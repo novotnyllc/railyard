@@ -32,11 +32,12 @@ Codex installed → skip Codex-side checks, and say so).
 
 - Fleet config: present, `validate-config` passes, no orphaned hosts
   (config entries whose SSH alias no longer resolves).
-- Legacy leftovers: a `machine-utilities/` config or state dir still being
-  used via fallback (offer the copy to `roundhouse/`); router config/state
-  still under the pre-split `~/.config/agent-utilities/` or
-  `~/.local/state/agent-utilities/` paths (offer the copy to `yardmaster/` —
-  the router does not read the old paths); retired plugins still installed.
+- Retired plugins still installed (machine-utilities); orphaned config/state
+  dirs from retired names (`~/.config/machine-utilities/`,
+  `~/.config/agent-utilities/`, `~/.local/state/agent-utilities/`) — offer
+  deletion, nothing reads them.
+- The unattended auto-update schedule, when installed: scheduler entry
+  present and its log free of repeated failures.
 - Router state: `yardmaster:model-routing` `status` succeeds; a configured
   catalog, if any, validates.
 - Credential presence for installed capabilities — existence only, never

@@ -22,13 +22,10 @@ Collect the current state before asking anything:
 - Known marketplaces: `novotnyllc/marketplace` and
   `EveryInc/compound-engineering-plugin`.
 - Fleet config: `ROUNDHOUSE_CONFIG`, else
-  `${XDG_CONFIG_HOME:-$HOME/.config}/roundhouse/config.json`, else the legacy
-  `machine-utilities/config.json`.
+  `${XDG_CONFIG_HOME:-$HOME/.config}/roundhouse/config.json`.
 - Tooling: `gh` auth state, the `gh-stack` extension and its agent skills,
   `tmux`, `jq`, `node`, `chezmoi` (optional), `op` (optional, for the
   one-password toolbox skill).
-- Pre-split leftovers: router config/state under `~/.config/agent-utilities/`
-  or `~/.local/state/agent-utilities/` (offer the copy to `yardmaster/`).
 - Optional extras already present: the Oracle Pro cache
   (`~/.config/yardmaster/oracle-pro.json`), a model-routing catalog
   (`~/.config/yardmaster/model-routing.json`).
@@ -100,11 +97,27 @@ Only ask what the inventory shows unset; restate each answer before writing.
   default; only write a catalog if the user has explicit routing policy.
 - **Oracle** [skip] — if the user has ChatGPT Pro and wants Oracle reviews,
   record availability per the oracle skill's cached-detection rules.
+- **Synced surface** [bootstrap from this host] — chezmoi is the single
+  store: add `~/.claude/settings.json`, the roundhouse fleet config, and any
+  yardmaster model-routing catalog to the chezmoi source, and generate a
+  `desired.json.tmpl` there from this host's installed plugins, user-scope
+  MCP servers, and standalone skills. Sync groups and per-machine
+  differences are chezmoi template data (each machine declares its groups);
+  `roundhouse:fleet-agents` "Desired-state sync" is the actuator that keeps
+  every host's managers converged, bidirectionally by change time.
+- **Auto-sync + update schedule** [none] — opt-in daily or weekly unattended
+  maintenance:
+  installs the OS-scheduler entry from `roundhouse:fleet-update`'s
+  "Unattended schedule" section (which runs the desired-state sync and then
+  package updates) (launchd agent on macOS, systemd user timer
+  on Linux, per-user scheduled task on Windows) that runs the harness with
+  the fixed unattended-maintenance prompt. Removable any time by deleting
+  the scheduler entry.
 
 Write the fleet config to
 `${XDG_CONFIG_HOME:-$HOME/.config}/roundhouse/config.json` (0600), then
 validate it with the roundhouse fleet CLI
-(`"<roundhouse>/scripts/machine-utilities" validate-config`). A validation
+(`"<roundhouse>/scripts/roundhouse" validate-config`). A validation
 failure is fixed in the interview loop, never hand-waved.
 
 ## 4. Diagnosis
