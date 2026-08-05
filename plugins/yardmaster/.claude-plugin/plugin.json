@@ -1,0 +1,43 @@
+{
+  "name": "yardmaster",
+  "version": "0.1.0",
+  "description": "The delivery system for agent work: model routing, goal-driven delivery, task orchestration, cross-machine placement, and fleet readiness for Codex and Claude Code.",
+  "author": {
+    "name": "Claire Novotny LLC",
+    "url": "https://github.com/novotnyllc"
+  },
+  "homepage": "https://github.com/novotnyllc/yardmaster",
+  "repository": "https://github.com/novotnyllc/yardmaster",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "claude-code",
+    "model-routing",
+    "orchestration",
+    "delivery",
+    "fleet",
+    "remote",
+    "ssh",
+    "review",
+    "skills"
+  ],
+  "skills": [
+    "./skills/cleanup-codex",
+    "./skills/fleet-agents",
+    "./skills/fleet-auth",
+    "./skills/fleet-chezmoi",
+    "./skills/fleet-inventory",
+    "./skills/fleet-projects",
+    "./skills/fleet-readiness",
+    "./skills/fleet-update",
+    "./skills/goal-driven-delivery",
+    "./skills/model-routing",
+    "./skills/oracle",
+    "./skills/remote-mac",
+    "./skills/ssh-doctor",
+    "./skills/task-orchestrator",
+    "./skills/thermo-nuclear-code-quality-review",
+    "./skills/thermo-nuclear-review",
+    "./skills/thermos"
+  ]
+}

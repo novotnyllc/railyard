@@ -1,0 +1,16 @@
+{
+  "description": "Bounded exact-process cleanup for a completed root Codex session.",
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/cleanup-codex/scripts/cleanup-codex.mjs\" cleanup --hook",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

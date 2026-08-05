@@ -1,0 +1,27 @@
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.0.0
+        with:
+          node-version: 24
+      - name: Manifest validation
+        run: |
+          node -e 'for (const f of ["plugins/yardmaster/.claude-plugin/plugin.json","plugins/yardmaster/.codex-plugin/plugin.json"]) JSON.parse(require("fs").readFileSync(f))'
+      - name: JS contract suites
+        run: |
+          node --test plugins/yardmaster/scripts/model-routing.test.mjs plugins/yardmaster/skills/task-orchestrator/scripts/delivery-contracts.test.mjs plugins/yardmaster/skills/oracle/scripts/oracle-route.test.mjs plugins/yardmaster/skills/oracle/scripts/ensure-oracle.test.mjs plugins/yardmaster/skills/cleanup-codex/scripts/cleanup-codex.test.mjs

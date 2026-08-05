@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "updatePolicy": "review-only",
+  "skills": [
+    {
+      "name": "oracle",
+      "repository": "https://github.com/steipete/oracle.git",
+      "path": "skills/oracle",
+      "commit": "0f0bdb6a752efb2c736ec4dcaa6d3cc29743d851",
+      "track": "refs/heads/main",
+      "license": "MIT"
+    },
+    {
+      "name": "thermos",
+      "repository": "https://github.com/cursor/plugins.git",
+      "path": "thermos/skills/thermos",
+      "commit": "fa16d695b35ccf4ea179d976e5aaee0834a25b0b",
+      "track": "refs/heads/main",
+      "license": "MIT"
+    },
+    {
+      "name": "thermo-nuclear-review",
+      "repository": "https://github.com/cursor/plugins.git",
+      "path": "thermos/skills/thermo-nuclear-review",
+      "commit": "fa16d695b35ccf4ea179d976e5aaee0834a25b0b",
+      "track": "refs/heads/main",
+      "license": "MIT"
+    },
+    {
+      "name": "thermo-nuclear-code-quality-review",
+      "repository": "https://github.com/cursor/plugins.git",
+      "path": "thermos/skills/thermo-nuclear-code-quality-review",
+      "commit": "fa16d695b35ccf4ea179d976e5aaee0834a25b0b",
+      "track": "refs/heads/main",
+      "license": "MIT"
+    }
+  ]
+}

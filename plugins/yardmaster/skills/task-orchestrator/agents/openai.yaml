@@ -1,0 +1,4 @@
+interface:
+  display_name: "Task Orchestrator"
+  short_description: "Orchestrate tasks to verified completion"
+  default_prompt: "Use $task-orchestrator to decompose this objective into owned tasks, route each task to the right execution skill, and verify the combined result without executing child work."
