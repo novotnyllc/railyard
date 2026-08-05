@@ -1,6 +1,6 @@
 {
   "name": "yardmaster",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The delivery system for agent work: model routing, goal-driven delivery, task orchestration, cross-machine placement, and fleet readiness for Codex and Claude Code.",
   "author": {
     "name": "Claire Novotny LLC",

@@ -52,8 +52,14 @@ work visible and resumable. Per the harness table above, stop/idle signals are
 never cleanup authority. When this is a directed child, Task Orchestrator
 closes it out after terminal acceptance and report verification.
 
-PR monitoring requires Compound Engineering with `ce-babysit-pr` (v3.20.0+).
-If unavailable, stop and ask the user to update CE; never hand-roll a watcher.
+This skill is built on the external Compound Engineering plugin
+(`EveryInc/compound-engineering-plugin`) — a required dependency, never
+modified. PR monitoring requires its `ce-babysit-pr` (v3.20.0+). If CE is
+missing or too old, offer to fix it before stopping:
+`claude plugin marketplace add EveryInc/compound-engineering-plugin` then
+`claude plugin install|update compound-engineering@compound-engineering-plugin`
+(Codex: `codex plugin add compound-engineering --marketplace
+compound-engineering-plugin`). Never hand-roll a watcher.
 
 ## Route selection
 

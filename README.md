@@ -14,6 +14,25 @@ verified, delivered result, on any machine in the fleet:
 | Quality gates | `thermos`, `thermo-nuclear-review`, `thermo-nuclear-code-quality-review`, `oracle` |
 | Runtime hygiene | `cleanup-codex` |
 
+## Built on Compound Engineering
+
+Yardmaster's delivery workflows are built on the external
+[Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin)
+plugin — `goal-driven-delivery` routes through `lfg`, the `ce-*` skills, and
+`ce-babysit-pr` (3.20.0+), and never modifies them. It is a required
+dependency for delivery work. Install and update it alongside yardmaster:
+
+```sh
+# Claude Code
+claude plugin marketplace add EveryInc/compound-engineering-plugin
+claude plugin install compound-engineering@compound-engineering-plugin
+claude plugin update compound-engineering@compound-engineering-plugin
+
+# Codex
+codex plugin marketplace add EveryInc/compound-engineering-plugin
+codex plugin add compound-engineering --marketplace compound-engineering-plugin
+```
+
 Before dispatching to another machine, the orchestrator consults
 [`roundhouse`](https://github.com/novotnyllc/roundhouse) — machine and
 infrastructure administration (readiness, inventory, parity, packages,

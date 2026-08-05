@@ -30,7 +30,10 @@ enrollment, privileged installs, network gear — lives in
 consults `roundhouse:fleet-readiness` before dispatch and never administers
 hosts itself. How to do a specific *kind* of work (craft skills) lives in
 [`agent-utilities`](https://github.com/novotnyllc/agent-utilities). Compound
-Engineering workflows are an external carrier, never modified.
+Engineering ([EveryInc/compound-engineering-plugin](https://github.com/EveryInc/compound-engineering-plugin))
+is a required external dependency for delivery work — Goal Driven Delivery
+routes through its workflows and never modifies them; the README carries the
+install and update commands.
 
 ## Naming and theming
 

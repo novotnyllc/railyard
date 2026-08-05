@@ -333,7 +333,11 @@ tool supports placement. Two remote lanes exist, one per destination harness:
   (`references/codex-remote-control.md` there). Claude Code
   cannot drive that app-tool surface; from a Claude orchestrator, a Codex
   destination goes through the codex plugin's rescue forwarder or a directly
-  invoked `codex` CLI on the destination via the SSH lane below.
+  invoked `codex` CLI on the destination via the SSH lane below. Dispatch
+  prerequisites for a native-Windows destination (marketplace desired-records,
+  profile bundles) are stageable from any harness through roundhouse's
+  enrolled `windows-sftp` lane — broker pickup within one minute — leaving
+  only the in-session convergence to the Codex task surface.
 - **Claude Code destination**: over fleet-verified SSH (the
   configured alias, login shell, bounded timeouts), launch a real
   destination-native worker in the fleet-verified project checkout:
