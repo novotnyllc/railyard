@@ -67,8 +67,10 @@ Resolve the requested artifact and terminal boundary before invoking a child
 skill. An explicit narrower outcome wins over the implementation default. A
 brainstorm, design, plan, or debug request about software work is a
 delivery-routing request and enters this table — even when another installed
-skill claims brainstorming or planning generically; the CE stages below are
-the routes. Pick one route:
+skill claims brainstorming or planning generically, and even when the
+planning intent emerges mid-conversation rather than in the opening request
+("update the plan", weighing approaches, requirements talk): load the route
+at that moment. The CE stages below are the routes. Pick one route:
 
 | Situation | Route | Stop at |
 | --- | --- | --- |

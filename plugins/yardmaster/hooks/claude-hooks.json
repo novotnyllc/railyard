@@ -1,17 +1,6 @@
 {
-  "description": "Codex hooks: bounded exact-process SessionEnd cleanup (Codex-only), plus the shared routing charter and prompt nudge.",
+  "description": "Lightweight routing nudges: ambient charter at session start, one-line just-in-time hint on delivery/planning/orchestration prompts. The Codex-only SessionEnd cleanup hook lives separately in codex/hooks.json and must never load here.",
   "hooks": {
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/cleanup-codex/scripts/cleanup-codex.mjs\" cleanup --hook",
-            "timeout": 3
-          }
-        ]
-      }
-    ],
     "SessionStart": [
       {
         "hooks": [

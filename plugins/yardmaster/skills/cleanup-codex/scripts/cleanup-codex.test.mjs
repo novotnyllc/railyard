@@ -3027,9 +3027,28 @@ test("plugin packaging exposes actual root SessionEnd cleanup and no Claude hook
   assert.ok(codexManifest.interface.defaultPrompt.length <= 3);
   assert.equal(claudeManifest.version, codexManifest.version);
   assert.ok(claudeManifest.skills.includes("./skills/cleanup-codex"));
-  assert.equal("hooks" in claudeManifest, false);
-  assert.equal(fs.existsSync(path.join(PLUGIN_DIRECTORY, "hooks")), false);
-  assert.deepEqual(Object.keys(hooks.hooks), ["SessionEnd"]);
+  // Claude loads only the routing nudges; the SessionEnd cleanup hook stays
+  // Codex-only. The Claude hooks file must never register SessionEnd.
+  assert.equal(claudeManifest.hooks, "./hooks/claude-hooks.json");
+  const claudeHooks = JSON.parse(fs.readFileSync(
+    path.join(PLUGIN_DIRECTORY, "hooks", "claude-hooks.json"),
+    "utf8",
+  ));
+  assert.deepEqual(
+    Object.keys(claudeHooks.hooks).sort(),
+    ["SessionStart", "UserPromptSubmit"],
+  );
+  for (const event of Object.values(claudeHooks.hooks)) {
+    for (const entry of event) {
+      for (const hook of entry.hooks) {
+        assert.doesNotMatch(hook.command, /cleanup-codex/);
+      }
+    }
+  }
+  assert.deepEqual(
+    Object.keys(hooks.hooks).sort(),
+    ["SessionEnd", "SessionStart", "UserPromptSubmit"],
+  );
   const commandHook = hooks.hooks.SessionEnd[0].hooks[0];
   assert.equal(commandHook.type, "command");
   assert.equal(commandHook.timeout, 3);
@@ -3048,7 +3067,11 @@ test("Claude loader excludes the Codex-only SessionEnd hook", (context) => {
     return;
   }
   assert.equal(loaded.status, 0, loaded.stderr);
-  assert.match(loaded.stdout, /Hooks \(0\)/);
+  // Claude loads exactly the two routing hooks; the Codex-only SessionEnd
+  // cleanup hook must not appear.
+  assert.match(loaded.stdout, /Hooks \(2\)/);
+  assert.match(loaded.stdout, /SessionStart/);
+  assert.match(loaded.stdout, /UserPromptSubmit/);
   assert.doesNotMatch(loaded.stdout, /SessionEnd/);
 });
 

@@ -1,6 +1,6 @@
 {
   "name": "yardmaster",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "The delivery system for agent work: model routing, goal-driven delivery, task orchestration, cross-machine placement, review gates, Oracle, and Codex runtime hygiene.",
   "author": {
     "name": "Claire Novotny LLC",
@@ -30,5 +30,6 @@
     "./skills/thermo-nuclear-code-quality-review",
     "./skills/thermo-nuclear-review",
     "./skills/thermos"
-  ]
+  ],
+  "hooks": "./hooks/claude-hooks.json"
 }
