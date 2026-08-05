@@ -64,7 +64,8 @@ The categorical work-shape values are `low`, `medium`, `high`, or `unknown`.
 They are current-request policy input, never prompt-derived learning. Valid
 caller kinds are `compound-engineering`, `orchestrate`,
 `deliver`, `thermos`, and `fleet`. A CE caller must
-supply a closed `ceSeam`; it is not free-form override prose.
+supply a closed `ceSeam`; it is not free-form override prose. A local caller
+omits `callerKind` entirely — the literal value `"local"` is not accepted.
 
 The router derives a bounded `workClassDigest` from role, risk, context class,
 and the fully normalized categorical work shape. A caller may repeat that
@@ -87,7 +88,7 @@ native versus visible-task bridge path.
 unpadded positive decimal turn count from `"1"` through `"999"`. Values such
 as `all`, `full-history`, `0`, `03`, numbers, and unknown strings are rejected.
 
-Machine Utilities may supply one closed content-free R52 readiness record:
+A fleet caller (callerKind `fleet`) may supply one closed content-free R52 readiness record:
 
 ```json
 {
@@ -103,7 +104,7 @@ Machine Utilities may supply one closed content-free R52 readiness record:
 Readiness states are only `ready`, `blocked`, or `unknown`; platforms are only
 `darwin`, `linux`, `windows`, `wsl`, or `unknown`. The five objects and their
 fields are exact. Raw paths, commands, profiles, prompts, host names, or task
-content are rejected. A Machine Utilities resolve/admit request requires all
+content are rejected. A fleet resolve/admit request requires all
 three readiness facts to be `ready`; missing, `blocked`, or `unknown` readiness
 is `model_routing_capability_unavailable` before selection. The router freezes
 and digests the record in the
@@ -478,19 +479,19 @@ the local fixed bridge contracts: Oracle private-artifact import, public-CLI
 rejection of caller-controlled authority/native evidence, and trusted
 in-process native state persistence. They
 do not launch a browser, make a network call, or execute a real Oracle, CE, or
-Machine Utilities task. They therefore do not prove provider
+Roundhouse task. They therefore do not prove provider
 entitlement/authentication, provider model availability, a remote canary, or
 real dispatch. Those claims require their own bound host evidence and receipts.
 
 ## Runtime replacement clauses for unchanged CE skills
 
 This is the operative answer to “where CE says do X with Y, do Z instead.”
-Agent Utilities does not edit CE text. The owning agent adds this frozen clause
+Yardmaster does not edit CE text. The owning agent adds this frozen clause
 to the ordinary CE invocation at the exact named seam:
 
 > **Runtime execution override — frozen decision `<decisionId>`.** When this
 > unchanged CE instruction directs `<default executor/reviewer>` to perform
-> `<bounded seam>`, the Agent Utilities owning agent must perform only that
+> `<bounded seam>`, the Yardmaster owning agent must perform only that
 > bounded step through claimed `<carrierId>`/`<adapterId>` instead. Use the same
 > CE-provided bounded objective, accepted input envelope, constraints, and stop
 > condition. Return the result in the exact ordinary CE `<artifact schema>` at
@@ -516,7 +517,7 @@ model/fallback, commit/push/merge, mutate external systems, add credentials, or
 expand filesystem/network scope.
 
 For Claude, use only the supported CE-owned `claude -p` adapter bound to the
-claimed slot. Agent Utilities/GDD does not construct an alternate Claude
+claimed slot. Yardmaster's deliver skill does not construct an alternate Claude
 command or supervisor. For GLM, use only the callable separate-task profile;
 never pass GLM to a selector or native-subagent API. If that path or CE seam is
 not attested, return `transport_unsupported` and use the frozen disclosed

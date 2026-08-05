@@ -181,7 +181,8 @@ treats a pushed checkpoint, green CI, or "no known defects" as completion;
 never spends `max`-effort by default (escalation is deliberate); and never
 administers machines directly — that's roundhouse's charter.
 
-More depth: [AGENTS.md](../AGENTS.md) (charter),
+More depth: [delivery-workflows.md](delivery-workflows.md) (the full
+decision rules and cross-host model), [AGENTS.md](../AGENTS.md) (charter),
 [`model-routing.md`](../plugins/yardmaster/references/model-routing.md) (the
 wire contract), and the harness-surface tables inside
 [`orchestrate`](../plugins/yardmaster/skills/orchestrate/SKILL.md)

@@ -273,7 +273,7 @@ For every Thermos gate, invoke the sibling skills in this plugin:
 `yardmaster:thermo-nuclear-review` (correctness, breakage, security,
 devex, feature-leak), and `yardmaster:thermo-nuclear-code-quality-review`
 (maintainability, structure, code health). If plugin-qualified names are not
-exposed, read the sibling `../thermos/SKILL.md` files directly.
+exposed, read the sibling `../thermos/SKILL.md`, `../thermo-nuclear-review/SKILL.md`, and `../thermo-nuclear-code-quality-review/SKILL.md` files directly.
 
 Run the two review passes in parallel when subagents are supported, give both
 the same scoped diff plus enough source context, synthesize and deduplicate,

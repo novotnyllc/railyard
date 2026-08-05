@@ -248,7 +248,7 @@ bootstrap failure.
 - For advisory multi-model panels where partial success is useful, use `--allow-partial --write-output <path>` so successful model files and the `<stem>.oracle.json` manifest are easy to recover:
   - `"$ORACLE_CLI" --models "${ORACLE_MODELS:-<models>}" --allow-partial --write-output /tmp/panel.md -p "<task>"`
 - `--timeout 10m` is the normal user-facing API deadline; Oracle derives the HTTP transport timeout unless `--http-timeout` is explicitly set.
-- If the exported `OPENAI_API_KEY` is invalid and the user wants a personal OpenAI key, use `the `agent-utilities:one-password` skill` in one persistent tmux session with the user-provided item and field. Inject only into the single Oracle command; never print the key.
+- If the exported `OPENAI_API_KEY` is invalid and the user wants a personal OpenAI key, use the `agent-utilities:one-password` skill` in one persistent tmux session with the user-provided item and field. Inject only into the single Oracle command; never print the key.
 - For debugging Oracle itself, use the checkout path supplied by the user or `${ORACLE_REPO:-$HOME/dev/oracle}`:
   - `pnpm -C "${ORACLE_REPO:-$HOME/dev/oracle}" run build`
   - `node "${ORACLE_REPO:-$HOME/dev/oracle}/dist/scripts/run-cli.js" ...`

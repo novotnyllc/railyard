@@ -1,6 +1,6 @@
 # Workflow task titles
 
-Apply this policy whenever an Agent Utilities workflow says it owns a task
+Apply this policy whenever an Yardmaster workflow says it owns a task
 title.
 
 Use:

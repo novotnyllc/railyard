@@ -1,7 +1,7 @@
 {
   "name": "yardmaster",
   "version": "0.2.0",
-  "description": "The delivery system for agent work: model routing, goal-driven delivery, task orchestration, cross-machine placement, and fleet readiness for Codex and Claude Code.",
+  "description": "The delivery system for agent work: model routing, goal-driven delivery, task orchestration, cross-machine placement, review gates, Oracle, and Codex runtime hygiene.",
   "author": {
     "name": "Claire Novotny LLC",
     "url": "https://github.com/novotnyllc"
@@ -13,8 +13,8 @@
   "hooks": "./codex/hooks.json",
   "interface": {
     "displayName": "Yardmaster",
-    "shortDescription": "Model routing, goal-driven delivery, task orchestration, and fleet readiness",
-    "longDescription": "Yardmaster is the delivery system for agent work: budget-aware model routing, intent-routed LFG-first delivery, multi-agent and cross-machine orchestration, fleet readiness (runtimes, plugins, skills, auth, projects, packages, dotfiles), remote transport and SSH diagnosis, deep review gates, Oracle second-model review, and Codex runtime hygiene.",
+    "shortDescription": "Model routing, goal-driven delivery, task orchestration, review gates, and Oracle",
+    "longDescription": "Yardmaster is the delivery system for agent work: budget-aware model routing, intent-routed LFG-first delivery (the deliver skill), multi-agent and cross-machine orchestration (the orchestrate skill), deep review gates, Oracle second-model review, guided setup and doctor diagnosis, and Codex runtime hygiene. It only dispatches cross-machine work to hosts the sibling roundhouse plugin has verified are ready; machine administration itself lives there.",
     "developerName": "Claire Novotny LLC",
     "category": "Productivity",
     "capabilities": [
@@ -26,9 +26,9 @@
     "privacyPolicyURL": "https://github.com/novotnyllc/yardmaster",
     "termsOfServiceURL": "https://github.com/novotnyllc/yardmaster",
     "defaultPrompt": [
-      "Use goal-driven delivery to route this implementation through LFG, merge, and post-merge proof.",
-      "Use the task orchestrator to run this objective across the fleet.",
-      "Check fleet readiness before dispatching work to another machine."
+      "Use yardmaster to deliver this change through LFG, merge, and post-merge proof.",
+      "Use yardmaster to orchestrate this objective across tasks and machines.",
+      "Run the yardmaster doctor and fix anything out of sync."
     ],
     "brandColor": "#B45309"
   }

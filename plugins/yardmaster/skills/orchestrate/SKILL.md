@@ -358,7 +358,7 @@ policy, and terminal report, and it gets the same readiness verification,
 single-use child rule, one-canonical-writer boundary, and monitoring cadence
 as any other child.
 
-Before cross-host dispatch, invoke the installed Machine Utilities skills:
+Before cross-host dispatch, invoke the installed Roundhouse skills:
 `roundhouse:fleet-projects` (repository identity, checkout state,
 project baseline, saved-project readiness), `roundhouse:fleet-agents`
 (runtimes, plugin versions, skill hashes, capabilities), and
@@ -368,7 +368,7 @@ inconsistent skills, unhealthy auth, and unreachable hosts are Fleet Readiness
 prerequisites — delegate inventory and user-approved reconciliation to Machine
 Utilities; never mutate hosts directly. Dispatch only after every assigned
 host has evidence for its exact project and capabilities; for fleet-wide
-parity, verify every configured node. If Machine Utilities is unavailable,
+parity, verify every configured node. If Roundhouse is unavailable,
 require equivalent read-only evidence and report consistency as unverified.
 
 Allocation order (unless the user specifies another): filter to hosts with the

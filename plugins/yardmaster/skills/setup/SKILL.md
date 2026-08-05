@@ -27,6 +27,8 @@ Collect the current state before asking anything:
 - Tooling: `gh` auth state, the `gh-stack` extension and its agent skills,
   `tmux`, `jq`, `node`, `chezmoi` (optional), `op` (optional, for the
   one-password toolbox skill).
+- Pre-split leftovers: router config/state under `~/.config/agent-utilities/`
+  or `~/.local/state/agent-utilities/` (offer the copy to `yardmaster/`).
 - Optional extras already present: the Oracle Pro cache
   (`~/.config/yardmaster/oracle-pro.json`), a model-routing catalog
   (`~/.config/yardmaster/model-routing.json`).

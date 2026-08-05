@@ -4,7 +4,7 @@ This is the normative internal transport phase of
 `yardmaster/model-routing/v1`. Workflow consumers invoke
 `yardmaster:model-routing`, never this reference as a second router. The
 phase owns the one compatibility matrix for Task Orchestrator, Goal Driven
-Delivery, Thermos, and compatible Machine Utilities senders. It chooses a
+Delivery, Thermos, and compatible fleet senders. It chooses a
 transport-safe path without changing the frozen model, effort, privacy, or
 budget decision.
 
@@ -83,7 +83,7 @@ must apply this same classification to every nested edge.
 ## Claude subscription Fable reviews
 
 This launch contract applies only after the workflow selects a supported
-read-only Claude subscription review. Agent Utilities defines the binding and
+read-only Claude subscription review. Yardmaster defines the binding and
 validates its receipt; the caller's existing detached supervisor owns process
 launch, private logs, deadlines, and ownership-scoped termination. Do not add a
 second Claude runner here or use Oracle as a transport substitute. A CE adapter

@@ -19,7 +19,7 @@ and never resolve or charge the same edge twice.
 
 When a frozen decision selects a Claude Fable/Opus reviewer, override only the
 normal optional cross-model review executor through CE's existing attested
-read-only Claude adapter; Agent Utilities never starts a parallel raw
+read-only Claude adapter; Yardmaster never starts a parallel raw
 `claude -p` runner. Pass the frozen binding to that CE-owned seam, then feed its
 receipt-bound findings into the ordinary Thermos disposition. Until that seam
 attests the binding, the route is `transport_unsupported`. Preserve the
@@ -35,6 +35,12 @@ selector, or claim a review without the fixed adapter receipt.
    - Cursor: launch both subagents in the same message with `run_in_background: true`:
      - `subagent_type: "thermo-nuclear-review-subagent"` for bugs, breakages, security, devex regressions, feature-flag leaks, and other branch-audit risks.
      - `subagent_type: "thermo-nuclear-code-quality-review-subagent"` for maintainability, structure, file-size growth, spaghetti, abstractions, and codebase-health risks.
+   - Claude Code: launch both reviewers as two `Agent` tool calls in one
+     message (fresh-context subagents). Give each the frozen packet plus the
+     full instructions of its sibling skill — read
+     `../thermo-nuclear-review/SKILL.md` for the correctness/security agent
+     and `../thermo-nuclear-code-quality-review/SKILL.md` for the
+     maintainability agent — since no predefined subagent types exist here.
    - Codex: spawn two `explorer` subagents in parallel.
      - For the correctness/security agent, attach or pass the `thermo-nuclear-review` skill. If structured skill attachments are unavailable, read `../thermo-nuclear-review/SKILL.md` relative to this skill and include its instructions in the subagent prompt.
      - For the maintainability agent, attach or pass the `thermo-nuclear-code-quality-review` skill. If structured skill attachments are unavailable, read `../thermo-nuclear-code-quality-review/SKILL.md` relative to this skill and include its instructions in the subagent prompt.

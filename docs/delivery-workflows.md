@@ -11,13 +11,13 @@ The workflow has four distinct responsibilities:
 - `deliver` routes and executes one host-local change or pull
   request through the appropriate CE route. Generic implementation and bug
   fixes enter LFG by default and continue through merge and post-merge proof.
-- Fleet Readiness is the Machine Utilities capability that verifies and, with
+- Fleet Readiness is the Roundhouse capability that verifies and, with
   approval, reconciles projects, agents, plugins, skills, authentication, and
   host availability. It does not own the objective or its implementation.
 
-`orchestrate` is not a third workflow. Its useful delegation rules are now in
-`orchestrate`, so keeping it would add another name without adding a
-distinct responsibility.
+There is deliberately no third "delegate" workflow: its useful delegation
+rules live inside `orchestrate`, and another name would add nothing but a
+second place to look.
 
 ## One task or several?
 
@@ -51,7 +51,7 @@ combine working trees.
 | Existing PR to fix, drive, or deliver | `deliver` | It runs the applicable CE review or babysitting route, then owns authorized merge and post-merge proof. Review-only or watch-only requests stop earlier. |
 | Two or more independently resumable tasks, in one project or several | `orchestrate` | It creates owned tasks, selects their execution skills, tracks dependencies, and verifies the combined result. |
 | Work must run on another machine | `orchestrate` | It verifies that host, places a visible task there, and lets that task use host-local subagents and `deliver`. |
-| Fleet setup or reconciliation | Fleet Readiness (Machine Utilities) | It inventories and, with separate approval, reconciles projects, agents, plugins, skills, authentication, and host availability. |
+| Fleet setup or reconciliation | `roundhouse:fleet-readiness` | It inventories and, with separate approval, reconciles projects, agents, plugins, skills, authentication, and host availability. |
 | A tiny known-file or documentation edit | Direct edit and targeted check | Neither delivery skill is required unless durable tracking or remote placement adds value. |
 
 You normally invoke one workflow skill. Both delivery skills run the same
@@ -233,7 +233,7 @@ than silently changing provider or model.
 ## Fleet Readiness is a prerequisite
 
 Before cross-host dispatch, `orchestrate` invokes Fleet Readiness through
-the installed Machine Utilities plugin:
+the installed Roundhouse plugin:
 
 - `roundhouse:fleet-projects` verifies repository identity, checkout
   state, the required baseline, and Codex saved-project readiness.
@@ -245,7 +245,7 @@ the installed Machine Utilities plugin:
 
 Missing projects, unavailable saved projects, stale required tooling,
 inconsistent required skills, unhealthy required authentication, and
-unreachable hosts become Fleet Readiness prerequisites. Machine Utilities owns any
+unreachable hosts become Fleet Readiness prerequisites. Roundhouse owns any
 inventory and user-approved reconciliation; Task Orchestrator does not copy
 its scripts or silently update machines. If fleet-wide parity is part of the
 outcome, every configured node is verified, not only the selected workers.
@@ -269,14 +269,14 @@ cost is not free, unlike meters are not added without an explicit conversion,
 and every receipt separates configured, requested, and observed provider,
 model, effort, execution surface, and billing surface.
 
-Compound Engineering is not modified. Agent Utilities supplies narrow,
+Compound Engineering is not modified. Yardmaster supplies narrow,
 stage-scoped override instructions: when CE Plan or Debug calls for its normal
 research helper, an admitted GLM scout may perform only that bounded step; when
 CE Work calls for an already-legitimized implementation unit, an admitted GLM
 engineer may be that unit's canonical writer; when a CE review stage calls for
 an optional cross-model reviewer, an admitted binding may use CE's existing
 attested read-only Claude adapter to supply the ordinary findings artifact;
-Agent Utilities does not start a parallel Claude runner. CE keeps its workflow,
+Yardmaster does not start a parallel Claude runner. CE keeps its workflow,
 persona, artifact schema, legitimacy, synthesis, writer, and terminal
 authority. Missing transport takes a disclosed allowed fallback or blocks.
 
@@ -354,7 +354,7 @@ source, host inventory, or asserted transport trust. Unknown adapters validate
 as data but remain `unsupported_adapter` until a fixed attesting adapter exists.
 
 Budget scopes are one routed child action (`task`), one Goal Driven Delivery or
-bounded Machine Utilities session (`run`), and the owning standalone or Task
+bounded Roundhouse session (`run`), and the owning standalone or Task
 Orchestrator allocation (`project`). Soft limits warn; hard-admission limits
 atomically reserve a conservative ceiling before compliant dispatch; strict
 limits additionally require the carrier to enforce that exact meter. Marginal
@@ -429,7 +429,7 @@ Each worker uses `deliver`; dependent PRs use `gh-stack` after the
 conditional bootstrap when needed.
 
 **The same project on several nodes:** invoke `orchestrate`. It first
-uses Machine Utilities to verify project and agent readiness on each required
+uses Roundhouse to verify project and agent readiness on each required
 node, creates destination tasks only on ready hosts, and collects their final
 evidence before declaring the delivery complete.
 
@@ -457,7 +457,7 @@ interactive-elevation, or recoverable-host.
 Goal Driven Delivery consumes the orchestrator's explicit contract. A ready
 plan with a local/return-to-caller boundary uses CE Work; unconstrained shipping
 uses LFG. Later user instructions explicitly reconcile that shipping boundary.
-Compound Engineering remains an external carrier: Agent Utilities selects it
+Compound Engineering remains an external carrier: Yardmaster selects it
 and supplies contracts but does not patch it.
 
 ## Source skills

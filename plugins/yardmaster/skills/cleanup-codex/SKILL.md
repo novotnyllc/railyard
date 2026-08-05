@@ -15,7 +15,7 @@ From this skill directory:
 node scripts/cleanup-codex.mjs inspect
 ```
 
-From the Agent Utilities repository root:
+From the Yardmaster repository root:
 
 ```bash
 node plugins/yardmaster/skills/cleanup-codex/scripts/cleanup-codex.mjs inspect --json
@@ -69,7 +69,7 @@ node scripts/cleanup-codex.mjs recycle --pid 500 --nofile-attestor /private/abso
 
 The receipt binds the exact server, applicable parent, descendants, socket-linked proxy PIDs, socket, native daemon evidence, minimum limit, attestor, launcher, and expected replacement executable. Any drift before mutation invalidates it.
 
-Managed mode is the default. It requires stable native daemon samples before confirmation, under the lock, and immediately before mutation, plus replacement attestation after restart. Each sample requires backend `pid`, the exact native PID record, selected-socket ownership, and the managed executable identity. The current native `codex app-server daemon restart` command does not accept the receipt-bound expected PID and start time, so Agent Utilities fails closed with `managed-restart-exact-pid-unsupported` before confirmation or mutation. A future native compare-and-swap adapter may own the lifecycle; Agent Utilities never signals a managed server directly and may reap only still-matching residue from the confirmed old snapshot.
+Managed mode is the default. It requires stable native daemon samples before confirmation, under the lock, and immediately before mutation, plus replacement attestation after restart. Each sample requires backend `pid`, the exact native PID record, selected-socket ownership, and the managed executable identity. The current native `codex app-server daemon restart` command does not accept the receipt-bound expected PID and start time, so Yardmaster fails closed with `managed-restart-exact-pid-unsupported` before confirmation or mutation. A future native compare-and-swap adapter may own the lifecycle; Yardmaster never signals a managed server directly and may reap only still-matching residue from the confirmed old snapshot.
 
 Use unmanaged mode only when native evidence explicitly proves no managed backend and no PID record:
 
@@ -79,7 +79,7 @@ node scripts/cleanup-codex.mjs recycle --pid 500 --unmanaged --launcher /private
 
 After reviewing that receipt, rerun the identical command with `--confirm`. Unmanaged mode revalidates the full tree under the mutation lock, sends `TERM` and survivor-only `KILL` to exact recorded PIDs, then launches only the receipt-bound launcher. If `--launcher` is omitted, resolution checks `YARDMASTER_CODEX_BIN`, absolute `PATH` entries, then `~/.local/bin/codex`; symlinks are resolved and the canonical target is bound.
 
-The configured minimum soft descriptor limit defaults to `8192` and may be changed with `--min-soft-limit`. `--nofile-attestor` may instead be supplied as `YARDMASTER_NOFILE_ATTESTOR`. Agent Utilities does not bundle or provision an attestor, launcher, or descriptor-limit configuration; Machine Utilities owns that machine configuration, and the operator may only select an already approved path. Without a trusted provider, recycle intentionally refuses before mutation.
+The configured minimum soft descriptor limit defaults to `8192` and may be changed with `--min-soft-limit`. `--nofile-attestor` may instead be supplied as `YARDMASTER_NOFILE_ATTESTOR`. Yardmaster does not bundle or provision an attestor, launcher, or descriptor-limit configuration; Roundhouse owns that machine configuration, and the operator may only select an already approved path. Without a trusted provider, recycle intentionally refuses before mutation.
 
 The attestor is an explicit trust boundary. It must be an absolute, executable, single-link regular file owned by root or the current user, with no set-ID or group/world-write bits. The command must emit only the following bounded JSON schemas:
 
