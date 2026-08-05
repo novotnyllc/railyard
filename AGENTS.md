@@ -13,10 +13,10 @@ clears departures, and confirms arrival.
 - *Routing* — which model, effort, budget, and transport carry a unit of work
   (`model-routing` and its `yardmaster/model-routing/v1` contract).
 - *Delivery* — driving one software change through the right workflow to
-  merge and post-merge proof (`goal-driven-delivery`).
+  merge and post-merge proof (`deliver`).
 - *Orchestration and placement* — decomposing objectives across tasks,
   projects, hosts, and dependencies, and choosing where each child runs
-  (`task-orchestrator`, including the Codex saved-project and Claude SSH
+  (`orchestrate`, including the Codex saved-project and Claude SSH
   worker lanes).
 - *Quality gates and second opinions* — the pre-commit deep reviews
   (`thermos` and the two thermo-nuclear reviewers) and the Oracle one-shot
@@ -49,9 +49,9 @@ supplies an exact title or a higher-priority harness rule applies.
 
 - Run the read-only `yardmaster:model-routing` intake on every software
   delivery turn. Explicit workflow and terminal instructions win. Configured
-  fleet/account delivery enters `yardmaster:task-orchestrator`, even when it
+  fleet/account delivery enters `yardmaster:orchestrate`, even when it
   fast-paths one lane; explicit local/no-fleet or no-config single-host work
-  enters `yardmaster:goal-driven-delivery` directly.
+  enters `yardmaster:deliver` directly.
 - Task Orchestrator owns decomposition, allocation, placement, concurrency,
   monitoring, synthesis, and evidence; it never executes child work. Each
   software-delivery child uses Goal Driven Delivery and consumes its immutable
@@ -79,7 +79,7 @@ Never treat an installed plugin cache as the source repository.
 ## Skill Editing Rules
 
 - Keep skills usable by both Codex and Claude Code; the harness-surface
-  tables in `task-orchestrator` and `goal-driven-delivery` are the pattern.
+  tables in `orchestrate` and `deliver` are the pattern.
 - Preserve upstream attribution when copying or refreshing skills; the
   thermos-family names track their upstream source and are not renamed.
 - Validate JSON manifests and skill frontmatter before committing.

@@ -5,10 +5,10 @@ The workflow has four distinct responsibilities:
 - `model-routing` is the single versioned policy entrypoint for model, effort,
   budget, adapter, and transport decisions. It never starts carrier work.
 
-- `task-orchestrator` owns an objective that requires multiple independently
+- `orchestrate` owns an objective that requires multiple independently
   resumable tasks or remote task placement. It routes and monitors work but
   does not execute child tasks.
-- `goal-driven-delivery` routes and executes one host-local change or pull
+- `deliver` routes and executes one host-local change or pull
   request through the appropriate CE route. Generic implementation and bug
   fixes enter LFG by default and continue through merge and post-merge proof.
 - Fleet Readiness is the Machine Utilities capability that verifies and, with
@@ -16,21 +16,21 @@ The workflow has four distinct responsibilities:
   host availability. It does not own the objective or its implementation.
 
 `orchestrate` is not a third workflow. Its useful delegation rules are now in
-`task-orchestrator`, so keeping it would add another name without adding a
+`orchestrate`, so keeping it would add another name without adding a
 distinct responsibility.
 
 ## One task or several?
 
-`task-orchestrator` is scoped to an objective, not to a project or machine. It
+`orchestrate` is scoped to an objective, not to a project or machine. It
 is used when configured fleet/account policy owns allocation, for two or more
 independently resumable tasks, or when a task must be placed on another host.
 Configured policy may fast-path a single lane. Explicit local/no-fleet and the
 no-config single-host path enter Goal Driven Delivery directly. One bounded
 task may still use several local subagents without becoming orchestration.
 
-Software-delivery children use `goal-driven-delivery`. Research, operations,
+Software-delivery children use `deliver`. Research, operations,
 review, documentation, and decision children use the appropriate skill for
-their own outcome. A child invokes `task-orchestrator` only when its assignment
+their own outcome. A child invokes `orchestrate` only when its assignment
 itself contains multiple independently resumable tasks; this prevents recursive
 orchestration loops.
 
@@ -45,23 +45,23 @@ combine working trees.
 
 | Situation | Use | What happens |
 | --- | --- | --- |
-| Configured fleet/account delivery, including one-lane placement | `task-orchestrator` | It resolves project policy and may fast-path one Goal Driven Delivery lane. |
-| Brainstorm, plan, diagnosis, review, or local-only request | `goal-driven-delivery` | It selects the matching CE route and stops at the requested artifact. |
-| One feature, bug fix, refactor, or ship request on the current host | `goal-driven-delivery` | It routes generic implementation to LFG, then owns authorized merge and post-merge proof. |
-| Existing PR to fix, drive, or deliver | `goal-driven-delivery` | It runs the applicable CE review or babysitting route, then owns authorized merge and post-merge proof. Review-only or watch-only requests stop earlier. |
-| Two or more independently resumable tasks, in one project or several | `task-orchestrator` | It creates owned tasks, selects their execution skills, tracks dependencies, and verifies the combined result. |
-| Work must run on another machine | `task-orchestrator` | It verifies that host, places a visible task there, and lets that task use host-local subagents and `goal-driven-delivery`. |
+| Configured fleet/account delivery, including one-lane placement | `orchestrate` | It resolves project policy and may fast-path one Goal Driven Delivery lane. |
+| Brainstorm, plan, diagnosis, review, or local-only request | `deliver` | It selects the matching CE route and stops at the requested artifact. |
+| One feature, bug fix, refactor, or ship request on the current host | `deliver` | It routes generic implementation to LFG, then owns authorized merge and post-merge proof. |
+| Existing PR to fix, drive, or deliver | `deliver` | It runs the applicable CE review or babysitting route, then owns authorized merge and post-merge proof. Review-only or watch-only requests stop earlier. |
+| Two or more independently resumable tasks, in one project or several | `orchestrate` | It creates owned tasks, selects their execution skills, tracks dependencies, and verifies the combined result. |
+| Work must run on another machine | `orchestrate` | It verifies that host, places a visible task there, and lets that task use host-local subagents and `deliver`. |
 | Fleet setup or reconciliation | Fleet Readiness (Machine Utilities) | It inventories and, with separate approval, reconciles projects, agents, plugins, skills, authentication, and host availability. |
 | A tiny known-file or documentation edit | Direct edit and targeted check | Neither delivery skill is required unless durable tracking or remote placement adds value. |
 
 You normally invoke one workflow skill. Both delivery skills run the same
 read-only `yardmaster:model-routing` intake. For an explicit local or
 no-config single software-delivery task, invoke
-`goal-driven-delivery`; it routes brainstorm, plan, diagnosis, review, and
+`deliver`; it routes brainstorm, plan, diagnosis, review, and
 local-only requests to their narrower CE terminal state and generic
 implementation to LFG. For multiple independently resumable tasks or cross-host work, invoke
-`task-orchestrator`; the orchestrator propagates that policy and decides which
-workers should invoke `goal-driven-delivery`.
+`orchestrate`; the orchestrator propagates that policy and decides which
+workers should invoke `deliver`.
 
 ## How they fit together
 
@@ -232,7 +232,7 @@ than silently changing provider or model.
 
 ## Fleet Readiness is a prerequisite
 
-Before cross-host dispatch, `task-orchestrator` invokes Fleet Readiness through
+Before cross-host dispatch, `orchestrate` invokes Fleet Readiness through
 the installed Machine Utilities plugin:
 
 - `roundhouse:fleet-projects` verifies repository identity, checkout
@@ -402,33 +402,33 @@ in v1.
 
 The former `orchestrate` skill said to delegate substantial work, assign
 distinct ownership, choose agent effort deliberately, and remain available to
-the user. `task-orchestrator` already contains those rules with stronger task,
+the user. `orchestrate` already contains those rules with stronger task,
 host, dependency, evidence, and cleanup contracts.
 
 Keeping both also created conflicts: `orchestrate` prohibited delegation by
 leaf workers and made the coordinator integrate results, while
-`task-orchestrator` permits useful bounded delegation and requires integration
+`orchestrate` permits useful bounded delegation and requires integration
 and validation to be delegated. The clearer rule is one control-plane skill,
-`task-orchestrator`, and one software-delivery execution skill, `goal-driven-delivery`.
+`orchestrate`, and one software-delivery execution skill, `deliver`.
 
 ## Examples
 
-**One local bug fix:** invoke `goal-driven-delivery`. It diagnoses as needed,
+**One local bug fix:** invoke `deliver`. It diagnoses as needed,
 routes implementation to LFG, runs the applicable quality gates, and continues
 through authorized merge and post-merge proof unless a narrower stop was
 requested.
 
-**A plan or brainstorm request:** invoke `goal-driven-delivery`. It uses the
+**A plan or brainstorm request:** invoke `deliver`. It uses the
 matching CE route and returns the requested artifact without starting LFG or
 creating a PR.
 
-**Frontend and API changes in separate PRs:** invoke `task-orchestrator`. It
+**Frontend and API changes in separate PRs:** invoke `orchestrate`. It
 assigns one canonical writer per PR, records their dependency, propagates the
 model and completion policy, and gives each worker its own acceptance evidence.
-Each worker uses `goal-driven-delivery`; dependent PRs use `gh-stack` after the
+Each worker uses `deliver`; dependent PRs use `gh-stack` after the
 conditional bootstrap when needed.
 
-**The same project on several nodes:** invoke `task-orchestrator`. It first
+**The same project on several nodes:** invoke `orchestrate`. It first
 uses Machine Utilities to verify project and agent readiness on each required
 node, creates destination tasks only on ready hosts, and collects their final
 evidence before declaring the delivery complete.
@@ -463,5 +463,5 @@ and supplies contracts but does not patch it.
 ## Source skills
 
 - [`model-routing`](../plugins/yardmaster/skills/model-routing/SKILL.md)
-- [`task-orchestrator`](../plugins/yardmaster/skills/task-orchestrator/SKILL.md)
-- [`goal-driven-delivery`](../plugins/yardmaster/skills/goal-driven-delivery/SKILL.md)
+- [`orchestrate`](../plugins/yardmaster/skills/orchestrate/SKILL.md)
+- [`deliver`](../plugins/yardmaster/skills/deliver/SKILL.md)

@@ -50,7 +50,7 @@ function routerRequest(command, fields = {}) {
   const value = {
     contractVersion: "yardmaster/model-routing/v1",
     command,
-    callerKind: "goal-driven-delivery",
+    callerKind: "deliver",
     role: "implementation",
     adapterId: "native-subagent-create",
     dispatchKind: "subagent_create",

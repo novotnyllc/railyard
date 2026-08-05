@@ -1,6 +1,6 @@
 ---
 name: setup
-description: "Set up, extend, or diagnose the yardmaster delivery system: inventories what is installed, installs prerequisites (Compound Engineering, roundhouse, agent-utilities, gh-stack, tmux/jq) with consent, asks what the fleet hosts are and enrolls each through roundhouse:fleet-hosts, validates configuration, and reports readiness. Doctor mode diagnoses and fixes a broken or drifted setup. Use when the user asks to set up, install, configure, onboard, diagnose, or fix yardmaster or the delivery system, or when a required dependency turns out to be missing."
+description: "Set up, extend, or diagnose the yardmaster delivery system: inventories what is installed, installs prerequisites (Compound Engineering, roundhouse, agent-utilities, gh-stack, tmux/jq) with consent, asks what the fleet hosts are and enrolls each through roundhouse:fleet-hosts, validates configuration, and reports readiness. For diagnosing an existing installation use yardmaster:doctor. Use when the user asks to set up, install, configure, onboard, or fix yardmaster or the delivery system, or when a required dependency turns out to be missing."
 ---
 
 # Yardmaster Setup
@@ -30,6 +30,14 @@ Collect the current state before asking anything:
 - Optional extras already present: the Oracle Pro cache
   (`~/.config/yardmaster/oracle-pro.json`), a model-routing catalog
   (`~/.config/yardmaster/model-routing.json`).
+- Credential presence for whatever the installed plugins actually need —
+  check existence only, never read or print a value: `gh auth status` for
+  GitHub; `ZAI_API_KEY` and `LITELLM_PROXY_API_KEY` when the Codex
+  `zai_litellm` GLM provider is configured; `op` sign-in state when the
+  one-password skill is installed; any other key an installed skill's own
+  docs name. A missing key is reported with *where to set it* (shell
+  environment via dotfiles, or 1Password injected through the one-password
+  skill) — never ask the user to paste a secret into the conversation.
 
 Summarize present/missing in one table before proposing anything.
 
@@ -58,6 +66,12 @@ package managers only.
   and the `--agent claude-code` twin.
 - **Shell tooling** (required for fleet transport and 1Password): `tmux` and
   `jq` via the user's package manager (`brew install tmux jq` on macOS).
+- **macOS app testing** (optional; offer when the user builds macOS/iOS
+  apps): `tart-xcode-runner@novotnyllc` runs Xcode builds and XCUITests in
+  disposable Tart VMs so UI tests never seize the host display — plus the
+  `tart` CLI (`brew install cirruslabs/cli/tart`) it depends on. Skipping
+  disables nothing else; `deliver` will suggest it again the first time
+  macOS app work would benefit.
 - **CE's own setup**: if Compound Engineering was just installed, offer
   `compound-engineering:ce-setup` for its repository-level onboarding.
 
@@ -91,26 +105,11 @@ validate it with the roundhouse fleet CLI
 (`"<roundhouse>/scripts/machine-utilities" validate-config`). A validation
 failure is fixed in the interview loop, never hand-waved.
 
-## 4. Doctor mode (diagnose and fix)
+## 4. Diagnosis
 
-When invoked to diagnose ("setup doctor", "why isn't delivery/fleet/X
-working"), run the inventory plus the deeper checks, report one findings
-table, and propose the minimal fix for each finding — applying fixes only on
-consent:
-
-- Config: `validate-config`; legacy `machine-utilities/` config still in use
-  (offer the copy to `roundhouse/`).
-- Versions: installed plugins vs marketplace catalog; CE below 3.20.0;
-  mismatched versions between the two harnesses.
-- Per host: SSH reachability through the login shell; certificate enrollment
-  state (`enroll-ssh-posix status`/`verify`); installed executor
-  verification; `roundhouse:fleet-readiness` go/no-go.
-- Route failures to their owners: sshd faults → `roundhouse:ssh-doctor`;
-  host enrollment or prerequisites → `roundhouse:fleet-hosts`;
-  plugin/skill parity → `roundhouse:fleet-agents`; package baseline →
-  `roundhouse:fleet-update`.
-
-Doctor never mutates during diagnosis; fixes are a second, consented pass.
+Diagnosing an existing installation — sync drift, broken hosts, "why isn't
+X working" — is `yardmaster:doctor`'s job, not setup's. If the inventory in
+step 1 surfaces breakage rather than absence, hand off to the doctor.
 
 ## 5. Boundaries
 
@@ -127,6 +126,6 @@ Finish with one table: each prerequisite, host, and config item, its state
 (installed/enrolled/configured/skipped-by-choice/missing), and the exact next
 command for anything deferred. If everything required is green, say the host
 is delivery-ready and name the entry points: plain "implement/fix/ship X"
-routes through `yardmaster:goal-driven-delivery`; fleet or multi-task
-objectives through `yardmaster:task-orchestrator`; growing or shrinking the
+routes through `yardmaster:deliver`; fleet or multi-task
+objectives through `yardmaster:orchestrate`; growing or shrinking the
 fleet through `roundhouse:fleet-hosts`.

@@ -41,7 +41,7 @@ An outbound-work request supplies only content-free control data:
 {
   "contractVersion": "yardmaster/model-routing/v1",
   "command": "resolve",
-  "callerKind": "goal-driven-delivery",
+  "callerKind": "deliver",
   "role": "implementation",
   "adapterId": "native-subagent-create",
   "dispatchKind": "subagent_create",
@@ -62,8 +62,8 @@ An outbound-work request supplies only content-free control data:
 
 The categorical work-shape values are `low`, `medium`, `high`, or `unknown`.
 They are current-request policy input, never prompt-derived learning. Valid
-caller kinds are `compound-engineering`, `task-orchestrator`,
-`goal-driven-delivery`, `thermos`, and `fleet`. A CE caller must
+caller kinds are `compound-engineering`, `orchestrate`,
+`deliver`, `thermos`, and `fleet`. A CE caller must
 supply a closed `ceSeam`; it is not free-form override prose.
 
 The router derives a bounded `workClassDigest` from role, risk, context class,
@@ -162,7 +162,7 @@ No catalog means no external probes and no optional-route assumption.
 
 | Work role | Frozen default |
 | --- | --- |
-| `implementation` and its bounded subroles | `gpt-5.6-luna` at `max`, including exactly `implementationEngine:{"mode":"require","target":"codex","model":"gpt-5.6-luna","source":"goal-driven-delivery"}` |
+| `implementation` and its bounded subroles | `gpt-5.6-luna` at `max`, including exactly `implementationEngine:{"mode":"require","target":"codex","model":"gpt-5.6-luna","source":"deliver"}` |
 | orchestration or independent review | `gpt-5.6-sol` at `high`; `max` only for high/critical or explicitly complex work |
 | unavailable/unselectable Luna implementation | only a runtime-attested Terra model at `max`, disclosed as `implementation_model_substitute`; the resolver never invents a Terra slug |
 

@@ -1,5 +1,5 @@
 ---
-name: task-orchestrator
+name: orchestrate
 description: Orchestrate configured fleet/account delivery or complex objectives across independently resumable tasks, projects, hosts, pull requests, and dependencies while remaining available as the control task. Use when configured routing owns allocation, when the user asks to run work on another machine or across the fleet, or when an objective needs multiple tasks, parallel or staged execution, separate ownership, cross-project work, or cross-host placement — including when the user names this skill directly.
 ---
 
@@ -46,7 +46,7 @@ allocation, an objective has two or more independently resumable tasks, or a
 task must be placed on another host. Configured policy may fast-path one local
 Goal Driven Delivery lane without inventing parallel work. Explicit
 local/no-fleet delivery and the no-config single-host path use
-`yardmaster:goal-driven-delivery` directly; one bounded non-delivery task
+`yardmaster:deliver` directly; one bounded non-delivery task
 uses its appropriate skill or native tools.
 
 Route each child by its own outcome: software implementation and PR delivery

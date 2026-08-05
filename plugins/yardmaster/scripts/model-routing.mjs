@@ -84,8 +84,8 @@ const SHAPE_FIELDS = Object.freeze([
 const SHAPE_VALUES = new Set(["low", "medium", "high", "unknown"]);
 const CALLER_KINDS = new Set([
   "compound-engineering",
-  "task-orchestrator",
-  "goal-driven-delivery",
+  "orchestrate",
+  "deliver",
   "thermos",
   "fleet",
 ]);
@@ -266,7 +266,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     efforts: ["max"],
     adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
     roles: ["implementation", "implementation.fix", "implementation.mechanical"],
-    implementationEngine: freeze({ mode: "require", target: "codex", model: "gpt-5.6-luna", source: "goal-driven-delivery" }),
+    implementationEngine: freeze({ mode: "require", target: "codex", model: "gpt-5.6-luna", source: "deliver" }),
   }),
   "codex-sol": freeze({
     version: "v1",

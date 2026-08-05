@@ -6,7 +6,7 @@ import test from "node:test";
 
 const orchestrator = readFileSync(new URL("../SKILL.md", import.meta.url), "utf8");
 const delivery = readFileSync(
-  new URL("../../goal-driven-delivery/SKILL.md", import.meta.url),
+  new URL("../../deliver/SKILL.md", import.meta.url),
   "utf8",
 );
 const thermos = readFileSync(new URL("../../thermos/SKILL.md", import.meta.url), "utf8");

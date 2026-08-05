@@ -1,6 +1,6 @@
 ---
-name: goal-driven-delivery
-description: Route one host-local software change or pull-request task through the correct Compound Engineering workflow, with LFG-first implementation delivery, Thermos review gates, React Doctor, PR babysitting, merge proof, and durable learnings. Use whenever the user says to implement, fix, ship, deliver, or "go do" a software change — including when they name this skill directly — for a feature, bug fix, risky refactor, long-running implementation, or existing PR; this skill then routes to the right child skill. Use yardmaster:task-orchestrator instead for multiple independently resumable tasks or cross-host placement.
+name: deliver
+description: Route one host-local software change or pull-request task through the correct Compound Engineering workflow, with LFG-first implementation delivery, Thermos review gates, React Doctor, PR babysitting, merge proof, and durable learnings. Use whenever the user says to implement, fix, ship, deliver, or "go do" a software change — including when they name this skill directly — for a feature, bug fix, risky refactor, long-running implementation, or existing PR; this skill then routes to the right child skill. Use yardmaster:orchestrate instead for multiple independently resumable tasks or cross-host placement.
 ---
 
 # Goal Driven Delivery
@@ -42,7 +42,7 @@ when a child workflow would impose a different convention:
 Own one host-local implementation or pull-request lane from planning through
 its requested terminal state. If the outcome needs multiple independently
 resumable scopes or PRs, or work placed on another host, invoke
-`yardmaster:task-orchestrator`; each worker may then use this skill for
+`yardmaster:orchestrate`; each worker may then use this skill for
 its single owned lane. Do not duplicate the orchestrator's decomposition, host
 allocation, cross-lane dependency tracking, or task monitoring here.
 
@@ -297,6 +297,15 @@ project scripts, assume a local install, or add it as a dependency without
 explicit request. Fix real findings before commit; run again before PR on
 UI-heavy branches; skip for backend-only, schema-only, script-only, and
 docs-only diffs.
+
+## macOS/iOS app work
+
+When the change targets a macOS or iOS app and the lane needs to run Xcode
+builds, simulator tests, or XCUITests, prefer the `tart-xcode-runner` plugin
+(disposable Tart VMs — UI tests never seize the host display, and every run
+starts from a pristine image). If it is not installed, suggest it once —
+`claude plugin install tart-xcode-runner@novotnyllc` plus the `tart` CLI —
+and proceed with host-local tooling if declined; never install it silently.
 
 ## PR feedback and monitoring
 

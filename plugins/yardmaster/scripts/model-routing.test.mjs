@@ -31,7 +31,7 @@ function request(command, fields = {}) {
   const value = {
     contractVersion: CONTRACT_VERSION,
     command,
-    callerKind: "goal-driven-delivery",
+    callerKind: "deliver",
     role: "implementation",
     adapterId: "native-subagent-create",
     dispatchKind: "subagent_create",
@@ -1111,7 +1111,7 @@ test("the public CLI accepts only a fixed Oracle receipt reference and settles a
     const admitted = publicCli({
       contractVersion: CONTRACT_VERSION,
       command: "admit",
-      callerKind: "goal-driven-delivery",
+      callerKind: "deliver",
       role: "review.deep",
       adapterId: "oracle-browser",
       dispatchKind: "subagent_create",
@@ -1246,7 +1246,7 @@ test("public CLI environment and JSON cannot mint visible-task authority or sett
     const visibleAdmission = {
       contractVersion: CONTRACT_VERSION,
       command: "admit",
-      callerKind: "goal-driven-delivery",
+      callerKind: "deliver",
       role: "implementation",
       adapterId: "codex-task-create",
       dispatchKind: "task_create",

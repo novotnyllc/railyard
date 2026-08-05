@@ -21,11 +21,12 @@
   ],
   "skills": [
     "./skills/setup",
+    "./skills/doctor",
     "./skills/cleanup-codex",
-    "./skills/goal-driven-delivery",
+    "./skills/deliver",
     "./skills/model-routing",
     "./skills/oracle",
-    "./skills/task-orchestrator",
+    "./skills/orchestrate",
     "./skills/thermo-nuclear-code-quality-review",
     "./skills/thermo-nuclear-review",
     "./skills/thermos"

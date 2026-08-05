@@ -1,4 +1,0 @@
-interface:
-  display_name: "Goal Driven Delivery"
-  short_description: "Route and complete one change lane."
-  default_prompt: "Use $goal-driven-delivery to route this single lane, defaulting implementation delivery to LFG through merge and post-merge proof unless a narrower stop is explicit."
