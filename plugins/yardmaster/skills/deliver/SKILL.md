@@ -1,6 +1,6 @@
 ---
 name: deliver
-description: Route one host-local software change or pull-request task through the correct Compound Engineering workflow, with LFG-first implementation delivery, Thermos review gates, React Doctor, PR babysitting, merge proof, and durable learnings. Use whenever the user says to implement, fix, ship, deliver, or "go do" a software change — including when they name this skill directly — for a feature, bug fix, risky refactor, long-running implementation, or existing PR; this skill then routes to the right child skill. Use yardmaster:orchestrate instead for multiple independently resumable tasks or cross-host placement.
+description: Route one host-local software change or pull-request task through the correct Compound Engineering workflow, with LFG-first implementation delivery, Thermos review gates, React Doctor, PR babysitting, merge proof, and durable learnings. Use whenever the user says to implement, fix, ship, deliver, or "go do" a software change — and equally when they ask to brainstorm, design, plan, spec, or debug one: those route to the matching CE stage (ce-brainstorm, ce-plan, ce-debug) and stop at that artifact. Applies including when they name this skill directly, for a feature, bug fix, risky refactor, long-running implementation, or existing PR. Use yardmaster:orchestrate instead for multiple independently resumable tasks or cross-host placement.
 ---
 
 # Goal Driven Delivery
@@ -64,8 +64,11 @@ compound-engineering-plugin`). Never hand-roll a watcher.
 ## Route selection
 
 Resolve the requested artifact and terminal boundary before invoking a child
-skill. An explicit narrower outcome wins over the implementation default. Pick
-one route:
+skill. An explicit narrower outcome wins over the implementation default. A
+brainstorm, design, plan, or debug request about software work is a
+delivery-routing request and enters this table — even when another installed
+skill claims brainstorming or planning generically; the CE stages below are
+the routes. Pick one route:
 
 | Situation | Route | Stop at |
 | --- | --- | --- |
