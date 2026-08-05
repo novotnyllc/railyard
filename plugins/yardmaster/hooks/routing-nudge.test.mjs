@@ -1,14 +1,31 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const script = fileURLToPath(new URL("./routing-nudge.js", import.meta.url));
+const fixtureConfig = path.join(
+  fs.mkdtempSync(path.join(os.tmpdir(), "nudge-test-")),
+  "config.json",
+);
+fs.writeFileSync(
+  fixtureConfig,
+  JSON.stringify({
+    machines: {
+      "silverstreak": { ssh_alias: "silverstreak", os: "mac" },
+      "boxcar": { ssh_alias: "boxcar-ts", tailnet_name: "boxcar.tailnet.example", os: "linux" },
+    },
+  }),
+);
 
-function nudge(prompt) {
+function nudge(prompt, env = {}) {
   const run = spawnSync(process.execPath, [script], {
     input: JSON.stringify({ prompt }),
     encoding: "utf8",
+    env: { ...process.env, ROUNDHOUSE_CONFIG: fixtureConfig, ...env },
   });
   assert.equal(run.status, 0);
   return run.stdout.trim();
@@ -23,6 +40,20 @@ test("delivery, orchestration, planning, and PR intents route", () => {
   );
   assert.match(nudge("do these things in parallel please"), /orchestrate/);
   assert.match(nudge("update this across all my machines"), /orchestrate/);
+  // Registered machine names from the fleet registry, not hardcoded types.
+  assert.match(nudge("run the tests over on boxcar"), /orchestrate/);
+  assert.match(nudge("deploy it to silverstreak tonight"), /orchestrate/);
+  // Unregistered machine-ish words no longer match.
+  assert.equal(nudge("put the file on the studio shelf list"), "");
+  // Without a registry, generic phrasing still works and names do not.
+  assert.match(
+    nudge("run this on my other mac", { ROUNDHOUSE_CONFIG: "/nonexistent" }),
+    /orchestrate/,
+  );
+  assert.equal(
+    nudge("run the tests over on boxcar", { ROUNDHOUSE_CONFIG: "/nonexistent" }),
+    "",
+  );
   assert.match(
     nudge("hey lets update the plan for the sync thing"),
     /Planning\/brainstorming/,
