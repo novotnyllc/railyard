@@ -8,6 +8,7 @@ verified, delivered result, on any machine in the fleet:
 
 | Track | Skills |
 | --- | --- |
+| Setup | `setup` — first-run onboarding, prerequisite installs on consent, host enrollment via roundhouse, and a doctor mode for diagnosis |
 | Routing | `model-routing` — one model/effort/budget/transport decision per unit of work, via the `yardmaster/model-routing/v1` contract |
 | Delivery | `goal-driven-delivery` — one change through the right workflow to merge and post-merge proof |
 | Orchestration & placement | `task-orchestrator` — objectives across tasks, projects, hosts, and dependencies, with the Codex saved-project and Claude SSH worker lanes |

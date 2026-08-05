@@ -1,0 +1,132 @@
+---
+name: setup
+description: "Set up, extend, or diagnose the yardmaster delivery system: inventories what is installed, installs prerequisites (Compound Engineering, roundhouse, agent-utilities, gh-stack, tmux/jq) with consent, asks what the fleet hosts are and enrolls each through roundhouse:fleet-hosts, validates configuration, and reports readiness. Doctor mode diagnoses and fixes a broken or drifted setup. Use when the user asks to set up, install, configure, onboard, diagnose, or fix yardmaster or the delivery system, or when a required dependency turns out to be missing."
+---
+
+# Yardmaster Setup
+
+Bring a host from bare to delivery-ready, grow the fleet, or diagnose why
+something stopped working. Setup is idempotent: run it again any time and it
+only proposes what is actually missing. A zero-fleet, zero-config outcome is
+valid — the router's built-in defaults and local delivery work with nothing
+configured — so never manufacture configuration the user does not want.
+
+## 1. Inventory (read-only, no consent needed)
+
+Collect the current state before asking anything:
+
+- Installed plugins on each available harness: `claude plugin list` and
+  `codex plugin list --json`. Note versions for `yardmaster`, `roundhouse`,
+  `agent-utilities`, and `compound-engineering` (needs 3.20.0+ for
+  `ce-babysit-pr`).
+- Known marketplaces: `novotnyllc/marketplace` and
+  `EveryInc/compound-engineering-plugin`.
+- Fleet config: `ROUNDHOUSE_CONFIG`, else
+  `${XDG_CONFIG_HOME:-$HOME/.config}/roundhouse/config.json`, else the legacy
+  `machine-utilities/config.json`.
+- Tooling: `gh` auth state, the `gh-stack` extension and its agent skills,
+  `tmux`, `jq`, `node`, `chezmoi` (optional), `op` (optional, for the
+  one-password toolbox skill).
+- Optional extras already present: the Oracle Pro cache
+  (`~/.config/yardmaster/oracle-pro.json`), a model-routing catalog
+  (`~/.config/yardmaster/model-routing.json`).
+
+Summarize present/missing in one table before proposing anything.
+
+## 2. Prerequisites (install on consent, grouped)
+
+Ask once per group, not per command; on Claude Code use the question tool with
+the recommended option first. Never install silently, never use sudo — user
+package managers only.
+
+- **Plugins and marketplaces** (required for delivery):
+
+  ```bash
+  claude plugin marketplace add novotnyllc/marketplace
+  claude plugin install yardmaster@novotnyllc roundhouse@novotnyllc agent-utilities@novotnyllc
+  claude plugin marketplace add EveryInc/compound-engineering-plugin
+  claude plugin install compound-engineering@compound-engineering-plugin
+  ```
+
+  Codex mirrors: `codex plugin marketplace add …` then
+  `codex plugin add <name> --marketplace <marketplace>`. Use `update` instead
+  of `install` for anything present but stale. If Compound Engineering is
+  below 3.20.0, updating it is required, not optional.
+- **Stacked-PR tooling** (required for dependent-stack delivery):
+  `gh extension install github/gh-stack --force` plus
+  `gh skill install github/gh-stack --all --agent codex --scope user --force`
+  and the `--agent claude-code` twin.
+- **Shell tooling** (required for fleet transport and 1Password): `tmux` and
+  `jq` via the user's package manager (`brew install tmux jq` on macOS).
+- **CE's own setup**: if Compound Engineering was just installed, offer
+  `compound-engineering:ce-setup` for its repository-level onboarding.
+
+## 3. Configuration interview (defaults in brackets)
+
+Only ask what the inventory shows unset; restate each answer before writing.
+
+- **What are the hosts?** [this machine only] — ask for the list of machines
+  that belong to the fleet: display name and SSH alias for each (aliases must
+  already resolve in `~/.ssh/config`; never invent one). "Just this machine"
+  is a complete answer — skip everything host-related. For each named host,
+  delegate the entire add flow — config entry, reachability, SSH-certificate
+  enrollment ceremony, target prerequisites, readiness — to
+  `roundhouse:fleet-hosts`. Enrollment is in scope for setup, and its signing
+  and privileged steps each get their own explicit consent naming the exact
+  host; adding or removing machines later goes through the same skill.
+- **Development root** [`~/dev`] — where project checkouts live.
+- **Cross-host handoff project** [none] — the shared Git repo for
+  checkpoint-based handoff, if any.
+- **Codex remote-control host** [none] — only for a native-Windows
+  destination driven by Codex Desktop; skipping disables nothing else.
+- **Model-routing catalog** [none — built-in defaults] — the no-config
+  profile (Sol orchestration/review, Luna implementation) is the recommended
+  default; only write a catalog if the user has explicit routing policy.
+- **Oracle** [skip] — if the user has ChatGPT Pro and wants Oracle reviews,
+  record availability per the oracle skill's cached-detection rules.
+
+Write the fleet config to
+`${XDG_CONFIG_HOME:-$HOME/.config}/roundhouse/config.json` (0600), then
+validate it with the roundhouse fleet CLI
+(`"<roundhouse>/scripts/machine-utilities" validate-config`). A validation
+failure is fixed in the interview loop, never hand-waved.
+
+## 4. Doctor mode (diagnose and fix)
+
+When invoked to diagnose ("setup doctor", "why isn't delivery/fleet/X
+working"), run the inventory plus the deeper checks, report one findings
+table, and propose the minimal fix for each finding — applying fixes only on
+consent:
+
+- Config: `validate-config`; legacy `machine-utilities/` config still in use
+  (offer the copy to `roundhouse/`).
+- Versions: installed plugins vs marketplace catalog; CE below 3.20.0;
+  mismatched versions between the two harnesses.
+- Per host: SSH reachability through the login shell; certificate enrollment
+  state (`enroll-ssh-posix status`/`verify`); installed executor
+  verification; `roundhouse:fleet-readiness` go/no-go.
+- Route failures to their owners: sshd faults → `roundhouse:ssh-doctor`;
+  host enrollment or prerequisites → `roundhouse:fleet-hosts`;
+  plugin/skill parity → `roundhouse:fleet-agents`; package baseline →
+  `roundhouse:fleet-update`.
+
+Doctor never mutates during diagnosis; fixes are a second, consented pass.
+
+## 5. Boundaries
+
+- Signing (`certify-ssh-node`) and privilege-broker enrollment always get
+  their own explicit consent naming the exact host, even inside a larger
+  setup flow.
+- Never write credentials, tokens, or secrets into config.
+- Never modify Compound Engineering. Setup mutates other machines only
+  through the consented `roundhouse:fleet-hosts` flow.
+
+## 6. Readiness report
+
+Finish with one table: each prerequisite, host, and config item, its state
+(installed/enrolled/configured/skipped-by-choice/missing), and the exact next
+command for anything deferred. If everything required is green, say the host
+is delivery-ready and name the entry points: plain "implement/fix/ship X"
+routes through `yardmaster:goal-driven-delivery`; fleet or multi-task
+objectives through `yardmaster:task-orchestrator`; growing or shrinking the
+fleet through `roundhouse:fleet-hosts`.
