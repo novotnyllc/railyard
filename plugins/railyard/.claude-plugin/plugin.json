@@ -1,0 +1,35 @@
+{
+  "name": "railyard",
+  "version": "0.4.0",
+  "description": "The delivery system for agent work: model routing, goal-driven delivery, task orchestration, cross-machine placement, review gates, Oracle, and Codex runtime hygiene.",
+  "author": {
+    "name": "Claire Novotny LLC",
+    "url": "https://github.com/novotnyllc"
+  },
+  "homepage": "https://github.com/novotnyllc/railyard",
+  "repository": "https://github.com/novotnyllc/railyard",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "claude-code",
+    "model-routing",
+    "orchestration",
+    "delivery",
+    "review",
+    "oracle",
+    "skills"
+  ],
+  "skills": [
+    "./skills/setup",
+    "./skills/doctor",
+    "./skills/cleanup-codex",
+    "./skills/deliver",
+    "./skills/model-routing",
+    "./skills/oracle",
+    "./skills/orchestrate",
+    "./skills/thermo-nuclear-code-quality-review",
+    "./skills/thermo-nuclear-review",
+    "./skills/thermos"
+  ],
+  "hooks": "./hooks/claude-hooks.json"
+}

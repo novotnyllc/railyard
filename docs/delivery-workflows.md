@@ -55,7 +55,7 @@ combine working trees.
 | A tiny known-file or documentation edit | Direct edit and targeted check | Neither delivery skill is required unless durable tracking or remote placement adds value. |
 
 You normally invoke one workflow skill. Both delivery skills run the same
-read-only `yardmaster:model-routing` intake. For an explicit local or
+read-only `railyard:model-routing` intake. For an explicit local or
 no-config single software-delivery task, invoke
 `deliver`; it routes brainstorm, plan, diagnosis, review, and
 local-only requests to their narrower CE terminal state and generic
@@ -109,7 +109,7 @@ orchestration loops.
 ## Thread titles
 
 Task Orchestrator and Goal Driven Delivery consume the shared
-`plugins/yardmaster/references/task-titles.md` policy. They use one fixed
+`plugins/railyard/references/task-titles.md` policy. They use one fixed
 role emoji followed by one current-state emoji, then any applicable Git issue
 or pull-request reference:
 
@@ -198,10 +198,10 @@ a task orchestrator.
 Before every work-starting task, message, follow-up, subagent, browser, or CLI
 action, Task Orchestrator, Goal Driven Delivery, Thermos, and compatible Machine
 Utilities senders invoke
-[`model-routing`](../plugins/yardmaster/skills/model-routing/SKILL.md) with
-exact contract `yardmaster/model-routing/v1`. It incorporates the
+[`model-routing`](../plugins/railyard/skills/model-routing/SKILL.md) with
+exact contract `railyard/model-routing/v1`. It incorporates the
 normative internal
-[`provider-task-routing`](../plugins/yardmaster/references/provider-task-routing.md)
+[`provider-task-routing`](../plugins/railyard/references/provider-task-routing.md)
 phase, so consumers never call a second router. It classifies collaboration
 transport, source and target transport trust domains, model-serving providers,
 destination capability, model/effort controls, privacy, and budget before dispatch.
@@ -269,14 +269,14 @@ cost is not free, unlike meters are not added without an explicit conversion,
 and every receipt separates configured, requested, and observed provider,
 model, effort, execution surface, and billing surface.
 
-Compound Engineering is not modified. Yardmaster supplies narrow,
+Compound Engineering is not modified. Railyard supplies narrow,
 stage-scoped override instructions: when CE Plan or Debug calls for its normal
 research helper, an admitted GLM scout may perform only that bounded step; when
 CE Work calls for an already-legitimized implementation unit, an admitted GLM
 engineer may be that unit's canonical writer; when a CE review stage calls for
 an optional cross-model reviewer, an admitted binding may use CE's existing
 attested read-only Claude adapter to supply the ordinary findings artifact;
-Yardmaster does not start a parallel Claude runner. CE keeps its workflow,
+Railyard does not start a parallel Claude runner. CE keeps its workflow,
 persona, artifact schema, legitimacy, synthesis, writer, and terminal
 authority. Missing transport takes a disclosed allowed fallback or blocks.
 
@@ -329,13 +329,13 @@ smallest applicable post-merge check.
 ## Model policy configuration and accounting
 
 The optional credential-free JSON catalog is schema version 1. Resolution uses
-an absolute `YARDMASTER_MODEL_POLICY_PATH`, then
-`$XDG_CONFIG_HOME/yardmaster/model-routing.json` or
-`~/.config/yardmaster/model-routing.json` on POSIX, then the current
-user's `LOCALAPPDATA/yardmaster/model-routing.json` on Windows. Private
-state uses an absolute `YARDMASTER_MODEL_STATE_PATH`, then
-`$XDG_STATE_HOME/yardmaster/model-routing-state.json` or
-`~/.local/state/yardmaster/model-routing-state.json`. Overrides must stay
+an absolute `RAILYARD_MODEL_POLICY_PATH`, then
+`$XDG_CONFIG_HOME/railyard/model-routing.json` or
+`~/.config/railyard/model-routing.json` on POSIX, then the current
+user's `LOCALAPPDATA/railyard/model-routing.json` on Windows. Private
+state uses an absolute `RAILYARD_MODEL_STATE_PATH`, then
+`$XDG_STATE_HOME/railyard/model-routing-state.json` or
+`~/.local/state/railyard/model-routing-state.json`. Overrides must stay
 outside repositories, worktrees, and plugin caches.
 
 Config and state versions are independent. A missing catalog uses the static
@@ -398,19 +398,6 @@ latency, and time remain separate. Authentication stays receipt-backed or
 Automatic login recovery, remote Oracle, and routed Oracle API are unsupported
 in v1.
 
-## Why `orchestrate` was removed
-
-The former `orchestrate` skill said to delegate substantial work, assign
-distinct ownership, choose agent effort deliberately, and remain available to
-the user. `orchestrate` already contains those rules with stronger task,
-host, dependency, evidence, and cleanup contracts.
-
-Keeping both also created conflicts: `orchestrate` prohibited delegation by
-leaf workers and made the coordinator integrate results, while
-`orchestrate` permits useful bounded delegation and requires integration
-and validation to be delegated. The clearer rule is one control-plane skill,
-`orchestrate`, and one software-delivery execution skill, `deliver`.
-
 ## Examples
 
 **One local bug fix:** invoke `deliver`. It diagnoses as needed,
@@ -457,11 +444,11 @@ interactive-elevation, or recoverable-host.
 Goal Driven Delivery consumes the orchestrator's explicit contract. A ready
 plan with a local/return-to-caller boundary uses CE Work; unconstrained shipping
 uses LFG. Later user instructions explicitly reconcile that shipping boundary.
-Compound Engineering remains an external carrier: Yardmaster selects it
+Compound Engineering remains an external carrier: Railyard selects it
 and supplies contracts but does not patch it.
 
 ## Source skills
 
-- [`model-routing`](../plugins/yardmaster/skills/model-routing/SKILL.md)
-- [`orchestrate`](../plugins/yardmaster/skills/orchestrate/SKILL.md)
-- [`deliver`](../plugins/yardmaster/skills/deliver/SKILL.md)
+- [`model-routing`](../plugins/railyard/skills/model-routing/SKILL.md)
+- [`orchestrate`](../plugins/railyard/skills/orchestrate/SKILL.md)
+- [`deliver`](../plugins/railyard/skills/deliver/SKILL.md)

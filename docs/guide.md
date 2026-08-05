@@ -1,8 +1,8 @@
-# Using Yardmaster
+# Using Railyard
 
-<img src="assets/yardmaster.png" alt="Yardmaster" width="160" align="right"/>
+<img src="assets/railyard.png" alt="Railyard" width="160" align="right"/>
 
-Yardmaster turns "go do X" into a verified, delivered result. You say what
+Railyard turns "go do X" into a verified, delivered result. You say what
 you want in plain language; it picks the workflow, the model, the budget, and
 — when you have a fleet — the machine, then drives the change through
 implementation, review, merge, and post-merge proof. You never have to name a
@@ -26,7 +26,7 @@ skill: the skills route themselves from what you say.
 ## The mental model
 
 Two decisions happen on every delivery request: *which workflow owns it* and
-*which model/effort carries each unit of work*. Yardmaster owns both.
+*which model/effort carries each unit of work*. Railyard owns both.
 
 ```mermaid
 flowchart TD
@@ -44,8 +44,8 @@ The model decision is layered, and the layers are independent:
 
 | Layer | Question | Answer lives in |
 | --- | --- | --- |
-| Session model | What model is *this conversation* running as? | Per-harness defaults — see [`harness-model-invocation.md`](../plugins/yardmaster/references/harness-model-invocation.md) |
-| Delegated route | What model carries a *bounded unit of work* handed to a carrier? | The router's frozen `yardmaster/model-routing/v1` contract — [`model-routing.md`](../plugins/yardmaster/references/model-routing.md) |
+| Session model | What model is *this conversation* running as? | Per-harness defaults — see [`harness-model-invocation.md`](../plugins/railyard/references/harness-model-invocation.md) |
+| Delegated route | What model carries a *bounded unit of work* handed to a carrier? | The router's frozen `railyard/model-routing/v1` contract — [`model-routing.md`](../plugins/railyard/references/model-routing.md) |
 
 With zero configuration the router already works: Sol for orchestration and
 review, Luna for implementation. You only write a catalog if you have
@@ -55,7 +55,7 @@ capabilities, so that route intentionally does not exist.
 
 ## Getting started
 
-Run **`yardmaster:setup`** (or just say "set up yardmaster"). It inventories
+Run **`railyard:setup`** (or just say "set up railyard"). It inventories
 what's installed, installs prerequisites on grouped consent — the
 [Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin)
 dependency, roundhouse, agent-utilities, gh-stack, tmux/jq — checks that the
@@ -64,7 +64,7 @@ what your fleet hosts are (enrolling each through `roundhouse:fleet-hosts`),
 and ends with a readiness table. "Just this machine, no config" is a complete
 and supported answer.
 
-When something later drifts or breaks, **`yardmaster:doctor`** diagnoses —
+When something later drifts or breaks, **`railyard:doctor`** diagnoses —
 plugin versions out of sync between harnesses or across hosts, stale
 marketplaces, unreachable hosts, missing keys — and proposes minimal fixes,
 applied only on consent.
@@ -90,7 +90,7 @@ routing — `deliver` still drives CE; it never bypasses it.
 
 For an implementation request, LFG (Compound Engineering) owns plan → work →
 simplify → review → browser test → commit/push/PR → CI and review
-settlement. Yardmaster's `deliver` then owns what CE doesn't: the independent
+settlement. Railyard's `deliver` then owns what CE doesn't: the independent
 review confirmation, the authorized merge with the repository's strategy, and
 the post-merge proof (`gh pr view` showing MERGED, the merge commit reachable
 from the base branch, and the smallest applicable post-merge check). A green
@@ -174,7 +174,7 @@ supported thing. For a native-Windows destination, declarative prerequisites
 can be staged from any harness through roundhouse's `windows-sftp` lane;
 only the in-session Codex task surface drives the interactive half.
 
-## What yardmaster never does
+## What railyard never does
 
 It never edits Compound Engineering (external carrier, ever unchanged); never
 treats a pushed checkpoint, green CI, or "no known defects" as completion;
@@ -183,9 +183,9 @@ administers machines directly — that's roundhouse's charter.
 
 More depth: [delivery-workflows.md](delivery-workflows.md) (the full
 decision rules and cross-host model), [AGENTS.md](../AGENTS.md) (charter),
-[`model-routing.md`](../plugins/yardmaster/references/model-routing.md) (the
+[`model-routing.md`](../plugins/railyard/references/model-routing.md) (the
 wire contract), and the harness-surface tables inside
-[`orchestrate`](../plugins/yardmaster/skills/orchestrate/SKILL.md)
+[`orchestrate`](../plugins/railyard/skills/orchestrate/SKILL.md)
 and
-[`deliver`](../plugins/yardmaster/skills/deliver/SKILL.md)
+[`deliver`](../plugins/railyard/skills/deliver/SKILL.md)
 for exactly how Codex concepts map to Claude Code.

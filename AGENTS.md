@@ -2,16 +2,16 @@
 
 ## Charter
 
-Yardmaster is the delivery system for agent work — the yard boss that stands
-between "go do X" and a verified, delivered result, on any machine in the
-fleet. Like its rail namesake it never hauls freight itself: it classifies
-inbound work, routes each cut of cars to the right track, couples the consist,
-clears departures, and confirms arrival.
+Railyard is the delivery system for agent work — the yard where "go do X"
+becomes a verified, delivered result, on any machine in the fleet. Like its
+namesake it never hauls the freight itself: inbound work is received and
+classified, routed to the right track, assembled into trains, cleared for
+departure, and confirmed arrived.
 
 **Belongs here:** deciding and driving work —
 
 - *Routing* — which model, effort, budget, and transport carry a unit of work
-  (`model-routing` and its `yardmaster/model-routing/v1` contract).
+  (`model-routing` and its `railyard/model-routing/v1` contract).
 - *Delivery* — driving one software change through the right workflow to
   merge and post-merge proof (`deliver`).
 - *Orchestration and placement* — decomposing objectives across tasks,
@@ -47,29 +47,29 @@ When one of the workflow skills is active, its two-emoji task-title contract
 overrides this repository's general thread-title convention unless the user
 supplies an exact title or a higher-priority harness rule applies.
 
-- Run the read-only `yardmaster:model-routing` intake on every software
+- Run the read-only `railyard:model-routing` intake on every software
   delivery turn. Explicit workflow and terminal instructions win. Configured
-  fleet/account delivery enters `yardmaster:orchestrate`, even when it
+  fleet/account delivery enters `railyard:orchestrate`, even when it
   fast-paths one lane; explicit local/no-fleet or no-config single-host work
-  enters `yardmaster:deliver` directly.
+  enters `railyard:deliver` directly.
 - Task Orchestrator owns decomposition, allocation, placement, concurrency,
   monitoring, synthesis, and evidence; it never executes child work. Each
   software-delivery child uses Goal Driven Delivery and consumes its immutable
   route, budget lease, checkpoint, and terminal policy.
 - LFG owns plan through CI and review settlement. Goal Driven Delivery owns
   authorized merge and post-merge proof.
-- `yardmaster/model-routing/v1` is the only operational model/effort, budget,
+- `railyard/model-routing/v1` is the only operational model/effort, budget,
   and transport policy. Per-harness session defaults, the Codex-only GLM-5.2
   route, and cross-harness handoffs live in
-  `plugins/yardmaster/references/harness-model-invocation.md`. Claude Code
+  `plugins/railyard/references/harness-model-invocation.md`. Claude Code
   cannot invoke GLM-5.2.
 
 ## Release Coupling
 
 When changing the plugin version, update:
 
-- `plugins/yardmaster/.codex-plugin/plugin.json`
-- `plugins/yardmaster/.claude-plugin/plugin.json`
+- `plugins/railyard/.codex-plugin/plugin.json`
+- `plugins/railyard/.claude-plugin/plugin.json`
 - `<marketplace-repo>/.agents/plugins/marketplace.json`
 - `<marketplace-repo>/.agents/plugins/plugin-versions.json`
 - `<marketplace-repo>/.claude-plugin/marketplace.json`
