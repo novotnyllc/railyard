@@ -24,4 +24,4 @@ jobs:
           node -e 'for (const f of ["plugins/yardmaster/.claude-plugin/plugin.json","plugins/yardmaster/.codex-plugin/plugin.json"]) JSON.parse(require("fs").readFileSync(f))'
       - name: JS contract suites
         run: |
-          node --test plugins/yardmaster/scripts/model-routing.test.mjs plugins/yardmaster/skills/orchestrate/scripts/delivery-contracts.test.mjs plugins/yardmaster/skills/oracle/scripts/oracle-route.test.mjs plugins/yardmaster/skills/oracle/scripts/ensure-oracle.test.mjs plugins/yardmaster/skills/cleanup-codex/scripts/cleanup-codex.test.mjs
+          node --test plugins/yardmaster/scripts/model-routing.test.mjs plugins/yardmaster/skills/orchestrate/scripts/delivery-contracts.test.mjs plugins/yardmaster/skills/oracle/scripts/oracle-route.test.mjs plugins/yardmaster/skills/oracle/scripts/ensure-oracle.test.mjs plugins/yardmaster/skills/cleanup-codex/scripts/cleanup-codex.test.mjs plugins/yardmaster/hooks/routing-nudge.test.mjs

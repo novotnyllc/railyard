@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 // SessionStart: inject the yardmaster routing charter as ambient context.
-// Cross-platform, dependency-free, never blocks (always exit 0).
+// Once per session, ~7 lines. Cross-platform, dependency-free, never blocks.
 process.stdout.write(
   [
-    "Yardmaster delivery routing: requests to implement, fix, ship, or 'go do'",
-    "a software change route through yardmaster:deliver; requests to",
-    "brainstorm, design, plan, spec, or debug software work also enter",
-    "yardmaster:deliver and stop at the matching Compound Engineering",
-    "artifact. Multi-task, fleet, or cross-machine objectives use",
-    "yardmaster:orchestrate. Delivery turns begin with the read-only",
-    "yardmaster:model-routing intake.",
+    "Yardmaster routing:",
+    "- Software change requests (implement/fix/ship/'go do it') route through",
+    "  yardmaster:deliver, starting with its read-only model-routing intake.",
+    "  Done means authorized merge plus post-merge proof — not green CI.",
+    "- Brainstorming, planning, spec, or debugging of software work — even",
+    "  arising mid-conversation — routes through yardmaster:deliver to the",
+    "  matching CE stage and stops at that artifact.",
+    "- Several independent pieces of work, work meant for another machine, or",
+    "  fleet-wide operations route through yardmaster:orchestrate (readiness",
+    "  via roundhouse; never raw SSH pretending to be an agent).",
+    "- Existing-PR watching/fixing/driving uses deliver's PR routes; a deep",
+    "  pre-commit review is yardmaster:thermos.",
   ].join("\n") + "\n",
 );
 process.exit(0);
