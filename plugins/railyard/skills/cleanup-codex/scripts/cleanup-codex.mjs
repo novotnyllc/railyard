@@ -43,7 +43,10 @@ const MAX_HOOK_INPUT_BYTES = 16 * 1024;
 const MAX_HOOK_TARGETS = 24;
 const MAX_HOOK_ANCESTORS = 8;
 const HOOK_COMMAND_TIMEOUT_MS = 500;
-const HOOK_TOTAL_BUDGET_MS = 2_700;
+// Codex clamps SessionEnd hook timeouts to 3s (declaring more just emits a
+// discovery warning), so the internal budget leaves ~800ms for node cold
+// start and module parse under that hard ceiling.
+const HOOK_TOTAL_BUDGET_MS = 2_200;
 const HOOK_GRACE_MS = 200;
 const HOOK_POST_SIGNAL_MS = 50;
 const HOOK_RECEIPT_SCHEMA = "cleanup-codex-hook-cleanup-v1";
