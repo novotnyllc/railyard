@@ -3008,6 +3008,19 @@ test("invalid SessionEnd stdin fails closed without scanning or mutation", () =>
   assert.deepEqual(signals, []);
 });
 
+test("non-macOS SessionEnd hook no-ops with exit 0 before reading stdin", () => {
+  for (const platform of ["win32", "linux"]) {
+    assert.equal(runCli(["cleanup", "--hook"], {
+      platform,
+      env: {},
+      hookInput: "",
+      runner: () => { throw new Error("must not scan"); },
+      signalProcess: () => { throw new Error("must not signal"); },
+      write: () => {},
+    }), EXIT_CODES.healthy);
+  }
+});
+
 test("plugin packaging exposes actual root SessionEnd cleanup and no Claude hook", () => {
   const codexManifest = JSON.parse(fs.readFileSync(
     path.join(PLUGIN_DIRECTORY, ".codex-plugin", "plugin.json"),
@@ -3051,7 +3064,9 @@ test("plugin packaging exposes actual root SessionEnd cleanup and no Claude hook
   );
   const commandHook = hooks.hooks.SessionEnd[0].hooks[0];
   assert.equal(commandHook.type, "command");
-  assert.equal(commandHook.timeout, 3);
+  // 5s outer cap: the script's internal 2.7s budget plus node cold start
+  // must never race the harness timeout.
+  assert.equal(commandHook.timeout, 5);
   assert.match(commandHook.command, /cleanup-codex\.mjs\" cleanup --hook$/);
   assert.doesNotMatch(commandHook.command, /\breap\b|\brecycle\b|\bStop\b|\bSubagentStop\b/);
 });

@@ -20,4 +20,5 @@ process.stdout.write(
     "  (skills cannot switch the session model) rather than running inline.",
   ].join("\n") + "\n",
 );
-process.exit(0);
+// No process.exit(): on Windows, pipe-backed stdout flushes asynchronously
+// and exit() can truncate the write. Natural exit is code 0 anyway.

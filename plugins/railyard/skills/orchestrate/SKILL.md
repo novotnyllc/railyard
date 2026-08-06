@@ -351,9 +351,11 @@ tool supports placement. Two remote lanes exist, one per destination harness:
   destination-local log. Wrap long-running or interactive children in a named
   tmux session (the `roundhouse:remote-mac` pattern) and report the
   attach command. A native-Windows destination with a `wsl_interop_via`
-  sibling is reachable the same way: SSH to the WSL side and launch the
-  Windows-native `claude` through full-path `powershell.exe` — a native
-  process, not WSL-side execution. The session UUID is the child's durable identity: resume the
+  sibling is reachable the same way: SSH to the WSL side, `cd /mnt/c`, and
+  launch the Windows-native `claude` through full-path `cmd.exe /c` per
+  roundhouse's fleet-agents interop rules (`%VAR%` not `$env:`; quote-heavy
+  briefs go through the `-EncodedCommand` hatch, never nested quotes) — a
+  native process, not WSL-side execution. The session UUID is the child's durable identity: resume the
   same child with `--resume <uuid>` on the same host; a new assignment gets a
   fresh UUID. Evidence returns through Git checkpoint pushes plus the captured
   JSON result — the same harness-neutral handoff substrate the Codex lane

@@ -3329,7 +3329,9 @@ export function inspectHook({
     return { status: "disabled", receipt: null, receiptPath: null };
   }
   if (platform !== "darwin") {
-    return { status: "unavailable", receipt: null, receiptPath: null };
+    // Non-macOS session ends are a no-op, not a refusal: exit 0 so the
+    // harness doesn't log a hook error on every Windows/Linux session.
+    return { status: "disabled", receipt: null, receiptPath: null };
   }
   const deadline = monotonicNow() + HOOK_TOTAL_BUDGET_MS;
   const boundedRunner = (file, args) => {
@@ -3926,6 +3928,16 @@ export function runCli(argv = process.argv.slice(2), {
   }
 
   if (parsed.hook) {
+    if (platform !== "darwin" || env.RAILYARD_CLEANUP_CODEX_HOOK_DISABLED === "1") {
+      // Non-macOS or explicitly disabled: no-op before touching stdin — the
+      // hook must never block on the payload or report a refusal here.
+      if (parsed.json) write(JSON.stringify(hookInspectionResult(
+        { status: "disabled", receipt: null, receiptPath: null },
+        platform,
+        parsed.thresholds,
+      ), null, 2));
+      return EXIT_CODES.healthy;
+    }
     const payload = hookInput === undefined ? readHookPayload(fsApi) : parseHookPayload(hookInput);
     if (!payload) {
       if (parsed.json) write(JSON.stringify(hookInspectionResult(

@@ -6,6 +6,7 @@
 // with a task verb — so ordinary conversation stays silent. At most one
 // line is ever injected. Cross-platform, dependency-free, never blocks.
 let raw = "";
+process.stdin.setEncoding("utf8");
 process.stdin.on("data", (c) => (raw += c));
 process.stdin.on("end", () => {
   let prompt = "";
@@ -98,5 +99,7 @@ process.stdin.on("end", () => {
       "[railyard] Delivery intent: route through railyard:deliver (model-routing intake first; ends at merge + post-merge proof unless a narrower stop is asked).";
   }
   if (line) process.stdout.write(line + "\n");
-  process.exit(0);
+  // Windows pipe stdout flushes async; process.exit() here could drop the
+  // line. exitCode + natural exit flushes on every platform.
+  process.exitCode = 0;
 });

@@ -1,5 +1,5 @@
 {
-  "description": "Codex hooks: bounded exact-process SessionEnd cleanup (Codex-only), plus the shared routing charter and prompt nudge.",
+  "description": "Codex hooks: bounded exact-process SessionEnd cleanup (macOS-only at runtime; no-ops with exit 0 elsewhere), plus the shared routing charter and prompt nudge.",
   "hooks": {
     "SessionEnd": [
       {
@@ -7,7 +7,8 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/cleanup-codex/scripts/cleanup-codex.mjs\" cleanup --hook",
-            "timeout": 3
+            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\skills\\cleanup-codex\\scripts\\cleanup-codex.mjs\" cleanup --hook }",
+            "timeout": 5
           }
         ]
       }
@@ -18,6 +19,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/routing-charter.js\"",
+            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\routing-charter.js\" }",
             "timeout": 5
           }
         ]
@@ -29,6 +31,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/routing-nudge.js\"",
+            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\routing-nudge.js\" }",
             "timeout": 5
           }
         ]

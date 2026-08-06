@@ -60,6 +60,9 @@ Codex installed → skip Codex-side checks, and say so).
   `wsl_interop_via`, verify the interop lane answers (`cd /mnt/c` then
   full-path `cmd.exe /c` runs a native command from the WSL side), the
   named WSL entry exists, and paired entries agree on `physical_host`.
+  If the interop launch fails while SSH is healthy, check
+  `/proc/sys/fs/binfmt_misc/WSLInterop` on the WSL side to split
+  "interop disabled" from "target missing".
 
 ## Findings and fixes
 
