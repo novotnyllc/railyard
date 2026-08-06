@@ -158,7 +158,7 @@ leave model and effort unset unless the request names them.
 
 ## Boundaries this reference does not move
 
-- The Claude subscription Fable review preflight still blocks when
+- The Claude subscription review preflight still blocks when
   `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, or any
   other third-party provider selector is in the launch environment. That is
   the check doing its job, not an obstacle.

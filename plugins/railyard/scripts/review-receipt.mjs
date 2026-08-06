@@ -1,25 +1,68 @@
 #!/usr/bin/env node
 
+// Attests a Claude-family review: the private `claude -p --output-format
+// stream-json` JSONL stream plus the process exit status. The expected review
+// model is supplied by the caller (`--expect-model`) and is whatever
+// railyard:model-routing selected — Fable, Opus, or a later Claude review
+// model. Nothing here is model-specific.
+//
+// This parser only understands Claude Code's stream format. Other review
+// carriers carry their own native evidence and must NOT be piped through it:
+// Codex-native review models (Sol today, successors later) validate through
+// Codex's own task/thread metadata, and Oracle/ChatGPT Pro review validates
+// through the oracle route's receipts. Equivalents exist per carrier; none is
+// privileged.
+
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 
-const SUPPORTED_VERSIONS = new Set(["2.1.220"]);
-const REQUIRED_MODEL = "claude-fable-5";
-const ALLOWED_AUXILIARY_MODELS = new Set(["claude-haiku-4-5-20251001"]);
-const isFable = (model) => model === REQUIRED_MODEL;
-const isAllowedAuxiliary = (model) => ALLOWED_AUXILIARY_MODELS.has(model);
+const DEFAULT_MIN_CLI_VERSION = "2.1.220";
+// Claude Code uses Haiku for internal summarization/title generation, so it is
+// allowed by default alongside a Claude-family expectation. Any explicit
+// --allow-aux replaces this default.
+const DEFAULT_CLAUDE_AUX = "claude-haiku-4-5-20251001";
 
 let exitStatus;
+let expectModel;
+let minCliVersion = DEFAULT_MIN_CLI_VERSION;
 let path;
+const allowAux = [];
 for (let i = 2; i < process.argv.length; i += 1) {
-  if (process.argv[i] === "--exit-status") exitStatus = Number(process.argv[++i]);
-  else if (!path) path = process.argv[i];
-  else throw new Error(`unexpected argument: ${process.argv[i]}`);
+  const arg = process.argv[i];
+  if (arg === "--exit-status") exitStatus = Number(process.argv[++i]);
+  else if (arg === "--expect-model") expectModel = process.argv[++i];
+  else if (arg === "--allow-aux") allowAux.push(process.argv[++i]);
+  else if (arg === "--min-cli-version") minCliVersion = process.argv[++i];
+  else if (!path) path = arg;
+  else throw new Error(`unexpected argument: ${arg}`);
 }
 
-if (!Number.isInteger(exitStatus)) {
-  console.error("usage: claude-fable-review-receipt.mjs --exit-status <integer> [stream.jsonl]");
+if (!Number.isInteger(exitStatus) || !expectModel) {
+  console.error(
+    "usage: review-receipt.mjs --exit-status <integer> --expect-model <model-id>" +
+      " [--allow-aux <model-id>]... [--min-cli-version <semver>] [stream.jsonl]",
+  );
   process.exit(2);
+}
+
+const auxiliaryModels = new Set(
+  allowAux.length ? allowAux : expectModel.startsWith("claude-") ? [DEFAULT_CLAUDE_AUX] : [],
+);
+const isExpected = (model) => model === expectModel;
+const isAllowedAuxiliary = (model) => auxiliaryModels.has(model);
+
+// Numeric dotted compare, zero-padded to equal length; a version that is not
+// all-numeric (prereleases, build metadata, undefined) fails closed.
+function atLeastMinVersion(version) {
+  const parts = String(version ?? "").split(".");
+  const floor = minCliVersion.split(".");
+  if ([...parts, ...floor].some((part) => !/^\d+$/.test(part))) return false;
+  for (let i = 0; i < Math.max(parts.length, floor.length); i += 1) {
+    const observed = Number(parts[i] ?? 0);
+    const required = Number(floor[i] ?? 0);
+    if (observed !== required) return observed > required;
+  }
+  return true;
 }
 
 const input = path ? createReadStream(path, "utf8") : process.stdin;
@@ -36,6 +79,7 @@ function finish(ok, reason, details = {}) {
   const receipt = {
     ok,
     reason,
+    expected_model: expectModel,
     model: init?.model ?? null,
     claude_code_version: init?.claude_code_version ?? null,
     session_id: init?.session_id ?? null,
@@ -47,13 +91,13 @@ function finish(ok, reason, details = {}) {
 }
 
 function inspectModelUsage(modelUsage) {
-  let sawFable = false;
+  let sawExpected = false;
   let reason;
   let observedModel;
   let observedProvider;
   let providerModel;
   for (const [model, usage] of Object.entries(modelUsage)) {
-    if (isFable(model)) sawFable = true;
+    if (isExpected(model)) sawExpected = true;
     else if (!isAllowedAuxiliary(model) && !reason) {
       reason = "model_usage_mismatch";
       observedModel = model;
@@ -65,7 +109,7 @@ function inspectModelUsage(modelUsage) {
     }
   }
   return {
-    sawFable,
+    sawExpected,
     ...(reason ? { reason } : {}),
     ...(observedModel ? { observed_model: observedModel } : {}),
     ...(observedProvider !== undefined ? { observed_provider: observedProvider, provider_model: providerModel } : {}),
@@ -73,7 +117,7 @@ function inspectModelUsage(modelUsage) {
 }
 
 function receiptEvidence(usageEvidence) {
-  const { reason, sawFable, ...details } = usageEvidence ?? {};
+  const { reason, sawExpected, ...details } = usageEvidence ?? {};
   return { ...(reason ? { evidence_reason: reason } : {}), ...details };
 }
 
@@ -101,9 +145,9 @@ lines.on("line", (line) => {
   if (event.type === "system" && event.subtype === "init") {
     if (state !== "await_init") return finish(false, "invalid_event_order");
     init = event;
-    if (!SUPPORTED_VERSIONS.has(event.claude_code_version)) {
-      return finish(false, "unsupported_claude_version");
-    } else if (!isFable(event.model)) {
+    if (!atLeastMinVersion(event.claude_code_version)) {
+      return finish(false, "unsupported_claude_version", { min_claude_code_version: minCliVersion });
+    } else if (!isExpected(event.model)) {
       return finish(false, "init_model_mismatch", { observed_model: event.model ?? null });
     }
     state = "active";
@@ -114,7 +158,7 @@ lines.on("line", (line) => {
     if (state !== "active") return finish(false, "invalid_event_order");
     assistantEvents += 1;
     const model = event.message?.model;
-    if (!isFable(model)) {
+    if (!isExpected(model)) {
       finish(false, "assistant_model_mismatch", { observed_model: model ?? null });
     }
     return;
@@ -147,10 +191,10 @@ lines.on("close", () => {
   const modelUsage = result.modelUsage;
   if (!modelUsage || typeof modelUsage !== "object") return finish(false, "missing_model_usage");
   if (usageEvidence.reason) {
-    const { reason, sawFable, ...details } = usageEvidence;
+    const { reason, sawExpected, ...details } = usageEvidence;
     return finish(false, reason, details);
   }
-  if (!usageEvidence.sawFable) return finish(false, "missing_fable_usage");
+  if (!usageEvidence.sawExpected) return finish(false, "missing_expected_usage");
 
   finish(true, "validated", { exit_status: exitStatus });
 });

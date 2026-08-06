@@ -80,16 +80,19 @@ through its native wait operation. It may create provider-local nested agents
 only within the existing depth, concurrency, and child-count bounds, and it
 must apply this same classification to every nested edge.
 
-## Claude subscription Fable reviews
+## Claude subscription reviews
 
 This launch contract applies only after the workflow selects a supported
-read-only Claude subscription review. Railyard defines the binding and
-validates its receipt; the caller's existing detached supervisor owns process
-launch, private logs, deadlines, and ownership-scoped termination. Do not add a
-second Claude runner here or use Oracle as a transport substitute. A CE adapter
-that cannot preserve the raw stream and enforce this contract does not verify
-Fable: block and return control to the caller. A different-model review is a
-new, explicitly authorized task, never a fallback receipt for this one.
+read-only Claude subscription review. The review model is the routed model —
+whatever `railyard:model-routing` selected for this review (Fable, Opus, or a
+later Claude review model); this contract never hardcodes one. Railyard defines
+the binding and validates its receipt; the caller's existing detached
+supervisor owns process launch, private logs, deadlines, and ownership-scoped
+termination. Do not add a second Claude runner here or use Oracle as a
+transport substitute. A CE adapter that cannot preserve the raw stream and
+enforce this contract does not verify the routed model: block and return
+control to the caller. A different-model review is a new, explicitly authorized
+task, never a fallback receipt for this one.
 
 ### Fail-closed preflight
 
@@ -97,8 +100,9 @@ Use a secret-free, presence-only preflight. Never print environment values,
 auth tokens, settings bodies, or raw review output in a routing receipt.
 
 1. Resolve one `claude` executable and record its canonical path and version.
-   Version `2.1.220` is the currently verified baseline; another version must
-   pass the same canaries and update the validator before use.
+   Version `2.1.220` is the verified minimum; the receipt parser enforces it as
+   a floor (`--min-cli-version`), so newer patch releases pass without a
+   validator change. Raise the floor when a newer version becomes required.
 2. Read only these fields from `claude auth status --json`: `loggedIn`,
    `authMethod`, `subscriptionType`, and `apiProvider`. Require `loggedIn: true`,
    `authMethod: claude.ai`, and `apiProvider: firstParty`.
@@ -121,7 +125,7 @@ auth tokens, settings bodies, or raw review output in a routing receipt.
 Run from the trusted review checkout with a secret-free prompt:
 
 ```bash
-"$CLAUDE_BIN" -p --model claude-fable-5 --effort high --permission-mode plan \
+"$CLAUDE_BIN" -p --model "$REVIEW_MODEL" --effort high --permission-mode plan \
   --tools 'Read,Grep,Glob' \
   --safe-mode \
   --mcp-config '{"mcpServers":{}}' --strict-mcp-config \
@@ -131,7 +135,9 @@ Run from the trusted review checkout with a secret-free prompt:
 ```
 
 `CLAUDE_BIN` is the canonical executable path attested by the preflight, not a
-later `PATH` lookup. The read-only route intentionally excludes `Bash`; a
+later `PATH` lookup. `REVIEW_MODEL` is the exact routed review model ID from
+`railyard:model-routing`, never a family alias or an inferred default. The
+read-only route intentionally excludes `Bash`; a
 review that needs commands must use the maintained CE adapter's separately
 verified tool policy.
 
@@ -163,38 +169,47 @@ for the bounded run. Human-attachable work is a different lifecycle: omit
 Validate the completed private stream with the shipped dependency-free parser:
 
 ```bash
-node <railyard-plugin-root>/scripts/claude-fable-review-receipt.mjs \
-  --exit-status <claude-exit-status> <private-stream.jsonl>
+node <railyard-plugin-root>/scripts/review-receipt.mjs \
+  --exit-status <claude-exit-status> --expect-model <routed-model-id> \
+  <private-stream.jsonl>
 ```
 
-Accept review evidence only when the parser exits zero. It requires a supported
-Claude version, a Fable `system/init`, only Fable assistant messages, a
-non-error terminal result, Fable usage, first-party providers, and process exit
-zero. The observed auxiliary Haiku title-generation usage is allowed but never
-satisfies the Fable requirement.
+Accept review evidence only when the parser exits zero. It requires a Claude
+version at or above the floor (`--min-cli-version`, default `2.1.220`), a
+`system/init` on the expected model, only expected-model assistant messages, a
+non-error terminal result, expected-model usage, first-party providers, and
+process exit zero. Claude-family expectations allow the observed auxiliary
+Haiku title-generation usage by default; extra auxiliaries need explicit
+`--allow-aux` and never satisfy the expected-model requirement.
+
+This parser attests Claude-family streams only. Codex-native review models (Sol
+today, successors later) validate through Codex's own native task/thread
+evidence, and Oracle-based review validates through the oracle route's own
+receipts; equivalents exist per carrier, and none is privileged.
 
 Reject `system.subtype:model_refusal_fallback` immediately, even when the
-initial model was Fable. Also reject any later non-Fable assistant identity or
-unapproved primary/fallback family in `modelUsage`. On either live event, the
-supervisor terminates only its owned Claude review process group, preserves the
-partial private stream and exit evidence, and escalates without waiting for a
-terminal result. A provider fallback may consume allowance and must be reported,
-but it is not Fable review evidence.
+initial model was the routed one. Also reject any later assistant identity that
+is not the routed model, or an unapproved primary/fallback family in
+`modelUsage`. On either live event, the supervisor terminates only its owned
+Claude review process group, preserves the partial private stream and exit
+evidence, and escalates without waiting for a terminal result. A provider
+fallback may consume allowance and must be reported, but it is not review
+evidence for the routed model.
 
-After a refusal, the caller may make exactly one fresh Fable-only attempt. First
-inspect the refusal category and the original prompt for ambiguous wording,
-then write a semantically equivalent rephrase that makes the legitimate,
-defensive, read-only purpose explicit without removing material scope,
-concealing intent, or asking the model to evade policy. Launch the same full
-`claude-fable-5` ID with the same isolation flags, a new private stream, and no
+After a refusal, the caller may make exactly one fresh attempt on the same
+routed model. First inspect the refusal category and the original prompt for
+ambiguous wording, then write a semantically equivalent rephrase that makes the
+legitimate, defensive, read-only purpose explicit without removing material
+scope, concealing intent, or asking the model to evade policy. Launch the same
+full routed model ID with the same isolation flags, a new private stream, and no
 `--fallback-model`. Record the attempt number and exactly one rephrase reason
 code from `ambiguous_wording_clarified`, `legitimate_context_clarified`, or
 `defensive_read_only_purpose_clarified`; keep any textual rationale private
 without prompt excerpts or restatements. A second refusal, any model drift, or any other failure blocks and
-returns control to the caller; it never falls through to Opus, Sol, or another
-model.
+returns control to the caller; it never falls through to a different model or
+carrier.
 
-Timeout, malformed or truncated JSONL, missing init/result/usage, unsupported
+Timeout, malformed or truncated JSONL, missing init/result/usage, below-floor
 version, model or provider mismatch, `is_error: true`, or nonzero exit blocks
 and returns control to the caller. The refusal-only retry above is the sole
 retry; never silently retry another charged or ambiguously started review, enable

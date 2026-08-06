@@ -20,8 +20,8 @@ const providerRouting = readFileSync(
   new URL("../../../references/provider-task-routing.md", import.meta.url),
   "utf8",
 );
-const fableReceipt = fileURLToPath(
-  new URL("../../../scripts/claude-fable-review-receipt.mjs", import.meta.url),
+const reviewReceipt = fileURLToPath(
+  new URL("../../../scripts/review-receipt.mjs", import.meta.url),
 );
 const workflows = readFileSync(
   new URL("../../../../../docs/delivery-workflows.md", import.meta.url),
@@ -159,7 +159,7 @@ test("gates provider tasks on verified, secret-free acknowledgement", () => {
   assert.match(providerRouting, /Required provider-task bridge is unavailable[\s\S]*never substitute a provider or model silently/);
 });
 
-test("defines an isolated, bounded Fable review launch contract", () => {
+test("defines an isolated, bounded routed-model review launch contract", () => {
   assert.match(providerRouting, /`--safe-mode` preserves OAuth\/keychain auth/);
   assert.match(providerRouting, /--mcp-config '\{"mcpServers":\{\}\}' --strict-mcp-config/);
   assert.match(providerRouting, /--output-format stream-json --verbose --include-partial-messages/);
@@ -168,19 +168,46 @@ test("defines an isolated, bounded Fable review launch contract", () => {
   assert.match(providerRouting, /must not include `--fallback-model`[\s\S]*no-configured-fallback state/);
   assert.match(providerRouting, /`CLAUDE_BIN` is the canonical executable path attested by the preflight/);
   assert.match(providerRouting, /intentionally excludes `Bash`/);
-  assert.match(providerRouting, /exactly one fresh Fable-only attempt[\s\S]*semantically equivalent rephrase/);
+  assert.match(providerRouting, /exactly one fresh attempt on the same\s+routed model[\s\S]*semantically equivalent rephrase/);
   assert.match(providerRouting, /`ambiguous_wording_clarified`[\s\S]*`legitimate_context_clarified`[\s\S]*`defensive_read_only_purpose_clarified`/);
-  assert.match(providerRouting, /never falls through to Opus, Sol, or another\s+model/);
+  assert.match(providerRouting, /never falls through to a different model or\s+carrier/);
 });
 
-function validateFable(events, exitStatus = 0) {
+test("binds review evidence to the routed model, not a hardcoded one", () => {
+  assert.match(providerRouting, /The review model is the routed model —/);
+  assert.match(providerRouting, /`railyard:model-routing` selected for this review \(Fable, Opus, or a\s+later Claude review model\)/);
+  assert.match(providerRouting, /--expect-model <routed-model-id>/);
+  assert.match(providerRouting, /--min-cli-version`?, default `2\.1\.220`/);
+  assert.match(providerRouting, /Codex-native review models \(Sol\s+today, successors later\) validate through Codex's own native task\/thread\s+evidence/);
+  assert.match(providerRouting, /Oracle-based review validates through the oracle route's own\s+receipts; equivalents exist per carrier, and none is privileged/);
+  assert.doesNotMatch(providerRouting, /--model claude-fable-5/);
+});
+
+const validateFable = (events, exitStatus = 0, extraArgs = []) =>
+  validate("claude-fable-5", events, exitStatus, extraArgs);
+
+function validate(expectModel, events, exitStatus = 0, extraArgs = []) {
   const result = spawnSync(
     process.execPath,
-    [fableReceipt, "--exit-status", String(exitStatus)],
+    [reviewReceipt, "--exit-status", String(exitStatus), "--expect-model", expectModel, ...extraArgs],
     { input: `${events.map((event) => JSON.stringify(event)).join("\n")}\n`, encoding: "utf8" },
   );
   return { ...result, receipt: JSON.parse(result.stdout) };
 }
+
+const streamFor = (model, version = "2.1.220") => [
+  { type: "system", subtype: "init", model, claude_code_version: version, session_id: "test-session" },
+  { type: "assistant", message: { model } },
+  {
+    type: "result",
+    subtype: "success",
+    is_error: false,
+    modelUsage: {
+      "claude-haiku-4-5-20251001": { provider: "firstParty" },
+      [model]: { provider: "firstParty" },
+    },
+  },
+];
 
 const init = {
   type: "system",
@@ -205,6 +232,52 @@ test("accepts a first-party Fable stream with auxiliary Haiku usage", () => {
   assert.equal(run.status, 0);
   assert.equal(run.receipt.ok, true);
   assert.equal(run.receipt.reason, "validated");
+});
+
+test("attests whichever Claude model the router selected", () => {
+  const opus = validate("claude-opus-5", streamFor("claude-opus-5"));
+  assert.equal(opus.status, 0);
+  assert.equal(opus.receipt.reason, "validated");
+  assert.equal(opus.receipt.expected_model, "claude-opus-5");
+
+  const drift = validate("claude-opus-5", streamFor("claude-fable-5"));
+  assert.equal(drift.status, 1);
+  assert.equal(drift.receipt.reason, "init_model_mismatch");
+  assert.equal(drift.receipt.observed_model, "claude-fable-5");
+});
+
+test("allows the default Haiku auxiliary for a Claude-family expectation", () => {
+  const run = validate("claude-opus-5", streamFor("claude-opus-5"));
+  assert.equal(run.receipt.reason, "validated");
+  // An explicit allowlist replaces the default, so Haiku then fails usage.
+  const explicit = validate("claude-opus-5", streamFor("claude-opus-5"), 0, [
+    "--allow-aux",
+    "claude-other-1",
+  ]);
+  assert.equal(explicit.receipt.reason, "model_usage_mismatch");
+  assert.equal(explicit.receipt.observed_model, "claude-haiku-4-5-20251001");
+});
+
+test("treats the CLI version as a floor, not a pinned set", () => {
+  assert.equal(validate("claude-fable-5", streamFor("claude-fable-5", "2.1.223")).receipt.reason, "validated");
+  assert.equal(validate("claude-fable-5", streamFor("claude-fable-5", "2.2.0")).receipt.reason, "validated");
+  const stale = validate("claude-fable-5", streamFor("claude-fable-5", "2.1.219"));
+  assert.equal(stale.status, 1);
+  assert.equal(stale.receipt.reason, "unsupported_claude_version");
+  assert.equal(stale.receipt.min_claude_code_version, "2.1.220");
+  assert.equal(
+    validate("claude-fable-5", streamFor("claude-fable-5", "2.1.219"), 0, ["--min-cli-version", "2.1.0"]).receipt.reason,
+    "validated",
+  );
+  // Uneven segment counts pad, non-numeric versions fail closed.
+  assert.equal(
+    validate("claude-fable-5", streamFor("claude-fable-5", "2.2"), 0, ["--min-cli-version", "2.1.220"]).receipt.reason,
+    "validated",
+  );
+  assert.equal(
+    validate("claude-fable-5", streamFor("claude-fable-5", "2.1.220-rc1")).receipt.reason,
+    "unsupported_claude_version",
+  );
 });
 
 test("rejects refusal fallback after a valid Fable init", () => {
@@ -285,10 +358,17 @@ test("rejects model drift, error results, nonzero exits, and truncated streams",
   assert.equal(erroredWithDrift.receipt.observed_provider, "thirdParty");
 });
 
-test("reports unreadable Fable streams as metadata", () => {
+test("reports unreadable review streams as metadata", () => {
   const run = spawnSync(
     process.execPath,
-    [fableReceipt, "--exit-status", "0", "/path/that/does/not/exist/fable.jsonl"],
+    [
+      reviewReceipt,
+      "--exit-status",
+      "0",
+      "--expect-model",
+      "claude-fable-5",
+      "/path/that/does/not/exist/review.jsonl",
+    ],
     { encoding: "utf8" },
   );
   assert.equal(run.status, 1);
