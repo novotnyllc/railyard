@@ -47,6 +47,28 @@ test("spawn_agent with model and effort passes", () => {
   assert.equal(r.code, 0);
 });
 
+test("spawn_agent non-OpenAI child on mismatched-family session is refused", () => {
+  const r = run({
+    tool_name: "spawn_agent",
+    model: "gpt-5.6-sol",
+    tool_input: { model: "glm-5.2", reasoning_effort: "high", message: "x", task_name: "t" },
+  });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /cannot switch providers/);
+  assert.match(r.err, /modelProvider/);
+});
+
+test("spawn_agent non-OpenAI child on same-family session passes when provider configured", () => {
+  // fail-open on unreadable config.toml means sameFamily alone suffices here
+  const r = run({
+    tool_name: "spawn_agent",
+    model: "glm-5.2",
+    tool_input: { model: "glm-5.2", reasoning_effort: "high", message: "x", task_name: "t" },
+  });
+  // config.toml on this machine configures zai_litellm with glm -> allowed
+  assert.equal(r.code, 0);
+});
+
 test("spawn_agent missing reasoning_effort is refused naming the field", () => {
   const r = run({ tool_name: "spawn_agent", tool_input: { model: "gpt-5.6-luna" } });
   assert.equal(r.code, 2);

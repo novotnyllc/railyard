@@ -53,10 +53,45 @@ process.stdin.on("end", () => {
         "[railyard] Dispatch refused: spawn_agent must set " +
           missing.join(" and ") +
           " explicitly (no silent inheritance of the session tier)." +
-          " spawn_agent has no provider field — a non-OpenAI model" +
-          " requires its thread already on that provider" +
-          " (thread/start modelProvider). Retry with the fields set.",
+          " Retry with the fields set.",
       );
+      return;
+    }
+    // Provider coherence: spawn_agent has no provider field — a child
+    // inherits the thread's provider. A non-OpenAI child model therefore
+    // only works when the session already runs that family, and only when
+    // the active config.toml actually configures a provider for it.
+    const child = args.model.trim();
+    const openaiLike = (m) => /^(gpt-|o[0-9]|codex)/i.test(m);
+    if (!openaiLike(child)) {
+      const family = child.split(/[-.]/)[0].toLowerCase();
+      const session = String(input.model || "");
+      const sameFamily = session.toLowerCase().startsWith(family);
+      let providerConfigured = true; // fail open when unreadable
+      try {
+        const fs = require("fs");
+        const path = require("path");
+        const os = require("os");
+        const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
+        const toml = fs.readFileSync(path.join(codexHome, "config.toml"), "utf8");
+        providerConfigured =
+          /\[model_providers\./.test(toml) &&
+          toml.toLowerCase().includes(family);
+      } catch {}
+      if (!sameFamily || !providerConfigured) {
+        block(
+          "[railyard] Dispatch refused: '" + child + "' is not an OpenAI-served" +
+            " model, and spawn_agent cannot switch providers — the child" +
+            " inherits this thread's provider. " +
+            (!providerConfigured
+              ? "No model_providers entry for '" + family + "' is configured" +
+                " in the active config.toml. "
+              : "This session runs '" + session + "', a different family. ") +
+            "Start a dedicated thread instead (thread/start with model +" +
+            " modelProvider, or `codex exec -m " + child +
+            " -c model_provider=<provider>`).",
+        );
+      }
     }
     return;
   }
