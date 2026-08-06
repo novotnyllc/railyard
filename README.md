@@ -49,6 +49,10 @@ train, clears the departure, and confirms arrival:
 
 ## Built on Compound Engineering
 
+Installing railyard installs Compound Engineering automatically — it is a
+documented, required dependency, and the railyard install is the consent
+for it. No separate approval step.
+
 Delivery routes through the external
 [Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin)
 plugin (`lfg`, the `ce-*` skills, `ce-babysit-pr` 3.20.0+) and never modifies

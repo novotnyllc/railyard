@@ -90,6 +90,7 @@ front doors, and everything below is what they call on your behalf.
 claude plugin marketplace add novotnyllc/marketplace
 claude plugin install railyard@novotnyllc
 # then just say: "set up railyard"
+# (setup installs Compound Engineering automatically — railyard's documented dependency)
 ```
 
 Codex:

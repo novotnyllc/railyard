@@ -31,7 +31,7 @@ test("charter prints routing lines and exits 0", () => {
 test("no harness roots: no dependency warning", () => {
   const home = fixtureHome();
   const r = run(home);
-  assert.doesNotMatch(r.out, /MISSING DEPENDENCY/);
+  assert.doesNotMatch(r.out, /ACTION REQUIRED/);
   rmSync(home, { recursive: true, force: true });
 });
 
@@ -39,7 +39,7 @@ test("harness root without CE cache warns with that harness's fix", () => {
   const home = fixtureHome();
   mkdirSync(path.join(home, ".claude"), { recursive: true });
   const r = run(home);
-  assert.match(r.out, /MISSING DEPENDENCY/);
+  assert.match(r.out, /ACTION REQUIRED/);
   assert.match(r.out, /claude plugin marketplace add EveryInc\/compound-engineering-plugin/);
   assert.doesNotMatch(r.out, /codex plugin marketplace add/);
   rmSync(home, { recursive: true, force: true });
@@ -52,7 +52,7 @@ test("CE installed: no warning", () => {
   mkdirSync(ver, { recursive: true });
   writeFileSync(path.join(ver, "marker"), "x");
   const r = run(home);
-  assert.doesNotMatch(r.out, /MISSING DEPENDENCY/);
+  assert.doesNotMatch(r.out, /ACTION REQUIRED/);
   rmSync(home, { recursive: true, force: true });
 });
 
@@ -63,5 +63,17 @@ test("both harnesses missing CE: both fixes printed", () => {
   const r = run(home);
   assert.match(r.out, /claude plugin install compound-engineering/);
   assert.match(r.out, /codex plugin add compound-engineering/);
+  rmSync(home, { recursive: true, force: true });
+});
+
+test("CLAUDE_CONFIG_DIR override is honored", () => {
+  const home = fixtureHome();
+  const alt = path.join(home, "alt-claude");
+  mkdirSync(alt, { recursive: true });
+  const r = spawnSync(process.execPath, [script], {
+    encoding: "utf8",
+    env: { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: alt },
+  });
+  assert.match(r.stdout, /ACTION REQUIRED/);
   rmSync(home, { recursive: true, force: true });
 });

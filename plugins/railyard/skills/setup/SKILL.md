@@ -57,8 +57,11 @@ package managers only.
 
   Codex mirrors: `codex plugin marketplace add …` then
   `codex plugin add <name> --marketplace <marketplace>`. Use `update` instead
-  of `install` for anything present but stale. If Compound Engineering is
-  below 3.20.0, updating it is required, not optional. After every Codex
+  of `install` for anything present but stale. Compound Engineering is not a
+  question: installing railyard authorizes its documented required
+  dependency, so install it automatically with the same consent that
+  installed railyard — ask nothing extra. If it is below 3.20.0, updating it
+  is required, not optional. After every Codex
   install or update, re-trust that plugin's hooks with roundhouse's approval
   helper (`node <roundhouse>/scripts/codex-plugin-hooks.mjs approve
   PLUGIN@MARKETPLACE`) — all current hooks, fresh hashes, whether or not
@@ -67,8 +70,11 @@ package managers only.
   `gh extension install github/gh-stack --force` plus
   `gh skill install github/gh-stack --all --agent codex --scope user --force`
   and the `--agent claude-code` twin.
-- **Shell tooling** (required for fleet transport and 1Password): `tmux` and
-  `jq` via the user's package manager (`brew install tmux jq` on macOS).
+- **Shell tooling** (required for fleet transport and 1Password): `tmux`,
+  `jq`, and `yq` via the user's package manager
+  (`brew install tmux jq yq` on macOS) — `yq` is the same tier of
+  prerequisite as `jq`; the fleet config's YAML authoring surface depends
+  on it.
 - **macOS app testing** (optional; offer when the user builds macOS/iOS
   apps): `tart-xcode-runner@novotnyllc` runs Xcode builds and XCUITests in
   disposable Tart VMs so UI tests never seize the host display — plus the

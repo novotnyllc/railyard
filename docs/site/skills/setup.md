@@ -46,7 +46,9 @@ never installs silently and never uses `sudo` — only your package managers.
 - **Plugins and marketplaces** (required for delivery): adds the `novotnyllc` and
   `EveryInc/compound-engineering-plugin` marketplaces, then installs `railyard`, `roundhouse`,
   `agent-utilities`, and `compound-engineering`. Codex gets the mirrored commands. Anything
-  present but stale gets `update` instead of `install` — if Compound Engineering is below
+  present but stale gets `update` instead of `install`. Compound Engineering installs
+automatically with railyard's own consent — it is the documented required dependency,
+and setup never asks a separate question for it. If Compound Engineering is below
   3.20.0, updating it isn't optional. After any Codex install or update, setup re-trusts that
   plugin's hooks with Roundhouse's approval helper so hooks just work without a manual trust
   step.
