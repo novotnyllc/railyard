@@ -1,6 +1,6 @@
 {
   "name": "railyard",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "The delivery system for agent work: model routing, goal-driven delivery, task orchestration, cross-machine placement, review gates, Oracle, and Codex runtime hygiene.",
   "author": {
     "name": "Claire Novotny LLC",
@@ -30,6 +30,8 @@
       "Use railyard to orchestrate this objective across tasks and machines.",
       "Run the railyard doctor and fix anything out of sync."
     ],
-    "brandColor": "#B45309"
+    "brandColor": "#B45309",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/icon.png"
   }
 }
