@@ -269,7 +269,17 @@ the build→package→install→invoke chain — else stop after one bounded spi
 Treat hosted CI and remote/native matrices as frozen-input proof, not the
 default debugger: after the first opaque failure, isolate the smallest stage,
 add bounded secret-free progress evidence, and allow at most one instrumented
-diagnostic push per unresolved stage.
+diagnostic push per unresolved stage. CI confirms a completed batch — never
+push, open a PR, or trigger a matrix while known fixes remain unapplied;
+diagnose from downloaded logs and local reproduction, assemble the whole fix
+batch locally, then push once.
+
+Plan every stretch end-to-end for minimum wall time and token spend,
+especially with several pieces in flight: identify the long pole and start
+it first (in the background when nothing collides), batch independent small
+steps into single passes, never re-run an unchanged check, and never spend a
+deploy/rollout/CI cycle on a partial batch when more fixes are already
+known. Efficiency is a standing constraint, not a nicety.
 
 Maintain a compact restart receipt (plan digest, objective epoch, governing
 skill digest, active lanes, frozen inputs, decisions, reusable evidence);
