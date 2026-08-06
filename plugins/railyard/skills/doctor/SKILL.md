@@ -56,7 +56,9 @@ Codex installed → skip Codex-side checks, and say so).
 - Reachability through the login shell (`ssh -o BatchMode=yes`).
 - Certificate enrollment state (`enroll-ssh-posix status`/`verify`).
 - Installed executor verification and version vs this controller.
-- `roundhouse:fleet-readiness` go/no-go.
+- `roundhouse:fleet-readiness` go/no-go; for Windows machines declaring
+  `wsl_interop_via`, verify the interop lane answers (full-path
+  `powershell.exe` runs a native command from the WSL side).
 
 ## Findings and fixes
 

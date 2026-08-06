@@ -350,7 +350,10 @@ tool supports placement. Two remote lanes exist, one per destination harness:
   --output-format json --permission-mode <mode>`, output captured to a
   destination-local log. Wrap long-running or interactive children in a named
   tmux session (the `roundhouse:remote-mac` pattern) and report the
-  attach command. The session UUID is the child's durable identity: resume the
+  attach command. A native-Windows destination with a `wsl_interop_via`
+  sibling is reachable the same way: SSH to the WSL side and launch the
+  Windows-native `claude` through full-path `powershell.exe` — a native
+  process, not WSL-side execution. The session UUID is the child's durable identity: resume the
   same child with `--resume <uuid>` on the same host; a new assignment gets a
   fresh UUID. Evidence returns through Git checkpoint pushes plus the captured
   JSON result — the same harness-neutral handoff substrate the Codex lane
