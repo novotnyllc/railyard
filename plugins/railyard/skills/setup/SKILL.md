@@ -85,7 +85,9 @@ Only ask what the inventory shows unset; restate each answer before writing.
 - **What are the hosts?** [this machine only] — ask for the list of machines
   that belong to the fleet: display name and SSH alias for each (aliases must
   already resolve in `~/.ssh/config`; never invent one). "Just this machine"
-  is a complete answer — skip everything host-related. For each named host,
+  is a complete answer — skip everything host-related. Capture WSL/Windows
+  pairs on shared hardware (`physical_host` + `wsl_interop_via`) so the
+  interop maintenance lane works from day one. For each named host,
   delegate the entire add flow — config entry, reachability, SSH-certificate
   enrollment ceremony, target prerequisites, readiness — to
   `roundhouse:fleet-hosts`. Enrollment is in scope for setup, and its signing

@@ -57,8 +57,9 @@ Codex installed → skip Codex-side checks, and say so).
 - Certificate enrollment state (`enroll-ssh-posix status`/`verify`).
 - Installed executor verification and version vs this controller.
 - `roundhouse:fleet-readiness` go/no-go; for Windows machines declaring
-  `wsl_interop_via`, verify the interop lane answers (full-path
-  `powershell.exe` runs a native command from the WSL side).
+  `wsl_interop_via`, verify the interop lane answers (`cd /mnt/c` then
+  full-path `cmd.exe /c` runs a native command from the WSL side), the
+  named WSL entry exists, and paired entries agree on `physical_host`.
 
 ## Findings and fixes
 
