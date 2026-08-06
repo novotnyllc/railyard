@@ -141,3 +141,8 @@ built for one operator's own fleet, not a platform with numbers to cite.
 Or read more first: [the delivery lifecycle](/roundhouse/lifecycle) walks the whole
 routed-to-merged path with diagrams, and the [deliver skill reference](./skills/deliver.md)
 covers every route, gate, and what "done" means in full.
+
+---
+
+railyard ships adapted work from Peter Steinberger and Cursor, and runs on
+Compound Engineering — see [credits and upstream sources](credits.md).
