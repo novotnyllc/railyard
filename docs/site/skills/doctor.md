@@ -116,6 +116,10 @@ from:
 
 - Store reachable and replicating, and commit signatures verifying against the host-local
   allowed-signers file.
+- A host-local `allowed_signers` file that doesn't match this host's current CA enrollment
+  material — expected right after late CA enrollment or a CA rotation, since nothing regenerates
+  that file on its own. Fixed with `roundhouse sync-refresh-signers` (a plain re-run of
+  `sync-init` heals the same signing config).
 - Each host's last successful sync within 2× its cadence. The interactive-session-only
   `iris-windows` entry's staleness is *expected* and gets reported as such, by name — never a
   silent pass, never a broken row.
@@ -144,6 +148,7 @@ and for every non-`ok` row, the minimal fix and who owns it:
 | Enrollment or host prerequisites | `roundhouse:fleet-hosts` |
 | Package baseline (tmux/jq) | `roundhouse:fleet-update` |
 | Sync findings (held items, conflicts, stale lock, drift) | `roundhouse:fleet-agents` desired-state sync |
+| Stale or missing allowed_signers after late CA enrollment | `roundhouse sync-refresh-signers` |
 | Missing or duplicated sync scheduler entry | [setup.md](./setup.md) step 3a |
 | Missing prerequisites or first-run gaps | [setup.md](./setup.md) |
 

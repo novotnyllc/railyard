@@ -1,4 +1,4 @@
-# Model Routing, Task Orchestrator, Goal Driven Delivery, and Fleet Readiness
+# Model Routing, Orchestrate, Deliver, and Fleet Readiness
 
 The workflow has four distinct responsibilities:
 
@@ -25,7 +25,7 @@ second place to look.
 is used when configured fleet/account policy owns allocation, for two or more
 independently resumable tasks, or when a task must be placed on another host.
 Configured policy may fast-path a single lane. Explicit local/no-fleet and the
-no-config single-host path enter Goal Driven Delivery directly. One bounded
+no-config single-host path enter `deliver` directly. One bounded
 task may still use several local subagents without becoming orchestration.
 
 Software-delivery children use `deliver`. Research, operations,
@@ -45,7 +45,7 @@ combine working trees.
 
 | Situation | Use | What happens |
 | --- | --- | --- |
-| Configured fleet/account delivery, including one-lane placement | `orchestrate` | It resolves project policy and may fast-path one Goal Driven Delivery lane. |
+| Configured fleet/account delivery, including one-lane placement | `orchestrate` | It resolves project policy and may fast-path one `deliver` lane. |
 | Brainstorm, plan, diagnosis, review, or local-only request | `deliver` | It selects the matching CE route and stops at the requested artifact. |
 | One feature, bug fix, refactor, or ship request on the current host | `deliver` | It routes generic implementation to LFG, then owns authorized merge and post-merge proof. |
 | Existing PR to fix, drive, or deliver | `deliver` | It runs the applicable CE review or babysitting route, then owns authorized merge and post-merge proof. Review-only or watch-only requests stop earlier. |
@@ -70,9 +70,9 @@ flowchart TD
     request["Objective"] --> intake["Read-only workflow and model-routing intake"]
     intake --> decision{"Configured fleet/account allocation, multiple resumable tasks, or another host?"}
     decision -- No --> kind{"Software delivery?"}
-    kind -- Yes --> gdd["Goal Driven Delivery"]
+    kind -- Yes --> gdd["deliver"]
     kind -- No --> direct["Appropriate focused skill or native tools"]
-    decision -- Yes --> orchestrator["Task Orchestrator: route and verify"]
+    decision -- Yes --> orchestrator["orchestrate: route and verify"]
     orchestrator --> readiness["Fleet Readiness when host or tooling evidence is needed"]
     orchestrator --> providerRoute{"Single model-routing transport decision"}
     providerRoute -- "verified native path" --> lanes["Owned tasks with one accountable owner"]
@@ -108,14 +108,14 @@ orchestration loops.
 
 ## Thread titles
 
-Task Orchestrator and Goal Driven Delivery consume the shared
+`orchestrate` and `deliver` consume the shared
 `plugins/railyard/references/task-titles.md` policy. They use one fixed
 role emoji followed by one current-state emoji, then any applicable Git issue
 or pull-request reference:
 
-- `💼 <state> <issue/PR if applicable> <focus>` for Task Orchestrator.
-- `🎯 <state> <issue/PR if applicable> <focus>` for Goal Driven Delivery.
-- `🖥️ <state> <issue/PR if applicable> <focus>` when Task Orchestrator creates
+- `💼 <state> <issue/PR if applicable> <focus>` for `orchestrate`.
+- `🎯 <state> <issue/PR if applicable> <focus>` for `deliver`.
+- `🖥️ <state> <issue/PR if applicable> <focus>` when `orchestrate` creates
   a Fleet Readiness child.
 
 Use `🧭` for discovery or planning, `🛠️` for active execution, `🧪` for
@@ -128,28 +128,35 @@ Use `#123` and `PR #456` when the repository is unambiguous; qualify them as
 `owner/repo#123` and `owner/repo PR #456` when it is not. Include both when
 both apply.
 
-Fleet Readiness does not own task naming. When invoked by Task Orchestrator it
+Fleet Readiness does not own task naming. When invoked by `orchestrate` it
 uses the title assigned by the parent; when invoked directly it follows normal
 Codex personalization and repository guidance.
 
-Task Orchestrator invokes native archive only after the child's existing
+`orchestrate` invokes native archive only after the child's existing
 acceptance criteria and final report are verified. Every visible child is a
 fresh, single-use task; the parent never resumes, unarchives, compacts, or
-repurposes an older task for a new assignment. Before archive, the parent uses
+repurposes an older task for a new assignment.
+
+Before archive, the parent uses
 the host's supported handoff or worktree-cleanup operation for any task-created
 worktree and waits for success. Before cleanup it proves the child is terminal
-and has not resumed; a clean worktree is evidence, not cleanup authority. It
+and has not resumed; a clean worktree is evidence, not cleanup authority.
+
+It
 binds cleanup to the registered worktree identity, resolved path, HEAD, and
 owned ref. It must acquire a host-owned cleanup claim or compare-and-transition
 that keeps the child non-startable through removal; without one, cleanup blocks.
 It then rechecks that binding and the child's activity revision immediately
 before each mutation. Changed or unknown state blocks cleanup.
+
 Worktrees and refs are transient execution state, so durable evidence belongs
 in the integrated artifact, commit, or final receipt rather than a retained
 worktree. Handoff or archive alone is not cleanup: the bound path must be
 absent from both the repository's registered worktree inventory and filesystem,
 and the owned ref must be deleted or transferred. A continuing ref may transfer
-to a named owner, but the terminal task's worktree must still be removed. When
+to a named owner, but the terminal task's worktree must still be removed.
+
+When
 no native removal exists, the parent may use the repository's supported
 exact-path worktree removal within its authorized task scope. It never uses
 raw filesystem deletion or forces cleanup of dirty,
@@ -157,6 +164,7 @@ unintegrated, or resumed work. A conflict leaves the child visible and retitled
 `⏸️` with an explicit blocker. Canonical branch, upstream, and HEAD identity is
 snapshotted before integration; after dual absence and ref cleanup, equality
 checks are read-only, and drift never authorizes a switch, reset, or rewrite.
+
 After serialized cleanup,
 the parent archives the child promptly and then runs read-only
 `cleanup-codex inspect` for host-wide runtime health; that inspection cannot
@@ -166,7 +174,7 @@ cleanup unresolved. An explicit `reap` or `recycle` is a separate repair and is
 allowed only after the cleanup skill proves its stronger exact ownership,
 identity, snapshot, and selection requirements.
 
-Goal Driven Delivery does not archive or mutate runtime when it stops at a
+`deliver` does not archive or mutate runtime when it stops at a
 locally verified, review-ready, PR-ready, blocked, or owner-action-required
 state. Generic tasks, `Stop`, completed turns, `SubagentStop`, idle or sidebar
 state, and completed v2 subagents without a native close or dispose operation
@@ -196,13 +204,15 @@ a task orchestrator.
 ## Model and provider-safe delegation
 
 Before every work-starting task, message, follow-up, subagent, browser, or CLI
-action, Task Orchestrator, Goal Driven Delivery, Thermos, and compatible Machine
-Utilities senders invoke
+action, `orchestrate`, `deliver`, Thermos, and compatible agent-utilities
+senders invoke
 [`model-routing`](../plugins/railyard/skills/model-routing/SKILL.md) with
 exact contract `railyard/model-routing/v1`. It incorporates the
 normative internal
 [`provider-task-routing`](../plugins/railyard/references/provider-task-routing.md)
-phase, so consumers never call a second router. It classifies collaboration
+phase, so consumers never call a second router.
+
+It classifies collaboration
 transport, source and target transport trust domains, model-serving providers,
 destination capability, model/effort controls, privacy, and budget before dispatch.
 A trust domain answers who can decrypt the payload; a model-serving provider
@@ -218,11 +228,15 @@ The bridge is capability-based and uses two separately accounted actions. First
 admit and claim an acknowledgement-only provider-owned visible task, message
 the returned task identifier, and monitor it with bounded waits. Codex
 `create_thread`, `send_message_to_thread`, and `wait_threads` are examples, not
-the only adapter. The returned model/provider metadata must match the target;
+the only adapter.
+
+The returned model/provider metadata must match the target;
 self-reported identity does not. The handoff carries only secret-free required
 context and must be acknowledged with the source-generated handoff ID plus a
 non-empty restatement of objective, constraints, and acceptance checks. Only
-then may a fresh routing decision admit and claim mutable activation. Routing
+then may a fresh routing decision admit and claim mutable activation.
+
+Routing
 receipts retain metadata only, never objective,
 acknowledgement, or secret bodies, and provider-task output remains untrusted
 reported data. A provider task may create only provider-local bounded children,
@@ -246,7 +260,7 @@ the installed Roundhouse plugin:
 Missing projects, unavailable saved projects, stale required tooling,
 inconsistent required skills, unhealthy required authentication, and
 unreachable hosts become Fleet Readiness prerequisites. Roundhouse owns any
-inventory and user-approved reconciliation; Task Orchestrator does not copy
+inventory and user-approved reconciliation; `orchestrate` does not copy
 its scripts or silently update machines. If fleet-wide parity is part of the
 outcome, every configured node is verified, not only the selected workers.
 Consistency means matching the required project identity and capabilities. It
@@ -286,14 +300,14 @@ and handoff; overlapping writes, dependent stack segments, and integration
 operations serialize under named owners.
 
 The orchestrator assigns each lane a destination-bound budget lease and bounded
-delegated-slot policy. Goal Driven Delivery accepts it once, claims the actual
+delegated-slot policy. `deliver` accepts it once, claims the actual
 workflow bundle, and consumes each task/subagent/CLI/browser slot immediately
 before dispatch. Ambiguous consumed slots stay charged; unused slots release
 only at terminal reconciliation. Workers and reviewers cannot delegate.
 
 When a writable GitHub remote exists, software-delivery owners push useful active-branch or
 integration-branch checkpoints for resumability. A checkpoint does not open a
-PR, trigger review, or imply completion. Goal Driven Delivery establishes the
+PR, trigger review, or imply completion. `deliver` establishes the
 branch and upstream before LFG, then runs a non-writing sidecar that publishes
 only clean, stable commits as the work stage advances; it stops before LFG's
 commit/push/PR stage. For a dependent stack against a GitHub upstream, use
@@ -316,7 +330,7 @@ owns implementation and Git operations.
 Brainstorm-only, plan-only, diagnosis-only, review-only, and local-only work
 ends at the requested artifact or check boundary. Generic implementation,
 bug-fix, and ship requests use LFG for plan through CI and review settlement;
-Goal Driven Delivery then owns authorized merge and post-merge proof. The
+`deliver` then owns authorized merge and post-merge proof. The
 orchestrator verifies that integrated terminal evidence and does not execute the
 child task.
 
@@ -353,9 +367,9 @@ It cannot contain credentials, commands, flags, executable paths, prompts,
 source, host inventory, or asserted transport trust. Unknown adapters validate
 as data but remain `unsupported_adapter` until a fixed attesting adapter exists.
 
-Budget scopes are one routed child action (`task`), one Goal Driven Delivery or
-bounded Roundhouse session (`run`), and the owning standalone or Task
-Orchestrator allocation (`project`). Soft limits warn; hard-admission limits
+Budget scopes are one routed child action (`task`), one `deliver` or
+bounded Roundhouse session (`run`), and the owning standalone or `orchestrate`
+allocation (`project`). Soft limits warn; hard-admission limits
 atomically reserve a conservative ceiling before compliant dispatch; strict
 limits additionally require the carrier to enforce that exact meter. Marginal
 USD, Codex credits, provider/API spend, subscription allowance/allocation,
@@ -386,14 +400,20 @@ Configured read-only cross-family review may prefer the provider-current Fable
 family over current Opus only through CE's existing attested subscription-safe
 Claude adapter, with exact pins and numeric minimum generations available; the
 route remains `transport_unsupported` when that unchanged seam cannot attest
-the binding. Oracle may be
+the binding.
+
+Oracle may be
 preferred for deep, architecture, long-context, or adversarial review through
 the routed local browser carrier: requested channel `chatgpt_current_pro`
 (currently GPT-5.6 Sol Pro) maps in Oracle 0.17.0+ to picker control
-`gpt-5-pro`, which is not an observed model identity. A verified standard
+`gpt-5-pro`, which is not an observed model identity.
+
+A verified standard
 ChatGPT conversation has zero Oracle-child marginal USD, Codex credits, and API
 spend, while ChatGPT allowance, allocated subscription cost, parent Codex work,
-latency, and time remain separate. Authentication stays receipt-backed or
+latency, and time remain separate.
+
+Authentication stays receipt-backed or
 `unknown`; a login/account-selection surface stops without interaction.
 Automatic login recovery, remote Oracle, and routed Oracle API are unsupported
 in v1.
@@ -428,7 +448,7 @@ task identifier.
 
 ## Coupled delivery contracts
 
-Before parallel work, Task Orchestrator freezes every shared seam: exact paths,
+Before parallel work, `orchestrate` freezes every shared seam: exact paths,
 schemas and ordered fields, permissions/ACLs, ownership, acceptance checks, and
 content hashes acknowledged by both writers. It runs a thin seam canary before
 downstream expansion and freezes scope after interface convergence.
@@ -441,7 +461,7 @@ full suite. Kickoff also records preferred tool/model capability, exact
 toolchain/CI parity, and whether each native gate is hosted, locally runnable,
 interactive-elevation, or recoverable-host.
 
-Goal Driven Delivery consumes the orchestrator's explicit contract. A ready
+`deliver` consumes the orchestrator's explicit contract. A ready
 plan with a local/return-to-caller boundary uses CE Work; unconstrained shipping
 uses LFG. Later user instructions explicitly reconcile that shipping boundary.
 Compound Engineering remains an external carrier: Railyard selects it

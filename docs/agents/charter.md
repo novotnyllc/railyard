@@ -1,0 +1,41 @@
+# Charter and boundaries
+
+Railyard is the delivery system for agent work — the yard where "go do X"
+becomes a verified, delivered result, on any machine in the fleet.
+
+## Belongs here
+
+Deciding and driving work —
+
+- *Routing* — which model, effort, budget, and transport carry a unit of work
+  (`model-routing` and its `railyard/model-routing/v1` contract).
+- *Delivery* — driving one software change through the right workflow to
+  merge and post-merge proof (`deliver`).
+- *Orchestration and placement* — decomposing objectives across tasks,
+  projects, hosts, and dependencies, and choosing where each child runs
+  (`orchestrate`, including the Codex saved-project and Claude SSH
+  worker lanes).
+- *Quality gates and second opinions* — the pre-commit deep reviews
+  (`thermos` and the two thermo-nuclear reviewers) and the Oracle one-shot
+  advisor.
+- *Runtime hygiene* — cleaning up after completed runs (`cleanup-codex`).
+
+## Belongs elsewhere
+
+Keeping machines and infrastructure serviceable — readiness, inventory,
+parity, packages, dotfiles, auth, SSH transport and enrollment, privileged
+installs, network gear — lives in
+[`roundhouse`](https://github.com/novotnyllc/roundhouse); the orchestrator
+consults `roundhouse:fleet-readiness` before dispatch and never administers
+hosts itself.
+
+How to do a specific *kind* of work (craft skills) lives in
+[`agent-utilities`](https://github.com/novotnyllc/agent-utilities).
+
+## External dependency
+
+Compound Engineering
+([EveryInc/compound-engineering-plugin](https://github.com/EveryInc/compound-engineering-plugin))
+is a required external dependency for delivery work — Goal Driven Delivery
+routes through its workflows and never modifies them. The README carries the
+install and update commands.

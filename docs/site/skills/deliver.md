@@ -35,7 +35,7 @@ still use deliver for its own single lane.
 Before any work-starting action, deliver calls `railyard:model-routing` with exact contract
 `railyard/model-routing/v1` — see [model-routing.md](./model-routing.md). This runs first, with
 no model call, provider probe, or task creation ahead of it. Configured fleet or account
-delivery gets handed to Task Orchestrator (even when that just fast-paths a single lane back to
+delivery gets handed to `orchestrate` (even when that just fast-paths a single lane back to
 deliver); explicit local work or the no-config default stays here.
 
 Every subagent this skill dispatches — implementation workers, researchers, reviewers — names an

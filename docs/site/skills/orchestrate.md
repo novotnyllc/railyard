@@ -51,7 +51,7 @@ transcript history. An explicit instruction to perform delivery work ("go do," "
 "fix," "ship," or "carry out the approved plan") is work-starting: after bounded read-only
 intake, decomposition, allocation, and readiness checks, orchestrate consumes one task-authority
 use per destination and dispatches fresh visible execution tasks. A configured single-lane fast
-path still creates one real, fresh Goal Driven Delivery child — it doesn't satisfy a
+path still creates one real, fresh `deliver` child — it doesn't satisfy a
 work-starting instruction with analysis or a status response alone.
 
 A request for an answer, a status update, an explanation, planning, or bounded read-only
@@ -191,7 +191,7 @@ independently resumable tasks on two hosts, takes the objective itself rather th
 to deliver. It runs readiness checks through `roundhouse:fleet-projects` and
 `roundhouse:fleet-agents` for both hosts, confirms the Windows box's `wsl_interop_via` entry and
 interop lane are healthy, then calls model routing for the project's policy snapshot. It
-dispatches the retry-queue fix as a local Goal Driven Delivery child, and the dashboard update
+dispatches the retry-queue fix as a local `deliver` child, and the dashboard update
 as a real `claude` process launched over SSH through the WSL side of the Windows machine — `cd
 /mnt/c` then a full-path `cmd.exe /c` launch of the native `claude` binary, wrapped in a named
 tmux session it reports the attach command for. It tracks both lanes to terminal acceptance

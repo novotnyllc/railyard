@@ -133,6 +133,11 @@ around:
    end in front of you: fetch and open the run, read and record a verdict on every changed diff,
    apply, converge, journal, close. Anything held is reported before setup calls itself done.
 
+A host added to an already-syncing fleet enrolls its CA identity through `roundhouse:fleet-hosts`
+after this store already exists — that's late enrollment, and nothing regenerates the host's
+signer file for it automatically. Setup runs `roundhouse sync-refresh-signers` on that host right
+after enrollment; [doctor](./doctor.md) catches it later if that step was ever skipped.
+
 The fleet config is written to `${XDG_CONFIG_HOME:-$HOME/.config}/roundhouse/config.json` at
 mode `0600`, then validated with the Roundhouse fleet CLI. A validation failure gets fixed in
 the interview loop, not waved off.

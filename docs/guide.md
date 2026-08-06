@@ -105,7 +105,7 @@ always wins.
 These two skills aren't wrappers — each encodes a set of failure modes it
 refuses to let happen.
 
-**`deliver`** (goal-driven delivery) exists because agent work usually dies in the last
+**`deliver`** exists because agent work usually dies in the last
 mile: something compiles, CI is green, the agent declares victory, and
 nothing actually merged — or it merged without anyone independent looking at
 it. It structurally prevents that:
