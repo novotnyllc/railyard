@@ -1,6 +1,19 @@
 {
-  "description": "Codex hooks: bounded exact-process SessionEnd cleanup (macOS-only at runtime; no-ops with exit 0 elsewhere), plus the shared routing charter and prompt nudge.",
+  "description": "Codex hooks: bounded exact-process SessionEnd cleanup (macOS-only at runtime; no-ops with exit 0 elsewhere), the shared routing charter and prompt nudge, and the PreToolUse dispatch gate refusing spawn_agent calls that omit model or reasoning_effort.",
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "spawn_agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-gate.js\"",
+            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\dispatch-gate.js\" }",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "SessionEnd": [
       {
         "hooks": [

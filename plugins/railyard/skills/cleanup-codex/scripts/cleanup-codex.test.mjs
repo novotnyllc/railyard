@@ -3049,7 +3049,7 @@ test("plugin packaging exposes actual root SessionEnd cleanup and no Claude hook
   ));
   assert.deepEqual(
     Object.keys(claudeHooks.hooks).sort(),
-    ["SessionStart", "UserPromptSubmit"],
+    ["PreToolUse", "SessionStart", "UserPromptSubmit"],
   );
   for (const event of Object.values(claudeHooks.hooks)) {
     for (const entry of event) {
@@ -3060,7 +3060,7 @@ test("plugin packaging exposes actual root SessionEnd cleanup and no Claude hook
   }
   assert.deepEqual(
     Object.keys(hooks.hooks).sort(),
-    ["SessionEnd", "SessionStart", "UserPromptSubmit"],
+    ["PreToolUse", "SessionEnd", "SessionStart", "UserPromptSubmit"],
   );
   const commandHook = hooks.hooks.SessionEnd[0].hooks[0];
   assert.equal(commandHook.type, "command");
@@ -3084,7 +3084,7 @@ test("Claude loader excludes the Codex-only SessionEnd hook", (context) => {
   assert.equal(loaded.status, 0, loaded.stderr);
   // Claude loads exactly the two routing hooks; the Codex-only SessionEnd
   // cleanup hook must not appear.
-  assert.match(loaded.stdout, /Hooks \(2\)/);
+  assert.match(loaded.stdout, /Hooks \(3\)/);
   assert.match(loaded.stdout, /SessionStart/);
   assert.match(loaded.stdout, /UserPromptSubmit/);
   assert.doesNotMatch(loaded.stdout, /SessionEnd/);

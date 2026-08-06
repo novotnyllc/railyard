@@ -1,6 +1,19 @@
 {
-  "description": "Lightweight routing nudges: ambient charter at session start, one-line just-in-time hint on delivery/planning/orchestration prompts. The Codex-only SessionEnd cleanup hook lives separately in codex/hooks.json and must never load here.",
+  "description": "Lightweight routing nudges plus the dispatch gate: ambient charter at session start, one-line just-in-time hint on delivery/planning/orchestration prompts, and a PreToolUse gate refusing subagent dispatches that omit an explicit model. The Codex-only SessionEnd cleanup hook lives separately in codex/hooks.json and must never load here.",
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-gate.js\"",
+            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\dispatch-gate.js\" }",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
