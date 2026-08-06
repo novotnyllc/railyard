@@ -83,11 +83,55 @@ Defaults are shown in brackets:
   written if you have explicit routing policy to encode.
 - **Oracle** [skip] — recorded only if you have ChatGPT Pro and want Oracle reviews available;
   see [oracle.md](./oracle.md).
-- **Fleet sync** [not yet available] — mentioned as existing in Roundhouse's design, not wired
-  up here.
+- **Fleet sync** [skip] — mentioned exactly once, as a single paragraph, and never turned on by
+  default. Roundhouse's opt-in desired-state sync keeps your user-scope agent surface — plugins
+  with their enabled state, standalone skills, agents, hooks, MCP servers, and allowlisted
+  harness config keys — consistent across every machine and harness, with groups, per-host
+  history, rollback, an apply-time review of every changed item on the host where it will run,
+  and one owned scheduler entry per host. It lives in Roundhouse's own store (a `jj` repository
+  colocated with git under the config root's `store/`), never in chezmoi or another personal
+  sync engine — those are detected as *upstreams*, not depended on as infrastructure. Say no and
+  nothing else changes; say yes and setup runs the enrollment below.
 - **Auto-sync and update schedule** [none] — opt-in unattended maintenance (daily or weekly)
   that installs an OS-scheduler entry running Roundhouse's desired-state sync and package
-  updates; removable any time by deleting the scheduler entry.
+  updates; removable any time by deleting the scheduler entry. If you took fleet sync, that
+  enrollment already installed the single owned entry and setup won't add a second.
+
+### Step 3a — fleet sync enrollment, only if you opt in
+
+Ordered, and each step is a named command — a refusal stops the flow rather than getting routed
+around:
+
+1. **`jj`** — checked with `jj --version` (the store wants 0.43+) and installed through your own
+   user package manager if missing (`brew install jj` on macOS, apt on Linux, winget on
+   Windows) — never `sudo`, never a downloaded installer. A host that can't get `jj` isn't
+   blocked: `sync-init` falls back to git-only against the same repo by itself.
+2. **A private store remote** — created or verified; a private GitHub repo is the suggested
+   shape. The warning comes with it, plainly: the store is a trusted-write surface on every
+   fleet machine — the hooks and skills it carries execute as you on all of them — so a public
+   or wrongly-shared store is a fleet-wide compromise, not a leak.
+3. **This host's store credential** — delegated to `roundhouse:fleet-hosts` on its own consent:
+   an SSH deploy key generated on this host, or a token in a credential helper. Never embedded
+   in the remote URL, never reused for anything else.
+4. **The config `sync` block** — written per [Roundhouse's config
+   reference](/roundhouse/config#sync) (`enabled`, `remote.url`, and `cadence_hours` are all
+   required once the block exists; the URL predicate refuses credential-bearing URLs), then
+   re-validated.
+5. **Scaffold and privacy check** — `sync-init` (which refuses unless `sync.enabled` is true),
+   then `sync-verify-remote` *before any first push*: it probes the remote unauthenticated, and
+   only an authentication refusal proves privacy — a publicly readable remote and an
+   inconclusive probe both refuse. Then `sync-absorb-registry` moves `config.json`'s `machines`
+   block into the store registry.
+6. **One owned scheduler entry** — installed once, absorbing and removing any existing
+   fleet-update autoupdate entry, because two local runners racing one plugin cache is the
+   failure this prevents. macOS keeps fleet-update's existing
+   `com.novotnyllc.roundhouse.autoupdate.plist` launchd agent; Linux gets a systemd user timer;
+   Windows gets a per-user scheduled task installed through the WSL interop lane. Its program is
+   fleet-update's fixed unattended prompt, copied verbatim. On Windows it's
+   interactive-session-only, so staleness while logged off is expected, not a fault.
+7. **A supervised first run** — setup isn't finished until one sync run has been driven end to
+   end in front of you: fetch and open the run, read and record a verdict on every changed diff,
+   apply, converge, journal, close. Anything held is reported before setup calls itself done.
 
 The fleet config is written to `${XDG_CONFIG_HOME:-$HOME/.config}/roundhouse/config.json` at
 mode `0600`, then validated with the Roundhouse fleet CLI. A validation failure gets fixed in

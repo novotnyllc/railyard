@@ -103,6 +103,34 @@ execution can never
 as separate
   facts everywhere in this system.
 
+**Desired-state sync, per enrolled host**
+
+Only for hosts with a `sync` block set to `enabled: true` — if you never opted into fleet sync,
+doctor skips this section and says so. For each enrolled host it runs `sync-status` and works
+through [`roundhouse:fleet-agents`' doctor check
+contract](/roundhouse/skills/fleet-agents#desired-state-sync), which is the authoritative
+list; doctor consumes it rather than keeping a second copy that could drift. Every check is
+reported by name, with its evidence labelled the way fleet-agents labels it — **CLI-reported**
+rows name the `sync-*` field they came from, **agent-computed** rows name what they were derived
+from:
+
+- Store reachable and replicating, and commit signatures verifying against the host-local
+  allowed-signers file.
+- Each host's last successful sync within 2× its cadence. The interactive-session-only
+  `iris-windows` entry's staleness is *expected* and gets reported as such, by name — never a
+  silent pass, never a broken row.
+- No upstream stale beyond 2× cadence, and no conflict commit older than 24 hours.
+- No enabled-but-untrusted hook, and no held flagged item forgotten (`sync-pending` reports
+  fleet-wide pending items, not just this host's).
+- The scheduler entry singular and alive — two entries is a finding on its own, since that's the
+  racing-runners failure the single owned entry exists to prevent.
+- The run-lock not stale: a lock older than twice the cadence is a stale-lock refusal, not a live
+  runner. The fix is `sync-unlock`, and only after confirming no runner is actually live on that
+  host.
+- The untracked-file tripwire and `store_symlinks` clean, plus co-ownership sanity for any
+  detected second sync engine and store size within budget. A check named in `detection_failed`
+  is an unknown, never a pass.
+
 ### Findings and fixes
 
 Everything lands in one table: check, state (`ok` / `drift` / `broken` /
@@ -115,6 +143,8 @@ and for every non-`ok` row, the minimal fix and who owns it:
 | sshd faults | `roundhouse:ssh-doctor` |
 | Enrollment or host prerequisites | `roundhouse:fleet-hosts` |
 | Package baseline (tmux/jq) | `roundhouse:fleet-update` |
+| Sync findings (held items, conflicts, stale lock, drift) | `roundhouse:fleet-agents` desired-state sync |
+| Missing or duplicated sync scheduler entry | [setup.md](./setup.md) step 3a |
 | Missing prerequisites or first-run gaps | [setup.md](./setup.md) |
 
 Fixes apply only after consent, grouped the same way setup groups its consent
