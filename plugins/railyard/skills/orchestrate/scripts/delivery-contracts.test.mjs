@@ -38,9 +38,9 @@ test("dispatches explicit software-delivery authorization to visible execution t
   assert.match(orchestrator, /explicit instruction to perform delivery work/);
   assert.match(orchestrator, /`go do`, `implement`,\s+`fix`, `ship`/);
   assert.match(orchestrator, /consume one task-authority use per destination and dispatch fresh visible\s+execution tasks/);
-  assert.match(orchestrator, /one-lane fast path still creates one fresh\s+visible Goal Driven Delivery child/);
+  assert.match(orchestrator, /one-lane fast path still creates one fresh\s+visible Deliver child/);
   assert.match(orchestrator, /Do not satisfy the instruction with[\s\S]{0,40}analysis, a plan, a status response, or internal-subagent output alone/);
-  assert.match(orchestrator, /software implementation and PR delivery\s+use Goal Driven Delivery/);
+  assert.match(orchestrator, /software implementation and PR delivery\s+use Deliver/);
   assert.match(orchestrator, /never\s+implementing, testing, committing, pushing, or merging child work/);
   assert.match(orchestrator, /Bounded subagents are\s+for controller-scoped research\/review only/);
   assert.doesNotMatch(orchestrator, /bounded subagents for contained research, review, or execution/);

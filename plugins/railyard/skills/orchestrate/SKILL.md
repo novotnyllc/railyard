@@ -35,7 +35,7 @@ a tool:
 Read and enforce `../../references/task-titles.md` whenever this skill
 activates. Orchestrator task: `💼 <state emoji> <Git ref if any> <focus>`.
 Task Orchestrator also owns the titles of visible children it creates: `🎯`
-for a Goal Driven Delivery child, `🖥️` for a Fleet Readiness child, followed
+for a Deliver child, `🖥️` for a Fleet Readiness child, followed
 by the shared state/reference/focus fields. A child that owns its own title
 keeps enforcing the shared policy after dispatch.
 
@@ -44,13 +44,13 @@ keeps enforcing the shared policy after dispatch.
 Use this skill when configured fleet/account policy owns software-delivery
 allocation, an objective has two or more independently resumable tasks, or a
 task must be placed on another host. Configured policy may fast-path one local
-Goal Driven Delivery lane without inventing parallel work. Explicit
+Deliver lane without inventing parallel work. Explicit
 local/no-fleet delivery and the no-config single-host path use
 `railyard:deliver` directly; one bounded non-delivery task
 uses its appropriate skill or native tools.
 
 Route each child by its own outcome: software implementation and PR delivery
-use Goal Driven Delivery; research, operations, review, documentation, and
+use Deliver; research, operations, review, documentation, and
 decision tasks use their appropriate skills. A child invokes Task Orchestrator
 only when its assignment itself contains multiple independently resumable
 tasks — never as an orchestration loop.
@@ -72,7 +72,7 @@ transcript history.
   bounded read-only intake, decomposition, allocation, and readiness checks,
   consume one task-authority use per destination and dispatch fresh visible
   execution tasks. A configured one-lane fast path still creates one fresh
-  visible Goal Driven Delivery child. Do not satisfy the instruction with
+  visible Deliver child. Do not satisfy the instruction with
   analysis, a plan, a status response, or internal-subagent output alone.
 - A request for an answer, status, explanation, planning, or bounded read-only
   inspection is **non-work-starting**: answer or perform the bounded

@@ -1,9 +1,9 @@
 ---
 name: deliver
-description: Route one host-local software change or pull-request task through the correct Compound Engineering workflow, with LFG-first implementation delivery, Thermos review gates, React Doctor, PR babysitting, merge proof, and durable learnings. Use whenever the user says to implement, fix, ship, deliver, or "go do" a software change — and equally when they ask to brainstorm, design, plan, spec, or debug one: those route to the matching CE stage (ce-brainstorm, ce-plan, ce-debug) and stop at that artifact. Applies including when they name this skill directly, for a feature, bug fix, risky refactor, long-running implementation, or existing PR. Use railyard:orchestrate instead for multiple independently resumable tasks or cross-host placement.
+description: "Route one host-local software change or pull-request task through the correct Compound Engineering workflow, with LFG-first implementation delivery, Thermos review gates, React Doctor, PR babysitting, merge proof, and durable learnings. Use whenever the user says to implement, fix, ship, deliver, or \"go do\" a software change — and equally when they ask to brainstorm, design, plan, spec, or debug one: those route to the matching CE stage (ce-brainstorm, ce-plan, ce-debug) and stop at that artifact. Applies including when they name this skill directly, for a feature, bug fix, risky refactor, long-running implementation, or existing PR. Use railyard:orchestrate instead for multiple independently resumable tasks or cross-host placement."
 ---
 
-# Goal Driven Delivery
+# Deliver
 
 Choose the delivery route and invoke the right existing skills. Do not replace
 those skills with a long ad hoc prompt. This skill is the implicit entry point
@@ -32,7 +32,7 @@ subagent are never cleanup or completion authority.
 ## Thread title
 
 Read and enforce `../../references/task-titles.md` whenever this skill
-activates. Goal Driven Delivery always owns and maintains its task title, even
+activates. Deliver always owns and maintains its task title, even
 when a child workflow would impose a different convention:
 
 `🎯 <state emoji> <Git issue and/or PR if applicable> <specific focus>`
@@ -89,7 +89,7 @@ at that moment. The CE stages below are the routes. Pick one route:
 | Solved issue with reusable lesson | `ce-compound mode:headless depth:full` | captured learning |
 
 "Plan and implement" is implementation delivery: LFG owns its plan stage, must
-not invoke Goal Driven Delivery recursively, and is never wrapped in another
+not invoke Deliver recursively, and is never wrapped in another
 top-level plan/work route. Selecting an implementation-delivery route
 authorizes the ordinary repository merge after required checks and reviews
 pass; explicit approval requirements, merge restrictions, and protected-branch
@@ -347,7 +347,7 @@ open PR toward merge readiness; it owns the watch loop and delegates feedback
 fixes to `ce-resolve-pr-feedback` and CI fixes to `ce-debug` — do not pre-run
 those stages. Use `mode:pipeline` when another workflow needs a bounded
 non-interactive result; interactive mode when the user asks to keep watching.
-Babysitting never authorizes merging; Goal Driven Delivery owns the merge and
+Babysitting never authorizes merging; Deliver owns the merge and
 post-merge tail after a settled mergeable result. On an LFG route, never
 invoke `ce-babysit-pr` separately — LFG owns its pipeline invocation.
 
@@ -395,7 +395,7 @@ Workflow:
 6. Invoke compound-engineering:ce-code-review mode:agent with the plan path; apply all eligible findings.
 7. Invoke compound-engineering:ce-test-browser mode:pipeline when UI behavior changed.
 8. Stop at a locally verified tree only for an explicit local-only stop; otherwise continue the delivery tail.
-9. Invoke compound-engineering:ce-commit-push-pr, then ce-babysit-pr with the PR URL; Goal Driven Delivery owns merge and post-merge proof.
+9. Invoke compound-engineering:ce-commit-push-pr, then ce-babysit-pr with the PR URL; Deliver owns merge and post-merge proof.
 10. Invoke compound-engineering:ce-compound mode:headless depth:full for reusable patterns.
 ```
 
