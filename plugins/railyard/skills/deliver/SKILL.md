@@ -144,6 +144,18 @@ session, mechanical unit), dispatch that unit to a fresh child carrying the
 routed model instead of running it inline; never open an unexpected
 user-visible thread — subagents are the unsurprising form.
 
+**Every subagent dispatch names an explicit model and effort. No
+exceptions.** Subagents inherit the session model when the dispatch omits
+one, which silently runs workers on the premium tier — the exact inversion
+the routing exists to prevent. An omitted model field is a routing
+violation, not a neutral default: implementation workers, researchers, and
+routine reviewers dispatch at the harness's worker tier (on Claude Code,
+Opus for implementation/research/review, Sonnet or Haiku for mechanical
+extraction; effort per the harness reference), and a dispatch that
+deliberately runs a child on the session's own premium tier must say so and
+why in the dispatch. This applies to every carrier — direct Agent calls and
+children spawned while driving external workflow skills alike.
+
 Consume the resolver's immutable snapshot (policy digest, model/effort,
 carrier/adapter, transport, budget lease, fallback, disclosure). With no
 catalog it preserves the shipped Sol orchestration/review and Luna

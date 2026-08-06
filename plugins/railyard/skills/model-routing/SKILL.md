@@ -98,6 +98,17 @@ harness-model-invocation reference has the table, the current rate data, and
 why sticker rates settle almost nothing (meters differ, operating points
 differ, cache rates dominate).
 
+**Dispatch rule — explicit model and effort on every subagent, no
+exceptions.** Harness subagents inherit the session model when the dispatch
+omits one; on a premium-tier session (Fable, Sol `max`) that silently runs
+workers at the top tier — the inversion this router exists to prevent, and
+it burns the premium meter without consent. Every child dispatch therefore
+names its model (and effort where the harness exposes it) from the table
+above; a child deliberately run on the session's own tier is a named
+escalation with its reason stated at dispatch. Silent inheritance is a
+routing violation. Cross-harness dispatch is additionally opt-in only:
+never a silent default, because each harness meters separately.
+
 **Claude Code cannot invoke GLM-5.2.** A Claude session cannot both
 authenticate to Z.ai and keep its account-bound capabilities, so the route
 does not exist — do not rebuild it. GLM work goes through Codex:
