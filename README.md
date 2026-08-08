@@ -45,22 +45,31 @@ train, clears the departure, and confirms arrival:
 | Delivery | `deliver` — one change through the right workflow to merge and post-merge proof |
 | Orchestration & placement | `orchestrate` — objectives across tasks, projects, hosts; Codex saved-project and Claude SSH worker lanes |
 | Quality gates | `thermos`, `thermo-nuclear-review`, `thermo-nuclear-code-quality-review`, `oracle` |
+| Audit & retrospective | `audit` — how a run actually went: the decision chain, fan-out, deviations, and what to do better next time |
 | Runtime hygiene | `cleanup-codex` |
 
-## Built on Compound Engineering
+## Built on Compound Engineering and ponytail
 
-Installing railyard installs Compound Engineering automatically — it is a
-documented, required dependency, and the railyard install is the consent
-for it. No separate approval step.
+Installing railyard installs its required plugins automatically — Compound
+Engineering and ponytail. They are documented, required dependencies, and the
+railyard install is the consent for the whole group: one grouped install, no
+separate approval step. (Privileged and signing steps — SSH enrollment, the
+privilege broker — always keep their own explicit per-host consent; that is
+never folded into this.)
 
 Delivery routes through the external
 [Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin)
-plugin (`lfg`, the `ce-*` skills, `ce-babysit-pr` 3.20.0+) and never modifies
-it. `railyard:setup` installs and updates it for you; by hand:
+plugin (`lfg`, the `ce-*` skills, `ce-babysit-pr` 3.20.0+) as its workflow
+engine, and [ponytail](https://github.com/DietrichGebert/ponytail) keeps the
+work minimal — railyard carries the same efficiency discipline into its
+process and verification loop. It never modifies either. `railyard:setup`
+installs and updates them for you; by hand:
 
 ```sh
 claude plugin marketplace add EveryInc/compound-engineering-plugin
 claude plugin install compound-engineering@compound-engineering-plugin
+claude plugin marketplace add DietrichGebert/ponytail
+claude plugin install ponytail@ponytail
 ```
 
 ## The family
@@ -70,5 +79,11 @@ Machine and infrastructure administration lives in
 [`agent-utilities`](https://github.com/novotnyllc/agent-utilities). Charter
 and boundaries: [AGENTS.md](AGENTS.md).
 
-Portions adapted from `steipete/agent-scripts` and `steipete/oracle` (MIT);
-attribution preserved in the affected skills.
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+Portions are adapted from `steipete/oracle` and `cursor/plugins` (both MIT),
+with `steipete/agent-scripts` (MIT) reviewed alongside. Their copyright
+notices are preserved in [LICENSE](LICENSE) and the incorporations are
+itemized in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

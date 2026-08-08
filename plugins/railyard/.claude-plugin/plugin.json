@@ -22,6 +22,7 @@
   "skills": [
     "./skills/setup",
     "./skills/doctor",
+    "./skills/audit",
     "./skills/cleanup-codex",
     "./skills/deliver",
     "./skills/model-routing",

@@ -56,9 +56,12 @@ capabilities, so that route intentionally does not exist.
 ## Getting started
 
 Run **`railyard:setup`** (or just say "set up railyard"). It inventories
-what's installed, installs prerequisites on grouped consent — the
-[Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin)
-dependency, roundhouse, agent-utilities, gh-stack, tmux/jq — checks that the
+what's installed, then installs the required set under **one setup consent** —
+the [Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin)
+and [ponytail](https://github.com/DietrichGebert/ponytail) plugins, roundhouse,
+agent-utilities, gh-stack, tmux/jq — as a single grouped install, not one ask
+per plugin. (Signing, SSH enrollment, and the privilege broker keep their own
+explicit per-host consent — never folded into that one.) It checks that the
 API keys your installed plugins need are present (never their values), asks
 what your fleet hosts are (enrolling each through `roundhouse:fleet-hosts`),
 and ends with a readiness table. "Just this machine, no config" is a complete
@@ -99,6 +102,24 @@ CI is not "done" — the proof is.
 Narrower asks stop at narrower boundaries: plan-only stops at the plan,
 review-only at findings, "local only" at local checks. An explicit stop
 always wins.
+
+### It compounds on its own runs
+
+Every delivery ends with a short recap, and a substantial run closes with its
+**retrospective automatically** — not only when you ask. It generates pointed
+questions about that specific run, grades it against the approach the run set
+out at kickoff, and lands any lesson worth keeping: a repo learning through
+`compound-engineering:ce-compound`, or a cross-repo routing lesson in
+`~/.config/railyard/learnings.md`, plus a skill-improvement suggestion file when
+the fix belongs upstream. A Stop/SessionEnd hook is the backstop — if a
+substantial run would end without that loop, it reminds you, without ever
+blocking. The mechanical run log behind it feeds `railyard:audit` on request.
+
+The same discipline runs *inside* the loop: railyard carries ponytail's
+efficiency reflex into its own process — derive the approach from first
+principles before executing, don't re-run a check that didn't change, isolate
+independent work in its own worktree converging to one PR, and trust a "green"
+only when it's the process's own unmasked exit, actually run.
 
 ## Why the outcomes are better
 
@@ -176,10 +197,11 @@ only the in-session Codex task surface drives the interactive half.
 
 ## What railyard never does
 
-It never edits Compound Engineering (external carrier, ever unchanged); never
-treats a pushed checkpoint, green CI, or "no known defects" as completion;
-never spends `max`-effort by default (escalation is deliberate); and never
-administers machines directly — that's roundhouse's charter.
+It never edits Compound Engineering or ponytail (external carriers, ever
+unchanged); never treats a pushed checkpoint, green CI, or "no known defects"
+as completion; never spends `max`-effort by default (escalation is
+deliberate); and never administers machines directly — that's roundhouse's
+charter.
 
 More depth: [delivery-workflows.md](delivery-workflows.md) (the full
 decision rules and cross-host model), [AGENTS.md](../AGENTS.md) (charter),

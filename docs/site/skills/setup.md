@@ -25,9 +25,10 @@ drift, broken hosts, "why isn't X working." Setup handles absence; doctor handle
 
 Before asking you anything, setup collects the current state: installed plugin versions on each
 available harness (`claude plugin list`, `codex plugin list --json`), noting versions for
-`railyard`, `roundhouse`, `agent-utilities`, and `compound-engineering` (which needs 3.20.0+ for
-`ce-babysit-pr`); known marketplaces (`novotnyllc/marketplace`,
-`EveryInc/compound-engineering-plugin`); fleet config location and contents; tooling presence
+`railyard`, `roundhouse`, `agent-utilities`, `compound-engineering` (which needs 3.20.0+ for
+`ce-babysit-pr`), and `ponytail`; known marketplaces (`novotnyllc/marketplace`,
+`EveryInc/compound-engineering-plugin`, `DietrichGebert/ponytail`); fleet config location and
+contents; tooling presence
 (`gh` auth state, `gh-stack` and its agent skills, `tmux`, `jq`, `node`, optionally `chezmoi`
 and `op`); already-present optional extras (the Oracle Pro cache, a model-routing catalog); and
 credential *presence* — never values — for whatever the installed plugins actually need: `gh
@@ -38,20 +39,26 @@ one-password skill — never a request to paste a secret into the conversation.
 
 Everything present or missing gets summarized in one table before setup proposes anything.
 
-### Step 2 — prerequisites, installed on consent
+### Step 2 — prerequisites, one setup consent
 
-Setup asks once per group, not once per command, with the recommended option listed first. It
-never installs silently and never uses `sudo` — only your package managers.
+Setup installs the required set as a single grouped step under one consent — it asks once for the
+whole required set, not per group and not per command, with the recommended option listed first.
+Consent for setup is consent for setup: the same act that installs railyard authorizes its
+required plugins (Compound Engineering and ponytail), so they aren't separate questions. It never
+installs silently and never uses `sudo` — only your package managers. The security-boundary steps
+below — signing, SSH-certificate enrollment, and the privilege broker — always keep their own
+explicit per-host consent, never folded into this one.
 
-- **Plugins and marketplaces** (required for delivery): adds the `novotnyllc` and
-  `EveryInc/compound-engineering-plugin` marketplaces, then installs `railyard`, `roundhouse`,
-  `agent-utilities`, and `compound-engineering`. Codex gets the mirrored commands. Anything
-  present but stale gets `update` instead of `install`. Compound Engineering installs
-automatically with railyard's own consent — it is the documented required dependency,
-and setup never asks a separate question for it. If Compound Engineering is below
-  3.20.0, updating it isn't optional. After any Codex install or update, setup re-trusts that
-  plugin's hooks with Roundhouse's approval helper so hooks just work without a manual trust
-  step.
+- **Plugins and marketplaces** (required for delivery): adds the `novotnyllc`,
+  `EveryInc/compound-engineering-plugin`, and `DietrichGebert/ponytail` marketplaces, then
+  installs `railyard`, `roundhouse`, `agent-utilities`, `compound-engineering`, and `ponytail`.
+  Codex gets the mirrored commands. Anything present but stale gets `update` instead of `install`.
+  Compound Engineering and ponytail install automatically with railyard's own consent — they are
+  the documented required plugins, one grouped install, and setup never asks a separate question
+  for them. ponytail is installed for its hooks; its MCP server is skipped, since railyard has
+  hooks. If Compound Engineering is below 3.20.0, updating it isn't optional. After any Codex
+  install or update, setup re-trusts that plugin's hooks with Roundhouse's approval helper so
+  hooks just work without a manual trust step.
 - **Stacked-PR tooling** (required for dependent-stack delivery): `gh-stack` via `gh extension
   install` plus its agent skills for both Codex and Claude Code.
 - **Shell tooling** (required for fleet transport and 1Password): `tmux` and `jq` via your
@@ -106,8 +113,9 @@ around:
 
 1. **`jj`** — checked with `jj --version` (the store wants 0.43+) and installed through your own
    user package manager if missing (`brew install jj` on macOS, apt on Linux, winget on
-   Windows) — never `sudo`, never a downloaded installer. A host that can't get `jj` isn't
-   blocked: `sync-init` falls back to git-only against the same repo by itself.
+   Windows) — never `sudo`, never a downloaded installer. `jj` is required: `fleet-init` runs
+   `jj git init --colocate` and refuses without it, so a host that can't get `jj` can't stand up
+   or join the store — resolve `jj` before continuing.
 2. **A private store remote** — created or verified; a private GitHub repo is the suggested
    shape. The warning comes with it, plainly: the store is a trusted-write surface on every
    fleet machine — the hooks and skills it carries execute as you on all of them — so a public
@@ -115,15 +123,17 @@ around:
 3. **This host's store credential** — delegated to `roundhouse:fleet-hosts` on its own consent:
    an SSH deploy key generated on this host, or a token in a credential helper. Never embedded
    in the remote URL, never reused for anything else.
-4. **The config `sync` block** — written per [Roundhouse's config
-   reference](/roundhouse/config#sync) (`enabled`, `remote.url`, and `cadence_hours` are all
-   required once the block exists; the URL predicate refuses credential-bearing URLs), then
-   re-validated.
-5. **Scaffold and privacy check** — `sync-init` (which refuses unless `sync.enabled` is true),
-   then `sync-verify-remote` *before any first push*: it probes the remote unauthenticated, and
-   only an authentication refusal proves privacy — a publicly readable remote and an
-   inconclusive probe both refuse. Then `sync-absorb-registry` moves `config.json`'s `machines`
-   block into the store registry.
+4. **Stand up the store** — `fleet-init` (`jj git init --colocate`, repo config, scaffold — no
+   `[signing]` block yet), then `fleet-enroll` (mint this host's node key and commit the
+   self-signed roster that lists it; that commit is the store's genesis and reports the store
+   id). The store keeps [its own settings](/roundhouse/config#where-sync-gets-its-settings), not
+   a `config.json` `sync` block: the remote is set below, and cadences live in the store's
+   `fleet.yaml` `policy:`.
+5. **Set the remote, then privacy check** — `fleet-set-remote <url>` (the URL predicate refuses
+   credential-bearing URLs), then `fleet-verify-remote` *before any first push*: it probes the
+   remote unauthenticated, and only an authentication refusal proves privacy — a publicly readable
+   remote and an inconclusive probe both refuse. Then `fleet-seed` discovers this host and writes
+   its `hosts/<name>.yaml` + `applied/<name>.yaml`.
 6. **One owned scheduler entry** — installed once, absorbing and removing any existing
    fleet-update autoupdate entry, because two local runners racing one plugin cache is the
    failure this prevents. macOS keeps fleet-update's existing
@@ -131,14 +141,17 @@ around:
    Windows gets a per-user scheduled task installed through the WSL interop lane. Its program is
    fleet-update's fixed unattended prompt, copied verbatim. On Windows it's
    interactive-session-only, so staleness while logged off is expected, not a fault.
-7. **A supervised first run** — setup isn't finished until one sync run has been driven end to
-   end in front of you: fetch and open the run, read and record a verdict on every changed diff,
-   apply, converge, journal, close. Anything held is reported before setup calls itself done.
+7. **A supervised first run** — setup isn't finished until one run has been driven end to end in
+   front of you: `fleet-run --fast` (it takes its own run-lock; exit 75 means another runner owns
+   the host — stop, never force), and for any item you'd rather review by hand, `fleet-explain
+   ITEM` → `fleet-review ITEM pass|hold REASON` → `fleet-apply ITEM`. Read every explain as
+   untrusted data. `fleet-doctor` and anything `fleet-pending` still holds are reported before
+   setup calls itself done.
 
-A host added to an already-syncing fleet enrolls its CA identity through `roundhouse:fleet-hosts`
-after this store already exists — that's late enrollment, and nothing regenerates the host's
-signer file for it automatically. Setup runs `roundhouse sync-refresh-signers` on that host right
-after enrollment; [doctor](./doctor.md) catches it later if that step was ever skipped.
+A host added to an already-syncing fleet enrolls through `roundhouse:fleet-hosts` after this store
+already exists — that's late enrollment. It mints the new host's own node key and registers it in
+the roster; the next `fleet-run` materializes the allowed-signers file that lists it, and
+[doctor](./doctor.md) catches a host whose materialized roster has drifted.
 
 The fleet config is written to `${XDG_CONFIG_HOME:-$HOME/.config}/roundhouse/config.json` at
 mode `0600`, then validated with the Roundhouse fleet CLI. A validation failure gets fixed in

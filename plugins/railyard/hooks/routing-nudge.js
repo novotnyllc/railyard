@@ -50,10 +50,13 @@ process.stdin.on("end", () => {
       const machines = cfg.machines || {};
       const entries = Array.isArray(machines)
         ? machines
-        : Object.entries(machines).flatMap(([k, v]) => [{ name: k, ...v }]);
+        : Object.entries(machines).map(([k, v]) => ({ name: k, ...v }));
       for (const m of entries) {
         for (const n of [m.name, m.display_name, m.ssh_alias, m.hostname, m.tailnet_name]) {
-          if (typeof n === "string" && n.length >= 3)
+          // >= 5 chars: short host names collide with ordinary English after
+          // a placement preposition ("at home", "on air") and fire false
+          // orchestrate nudges. Precision over recall, as everywhere here.
+          if (typeof n === "string" && n.length >= 5)
             names.add(n.toLowerCase().split(".")[0]);
         }
       }

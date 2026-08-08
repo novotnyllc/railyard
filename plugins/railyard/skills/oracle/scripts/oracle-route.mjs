@@ -336,12 +336,14 @@ export function bindExecutable(candidate, repoRoot = process.cwd()) {
   try {
     const info = fs.fstatSync(descriptor, { bigint: true });
     if (!info.isFile() || (Number(info.mode) & 0o022) !== 0 || ![0, process.getuid?.()].includes(Number(info.uid))) fail("unsafe_oracle_executable");
-    return { binary: actual, identity: executableIdentity(info), ancestors };
+    // repoRoot rides along so revalidation re-applies containment against the
+    // root the binding was made under, not whatever cwd happens to be later.
+    return { binary: actual, identity: executableIdentity(info), ancestors, repoRoot: repo };
   } finally { fs.closeSync(descriptor); }
 }
 
 export function revalidateExecutable(binding) {
-  const current = bindExecutable(binding.binary);
+  const current = bindExecutable(binding.binary, binding.repoRoot);
   if (stable(current.identity) !== stable(binding.identity) || stable(current.ancestors) !== stable(binding.ancestors)) fail("oracle_executable_changed");
   return current.binary;
 }

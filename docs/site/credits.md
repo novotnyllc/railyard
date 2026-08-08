@@ -9,6 +9,15 @@ these projects earned it. The machine-readable ledger lives at
 with adaptation notes in
 [`UPSTREAM.md`](https://github.com/novotnyllc/railyard/blob/main/UPSTREAM.md).
 
+This page is credit, not licensing. Only the "shipped and adapted" section
+below carries license obligations, and those are recorded in
+[`THIRD-PARTY-NOTICES.md`](https://github.com/novotnyllc/railyard/blob/main/THIRD-PARTY-NOTICES.md)
+with the license texts preserved in
+[`LICENSE`](https://github.com/novotnyllc/railyard/blob/main/LICENSE). The
+projects under "direct dependencies" are things railyard calls or was
+inspired by — credited here because they earned it, not because a license
+requires it.
+
 ## Shipped and adapted (with attribution)
 
 **Oracle** — the [oracle](skills/oracle.md) skill is adapted from
@@ -37,6 +46,14 @@ two-harness packaging and model-routing-safe dispatch.
 as its workflow engine: planning, implementation, review, PR babysitting.
 It is a required dependency we never modify — railyard routes work into it
 and owns what happens after it returns.
+
+**ponytail** — the lazy-senior-developer efficiency discipline by
+[DietrichGebert](https://github.com/DietrichGebert), from
+[DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail). It is a
+required dependency railyard auto-installs alongside Compound Engineering, and
+never modifies: ponytail keeps the code you write minimal, and railyard carries
+the same discipline into the process and verification loop. Installing railyard
+brings it.
 
 **The harnesses** — railyard is a plugin for
 [Claude Code](https://code.claude.com) (Anthropic) and

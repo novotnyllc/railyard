@@ -1,5 +1,5 @@
 {
-  "description": "Codex hooks: bounded exact-process SessionEnd cleanup (macOS-only at runtime; no-ops with exit 0 elsewhere), the shared routing charter and prompt nudge, and the PreToolUse dispatch gate refusing spawn_agent calls that omit model or reasoning_effort.",
+  "description": "Codex hooks: bounded exact-process SessionEnd cleanup (macOS-only at runtime; no-ops with exit 0 elsewhere), a SessionEnd retrospective reminder when a substantial run would end without one, the shared routing charter and prompt nudge, and the PreToolUse dispatch gate refusing spawn_agent calls that omit model or reasoning_effort. The charter and the gate also append run-log lines for railyard:audit; Codex has no subagent-completion event to subscribe, so worker completion comes from doctrine lines here.",
   "hooks": {
     "PreToolUse": [
       {
@@ -22,6 +22,12 @@
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/cleanup-codex/scripts/cleanup-codex.mjs\" cleanup --hook",
             "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\skills\\cleanup-codex\\scripts\\cleanup-codex.mjs\" cleanup --hook }",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/railyard-retro.js\"",
+            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\railyard-retro.js\" }",
+            "timeout": 5
           }
         ]
       }

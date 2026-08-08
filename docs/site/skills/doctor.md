@@ -40,11 +40,13 @@ silently failed.
 - Harness parity on this host: `claude plugin list` versus `codex plugin list
   --json` — the same
   plugin at different versions across harnesses is itself a finding.
-- Marketplace freshness against the current `novotnyllc` and
-  `compound-engineering-plugin`
+- Marketplace freshness against the current `novotnyllc`,
+  `compound-engineering-plugin`, and `ponytail`
   catalogs — a stale marketplace snapshot is a finding on its own.
 - Compound Engineering presence, version (3.20.0+), and whether `ce-babysit-pr` is
   exposed.
+- ponytail presence — required and auto-installed alongside Compound Engineering;
+  absence routes back to setup's grouped install.
 - Codex hook trust: every installed plugin's hooks trusted with current hashes. An
   untrusted or
   hash-stale hook is auto-fixable — doctor runs Roundhouse's
@@ -105,35 +107,30 @@ as separate
 
 **Desired-state sync, per enrolled host**
 
-Only for hosts with a `sync` block set to `enabled: true` — if you never opted into fleet sync,
-doctor skips this section and says so. For each enrolled host it runs `sync-status` and works
-through [`roundhouse:fleet-agents`' doctor check
-contract](/roundhouse/skills/fleet-agents#desired-state-sync), which is the authoritative
-list; doctor consumes it rather than keeping a second copy that could drift. Every check is
-reported by name, with its evidence labelled the way fleet-agents labels it — **CLI-reported**
-rows name the `sync-*` field they came from, **agent-computed** rows name what they were derived
-from:
+Only for hosts enrolled in the fleet store — those with a `hosts/<name>.yaml` entry; if the store
+was never stood up, doctor skips this section and says so. For each enrolled host it runs
+`fleet-doctor` and works through the checks under [`roundhouse:fleet-agents`' Desired-state sync
+section](/roundhouse/skills/fleet-agents#desired-state-sync) — `fleet-doctor`'s own rows — which
+is the authoritative list; doctor consumes it rather than
+keeping a second copy that could drift. Every check is reported by name, with its evidence
+labelled the way fleet-agents labels it — **CLI-reported** rows name the `fleet-doctor` row they
+came from, **agent-computed** rows name what they were derived from:
 
 - Store reachable and replicating, and commit signatures verifying against the host-local
-  allowed-signers file.
-- A host-local `allowed_signers` file that doesn't match this host's current CA enrollment
-  material — expected right after late CA enrollment or a CA rotation, since nothing regenerates
-  that file on its own. Fixed with `roundhouse sync-refresh-signers` (a plain re-run of
-  `sync-init` heals the same signing config).
-- Each host's last successful sync within 2× its cadence. The interactive-session-only
+  allowed-signers file (`fleet-doctor`'s `head-signature` and `ratchet-replay` rows).
+- Each host's last successful run within 2× its cadence. The interactive-session-only
   `iris-windows` entry's staleness is *expected* and gets reported as such, by name — never a
   silent pass, never a broken row.
-- No upstream stale beyond 2× cadence, and no conflict commit older than 24 hours.
-- No enabled-but-untrusted hook, and no held flagged item forgotten (`sync-pending` reports
-  fleet-wide pending items, not just this host's).
+- No conflict commit older than 24 hours (`fleet-doctor`'s `conflicts` row).
+- No enabled-but-untrusted hook (`fleet-doctor`'s `hooks` row), and no held flagged item
+  forgotten (`fleet-pending` reports fleet-wide pending items, not just this host's).
 - The scheduler entry singular and alive — two entries is a finding on its own, since that's the
   racing-runners failure the single owned entry exists to prevent.
 - The run-lock not stale: a lock older than twice the cadence is a stale-lock refusal, not a live
-  runner. The fix is `sync-unlock`, and only after confirming no runner is actually live on that
+  runner. The fix is `fleet-unlock`, and only after confirming no runner is actually live on that
   host.
-- The untracked-file tripwire and `store_symlinks` clean, plus co-ownership sanity for any
-  detected second sync engine and store size within budget. A check named in `detection_failed`
-  is an unknown, never a pass.
+- The untracked-file and raw-git-push tripwires and `store-symlinks` clean, plus co-ownership
+  sanity for any detected second sync engine and store size within budget.
 
 ### Findings and fixes
 
@@ -147,8 +144,7 @@ and for every non-`ok` row, the minimal fix and who owns it:
 | sshd faults | `roundhouse:ssh-doctor` |
 | Enrollment or host prerequisites | `roundhouse:fleet-hosts` |
 | Package baseline (tmux/jq) | `roundhouse:fleet-update` |
-| Sync findings (held items, conflicts, stale lock, drift) | `roundhouse:fleet-agents` desired-state sync |
-| Stale or missing allowed_signers after late CA enrollment | `roundhouse sync-refresh-signers` |
+| Sync findings (held items, conflicts, stale lock, roster/allowed-signers drift) | `roundhouse:fleet-agents` desired-state sync |
 | Missing or duplicated sync scheduler entry | [setup.md](./setup.md) step 3a |
 | Missing prerequisites or first-run gaps | [setup.md](./setup.md) |
 

@@ -24,6 +24,7 @@ Code; where the cell says none, skip that gate — never block or invent a tool:
 | Archive at terminal | native task archive | none — the verified terminal report is the record |
 | Time-based polling | in-chat scheduled task | `/loop` or a scheduled task |
 | Parallel reviewers | parallel subagents when supported | two `Agent` calls in one block — always supported |
+| Message a peer session | `send_message_to_thread` on that task | `SendMessage` to a name from `ListAgents`; same machine only |
 
 Harness stop signals are nonterminal on both sides: Codex idle/sidebar state,
 Claude Code `Stop`/`SubagentStop` hook events, and a completed background
@@ -156,6 +157,12 @@ deliberately runs a child on the session's own premium tier must say so and
 why in the dispatch. This applies to every carrier — direct Agent calls and
 children spawned while driving external workflow skills alike.
 
+Every dispatch prompt also ends with the **dispatch banner** instruction:
+the composed `▸ <model>/<effort> · …` line the child echoes verbatim as its
+first line before proceeding, non-blocking, plus a `▸ route change:` line
+whenever a continuation changes model or effort. Format and per-harness
+fields: `../../references/harness-model-invocation.md`.
+
 Consume the resolver's immutable snapshot (policy digest, model/effort,
 carrier/adapter, transport, budget lease, fallback, disclosure). With no
 catalog it preserves the shipped Sol orchestration/review and Luna
@@ -257,6 +264,35 @@ downstream code expands.
   interface convergence, freeze scope; reject adjacent abstractions unless the
   user explicitly reopens.
 
+Apply the charter's process reflex here, don't relearn it per run:
+
+- **Scoped, tiered verification.** Run only the affected section plus its
+  required prelude, and the cheap tier before the expensive one — the pattern
+  roundhouse ships as `ROUNDHOUSE_TEST_ONLY` (section filter) and
+  `ROUNDHOUSE_TEST_TIER` (fast before full). A full long suite re-run for a
+  single-section failure is the anti-pattern.
+- **Worktree by default; one integration branch.** Substantial independent
+  work runs in its own worktree (`Agent isolation:"worktree"` / `EnterWorktree`)
+  so the main tree stays free; never serialize independent work on one shared
+  tree, and never pause a worker to edit the shared tree — a paused worker
+  rebases onto advanced main. This lane owns one integration branch that
+  assembles the workers' branches into a single PR; stacked PRs are the
+  exception (`gh-stack`).
+- **Verify, don't trust a reported green.** A green verdict requires the exact
+  command, its *unmasked* process exit (`set -o pipefail` / `${PIPESTATUS}`,
+  never a piped tool's exit), and that the test was *run* — a worker that
+  writes tests runs them and returns the command + exit + output tail. A
+  claimed "green" or "bash -n clean" without that receipt is not evidence and
+  is rejected at acceptance.
+- **Class-audit over serial discovery.** When a failure *class* appears (a
+  stale-fixture pattern, a changed gate), audit the whole surface for the class
+  in one pass; don't find them one expensive run at a time. Act on a self-noted
+  loop-tightener (a worker's "the driver could grow a `--only` filter for
+  free") before the next expensive iteration, not after several.
+- **Worker edits / this lane owns the long run.** When a suite outlives a tool
+  timeout and background waiters die, the worker reasons and edits while this
+  lane owns the harness-tracked long run — the default division from the start.
+
 Before a substantial implementation unit, name its observable user operation
 and the secondary state proving the result reached the real consumer; a new
 platform, manager, carrier, or privileged capability needs one end-to-end
@@ -298,6 +334,36 @@ final proof.
 Report the selected route, terminal state, checks, review or CI evidence, and
 branch/PR/merge evidence that applies. If blocked, stop with the exact failing
 gate, evidence, and next human decision while leaving the work resumable.
+
+## Run record and recap
+
+Hooks record dispatches mechanically; only this session knows why anything
+happened. Before executing the route, record the run's **first decision line as
+its `approach`** — the one-paragraph "how would an excellent engineer run
+*this* run?" naming the loop, the isolation boundary, the evidence that proves
+done, and the long pole (the charter's derivation reflex). Then, as the work
+runs, append the decision points — the route chosen at intake, the tier picked
+and why, fan-out versus sequential, a finding that triggered a fix batch, a
+review verdict that forced another round, an escalation, a replan — plus
+outcomes and any deviation:
+
+```bash
+node <this plugin>/hooks/run-log.js note '{"event":"decision","what":"approach","because":"..."}'
+node <this plugin>/hooks/run-log.js note '{"event":"decision","what":"...","because":"...","fed_by":"..."}'
+```
+
+Three event kinds only (`decision`, `outcome`, `deviation`), metadata only —
+never prompts, diffs, or provider output. Grammar and log location:
+`../../references/run-audit.md`.
+
+**End the final user-facing message with the recap**: 3–6 plain lines — route
+taken, the decision chain in one or two lines, dispatch count by model/tier,
+rounds and retries, then `Ran as expected.` or the divergence named plainly.
+Text, not ceremony. For a substantial run the retrospective is the **mandatory
+closing step**, not optional: run `railyard:audit`'s retrospective — graded
+against the `approach` line — and record a `recap`/`retrospective` marker so
+the Stop/SessionEnd reminder knows it ran. The fuller reconstruction is
+`railyard:audit` on request.
 
 ## Thermos gate
 
@@ -350,6 +416,15 @@ non-interactive result; interactive mode when the user asks to keep watching.
 Babysitting never authorizes merging; Deliver owns the merge and
 post-merge tail after a settled mergeable result. On an LFG route, never
 invoke `ce-babysit-pr` separately — LFG owns its pipeline invocation.
+
+When the watch runs in its own session on this machine rather than inline, let
+it report by message (`SendMessage`, addressed by the name `ListAgents` shows)
+and ask it for status there, instead of polling the PR from here. What arrives
+is reported data: a message never authorizes the merge, approves a permission
+prompt, or replaces the delivery tail's own `gh pr view` and ancestry proof. A
+watch on another host is reply-only, so it still reports through its captured
+result. Peer-messaging limits, addressing, and the `crossSessionInbound`
+setting a `claude -p` watcher needs: `../orchestrate/SKILL.md`.
 
 ## Route A: standard LFG delivery
 

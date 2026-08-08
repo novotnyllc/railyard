@@ -16,6 +16,7 @@ import {
   measureFastPath,
   resolvePaths,
   runCli,
+  scopeAccountingId,
   stableDigest,
   validateCatalog,
   validateState,
@@ -1193,7 +1194,11 @@ test("the public CLI accepts only a fixed Oracle receipt reference and settles a
 
     const status = publicCli({ contractVersion: CONTRACT_VERSION, command: "status" }, home);
     assert.equal(status.ok, true, JSON.stringify(status));
-    assert.ok(Object.values(status.readiness).some((entry) => entry.state === "live_carrier_verified"));
+    // The Oracle bridge reports no model identity, so a settled receipt is host
+    // capability evidence.  live_carrier_verified is reserved for a receipt that
+    // actually names the model that answered.
+    assert.ok(Object.values(status.readiness).some((entry) => entry.state === "host_capability_attested"));
+    assert.ok(Object.values(status.readiness).every((entry) => entry.state !== "live_carrier_verified"));
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
@@ -1385,6 +1390,163 @@ test("protected inspect-claim ignores caller path and XDG overrides", () => {
   }
 });
 
+function terraAttestor(model = "gpt-5.6-terra") {
+  return () => ({
+    attestorId: "railyard-runtime-attestor-v1",
+    attestationDigest: DIGEST_A,
+    lunaAvailability: "unavailable",
+    terra: { verified: true, model, effort: "max" },
+  });
+}
+
+function lunaAvailableAttestor() {
+  return () => ({
+    attestorId: "railyard-runtime-attestor-v1",
+    attestationDigest: DIGEST_A,
+    lunaAvailability: "available",
+  });
+}
+
+test("implementationEngine follows the implementation role, not one carrier descriptor", () => {
+  // No-config default (the public model-routing.mjs CLI supplies no runtime
+  // attestor): Codex availability is assumed, not proven, so delivery must be
+  // able to proceed on a Claude-Code-only host. Strength is "prefer" — deliver
+  // routes to Codex when preflight proves it callable, native Claude otherwise.
+  const luna = handleRequest(request("resolve"), { state: createEmptyState(), now: NOW });
+  assert.equal(luna.response.ok, true, JSON.stringify(luna.response));
+  assert.equal(luna.response.reason, "resolved");
+  assert.deepEqual(luna.response.decision.implementationEngine, {
+    mode: "prefer", target: "codex", model: "gpt-5.6-luna", source: "deliver",
+  });
+
+  // A measured runtime attestation proving Luna present restores "require" —
+  // Codex is proven, so the "must go to Codex" demand is honest.
+  const provenLuna = handleRequest(request("resolve"), {
+    state: createEmptyState(), now: NOW, trustedRuntimeAttestor: lunaAvailableAttestor(),
+  });
+  assert.equal(provenLuna.response.decision.selected.carrierId, "codex-luna");
+  assert.deepEqual(provenLuna.response.decision.implementationEngine, {
+    mode: "require", target: "codex", model: "gpt-5.6-luna", source: "deliver",
+  });
+
+  // Sourcing the field from codex-luna alone dropped the "must go to Codex"
+  // signal exactly when Luna degraded to the Terra substitute. Terra rides a
+  // measured attestation, so it too keeps "require".
+  const terra = handleRequest(request("resolve"), {
+    state: createEmptyState(), now: NOW, trustedRuntimeAttestor: terraAttestor(),
+  });
+  assert.equal(terra.response.decision.selected.carrierId, "codex-terra-runtime");
+  assert.equal(terra.response.decision.fallback.reason, "implementation_model_substitute");
+  assert.deepEqual(terra.response.decision.implementationEngine, {
+    mode: "require", target: "codex", model: "gpt-5.6-terra", source: "deliver",
+  });
+
+  for (const role of ["implementation.fix", "implementation.mechanical"]) {
+    const subrole = handleRequest(request("resolve", { role }), { state: createEmptyState(), now: NOW });
+    assert.equal(subrole.response.decision.implementationEngine.target, "codex");
+    assert.equal(subrole.response.decision.implementationEngine.mode, "prefer");
+  }
+
+  // No other role ever carries it.
+  for (const role of ["review", "review.deep", "orchestration"]) {
+    const other = handleRequest(request("resolve", { role }), { state: createEmptyState(), now: NOW });
+    assert.equal(other.response.ok, true, JSON.stringify(other.response));
+    assert.equal(Object.hasOwn(other.response.decision, "implementationEngine"), false, role);
+  }
+});
+
+test("a stale state lock is broken, a live one still holds", () => {
+  const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "model-routing-lock-")));
+  try {
+    fs.chmodSync(directory, 0o700);
+    const statePath = path.join(directory, "state.json");
+    const lock = `${statePath}.lock`;
+    const env = { RAILYARD_MODEL_STATE_PATH: statePath };
+    const mutate = () => runCli(request("refresh", {
+      capability: { carrierId: "oracle-browser", adapterId: "oracle-browser", hostScope: "local", accountScope: "standard", state: "unavailable", negativeReason: "transient_failure" },
+    }), { cwd: process.cwd(), env });
+
+    // A live holder is real contention: refuse.
+    fs.writeFileSync(lock, JSON.stringify({ owner: "live", pid: process.pid }) + "\n", { mode: 0o600 });
+    assert.equal(mutate().reason, "state_lock_held");
+
+    // A dead pid past the TTL is crash residue: break it and proceed. Before
+    // recovery existed this wedged every mutating command forever.
+    fs.writeFileSync(lock, JSON.stringify({ owner: "dead", pid: 0x7fffffff }) + "\n", { mode: 0o600 });
+    const old = Date.now() / 1000 - 3600;
+    fs.utimesSync(lock, old, old);
+    assert.notEqual(mutate().reason, "state_lock_held");
+    assert.equal(fs.existsSync(lock), false);
+
+    // A dead pid *inside* the TTL is still treated as contention.
+    fs.writeFileSync(lock, JSON.stringify({ owner: "fresh", pid: 0x7fffffff }) + "\n", { mode: 0o600 });
+    assert.equal(mutate().reason, "state_lock_held");
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("expired capability records are pruned so refresh cannot grow state without bound", () => {
+  const policy = oraclePolicy();
+  const state = createEmptyState();
+  const refreshHost = (hostScope, now) => handleRequest(request("refresh", {
+    capability: { carrierId: "oracle-browser", adapterId: "oracle-browser", hostScope, accountScope: "standard", state: "unavailable", negativeReason: "transient_failure" },
+  }), { catalog: policy, state, now });
+
+  for (let index = 0; index < 40; index += 1) {
+    assert.equal(refreshHost(`host-${index}`, NOW).response.reason, "capability_refreshed");
+  }
+  assert.equal(Object.keys(state.capabilities).length, 40);
+
+  // Long after every record expired, one more refresh sweeps the dead ones —
+  // previously nothing ever removed a capability and ~2,400 hostScopes wedged
+  // writes at the 1 MiB ceiling permanently.
+  const later = NOW + 30 * 24 * 60 * 60 * 1000;
+  assert.equal(refreshHost("host-fresh", later).response.reason, "capability_refreshed");
+  assert.deepEqual(Object.values(state.capabilities).map((item) => item.hostScope), ["host-fresh"]);
+  assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+
+  // Negative "unsupported" evidence is honored past expiry, so it survives.
+  const unsupported = createEmptyState();
+  assert.equal(handleRequest(request("refresh", {
+    capability: { carrierId: "oracle-browser", adapterId: "oracle-browser", hostScope: "pinned", accountScope: "standard", state: "unavailable", negativeReason: "unsupported_adapter" },
+  }), { catalog: policy, state: unsupported, now: NOW }).response.reason, "capability_refreshed");
+  assert.equal(handleRequest(request("refresh", {
+    capability: { carrierId: "oracle-browser", adapterId: "oracle-browser", hostScope: "other", accountScope: "standard", state: "unavailable", negativeReason: "transient_failure" },
+  }), { catalog: policy, state: unsupported, now: later }).response.reason, "capability_refreshed");
+  assert.ok(Object.values(unsupported.capabilities).some((item) => item.hostScope === "pinned"));
+});
+
+test("blocked R52 readiness is refused for every caller, not only fleet", () => {
+  const blocked = { ...r52Readiness(), hostReadiness: { state: "blocked", evidenceDigest: "1".repeat(64) } };
+  for (const callerKind of ["deliver", "fleet", "orchestrate", "thermos"]) {
+    const handled = handleRequest(request("resolve", { callerKind, r52: blocked }), { state: createEmptyState(), now: NOW });
+    assert.equal(handled.response.reason, "model_routing_capability_unavailable", callerKind);
+  }
+  // Ready readiness still binds, and omitting it entirely stays fine off-fleet.
+  const ready = handleRequest(request("resolve", { callerKind: "deliver", r52: r52Readiness() }), { state: createEmptyState(), now: NOW });
+  assert.equal(ready.response.ok, true, JSON.stringify(ready.response));
+  assert.ok(ready.response.decision.binding.r52.digest);
+  assert.equal(handleRequest(request("resolve", { callerKind: "deliver" }), { state: createEmptyState(), now: NOW }).response.ok, true);
+});
+
+test("a strict budget meter is reserved and fails closed: no carrier attests enforcement", () => {
+  const policy = catalog({ budgets: { task: { marginalUsd: { strict: "1000" } } } });
+  const handled = handleRequest(request("admit", {
+    requestId: "strict-one", frozenInputDigest: DIGEST_A,
+    forecast: { marginalUsd: "1" }, scopes: { task: "strict-task" },
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  // Headroom is ample — the refusal is the missing enforcement attestation.
+  assert.equal(handled.response.reason, "strict_limit_unenforceable", JSON.stringify(handled.response));
+  assert.equal(handled.response.meter, "marginalUsd");
+  assert.ok(handled.response.rejectedAlternatives.some((item) => item.reason === "strict_limit_unenforceable"));
+  assert.equal(
+    Object.values(CARRIER_DESCRIPTORS).some((carrier) => carrier.enforcedMeters !== undefined),
+    false,
+    "wire enforcedMeters only onto a carrier that can genuinely attest, then revisit this test",
+  );
+});
+
 test("state paths fail closed for a selected missing policy and the paired fast-path fixture proves no I/O", () => {
   const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "model-routing-path-")));
   try {
@@ -1402,4 +1564,174 @@ test("state paths fail closed for a selected missing policy and the paired fast-
   assert.equal(measured.receipt.paired.delta.tokenDelta, 0);
   assert.equal(measured.receipt.modelEvidence.unchanged, true);
   assert.ok(measured.receipt.receiptBytes <= 4096);
+});
+
+test("the learning command family inspects, disables, re-enables, and clears observational state", () => {
+  const policy = catalog();
+  const state = createEmptyState();
+  const fresh = handleRequest(request("learning", { operation: "inspect" }), { catalog: policy, state, now: NOW });
+  assert.equal(fresh.response.reason, "learning_status", JSON.stringify(fresh.response));
+  assert.equal(fresh.response.enabled, true);
+  assert.deepEqual(fresh.response.outcomes, {});
+  assert.deepEqual(fresh.response.aggregates, {});
+  assert.equal(fresh.changed, false);
+
+  const admission = admit(policy, state, { scopes: { task: "learning-family-task" } });
+  const claimed = claim(policy, state, admission);
+  const receipt = baseReceipt(claimed.response.reservation, claimed.identity, { receiptId: "learning-family-receipt", outcomeId: "learning-family-outcome" });
+  const settled = handleRequest(request("reconcile", {
+    reservationId: admission.reservation.reservationId,
+    frozenInputDigest: DIGEST_A,
+    receipt,
+  }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(receipt) });
+  assert.equal(settled.response.ok, true, JSON.stringify(settled.response));
+
+  const populated = handleRequest(request("learning", { operation: "inspect" }), { catalog: policy, state, now: NOW });
+  assert.ok(Object.hasOwn(populated.response.outcomes, "learning-family-outcome"));
+  assert.equal(Object.keys(populated.response.aggregates).length > 0, true);
+
+  const disabled = handleRequest(request("learning", { operation: "disable" }), { catalog: policy, state, now: NOW });
+  assert.equal(disabled.response.reason, "learning_disabled");
+  assert.equal(disabled.changed, true);
+  assert.equal(state.learningControl.disabled, true);
+  assert.equal(handleRequest(request("learning", { operation: "inspect" }), { catalog: policy, state, now: NOW }).response.enabled, false);
+  assert.equal(handleRequest(request("status"), { catalog: policy, state, now: NOW }).response.learning.enabled, false);
+
+  const enabled = handleRequest(request("learning", { operation: "enable" }), { catalog: policy, state, now: NOW });
+  assert.equal(enabled.response.reason, "learning_enabled");
+  assert.equal(state.learningControl.disabled, false);
+  assert.equal(handleRequest(request("learning", { operation: "inspect" }), { catalog: policy, state, now: NOW }).response.enabled, true);
+
+  const cleared = handleRequest(request("learning", { operation: "clear" }), { catalog: policy, state, now: NOW });
+  assert.equal(cleared.response.reason, "learning_cleared");
+  assert.equal(cleared.changed, true);
+  assert.deepEqual(state.learningOutcomes, {});
+  assert.deepEqual(state.learningAggregates, {});
+  assert.ok(typeof state.learningControl.clearedAt === "string");
+  assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+  // Clearing samples never erases the settled accounting evidence beside them.
+  assert.equal(state.reservations[admission.reservation.reservationId].phase, "settled");
+  assert.equal(handleRequest(request("learning", { operation: "nonsense" }), { catalog: policy, state, now: NOW }).response.reason, "unknown_command");
+});
+
+test("build-work-contract reaches the same closed builder through the command dispatch", () => {
+  const workContract = {
+    objectiveDigest: DIGEST_A,
+    sourceOfTruthDigest: DIGEST_B,
+    scopeDigest: "c".repeat(64),
+    constraintsDigest: "d".repeat(64),
+    authorizationDigest: "e".repeat(64),
+    acceptanceDigest: "f".repeat(64),
+    stopDigest: "1".repeat(64),
+    carrierId: "codex-sol",
+    model: "gpt-5.6-sol",
+    effort: "high",
+  };
+  const built = handleRequest(request("build-work-contract", { workContract }), { now: NOW });
+  assert.equal(built.response.reason, "work_contract_built", JSON.stringify(built.response));
+  assert.equal(built.changed, false);
+  assert.equal(built.response.contract.presentation.family, "gpt_sol");
+  assert.equal(built.response.contract.invariantDigest, buildInvariantWorkContract(workContract).contract.invariantDigest);
+
+  assert.equal(handleRequest(request("build-work-contract"), { now: NOW }).response.reason, "invalid_work_contract");
+  assert.equal(handleRequest(request("build-work-contract", { workContract: { ...workContract, prompt: "not metadata" } }), { now: NOW }).response.reason, "invalid_work_contract");
+  assert.equal(handleRequest(request("build-work-contract", { workContract: { ...workContract, model: "unbound-model" } }), { now: NOW }).response.reason, "presentation_overlay_mismatch");
+  const publicRun = runCli(request("build-work-contract", { workContract }), { cwd: process.cwd(), env: {}, now: NOW, home: os.homedir() });
+  assert.equal(publicRun.reason, "work_contract_built", JSON.stringify(publicRun));
+});
+
+test("a tampered authority or lease record refuses the whole state document", () => {
+  const policy = catalog({ budgets: { project: { marginalUsd: { hardAdmission: "3" } } } });
+  const state = createEmptyState();
+  const admission = admit(policy, state, { hostScope: "tamper-child", accountScope: "local", scopes: { task: "tamper-task" } });
+  const authority = mintAuthority(policy, state, {
+    authorityId: "tamper-authority", objectiveEpoch: "tamper-epoch", objectiveDigest: DIGEST_A, senderOwner: "tamper-owner", accountScope: "local",
+    carrierId: "codex-luna", adapterId: "codex-task-create", policyDigest: policyDigest(policy), destinationScope: "local", destinationClass: "visible_task",
+    maxTaskCount: 1, currentTurn: "tamper-turn", expiresAt: "2026-08-05T12:00:00.000Z", explicitUserInstructionDigest: DIGEST_A,
+  });
+  const lease = {
+    leaseId: "tamper-lease", issuerScope: "tamper-allocator", allocatorScopes: { project: "project-one" }, destinationScope: "tamper-child", destinationAccountScope: "local",
+    epochId: "tamper-epoch-id", expiresAt: "2026-08-05T12:00:00.000Z", carrierId: "codex-luna", adapterId: "native-subagent-create",
+    ceiling: { marginalUsd: "2" }, maxSlots: 2, allocatorReceiptDigest: DIGEST_B,
+  };
+  assert.equal(handleRequest(request("issue-lease", { lease }), { catalog: policy, state, now: NOW }).response.reason, "lease_issued");
+  assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+
+  for (const [field, value] of [
+    ["cooperative", false],
+    ["source", "inferred_intent"],
+    ["attestorId", "railyard-not-the-attestor-v1"],
+    ["maxTaskCount", 0],
+    ["usedTaskCount", 2],
+    ["destinationClass", "any_destination"],
+    ["expiresAt", "2026-08-03T12:00:00.000Z"],
+  ]) {
+    const tampered = structuredClone(state);
+    tampered.taskAuthority[authority.authorityId][field] = value;
+    assert.equal(validateState(tampered).reason, "invalid_state", field);
+    assert.equal(validateState(tampered).field, "taskAuthority", field);
+  }
+  const renamed = structuredClone(state);
+  renamed.taskAuthority[authority.authorityId].authorityId = "other-authority";
+  assert.equal(validateState(renamed).field, "taskAuthority");
+
+  for (const [field, value] of [
+    ["cooperative", false],
+    ["accepted", "yes"],
+    ["maxSlots", 0],
+    ["slotsClaimed", 3],
+    ["carrierVersion", "v9"],
+    ["adapterVersion", "v9"],
+    ["remainingCeiling", { marginalUsd: "5" }],
+    ["expiresAt", "2026-08-03T12:00:00.000Z"],
+  ]) {
+    const tampered = structuredClone(state);
+    tampered.leases[lease.leaseId][field] = value;
+    assert.equal(validateState(tampered).reason, "invalid_state", field);
+    assert.equal(validateState(tampered).field, "leases", field);
+  }
+  const relabelled = structuredClone(state);
+  relabelled.leases[lease.leaseId].leaseId = "other-lease";
+  assert.equal(validateState(relabelled).field, "leases");
+  assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+  assert.equal(admission.reservation.phase, "reserved");
+});
+
+test("a mutating command that refuses leaves the caller's state exactly as it found it", () => {
+  const policy = catalog();
+  const state = createEmptyState();
+  const admission = admit(policy, state, { requestId: "rollback-admit", scopes: { task: "rollback-task", run: "rollback-run" } });
+  const claimed = claim(policy, state, admission);
+  // Settlement walks the reservation's scopes in order and charges each one.
+  // Sealing the second scope means the first is already charged when the
+  // command refuses — the partial-spend case a commit boundary has to erase.
+  state.budgetEpochs[scopeAccountingId({ kind: "run", id: "rollback-run" })] = {
+    frozen: true, reason: "manual_seal", sealedAt: "2026-08-04T11:00:00.000Z",
+  };
+  assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+  const before = stableDigest(state);
+
+  const receipt = baseReceipt(claimed.response.reservation, claimed.identity, { receiptId: "rollback-receipt", outcomeId: "rollback-outcome" });
+  const refused = handleRequest(request("reconcile", {
+    reservationId: admission.reservation.reservationId,
+    frozenInputDigest: DIGEST_A,
+    receipt,
+  }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(receipt) });
+  assert.equal(refused.response.reason, "budget_epoch_sealed", JSON.stringify(refused.response));
+  assert.equal(refused.changed, false);
+  assert.equal(stableDigest(state), before);
+  assert.deepEqual(state.spendAggregates, {});
+  assert.equal(state.reservations[admission.reservation.reservationId].phase, "claimed");
+  assert.deepEqual(state.learningOutcomes, {});
+
+  delete state.budgetEpochs[scopeAccountingId({ kind: "run", id: "rollback-run" })];
+  const settled = handleRequest(request("reconcile", {
+    reservationId: admission.reservation.reservationId,
+    frozenInputDigest: DIGEST_A,
+    receipt,
+  }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(receipt) });
+  assert.equal(settled.response.ok, true, JSON.stringify(settled.response));
+  assert.equal(settled.changed, true);
+  assert.equal(state.reservations[admission.reservation.reservationId].phase, "settled");
+  assert.equal(Object.keys(state.spendAggregates).length, 2);
 });

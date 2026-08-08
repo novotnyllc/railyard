@@ -115,6 +115,15 @@ reason stated at dispatch. Silent inheritance is a routing violation.
 Cross-harness dispatch is additionally opt-in only: never a silent
 default, because each harness meters separately.
 
+**Dispatch banner — every dispatch prompt makes the child announce its
+route.** The dispatcher composes the line (the worker cannot introspect its
+own model or effort) and instructs the child to echo it verbatim as the
+first line of its first message, then proceed without waiting; a
+model/effort change mid-thread gets a `▸ route change:` line the same way,
+and is N/A on harnesses that cannot change either mid-thread. The canonical
+format, per-harness fields, and mid-thread table are in the
+harness-model-invocation reference.
+
 **Claude Code cannot invoke GLM-5.2.** A Claude session cannot both
 authenticate to Z.ai and keep its account-bound capabilities, so the route
 does not exist — do not rebuild it. GLM work goes through Codex:

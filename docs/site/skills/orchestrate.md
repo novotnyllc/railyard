@@ -139,6 +139,15 @@ end-to-end canary across the seam. Once the interface has converged, scope is fr
 adjacent abstractions or cleanup creep unless the accepted contract requires them or you change
 the objective.
 
+Each substantial independent lane runs in its own worktree so no two lanes and the orchestrator
+share one tree — independent work is never serialized on a shared tree, and a lane is never paused
+so the orchestrator can edit it. The lanes' branches converge onto **one integration branch → one
+PR** as the usual end state; stacked PRs are the exception. Verification rides the same reflex:
+lanes run scoped, tiered checks rather than a full long-suite re-run; a worker that writes tests
+runs them and returns the command, its unmasked exit, and the output tail — a claimed "green"
+without that receipt is rejected at acceptance; and a failure *class* is audited across the whole
+surface in one pass rather than found one expensive run at a time.
+
 ### Directing the work
 
 1. Define the outcome, constraints, dependencies, risks, and terminal evidence.

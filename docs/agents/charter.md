@@ -19,6 +19,8 @@ Deciding and driving work —
   (`thermos` and the two thermo-nuclear reviewers) and the Oracle one-shot
   advisor.
 - *Runtime hygiene* — cleaning up after completed runs (`cleanup-codex`).
+- *Audit and retrospective* — reconstructing how a run went from the
+  mechanical run log (`audit`).
 
 ## Belongs elsewhere
 
@@ -32,10 +34,19 @@ hosts itself.
 How to do a specific *kind* of work (craft skills) lives in
 [`agent-utilities`](https://github.com/novotnyllc/agent-utilities).
 
-## External dependency
+## External dependencies
 
-Compound Engineering
-([EveryInc/compound-engineering-plugin](https://github.com/EveryInc/compound-engineering-plugin))
-is a required external dependency for delivery work — Goal Driven Delivery
-routes through its workflows and never modifies them. The README carries the
-install and update commands.
+Two required external plugins, both auto-installed by railyard and never
+modified:
+
+- Compound Engineering
+  ([EveryInc/compound-engineering-plugin](https://github.com/EveryInc/compound-engineering-plugin))
+  — the delivery workflow engine; Goal Driven Delivery routes through its
+  workflows.
+- ponytail
+  ([DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)) — the
+  efficiency discipline railyard carries into both the code and the process and
+  verification loop.
+
+Installing railyard authorizes and installs both as one group. The README
+carries the install and update commands.

@@ -71,6 +71,22 @@ test("delivery, orchestration, planning, and PR intents route", () => {
   assert.match(nudge("update the login page styling"), /Delivery intent/);
 });
 
+test("short machine names never fire — they collide with ordinary English", () => {
+  const shortCfg = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), "nudge-short-")),
+    "config.json",
+  );
+  fs.writeFileSync(
+    shortCfg,
+    JSON.stringify({ machines: { air: { os: "mac" }, home: { ssh_alias: "home" } } }),
+  );
+  const env = { ROUNDHOUSE_CONFIG: shortCfg };
+  assert.equal(nudge("lets do this at home tonight", env), "");
+  assert.equal(nudge("blow some air on it and see", env), "");
+  // Long registered names still match from the same registry shape.
+  assert.match(nudge("run the tests over on boxcar"), /orchestrate/);
+});
+
 test("ordinary conversation stays silent", () => {
   for (const p of [
     "fix this sentence it reads awkwardly",

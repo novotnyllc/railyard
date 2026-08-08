@@ -82,7 +82,17 @@ front doors, and everything below is what they call on your behalf.
 | Delivery | `deliver` |
 | Orchestration & placement | `orchestrate` |
 | Quality gates | `thermos`, plus its two review lenses, and `oracle` |
+| Audit & retrospective | `audit` |
 | Runtime hygiene | `cleanup-codex` |
+
+## On one machine
+
+Every capability above runs on the machine in front of you, with nothing else configured —
+intent-routed delivery, budget-aware model routing, the Thermos review gates, Oracle second-model
+review, doctor's health check, the audit trail, and Codex runtime hygiene. See
+[railyard on one machine](single-machine.md) for the full single-host surface, and
+[how railyard compares](comparison.md) for where it sits next to raw agent CLIs, CI bots, and
+model routers. A fleet is an optional amplifier that adds placement across hosts.
 
 ## Install
 
@@ -90,7 +100,7 @@ front doors, and everything below is what they call on your behalf.
 claude plugin marketplace add novotnyllc/marketplace
 claude plugin install railyard@novotnyllc
 # then just say: "set up railyard"
-# (setup installs Compound Engineering automatically — railyard's documented dependency)
+# (setup installs Compound Engineering and ponytail automatically — railyard's documented required plugins, one grouped consent)
 ```
 
 Codex:
@@ -125,11 +135,12 @@ twice.
 ## Scope, honestly
 
 railyard is a personal-scale operator tool — you run it inside your own Claude Code or Codex
-session, not a hosted service. It's built on the external
-[Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin) plugin as its
-workflow engine, which railyard installs and updates but never modifies; watching a PR to merge
-specifically needs that plugin at version 3.20.0 or newer, and setup fixes that for you rather
-than working around it. Multi-machine delivery depends on roundhouse being enrolled and healthy;
+session, not a hosted service. It's built on two external plugins it installs but never modifies:
+[Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin) as its workflow
+engine, and [ponytail](https://github.com/DietrichGebert/ponytail) for the efficiency discipline it
+carries into its own process. Both install under the one setup consent; watching a PR to merge
+specifically needs Compound Engineering at version 3.20.0 or newer, and setup fixes that for you
+rather than working around it. Multi-machine delivery depends on roundhouse being enrolled and healthy;
 without it, railyard just stays local rather than guessing at readiness it can't verify. It's
 opt-in and operator-owned end to end: nothing runs unattended unless you explicitly schedule it
 yourself, and no plugin here phones anything home. No user counts on this page — this is a tool
@@ -139,9 +150,11 @@ built for one operator's own fleet, not a platform with numbers to cite.
 
 **[Install railyard](#install)** — two commands, then one sentence to say.
 
-Or read more first: [the delivery lifecycle](/roundhouse/lifecycle) walks the whole
-routed-to-merged path with diagrams, and the [deliver skill reference](./skills/deliver.md)
-covers every route, gate, and what "done" means in full.
+Or read more first: [railyard on one machine](single-machine.md) is everything it does with zero
+fleet; [the delivery lifecycle](lifecycle.md) walks one prompt from routed to merged to proven;
+[how railyard compares](comparison.md) maps it against the tools you'd weigh it against; and the
+[deliver skill reference](./skills/deliver.md) covers every route, gate, and what "done" means in
+full.
 
 ---
 

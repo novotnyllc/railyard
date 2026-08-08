@@ -124,6 +124,14 @@ facets; carrier and probe identity; forecast/reservation/actual/charged meter
 facets; capability freshness; privacy; rejected alternatives; attribution
 boundary; and escalation state. Each facet has an explicit provenance and uses
 `"unknown"` or `"not_applicable"` rather than silently omitting an answer.
+
+The three route sections answer three different questions and are expected to
+diverge. `requested` is what the caller asked for and nothing else: the effort
+it named, the single provider its privacy constraint allowed, and
+`"not_requested"` for every facet a request cannot state — a caller never names
+a model, endpoint, execution surface, or billing surface. `configured` is the
+catalog's answer for the selected route, and `observed` is what the adapter
+receipt or capability attestation actually reported.
 The disclosure is content-free and the compact settlement form is retained so
 an exact receipt replay returns the same facts.
 
@@ -163,9 +171,27 @@ No catalog means no external probes and no optional-route assumption.
 
 | Work role | Frozen default |
 | --- | --- |
-| `implementation` and its bounded subroles | `gpt-5.6-luna` at `max`, including exactly `implementationEngine:{"mode":"require","target":"codex","model":"gpt-5.6-luna","source":"deliver"}` |
+| `implementation` and its bounded subroles | `gpt-5.6-luna` at `max`, including exactly `implementationEngine:{"mode":"prefer","target":"codex","model":"gpt-5.6-luna","source":"deliver"}` — `prefer`, not `require`, because no-config Luna availability is assumed, not proven (see below) |
 | orchestration or independent review | `gpt-5.6-sol` at `high`; `max` only for high/critical or explicitly complex work |
-| unavailable/unselectable Luna implementation | only a runtime-attested Terra model at `max`, disclosed as `implementation_model_substitute`; the resolver never invents a Terra slug |
+| unavailable/unselectable Luna implementation | only a runtime-attested Terra model at `max`, disclosed as `implementation_model_substitute`; the resolver never invents a Terra slug, and `implementationEngine` still rides along with `model` set to the attested Terra slug |
+
+`implementationEngine` is emitted from the work *role*, not from the carrier: any
+`implementation` role landing on a `codex` execution surface carries
+`{"mode":<strength>,"target":"codex","model":<selected model>,"source":"deliver"}`.
+Terra substitution therefore cannot silently drop the "must go to Codex" signal,
+and no other role ever carries the field.
+
+`<strength>` is `require` only when Codex is *proven* present — a measured
+runtime attestation (the Terra substitute path carries one, so it stays
+`require`) or an explicitly configured catalog route. The no-config fixed
+default assumes Luna without proof: the public `model-routing.mjs` CLI passes no
+runtime attestor, so demanding Codex there would dead-end a Claude-Code-only
+host at the `ce-work` `require`-blocker before any code is written. That default
+is therefore `prefer` — deliver routes to Codex when its own preflight proves it
+callable, and falls back to a native Claude implementation when it is not, which
+is what makes "local delivery works with nothing configured" true for
+implementation. A caller that supplies a real runtime attestor proving Codex
+available, or configures a catalog codex route, gets `require` back.
 
 An unavailable Luna with no attested Terra substitute returns
 `preferred_unavailable`. Explicit user/repository model requirements prevent
@@ -330,7 +356,12 @@ allocator lease headroom, and settled hard-accounted amount across every
 supplied scope. Scope accounting is namespaced by scope kind and opaque ID, so
 the same raw ID in task/run/project cannot collide. `hardAdmission`
 blocks over-allocation; `strict` also requires the fixed carrier to attest
-enforcement for that meter. Hard/strict meters cannot omit a forecast. The
+enforcement for that meter. **`strict` is reserved:** no carrier declares
+`enforcedMeters` today, because none can genuinely attest per-meter enforcement,
+so every strict meter refuses with `strict_limit_unenforceable`. That is the
+intended fail-closed answer — a strict limit nobody enforces must not admit
+work. Use `hardAdmission` for limits meant to bind now.
+Hard/strict meters cannot omit a forecast. The
 resolver tries the next eligible configured candidate when a higher-ranked
 candidate cannot meet a hard constraint; it never relaxes one. If billed actual
 is absent, reconciliation conservatively charges the reserved ceiling. A

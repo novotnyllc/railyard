@@ -20,6 +20,10 @@ const providerRouting = readFileSync(
   new URL("../../../references/provider-task-routing.md", import.meta.url),
   "utf8",
 );
+const harnessInvocation = readFileSync(
+  new URL("../../../references/harness-model-invocation.md", import.meta.url),
+  "utf8",
+);
 const reviewReceipt = fileURLToPath(
   new URL("../../../scripts/review-receipt.mjs", import.meta.url),
 );
@@ -258,6 +262,24 @@ test("allows the default Haiku auxiliary for a Claude-family expectation", () =>
   assert.equal(explicit.receipt.observed_model, "claude-haiku-4-5-20251001");
 });
 
+test("an auxiliary model on an assistant event is allowed, an unlisted one is not", () => {
+  // Aux models emit assistant events too — gating those on isExpected alone
+  // failed closed on exactly the traffic the allowance exists for.
+  const aux = { type: "assistant", message: { model: "claude-haiku-4-5-20251001" } };
+  const run = validateFable([init, aux, assistant, success]);
+  assert.equal(run.status, 0);
+  assert.equal(run.receipt.reason, "validated");
+
+  const unlisted = validateFable([
+    init,
+    { type: "assistant", message: { model: "claude-sonnet-4-5-20250929" } },
+    success,
+  ]);
+  assert.equal(unlisted.status, 1);
+  assert.equal(unlisted.receipt.reason, "assistant_model_mismatch");
+  assert.equal(unlisted.receipt.observed_model, "claude-sonnet-4-5-20250929");
+});
+
 test("treats the CLI version as a floor, not a pinned set", () => {
   assert.equal(validate("claude-fable-5", streamFor("claude-fable-5", "2.1.223")).receipt.reason, "validated");
   assert.equal(validate("claude-fable-5", streamFor("claude-fable-5", "2.2.0")).receipt.reason, "validated");
@@ -399,6 +421,56 @@ test("all model-launch workflows consume one model-routing entrypoint", () => {
   assert.match(modelRoutingReference, /provider-task-routing\.md/);
 });
 
+test("dispatched children echo a self-identifying route banner", () => {
+  assert.match(harnessInvocation, /## Dispatch banner/);
+  assert.match(harnessInvocation, /▸ <model>\/<effort> · <role\/work-class>/);
+  assert.match(harnessInvocation, /▸ route change:/);
+  for (const consumer of [modelRoutingSkill, delivery, orchestrator]) {
+    assert.match(consumer, /dispatch banner/i);
+    assert.match(consumer, /▸/);
+  }
+});
+
+test("peer-session messaging is doctrine, addressed by name, never authority", () => {
+  const runAudit = readFileSync(
+    new URL("../../../references/run-audit.md", import.meta.url),
+    "utf8",
+  );
+  assert.match(orchestrator, /## Message peer sessions/);
+  assert.match(orchestrator, /`ListAgents`/);
+  assert.match(orchestrator, /Same machine only for a new message/);
+  assert.match(orchestrator, /reply-only/);
+  assert.match(orchestrator, /never authority/);
+  assert.match(orchestrator, /crossSessionInbound/);
+  assert.match(orchestrator, /--name/);
+  assert.match(orchestrator, /Does not replace it/);
+  assert.match(delivery, /SendMessage/);
+  assert.match(delivery, /never authorizes the merge/);
+  assert.match(harnessInvocation, /## Session messaging/);
+  assert.match(harnessInvocation, /send_message_to_thread/);
+  assert.match(harnessInvocation, /no `▸ route change:` line/);
+  assert.match(runAudit, /not a dispatch/);
+});
+
+test("nested subagents recurse under the same rules at every depth", () => {
+  assert.match(harnessInvocation, /## Nested subagents/);
+  assert.match(harnessInvocation, /CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH/);
+  assert.match(harnessInvocation, /Every rule applies at every depth/);
+  assert.match(harnessInvocation, /dispatcher-composes rule recurses/);
+  assert.match(harnessInvocation, /delegation theater/);
+  assert.match(harnessInvocation, /no nested teams/);
+  assert.match(orchestrator, /Nesting is supported on both harnesses/);
+});
+
+test("agent teams are documented as evaluated and not adopted", () => {
+  assert.match(orchestrator, /Agent teams: evaluated, not adopted/);
+  assert.match(orchestrator, /CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS/);
+  assert.match(orchestrator, /do not spawn a\s+team/);
+  assert.match(orchestrator, /no nested teams/);
+  assert.match(orchestrator, /Task status lags/);
+  assert.match(orchestrator, /fixed at spawn/);
+});
+
 test("delivery workflows apply the invariant work contract and closed carrier overlay", () => {
   for (const text of [delivery, orchestrator]) {
     assert.match(text, /build-work-contract/);
@@ -452,6 +524,31 @@ test("Oracle exposes a routed browser-only mode without changing manual use", ()
   assert.match(oracle, /oracle-route\.mjs/);
   assert.match(oracle, /routed Oracle API|oracle-api/);
   assert.match(oracle, /manual commands below remain outside routed v1/);
+});
+
+test("completions recap the run and the audit reconstructs the decision chain", () => {
+  const audit = readFileSync(new URL("../../audit/SKILL.md", import.meta.url), "utf8");
+  const runAudit = readFileSync(
+    new URL("../../../references/run-audit.md", import.meta.url),
+    "utf8",
+  );
+  for (const consumer of [delivery, orchestrator]) {
+    assert.match(consumer, /run-log\.js/);
+    assert.match(consumer, /"event":"decision"/);
+    assert.match(consumer, /Ran as expected\./);
+    assert.match(consumer, /run-audit\.md/);
+  }
+  assert.match(audit, /railyard:audit|# Run audit/);
+  assert.match(audit, /decision/i);
+  assert.match(audit, /retrospective/i);
+  assert.match(audit, /the record doesn't capture why/);
+  assert.match(audit, /ce-compound/);
+  assert.match(audit, /suggestions\//);
+  assert.match(runAudit, /decision \| `what`|`decision`/);
+  assert.match(runAudit, /`fed_by`/);
+  assert.match(runAudit, /run-log\/YYYY-MM-DD\.jsonl/);
+  assert.match(harnessInvocation, /run-audit\.md/);
+  assert.ok(claudeManifest.skills.includes("./skills/audit"));
 });
 
 test("ships paired source manifest versions", () => {

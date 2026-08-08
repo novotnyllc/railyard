@@ -64,6 +64,128 @@ expecting — subagents and the orchestrator's normal visible-task dispatch
 are the unsurprising forms; suggest a fresh chat only when asked or when
 the work genuinely needs a clean interactive session.
 
+## Dispatch banner
+
+Every child dispatched under this routing self-identifies at the top of its
+transcript, so a reader scanning a background session or a Codex subagent can
+sanity-check the route at a glance. **The dispatcher composes the line and the
+worker echoes it**: a worker cannot reliably introspect its own model or
+effort, but the dispatching session just chose both. It is informational
+output only — the worker never waits for acknowledgement.
+
+One canonical format, one line, model and effort first because they are the
+sanity-check payload:
+
+```text
+▸ <model>/<effort> · <role/work-class> · <harness> <session-tier> via <skill> · <label>
+```
+
+Every dispatch prompt ends (or begins) with the exact instruction:
+
+> Begin your first message with exactly this line, then proceed without
+> waiting: `▸ …`
+
+**Effort is never dropped from the banner** — the banner always shows
+`<model>/<effort>`, on every harness. The banner is dispatcher-composed *text*
+documenting the *intended* effort: the explicit-model-and-effort rule requires
+the dispatcher to choose an effort for every dispatch, so it states that effort
+regardless of whether the dispatch tool has a per-dispatch effort parameter.
+Where the tool has an effort parameter (Codex), the banner's effort matches the
+parameter; where it does not (Claude Code's `Agent`), the effort is a stated
+intent, still shown.
+
+| Dispatch | Banner fields | Example |
+| --- | --- | --- |
+| Claude Code `Agent` | `model` + intended `effort` — stated in the banner text; the tool takes model but has no effort parameter | `▸ opus/high · implementation · Claude Code Fable via railyard:deliver · retry-backoff fix` |
+| Codex `spawn_agent` | `model` + `reasoning_effort` (a real parameter) | `▸ gpt-5.6-terra/max · implementation · Codex Sol medium via railyard:orchestrate · importer rewrite` |
+| Codex `thread/start` / `create_thread` | `model` + `config.model_reasoning_effort`, plus `modelProvider` when non-default | `▸ glm-5.2/high · bulk edit · Codex Sol medium via railyard:orchestrate (zai_litellm) · lint sweep` |
+| `codex exec` / `claude -p` worker | `model` + `effort` — from the flags on Codex; a stated intent for `claude -p`, which has no effort flag | `▸ claude-opus-5/high · review · Codex Sol high via railyard:thermos · PR 412` |
+
+### Mid-thread changes
+
+When a continuation changes the running model **or** effort, the continuation
+message carries the same echo instruction with a change line. Both sides show
+`<model>/<effort>`, so a change of effort alone (same model) is still announced:
+
+```text
+▸ route change: <old-model>/<old-effort> → <new-model>/<new-effort> · <reason>
+```
+
+| Harness | Mid-thread change |
+| --- | --- |
+| Codex thread continuation with a model or effort override | Supported — instruct the change line on the first message after the override. |
+| `codex exec` re-invocation | N/A: a fresh process emits a fresh banner, not a change line. |
+| Claude Code `Agent` + `SendMessage` | N/A: a live subagent's model is fixed at dispatch; a different model is a new dispatch with a fresh banner. |
+| Claude Code `SendMessage` to a peer session | N/A: a peer session owns its own route; a message cannot change its model or effort. |
+
+Where a harness cannot change model or effort mid-thread it is N/A — do not
+invent machinery to simulate it.
+
+## Session messaging
+
+Both harnesses can put text into another live session, and neither changes that
+session's route by doing so.
+
+| Harness | Reach | Mechanism |
+| --- | --- | --- |
+| Codex | its own tasks and threads | `send_message_to_thread` / `followup_task` |
+| Claude Code | live subagents; peer sessions on this machine; reply-only to sessions on other machines and on the web | `SendMessage` to a name from `ListAgents` (v2.1.224+, macOS/Linux) |
+
+A message carries plain text only, never a model or effort control, so there is
+no `▸ route change:` line for one. Work that needs a different model is a fresh
+dispatch with its own banner. Coordination doctrine — when messaging beats a
+checkpoint, addressing by `--name`, and the delivery limits — lives in
+`../skills/orchestrate/SKILL.md`.
+
+## Nested subagents
+
+A subagent handed a subtask that genuinely splits should dispatch its own
+children rather than serializing the work itself. Both harnesses allow it:
+
+| Harness | Recursion | Depth |
+| --- | --- | --- |
+| Codex | `spawn_agent` from inside a spawned agent | pass the inherited nested-subagent ceiling down as the bound |
+| Claude Code | the `Agent` tool is available to a subagent by default | three layers below the main conversation; `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` changes it, `1` turns nesting off |
+
+At the Claude Code limit the `Agent` tool is withheld, so the deepest subagent
+does its delegated work itself and returns one summary — nothing to detect or
+handle. A worker that must not delegate at all omits `Agent` from its `tools`
+or lists it in `disallowedTools`.
+
+**Every rule applies at every depth.** A nested dispatch is a dispatch: it
+names an explicit model and effort, it carries the same objective, scope,
+constraints, and required evidence, and the *nested* dispatcher composes its
+own child's banner — the dispatcher-composes rule recurses, because a worker
+three levels down still cannot introspect its own route.
+
+What is mechanically enforced at depth, as opposed to briefed:
+
+| At depth | Claude Code | Codex |
+| --- | --- | --- |
+| Explicit-model gate | **Enforced.** Plugin `PreToolUse` hooks fire for a subagent's tool calls exactly as for the main thread — verified here: a model-less `Agent` call from inside a subagent, and from inside that subagent's own nested child, were both refused by the gate. | Doctrine, with the `spawn_agent` hook registered; whether Codex delivers `PreToolUse` inside a spawned agent's turn is unverified. |
+| Run-log `dispatch` line | Written wherever the gate runs — same hook, same process, one call apart. | Same. |
+| `subagent_stop` line | Fires per subagent. | No equivalent event; completion comes from doctrine `outcome` lines. |
+| Banner echo | Doctrine only, at every depth. | Doctrine only, at every depth. |
+
+Everything in a doctrine-only row is a briefing obligation: the parent's
+dispatch text is the only thing that makes it happen.
+
+**Sanity rule.** Each level must buy real fan-out or real specialization —
+several children that can run at once, or a child with a materially different
+model, tool set, or scope. A level that takes one assignment and passes it
+along unchanged is delegation theater: it adds a context boundary, a summary
+hop, and a budget line for nothing. Collapse it and do the work.
+
+This is unrelated to agent teams' *no nested teams* limitation (see
+`../skills/orchestrate/SKILL.md`). Teammates cannot spawn teammates; an
+ordinary subagent spawning subagents is a supported, default-on capability.
+Do not read the team restriction as a ban on recursion.
+
+The banner is per-dispatch self-ID inside one transcript. Its sibling,
+`run-audit.md`, is the aggregate reconstruction across a whole run — the
+append-only run log, the completion recap, and `railyard:audit`. Banners are
+corroboration for an audit; the log is what survives compaction.
+
 ## Published rates and what they imply
 
 Checked 2026-08-05 against provider and OpenRouter listings; list prices in USD

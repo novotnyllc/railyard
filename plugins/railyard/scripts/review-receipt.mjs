@@ -158,7 +158,10 @@ lines.on("line", (line) => {
     if (state !== "active") return finish(false, "invalid_event_order");
     assistantEvents += 1;
     const model = event.message?.model;
-    if (!isExpected(model)) {
+    // Auxiliary models (Haiku et al.) are admitted in inspectModelUsage —
+    // they surface as assistant events too, which is the whole point of the
+    // allowance. Only an unlisted model is a mismatch.
+    if (!isExpected(model) && !isAllowedAuxiliary(model)) {
       finish(false, "assistant_model_mismatch", { observed_model: model ?? null });
     }
     return;

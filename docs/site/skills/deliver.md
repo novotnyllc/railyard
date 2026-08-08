@@ -82,6 +82,10 @@ browser-tests, and opens the PR. Deliver doesn't wrap LFG in anything, doesn't r
 internal stages, and doesn't start a second, duplicate PR-watcher alongside it. Compound
 Engineering itself (`EveryInc/compound-engineering-plugin`) is a required external dependency
 here — deliver drives it but never modifies it; its internals aren't documented on this page.
+ponytail (`DietrichGebert/ponytail`) is the second required external dependency, likewise never
+modified — its efficiency reflex is what deliver applies to verification: scoped, tiered checks
+instead of full re-runs, independent work isolated in its own worktree converging to one PR, and a
+"green" trusted only when it's the process's own unmasked exit, actually run.
 
 ### Route B: chunked hardening
 

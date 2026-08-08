@@ -27,8 +27,15 @@ node --test \
   plugins/railyard/skills/orchestrate/scripts/delivery-contracts.test.mjs \
   plugins/railyard/skills/oracle/scripts/oracle-route.test.mjs \
   plugins/railyard/skills/oracle/scripts/ensure-oracle.test.mjs \
-  plugins/railyard/skills/cleanup-codex/scripts/cleanup-codex.test.mjs \
-  plugins/railyard/hooks/routing-nudge.test.mjs
+  plugins/railyard/skills/cleanup-codex/scripts/inventory.test.mjs \
+  plugins/railyard/skills/cleanup-codex/scripts/snapshot-reap.test.mjs \
+  plugins/railyard/skills/cleanup-codex/scripts/recycle.test.mjs \
+  plugins/railyard/skills/cleanup-codex/scripts/hook.test.mjs \
+  plugins/railyard/skills/cleanup-codex/scripts/canary.test.mjs \
+  plugins/railyard/hooks/routing-nudge.test.mjs \
+  plugins/railyard/hooks/dispatch-gate.test.mjs \
+  plugins/railyard/hooks/routing-charter.test.mjs \
+  plugins/railyard/hooks/railyard-retro.test.mjs
 ```
 
 These are exactly the suites `.github/workflows/validate.yml` runs on Linux
