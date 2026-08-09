@@ -259,7 +259,13 @@ test("isolated managed recycle canary replaces a real Unix-socket fixture", {
   }
 });
 
-test("controlled process-group canary signals only fixture identities", { timeout: 5_000 }, async () => {
+test("controlled process-group canary signals only fixture identities", {
+  timeout: 5_000,
+  // macOS-only: drives real spawned processes through the host's exact-identity
+  // tooling, which the reaper (a no-op off macOS) only ever runs on darwin.
+  // Matches the guard the sibling canary test above already carries.
+  skip: process.platform !== "darwin" && "macOS-only host process identity",
+}, async () => {
   const childProgram = [
     "process.on('SIGTERM', () => {});",
     "console.log('ready');",

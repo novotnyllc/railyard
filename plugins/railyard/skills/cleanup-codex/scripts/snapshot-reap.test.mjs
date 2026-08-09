@@ -129,7 +129,12 @@ test("inspect snapshot records only the exact selected tree and socket-linked pr
   assert.doesNotMatch(JSON.stringify(snapshot), /SNAPSHOT_SECRET|PRIVATE_TRANSCRIPT|PROXY_SECRET|prompt|transcript|token/);
 });
 
-test("inspect --snapshot atomically writes a private validated snapshot", () => {
+test("inspect --snapshot atomically writes a private validated snapshot", {
+  // macOS-only: the sole snapshot test that publishes through the REAL
+  // filesystem (its siblings mock fsApi), so it depends on the host's
+  // hard-link + stat privacy semantics the darwin-only reaper targets.
+  skip: process.platform !== "darwin" && "macOS-only real-filesystem publish",
+}, () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "cleanup-codex-snapshot-"));
   const snapshotPath = path.join(directory, "tree.json");
   const fixture = inventory({
