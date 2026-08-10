@@ -89,6 +89,10 @@ const CONTROL_WORDS = new Set([
   "if", "then", "else", "elif", "fi", "do", "done", "while", "until", "for",
   "case", "esac", "in", "select", "function", "time", "command", "exec",
   "nohup", "builtin",
+  // Bash runs `{ gh pr merge 7; }` as a command group. These are standalone
+  // TOKENS, never split at the character level — `repos/{owner}/{repo}/…`
+  // must stay one token.
+  "{", "}",
 ]);
 // Authentication the merge command carries inline. Without forwarding it the
 // settlement query is unauthenticated, degrades open, and the shell's merge
@@ -143,7 +147,9 @@ function stripHeredocs(text) {
       continue;
     }
     out.push(line);
-    const open = line.match(/<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/);
+    // `<<<` is a here-string (inline data, no delimiter). Matching it made
+    // every following line vanish, silently disabling the gate.
+    const open = line.match(/(?<!<)<<(?!<)-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/);
     if (open) delimiter = open[2];
   }
   return out.join("\n");
@@ -154,6 +160,7 @@ function tokenizeSegments(text) {
   let tokens = [];
   let current = "";
   let quote = null;
+  let substitution = null;
   const endToken = () => {
     if (current) tokens.push(current);
     current = "";
@@ -166,8 +173,21 @@ function tokenizeSegments(text) {
   for (let i = 0; i < text.length; i += 1) {
     const char = text[i];
     if (quote) {
-      if (char === quote) quote = null;
-      else current += char;
+      // A backslash escape survives inside double quotes, so `"text \" --help"`
+      // does not end the quote — treating it as the close let `--help` become
+      // a real option again.
+      if (char === "\\" && quote === '"' && i + 1 < text.length) {
+        current += text[i + 1];
+        i += 1;
+      } else if (char === quote) quote = null;
+      else if (char === "$" && text[i + 1] === "(") {
+        // `"$(gh pr merge 7)"` still runs the command: leave quote mode for
+        // the substitution so its contents are parsed as a command.
+        endSegment();
+        i += 1;
+        substitution = quote;
+        quote = null;
+      } else current += char;
       continue;
     }
     if (char === '"' || char === "'") {
@@ -192,7 +212,10 @@ function tokenizeSegments(text) {
     else if (char === ";") endSegment();
     else if (char === "(" || char === ")") {
       endSegment();
-      segments.push([char]); // marker: a subshell scopes `cd`
+      if (char === ")" && substitution) {
+        quote = substitution; // back inside the surrounding quotes
+        substitution = null;
+      } else segments.push([char]); // marker: a subshell scopes `cd`
     }
     else if (char === "&" || char === "|") {
       endSegment();
@@ -222,6 +245,8 @@ function dropWrapperFlags(tokens) {
   const isEnv = basename(tokens[0]) === "env";
   let rest = tokens.slice(1);
   let chdir = null;
+  let splitString = null;
+  let ignoreEnv = false;
   const unset = [];
   while (rest[0] && rest[0].startsWith("-")) {
     const token = rest[0];
@@ -232,6 +257,10 @@ function dropWrapperFlags(tokens) {
     const eq = token.indexOf("=");
     const flag = eq > 0 ? token.slice(0, eq) : token;
     let value = eq > 0 ? token.slice(eq + 1) : null;
+    if (isEnv && (flag === "-i" || flag === "--ignore-environment")) {
+      ignoreEnv = true;
+      continue;
+    }
     if (isEnv && ENV_VALUE_FLAGS.has(flag)) {
       if (value === null && rest.length) {
         value = rest[0];
@@ -242,9 +271,10 @@ function dropWrapperFlags(tokens) {
       // `-u NAME` REMOVES the variable, so the child must not inherit it —
       // otherwise the merge runs without it while the gate runs with it.
       if ((flag === "-u" || flag === "--unset") && value) unset.push(value);
+      if ((flag === "-S" || flag === "--split-string") && value) splitString = value;
     }
   }
-  return { rest, chdir, unset };
+  return { rest, chdir, unset, splitString, ignoreEnv };
 }
 
 function ghArgs(segmentTokens) {
@@ -252,6 +282,7 @@ function ghArgs(segmentTokens) {
   const env = {};
   const unset = [];
   let chdir = null;
+  let ignoreEnv = false;
   for (;;) {
     const head = tokens[0];
     if (!head) return null;
@@ -270,6 +301,7 @@ function ghArgs(segmentTokens) {
     if (SHELL_WRAPPERS.has(basename(head))) {
       const dropped = dropWrapperFlags(tokens);
       if (dropped.chdir) chdir = dropped.chdir;
+      if (dropped.ignoreEnv) ignoreEnv = true;
       for (const name of dropped.unset) unset.push(name);
       tokens = dropped.rest;
       continue;
@@ -277,7 +309,7 @@ function ghArgs(segmentTokens) {
     break;
   }
   return basename(tokens[0]) === "gh"
-    ? { tokens: tokens.slice(1), env, chdir, unset }
+    ? { tokens: tokens.slice(1), env, chdir, unset, ignoreEnv }
     : null;
 }
 
@@ -314,11 +346,30 @@ function parseArgs(tokens) {
       continue;
     }
     const eq = token.indexOf("=");
-    const attached = token.match(/^(-[A-Za-z])(.+)$/);
+    const cluster = token.match(/^-([A-Za-z].*)$/);
     if (eq > 0 && token.startsWith("--")) {
       flags.set(token.slice(0, eq), token.slice(eq + 1)); // --flag=value
-    } else if (attached && SHORT_VALUE_FLAGS.has(attached[1])) {
-      flags.set(attached[1], attached[2].replace(/^=/, "")); // -Rowner/repo
+    } else if (cluster && !token.startsWith("--")) {
+      // gh accepts clustered and attached short flags: `-iXPUT` is `-i` plus
+      // `-X PUT`, `-Rowner/repo` is `-R owner/repo`. Walk the cluster; the
+      // first value-taking flag consumes the remainder as its value.
+      const chars = cluster[1];
+      let consumed = false;
+      for (let c = 0; c < chars.length; c += 1) {
+        const short = "-" + chars[c];
+        if (SHORT_VALUE_FLAGS.has(short)) {
+          const attached = chars.slice(c + 1).replace(/^=/, "");
+          if (attached) flags.set(short, attached);
+          else {
+            flags.set(short, tokens[i + 1] ?? true);
+            i += 1;
+          }
+          consumed = true;
+          break;
+        }
+        flags.set(short, true);
+      }
+      if (!consumed) { /* all boolean shorts recorded above */ }
     } else if (VALUE_FLAGS.has(token)) {
       flags.set(token, tokens[i + 1] ?? true);
       i += 1; // consume the value so it is never read as an option
@@ -339,7 +390,9 @@ function wrapperScript(tokens) {
   let rest = tokens;
   while (rest.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[0])) rest = rest.slice(1);
   if (!rest.length || !SHELL_WRAPPERS.has(basename(rest[0]))) return null;
-  rest = dropWrapperFlags(rest).rest;
+  const dropped = dropWrapperFlags(rest);
+  if (dropped.splitString) return dropped.splitString; // env -S 'gh pr merge 7'
+  rest = dropped.rest;
   return rest[0] && /\s/.test(rest[0]) ? rest[0] : null;
 }
 
@@ -397,6 +450,7 @@ function mergeCommands(text, baseCwd) {
     if (!gh) continue;
     const { tokens, env } = gh;
     const unset = gh.unset;
+    const ignoreEnv = gh.ignoreEnv;
     // `env -C DIR gh …` runs the merge from DIR.
     const at = gh.chdir ? path.resolve(cwd || process.cwd(), gh.chdir) : cwd;
     const { words, flags } = parseArgs(tokens);
@@ -405,7 +459,7 @@ function mergeCommands(text, baseCwd) {
     // blocks a command that merges nothing. Checked against real options only.
     if ([...NON_MERGE_FLAGS].some((f) => flags.has(f))) continue;
     if (words[0] === "pr" && words[1] === "merge") {
-      found.push({ kind: "pr", tokens, env, unset, flags, cwd: at, cwdUnknown, ref: words[2] || null });
+      found.push({ kind: "pr", tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown, ref: words[2] || null });
     } else if (words[0] === "api") {
       // Only the endpoint positional — a `-H 'X-Test: repos/x/y/pulls/5/merge'`
       // header value must not be mistaken for the endpoint being called.
@@ -419,14 +473,14 @@ function mergeCommands(text, baseCwd) {
         // resolves, so hand the number to that path rather than querying a
         // literal `{owner}`.
         found.push({
-          kind: "api", tokens, env, unset, flags, cwd: at, cwdUnknown, endpoint: path, ref: path[3],
+          kind: "api", tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown, endpoint: path, ref: path[3],
         });
       } else if (tokens.some((t) => t.includes("mergePullRequest"))) {
         // A raw GraphQL merge mutation carries a PR node id, not owner/repo/
         // number, so the gate cannot verify it. ponytail: report it loudly
         // instead of passing it in silence — upgrade to resolving the node id
         // if this form ever shows up in real use.
-        found.push({ kind: "graphql", tokens, env, unset, flags, cwd: at, cwdUnknown, ref: null });
+        found.push({ kind: "graphql", tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown, ref: null });
       }
     }
   }
@@ -504,8 +558,13 @@ function explicitTarget(command) {
 // capture a github.com URL target — and forward any authentication the merge
 // command carried inline. When the host is unknown, inherit, because gh would
 // resolve the merge the same ambient way.
-function ghEnv(host, captured, unset) {
-  const env = { ...process.env };
+function ghEnv(host, captured, unset, ignoreEnv) {
+  // `env -i` runs the merge with an empty environment, so inheriting the
+  // ambient one would let the gate authenticate (or pick a host) in ways the
+  // merge cannot. PATH is kept regardless: without it gh cannot be located,
+  // and failing to spawn just degrades open.
+  // ponytail: PATH-only floor; widen if a real -i case needs more.
+  const env = ignoreEnv ? { PATH: process.env.PATH } : { ...process.env };
   for (const name of unset || []) delete env[name];
   if (host) env.GH_HOST = host;
   for (const key of AUTH_ENV) {
@@ -516,7 +575,7 @@ function ghEnv(host, captured, unset) {
 
 // `host` routes the call at the same GitHub the merge targets, so an
 // enterprise selector cannot leave the gate querying github.com.
-function gh(args, timeout, { host, env, cwd, unset } = {}) {
+function gh(args, timeout, { host, env, cwd, unset, ignoreEnv } = {}) {
   const budget = Math.min(timeout, DEADLINE - Date.now());
   if (budget <= 0) {
     throw new Error(
@@ -528,7 +587,7 @@ function gh(args, timeout, { host, env, cwd, unset } = {}) {
   return execFileSync("gh", args, {
     encoding: "utf8",
     timeout: budget,
-    env: ghEnv(host, env, unset),
+    env: ghEnv(host, env, unset, ignoreEnv),
     cwd,
     // stdin ignored so a gh auth prompt can never hang the hook.
     stdio: ["ignore", "pipe", "ignore"],
@@ -549,6 +608,7 @@ function resolveViaGh(command) {
       env: command.env,
       cwd: command.cwd,
       unset: command.unset,
+      ignoreEnv: command.ignoreEnv,
     }),
   );
   // Any GitHub host, not just github.com — an enterprise URL must still parse.
@@ -576,7 +636,10 @@ function settlement(target, command) {
       "-F", `number=${target.number}`,
     ],
     GRAPHQL_TIMEOUT_MS,
-    { host: target.host, env: command.env, cwd: command.cwd, unset: command.unset },
+    {
+      host: target.host, env: command.env, cwd: command.cwd,
+      unset: command.unset, ignoreEnv: command.ignoreEnv,
+    },
   );
   const pr = JSON.parse(raw)?.data?.repository?.pullRequest;
   if (!pr || typeof pr.headRefOid !== "string") {

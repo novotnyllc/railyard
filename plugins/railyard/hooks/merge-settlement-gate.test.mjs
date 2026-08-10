@@ -907,6 +907,64 @@ gated("a cd behind control words makes the directory indeterminate", () => {
   assert.deepEqual(r.calls, []);
 });
 
+gated("a here-string does not swallow the following commands", () => {
+  // `<<<` is inline data, not a heredoc; matching it as one made every later
+  // line vanish and silently disabled the gate.
+  const r = run(bash("cat <<<EOF\ngh pr merge 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("a brace command group is still gated", () => {
+  const r = run(bash("{ gh pr merge 7; }"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("an escaped quote inside a value does not end the quote", () => {
+  const r = run(bash('gh pr merge 7 --body "text \\" --help"'), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("command substitution inside double quotes is still gated", () => {
+  const r = run(bash('echo "$(gh pr merge 7)"'), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("clustered short flags are expanded (-iXPUT sends a PUT)", () => {
+  const r = run(bash("gh api -iXPUT repos/o/r/pulls/7/merge"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("env -S runs its split string as the command", () => {
+  const r = run(bash("env -S 'gh pr merge 7'"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("env -i does not let the gate inherit the ambient environment", () => {
+  const r = run(bash("env -i PATH=$PATH gh pr merge 7"), {
+    ambientHost: "github.example.com",
+    graphql: settlement({ threads: [false] }),
+  });
+  // The command IS detected (a silent skip would leave stderr empty). The gate
+  // then runs gh with the ambient environment stripped, exactly as the merge
+  // would — which here means the shim loses its own logging vars and fails, so
+  // the gate degrades open rather than answering from a richer environment
+  // than the merge gets.
+  assert.equal(r.code, 0);
+  assert.match(r.err, /DEGRADED/);
+});
+
 gated("the two gh timeouts leave real margin under the 5s hook cap", () => {
   // Sequential worst case must clear the harness cap, or the harness kills the
   // hook before its own fail-open path runs.
