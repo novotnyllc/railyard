@@ -48,11 +48,17 @@ function harness() {
 
 // Which session is running us, when the harness says so in the environment.
 // Hook-written lines take the session id from their payload; a session-written
-// `note` has no payload, so it reads the id both harnesses export to the
-// commands they spawn. Unknown is a fine answer — the field is omitted, and
-// readers that need the binding treat an unscoped line as not theirs.
+// `note` has no payload, so it reads the id the harness exports to the
+// commands it spawns. The ACTIVE harness wins: a `codex exec` worker launched
+// from Claude Code inherits the parent's CLAUDE_CODE_SESSION_ID alongside its
+// own CODEX_THREAD_ID, and stamping the parent's id there would unbind the
+// note from the run that wrote it. Unknown is a fine answer — the field is
+// omitted, and readers that need the binding treat an unscoped line as not
+// theirs.
 function sessionId() {
-  return clip(process.env.CLAUDE_CODE_SESSION_ID || process.env.CODEX_THREAD_ID);
+  const claude = clip(process.env.CLAUDE_CODE_SESSION_ID);
+  const codex = clip(process.env.CODEX_THREAD_ID);
+  return harness() === "codex" ? codex || claude : claude || codex;
 }
 
 function clip(value, max = 120) {

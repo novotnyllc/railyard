@@ -183,31 +183,58 @@ test("an unscoped approach line arms nobody's reminder", () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-// `note` has no hook payload, so it stamps the session id the harness exports
-// — which is what binds the approach line to the run that wrote it.
-test("run-log note stamps the harness session id, and that line nudges", () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "retro-note-"));
-  const note = spawnSync(
+// Write an approach line the way a session does — through `run-log.js note`,
+// with no session_id of its own — under the given harness environment.
+function note(dir, env) {
+  const r = spawnSync(
     process.execPath,
     [
       path.join(path.dirname(script), "run-log.js"),
       "note",
       JSON.stringify({ event: "decision", what: "approach", because: "multi-host ops run" }),
     ],
-    {
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        RAILYARD_RUN_LOG_DIR: dir,
-        CLAUDE_CODE_SESSION_ID: "s1",
-        CODEX_THREAD_ID: "",
-      },
-    },
+    { encoding: "utf8", env: { ...process.env, RAILYARD_RUN_LOG_DIR: dir, ...env } },
   );
-  assert.equal(note.status, 0);
-  assert.equal(readLog(dir).at(-1).session_id, "s1");
+  assert.equal(r.status, 0);
+  return readLog(dir).at(-1);
+}
+
+// `note` has no hook payload, so it stamps the session id the harness exports
+// — which is what binds the approach line to the run that wrote it.
+test("run-log note stamps the harness session id, and that line nudges", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "retro-note-"));
+  assert.equal(note(dir, { CLAUDE_CODE_SESSION_ID: "s1", CODEX_THREAD_ID: "" }).session_id, "s1");
   assert.match(run("s1", dir).out.systemMessage, /approach line/);
   assert.equal(run("other", dir).stdout.trim(), ""); // and only for that session
+  rmSync(dir, { recursive: true, force: true });
+});
+
+// A `codex exec` worker inherits the parent's CLAUDE_CODE_SESSION_ID, so the
+// active harness has to pick the id — otherwise the Codex SessionEnd payload
+// (its thread id) would never match its own approach line.
+test("note stamps the ACTIVE harness's session id, not an inherited one", () => {
+  const both = { CLAUDE_CODE_SESSION_ID: "parent-claude", CODEX_THREAD_ID: "codex-thread" };
+  const codexDir = mkdtempSync(path.join(tmpdir(), "retro-note-codex-"));
+  const line = note(codexDir, { ...both, CLAUDE_PLUGIN_ROOT: path.join("/x", ".codex", "plugins") });
+  assert.equal(line.session_id, "codex-thread");
+  assert.match(run("codex-thread", codexDir).out.systemMessage, /approach line/);
+  assert.equal(run("parent-claude", codexDir).stdout.trim(), "");
+  rmSync(codexDir, { recursive: true, force: true });
+
+  const claudeDir = mkdtempSync(path.join(tmpdir(), "retro-note-claude-"));
+  const root = path.join("/x", ".claude", "plugins");
+  assert.equal(note(claudeDir, { ...both, CLAUDE_PLUGIN_ROOT: root }).session_id, "parent-claude");
+  rmSync(claudeDir, { recursive: true, force: true });
+});
+
+// The writer trims and clips ids; the hook must compare the same shape or a
+// padded/overlong harness id reads as "some other session".
+test("a padded or overlong session id still matches its own approach line", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "retro-note-clip-"));
+  const long = "s".repeat(200);
+  const stamped = note(dir, { CLAUDE_CODE_SESSION_ID: "  " + long + "  ", CODEX_THREAD_ID: "" });
+  assert.equal(stamped.session_id, "s".repeat(120)); // trimmed and clipped
+  assert.match(run("  " + long + "  ", dir).out.systemMessage, /approach line/);
   rmSync(dir, { recursive: true, force: true });
 });
 

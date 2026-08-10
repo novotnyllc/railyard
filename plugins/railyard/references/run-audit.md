@@ -77,9 +77,10 @@ node <plugin>/hooks/run-log.js note '{"event":"decision","what":"...","because":
 ```
 
 `note` stamps `session_id` itself, from the id the harness exports to the
-commands it spawns (`CLAUDE_CODE_SESSION_ID` / `CODEX_THREAD_ID`), so a
-doctrine line binds to the run that wrote it; passing `session_id` explicitly
-overrides that.
+commands it spawns — the **active** harness's own id wins
+(`CODEX_THREAD_ID` under Codex, `CLAUDE_CODE_SESSION_ID` under Claude Code),
+since a nested worker inherits the parent's. So a doctrine line binds to the
+run that wrote it; passing `session_id` explicitly overrides that.
 
 Three event kinds, no more:
 

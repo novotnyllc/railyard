@@ -17,8 +17,9 @@ const fs = require("fs");
 
 let logPath = null;
 let record = () => {};
+let clip = (v) => (typeof v === "string" ? v.trim() || undefined : undefined);
 try {
-  ({ logPath, record } = require("./run-log.js"));
+  ({ logPath, record, clip } = require("./run-log.js"));
 } catch {}
 
 // A run with at least this many dispatches is "substantial" enough to be
@@ -39,7 +40,9 @@ process.stdin.on("end", () => {
     try {
       payload = JSON.parse(raw) || {};
     } catch {}
-    const session = typeof payload.session_id === "string" ? payload.session_id : "";
+    // Normalize exactly as the writer does (trim + clip), or a long or padded
+    // harness id would never equal the id stamped on our own lines.
+    const session = clip(payload.session_id) || "";
 
     const file = logPath ? logPath() : null;
     if (!file || !fs.existsSync(file)) return; // no log: nothing to nudge about
