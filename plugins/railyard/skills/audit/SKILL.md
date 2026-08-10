@@ -80,6 +80,20 @@ Stop (Claude Code) / SessionEnd (Codex) hook is the backstop that reminds when
 a substantial run would end without one. Run it also whenever asked how the
 work could have gone better.
 
+**Substantial is by cost, not by route.** A run is substantial when it either
+fans out (a small fan-out of dispatches) *or* is expensive on its own —
+multi-host, multi-repo, or multi-hour — even with zero dispatches. A pure ops
+or release run is exactly that case, and it **must open an approach line
+before executing**, the same first decision line a deliver run opens:
+
+```bash
+node <this plugin>/hooks/run-log.js note '{"event":"decision","what":"approach","because":"..."}'
+```
+
+That one line is the whole audit spine for an ops run: it gives the
+retrospective its baseline and it is what makes the Stop/SessionEnd hook fire
+at all. Without it a multi-hour fleet run records nothing and closes silently.
+
 Read the audit report and the session history, then **generate 3–7 pointed
 questions specific to this run** — not a fixed checklist — and answer each
 against the evidence. Question quality is the whole skill here: "phase 3

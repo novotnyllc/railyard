@@ -13,12 +13,18 @@ Three depths, each opt-in deeper than the last:
 | **Audit** | on request (`railyard:audit`, "how did that run work?") | the decision chain, reconstructed from the run log |
 | **Retrospective** | closing step of a substantial run, or on request | self-generated questions about that run, answered against the evidence and graded against the kickoff `approach` line, ending in learnings and suggestions |
 
-The retrospective is no longer only on-request: a substantial deliver/
-orchestrate run runs it as its closing step, and a **Stop** hook (Claude Code)
-/ **SessionEnd** hook (Codex) reminds when a substantial run — at least a small
-fan-out of dispatches — would end without a recorded `retrospective` or `recap`
-marker. The hook only surfaces the reminder (metadata-only, never blocks the
-stop, no prompt/secret capture); the session runs the loop.
+The retrospective is no longer only on-request: a substantial run runs it as
+its closing step, and a **Stop** hook (Claude Code) / **SessionEnd** hook
+(Codex) reminds when a substantial run would end without a recorded
+`retrospective` or `recap` marker. The hook only surfaces the reminder
+(metadata-only, never blocks the stop, no prompt/secret capture); the session
+runs the loop.
+
+**Substantial is by cost, not by route.** The hook fires on either signal: a
+small fan-out of dispatches, *or* an `approach`/`decision` line with no closing
+marker. The second signal is what covers a run that spends hours without
+dispatching anything — a fleet or release run — which the dispatch count alone
+reads as trivial.
 
 ## Run log
 
@@ -75,6 +81,12 @@ Three event kinds, no more:
 | `decision` | `what`, `because`, `fed_by`, `led_to` | route chosen at intake, tier picked, fan-out vs sequential, a finding triggering a fix batch, a review verdict forcing another round, an escalation, a replan, a phase boundary |
 | `outcome` | `what`, `result`, `fed_by` | a worker finished, a gate passed or failed, a round closed |
 | `deviation` | `what`, `because` | actual shape diverged from the planned shape |
+
+Every substantial run opens with one of these, whatever routed it. A run that
+is substantial **by cost** — multi-host, multi-repo, or multi-hour — MUST open
+an `approach` line before it executes, even when nothing will ever dispatch:
+that single `note` call is the entire audit spine for an ops or release run,
+and it is also what arms the Stop/SessionEnd reminder.
 
 The run's **first** `decision` line is its `approach`: `what:"approach"`,
 `because:` the one-paragraph "how would an excellent engineer run *this* run?"
