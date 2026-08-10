@@ -65,7 +65,12 @@ process.stdin.on("end", () => {
       // And only when it is bound to THIS session — an unscoped line (legacy,
       // or written where no session id was available) deliberately stays
       // silent rather than nudging every unrelated session ending that day.
-      else if (e.event === "decision" && e.what === "approach" && session && e.session_id === session)
+      else if (
+        e.event === "decision" &&
+        e.what === "approach" &&
+        session &&
+        e.session_id === session
+      )
         hasApproach = true;
       else if (e.event === "retrospective" || e.event === "recap") hasRetro = true;
       else if (e.event === "retro_prompt") alreadyNudged = true;
