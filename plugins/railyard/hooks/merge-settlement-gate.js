@@ -71,22 +71,15 @@ function commandText(args) {
   return parts.join(" ");
 }
 
-// Parsing is SEGMENT-SCOPED, not phrase-scoped. A phrase search over the whole
-// command string gets two things wrong that both defeat the gate: `gh --repo
-// o/r pr merge 7` puts a global flag between `gh` and `pr` (a real, documented
-// invocation), and a decoy phrase in an unrelated segment —
-// `git commit -m "docs: gh pr merge 5" && gh pr merge 8` — hijacks the
-// identity onto the wrong PR, whose settled state can wrongly ALLOW the real
-// merge. So: split into commands, find the one that really is a merge, and
-// read its identity from that command's tokens only.
-// Parens split too: they close a subshell `(gh pr merge 7)`, terminate a case
-// pattern `yes) gh pr merge 7`, and open a substitution `$(gh pr merge 7)` —
-// all forms where the merge is not the segment's first token and would
-// otherwise run with no gate and no notice. Splitting there puts `gh` at the
-// front of its own segment, which keeps the decoy protection intact.
-const SEGMENT_SPLIT = /\|\||&&|[;\n|&()]/;
-// Wrappers an agent puts in front of the real command — notably Codex's argv
-// form ["bash","-lc","gh pr merge 7"], which joins to a wrapper-prefixed string.
+// Parsing is SEGMENT-SCOPED and QUOTE-AWARE, not a phrase search. Two things
+// break a naive scan, and both let a real merge through unchecked:
+//   - `gh --repo o/r pr merge 7` puts a global flag between `gh` and `pr`, and
+//     a decoy phrase in an unrelated segment can hijack identity onto another
+//     PR whose settled state then wrongly ALLOWS the real merge.
+//   - a whitespace split shreds quoted values, so `--body "text --help"` looks
+//     like a real `--help` option and skips the gate entirely.
+// So: tokenize once, honoring quotes, split into commands at UNQUOTED shell
+// separators, and read each command's identity from its own tokens.
 const SHELL_WRAPPERS = new Set(["bash", "sh", "zsh", "dash", "env"]);
 // Control words and grouping punctuation a merge can legitimately sit behind:
 // `(gh pr merge 7)`, `if gh pr merge 7; then ...`. Missing these means the
@@ -101,7 +94,9 @@ const CONTROL_WORDS = new Set([
 // then succeeds unchecked with the very token we ignored.
 const AUTH_ENV = [
   "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN",
-  "GH_CONFIG_DIR",
+  // gh resolves its config dir as GH_CONFIG_DIR, then $XDG_CONFIG_HOME/gh,
+  // then $HOME/.config/gh — so credentials can live behind any of these.
+  "GH_CONFIG_DIR", "XDG_CONFIG_HOME", "HOME",
 ];
 // Flags that consume the following token, so `--match-head-commit 7` never
 // yields `7` as the PR number. One union set covers gh's global flags and
@@ -127,8 +122,51 @@ const NON_MERGE_FLAGS = new Set(["--help", "-h", "--disable-auto"]);
 const REST_MERGE_RE = /repos\/([^\s/]+)\/([^\s/]+)\/pulls\/(\d+)\/merge/;
 
 // Also sheds grouping punctuation, so `(gh` and `7)` tokenize as `gh` and `7`.
-const unquote = (token) =>
-  token.replace(/^['"({!]+/, "").replace(/['")};]+$/, "");
+// One quote-aware pass over the whole command text: quoted runs stay a single
+// token (so a quoted separator cannot manufacture a segment and a quoted
+// `--help` is a value, not an option), and unquoted separators end a command.
+// Parens separate too — they close a subshell, terminate a case pattern, and
+// open a substitution, all places a merge hides behind a non-gh first token.
+function tokenizeSegments(text) {
+  const segments = [];
+  let tokens = [];
+  let current = "";
+  let quote = null;
+  const endToken = () => {
+    if (current) tokens.push(current);
+    current = "";
+  };
+  const endSegment = () => {
+    endToken();
+    if (tokens.length) segments.push(tokens);
+    tokens = [];
+  };
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (quote) {
+      if (char === quote) quote = null;
+      else current += char;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "\\" && i + 1 < text.length) {
+      current += text[i + 1];
+      i += 1;
+      continue;
+    }
+    if (/\s/.test(char)) endToken();
+    else if (char === ";" || char === "(" || char === ")") endSegment();
+    else if (char === "&" || char === "|") {
+      endSegment();
+      if (text[i + 1] === char) i += 1;
+    } else current += char;
+  }
+  endSegment();
+  return segments;
+}
 
 function basename(token) {
   const cut = token.lastIndexOf("/");
@@ -138,8 +176,8 @@ function basename(token) {
 // Reduce one shell command to gh's own arguments, or null when it is not a gh
 // invocation. Strips leading env assignments and any shell wrapper, so
 // `FOO=1 bash -lc "/usr/local/bin/gh pr merge 7"` still resolves.
-function ghArgs(segment) {
-  let tokens = segment.trim().split(/\s+/).map(unquote).filter(Boolean);
+function ghArgs(segmentTokens) {
+  let tokens = segmentTokens.map((t) => t.replace(/^!+/, "")).filter(Boolean);
   const env = {};
   for (;;) {
     const head = tokens[0];
@@ -217,9 +255,29 @@ function parseArgs(tokens) {
 // EVERY merge command in this text. A shell runs them all, so checking only
 // the first lets `gh pr merge 5 && gh pr merge 8` merge PR 8 unverified the
 // moment PR 5 is settled. `--help` is not a merge.
+// `bash -lc "gh pr merge 7"` carries its whole script as one quoted token, so
+// the wrapper's payload has to be parsed as command text in its own right.
+// (Codex's argv form joins to separate tokens and is handled by ghArgs.)
+function wrapperScript(tokens) {
+  let rest = tokens;
+  while (rest.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[0])) rest = rest.slice(1);
+  if (!rest.length || !SHELL_WRAPPERS.has(basename(rest[0]))) return null;
+  rest = rest.slice(1);
+  while (rest[0] && rest[0].startsWith("-")) rest = rest.slice(1);
+  return rest[0] && /\s/.test(rest[0]) ? rest[0] : null;
+}
+
 function mergeCommands(text) {
   const found = [];
-  for (const segment of text.split(SEGMENT_SPLIT)) {
+  const queue = tokenizeSegments(text);
+  // Bounded: a pathological nest cannot spin the hook inside its budget.
+  for (let i = 0; i < queue.length && i < 64; i += 1) {
+    const segment = queue[i];
+    const script = wrapperScript(segment);
+    if (script) {
+      for (const sub of tokenizeSegments(script)) queue.push(sub);
+      continue;
+    }
     const gh = ghArgs(segment);
     if (!gh) continue;
     const { tokens, env } = gh;
@@ -237,7 +295,7 @@ function mergeCommands(text) {
         // resolves, so hand the number to that path rather than querying a
         // literal `{owner}`.
         found.push({ kind: "api", tokens, env, flags, ref: path[3] });
-      } else if (/mergePullRequest/.test(segment)) {
+      } else if (tokens.some((t) => t.includes("mergePullRequest"))) {
         // A raw GraphQL merge mutation carries a PR node id, not owner/repo/
         // number, so the gate cannot verify it. ponytail: report it loudly
         // instead of passing it in silence — upgrade to resolving the node id
@@ -256,15 +314,20 @@ function mergeCommands(text) {
 // explicitly selected — and losing it there sends the settlement query to the
 // wrong GitHub while the merge goes to the enterprise host.
 function hostFromCommand(command) {
-  const { flags, env } = command;
+  const { flags, env, kind } = command;
   const explicit = flags.get("--hostname");
   if (typeof explicit === "string") return explicit;
-  const selector = [flags.get("-R"), flags.get("--repo")]
-    .find((v) => typeof v === "string");
-  const fromSelector = selector && parseRepo(selector);
-  if (fromSelector && fromSelector.host) return fromSelector.host;
-  const fromEnv = env && env.GH_REPO ? parseRepo(env.GH_REPO) : null;
-  if (fromEnv && fromEnv.host) return fromEnv.host;
+  // `gh api` reads its host ONLY from --hostname/GH_HOST. GH_REPO there just
+  // fills {owner}/{repo} placeholders, so promoting its host would query an
+  // enterprise host while the REST call goes to github.com.
+  if (kind !== "api") {
+    const selector = [flags.get("-R"), flags.get("--repo")]
+      .find((v) => typeof v === "string");
+    const fromSelector = selector && parseRepo(selector);
+    if (fromSelector && fromSelector.host) return fromSelector.host;
+    const fromEnv = env && env.GH_REPO ? parseRepo(env.GH_REPO) : null;
+    if (fromEnv && fromEnv.host) return fromEnv.host;
+  }
   return (env && env.GH_HOST) || null;
 }
 

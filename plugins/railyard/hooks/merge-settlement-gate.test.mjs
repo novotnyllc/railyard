@@ -25,6 +25,7 @@ const SHIM = `#!/bin/sh
 echo "$1 $2" >> "$GH_CALL_LOG"
 echo "$GH_HOST" >> "$GH_HOST_LOG"
 echo "$GH_TOKEN" >> "$GH_TOKEN_LOG"
+echo "$XDG_CONFIG_HOME" >> "$GH_XDG_LOG"
 if [ -n "$GH_FIXTURE_SLEEP" ]; then sleep "$GH_FIXTURE_SLEEP"; fi
 if [ -n "$GH_FIXTURE_FAIL" ]; then echo "gh: could not authenticate" >&2; exit 1; fi
 case "$1 $2" in
@@ -90,6 +91,8 @@ function run(input, fixtures = {}) {
   writeFileSync(hostLog, "");
   const tokenLog = path.join(dir, "tokens.log");
   writeFileSync(tokenLog, "");
+  const xdgLog = path.join(dir, "xdg.log");
+  writeFileSync(xdgLog, "");
 
   const result = spawnSync(process.execPath, [script], {
     input: typeof input === "string" ? input : JSON.stringify(input),
@@ -100,6 +103,8 @@ function run(input, fixtures = {}) {
       GH_CALL_LOG: callLog,
       GH_HOST_LOG: hostLog,
       GH_TOKEN_LOG: tokenLog,
+      GH_XDG_LOG: xdgLog,
+      XDG_CONFIG_HOME: "",
       GH_HOST: fixtures.ambientHost ?? "",
       GH_TOKEN: "",
       GH_FIXTURE_VIEW: fixtures.view ?? VIEW_OK,
@@ -112,8 +117,9 @@ function run(input, fixtures = {}) {
   // Trailing "" entries matter (no host override), so do not filter these.
   const hosts = readFileSync(hostLog, "utf8").split("\n").slice(0, calls.length);
   const tokens = readFileSync(tokenLog, "utf8").split("\n").slice(0, calls.length);
+  const xdg = readFileSync(xdgLog, "utf8").split("\n").slice(0, calls.length);
   rmSync(dir, { recursive: true, force: true });
-  return { code: result.status, err: result.stderr, calls, hosts, tokens };
+  return { code: result.status, err: result.stderr, calls, hosts, tokens, xdg };
 }
 
 // --- refusals (the only two determinable violations) ----------------------
@@ -670,6 +676,47 @@ gated("--jq taking --help as its value does not skip the gate", () => {
     { graphql: settlement({ threads: [false] }) },
   );
   assert.equal(r.code, 2);
+});
+
+gated("a quoted multiword --body value cannot smuggle --help", () => {
+  // A whitespace split shredded the quoted value, so `--help` looked like a
+  // real option and the gate skipped a command gh would actually merge.
+  const r = run(bash('gh pr merge 7 --body "normal text --help"'), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("a quoted separator cannot manufacture a decoy segment", () => {
+  // Previously an accepted ceiling; quote-aware tokenizing closes it.
+  const r = run(
+    bash('printf "x && gh pr merge 5" && gh pr merge 8'),
+    { view: JSON.stringify({ number: 8, url: "https://github.com/novotnyllc/railyard/pull/8" }),
+      graphql: settlement({ threads: [false] }) },
+  );
+  assert.equal(r.code, 2);
+  // Only the REAL merge is checked — the quoted decoy never becomes a command.
+  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
+});
+
+gated("gh api does not take its host from GH_REPO", () => {
+  // GH_REPO fills {owner}/{repo} for gh api; it does not select the host.
+  // Promoting its host queried the enterprise host while the PUT went to
+  // github.com.
+  const r = run(
+    bash("GH_REPO=github.example.com/foo/bar gh api -X PUT repos/owner/repo/pulls/7/merge"),
+    { graphql: settlement({ threads: [false] }) },
+  );
+  assert.equal(r.code, 2);
+  assert.equal(r.hosts.at(-1), "");
+});
+
+gated("inline XDG_CONFIG_HOME reaches the settlement calls", () => {
+  const r = run(bash("XDG_CONFIG_HOME=/tmp/profile gh pr merge 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.equal(r.xdg.at(-1), "/tmp/profile");
 });
 
 gated("the two gh timeouts leave real margin under the 5s hook cap", () => {
