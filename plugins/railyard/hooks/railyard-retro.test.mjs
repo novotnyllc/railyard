@@ -209,22 +209,27 @@ test("run-log note stamps the harness session id, and that line nudges", () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-// A `codex exec` worker inherits the parent's CLAUDE_CODE_SESSION_ID, so the
-// active harness has to pick the id — otherwise the Codex SessionEnd payload
-// (its thread id) would never match its own approach line.
-test("note stamps the ACTIVE harness's session id, not an inherited one", () => {
+// A `codex exec` worker inherits the parent's CLAUDE_CODE_SESSION_ID and adds
+// its own thread id, so the thread id has to win — otherwise the Codex
+// SessionEnd payload never matches the approach line the worker wrote. This
+// must not depend on CLAUDE_PLUGIN_ROOT: a `note` run from a tool call sees it
+// absent or inherited from the parent, so both are exercised here.
+test("note stamps the Codex thread id over an inherited Claude session id", () => {
   const both = { CLAUDE_CODE_SESSION_ID: "parent-claude", CODEX_THREAD_ID: "codex-thread" };
-  const codexDir = mkdtempSync(path.join(tmpdir(), "retro-note-codex-"));
-  const line = note(codexDir, { ...both, CLAUDE_PLUGIN_ROOT: path.join("/x", ".codex", "plugins") });
-  assert.equal(line.session_id, "codex-thread");
-  assert.match(run("codex-thread", codexDir).out.systemMessage, /approach line/);
-  assert.equal(run("parent-claude", codexDir).stdout.trim(), "");
-  rmSync(codexDir, { recursive: true, force: true });
+  for (const root of ["", path.join("/x", ".claude", "plugins")]) {
+    const dir = mkdtempSync(path.join(tmpdir(), "retro-note-codex-"));
+    assert.equal(note(dir, { ...both, CLAUDE_PLUGIN_ROOT: root }).session_id, "codex-thread");
+    assert.match(run("codex-thread", dir).out.systemMessage, /approach line/);
+    assert.equal(run("parent-claude", dir).stdout.trim(), "");
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
-  const claudeDir = mkdtempSync(path.join(tmpdir(), "retro-note-claude-"));
-  const root = path.join("/x", ".claude", "plugins");
-  assert.equal(note(claudeDir, { ...both, CLAUDE_PLUGIN_ROOT: root }).session_id, "parent-claude");
-  rmSync(claudeDir, { recursive: true, force: true });
+test("note falls back to the Claude session id when Codex is not in the picture", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "retro-note-claude-"));
+  const env = { CLAUDE_CODE_SESSION_ID: "s1", CODEX_THREAD_ID: "", CLAUDE_PLUGIN_ROOT: "" };
+  assert.equal(note(dir, env).session_id, "s1");
+  rmSync(dir, { recursive: true, force: true });
 });
 
 // The writer trims and clips ids; the hook must compare the same shape or a
