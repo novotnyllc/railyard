@@ -28,8 +28,18 @@ process.stdin.on("end", () => {
   const severalPieces =
     (listItems >= 3 && taskVerb.test(p)) ||
     /\b(in parallel|at the same time|simultaneously|while you'?re at it|these (tasks|things|changes|items)|split (this|it) up|divide (this|the work))\b/i.test(p);
-  const otherMachine =
-    /\b(on (my|the) (other|second) (mac|machine|laptop|desktop|computer|box)|(on|across|to) (all|every|each)( of)?( my| the)? (machines?|macs?|hosts?|computers?|boxes)|everywhere\b|fleet-?wide|the fleet\b|remote (machine|host|mac|box))\b/i;
+  // Fleet-wide desired-state / privileged reconciliation is orchestrate.
+  const fleetWide =
+    /\b((on|across|to) (all|every|each)( of)?( my| the)? (fleet )?(machines?|macs?|hosts?|computers?|boxes)|everywhere\b|fleet-?wide|the fleet\b)\b/i;
+  // A single other host — bounded remote work, not inherently orchestrate.
+  const oneOtherHost =
+    /\b(on (my|the) (other|second) (mac|machine|laptop|desktop|computer|box)|remote (machine|host|mac|box))\b/i;
+  // Delegated remote-AGENT work (run an agent to change a repo) IS orchestrate.
+  const remoteAgent =
+    /\b((run|launch|start|spin up|dispatch) (an? )?(agent|codex|claude|assistant|worker)|(agent|codex|claude) (on|onto|to) (my|the|another|a )|(implement|build|fix|refactor|ship|migrate|modify|edit|change) [^.]*\b(on|across) (my|the|another|each|every|all)\b)/i;
+  // A bounded remote admin / target-native CLI op over SSH is remote-mac direct.
+  const remoteAdmin =
+    /\b(ssh|scp|rsync|restart|reboot|relaunch|run|execute|invoke|kill|check|tail|logs?|status|open|launch (the )?app|the CLI|--\w|command)\b/i;
   // The user's actual machines, from the roundhouse fleet registry: a
   // placement preposition followed by a registered machine name, alias, or
   // tailnet name. Best-effort — no config, no matching, never an error.
@@ -82,9 +92,20 @@ process.stdin.on("end", () => {
   const softwareChange = taskVerb.test(p) && softwareObject.test(p);
 
   let line = "";
-  if (severalPieces || otherMachine.test(p) || (namedMachine && namedMachine.test(p))) {
+  // Targeting one specific host is itself the bounded signal — remote-mac —
+  // unless it is delegated remote-agent work or spans the fleet. remoteAdmin
+  // is retained as a positive hint but a named single host suffices.
+  const boundedRemote =
+    (oneOtherHost.test(p) || (namedMachine && namedMachine.test(p))) &&
+    !remoteAgent.test(p) &&
+    !fleetWide.test(p);
+  void remoteAdmin;
+  if (severalPieces || fleetWide.test(p) || remoteAgent.test(p)) {
     line =
-      "[railyard] Several independent pieces or another machine — that's railyard:orchestrate territory (readiness via roundhouse before placement).";
+      "[railyard] Several independent pieces, fleet-wide, or delegated remote-agent work — railyard:orchestrate (readiness via roundhouse before placement).";
+  } else if (boundedRemote) {
+    line =
+      "[railyard] A bounded op on one host (SSH admin, a target-native CLI, restart an app) is roundhouse:remote-mac over SSH directly — not orchestrate. SSH is the tool; if the user named a CLI, inspect THAT CLI first.";
   } else if (maintenance) {
     line =
       "[railyard] Maintenance intent: roundhouse's fleet skills (fleet-agents / fleet-update) — mechanical tier; from a premium-model session, delegate to a cheap-model child rather than running inline.";

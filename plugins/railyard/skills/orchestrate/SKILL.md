@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Orchestrate configured fleet/account delivery or complex objectives across independently resumable tasks, projects, hosts, pull requests, and dependencies while remaining available as the control task. Use when configured routing owns allocation, when the user asks to run work on another machine or across the fleet, or when an objective needs multiple tasks, parallel or staged execution, separate ownership, cross-project work, or cross-host placement — including when the user names this skill directly.
+description: Orchestrate configured fleet/account delivery or complex objectives across independently resumable tasks, projects, hosts, pull requests, and dependencies while remaining available as the control task. Use when configured routing owns allocation, when the user asks to run a delegated AGENT on another machine (a Claude/Codex worker changing a repo) or to reconcile across the fleet, or when an objective needs multiple tasks, parallel or staged execution, separate ownership, cross-project work, or cross-host placement — including when the user names this skill directly. A bounded one-host operation — an SSH admin command, a target-native CLI, restarting an app, moving a file — is NOT orchestration: it is roundhouse:remote-mac over SSH directly.
 ---
 
 # Task Orchestrator
@@ -408,13 +408,23 @@ tool supports placement. Two remote lanes exist, one per destination harness:
   uses.
 
 Raw SSH command execution is still not a remote agent — running loose shell
-commands and calling it delegation stays forbidden. What the Claude lane
+commands and calling it *delegation* stays forbidden. What the Claude lane
 launches is an actual harness process with its own session identity, model
 policy, and terminal report, and it gets the same readiness verification,
 single-use child rule, one-canonical-writer boundary, and monitoring cadence
-as any other child.
+as any other child. The prohibition is narrow and applies ONLY here — SSH
+standing in for a delegated agent. Legitimate bounded remote admin over SSH (a
+one-host command, a target-native CLI, restart/inspect/move-file) is not
+delegation and is exactly right: it belongs to `roundhouse:remote-mac`, direct,
+with none of the fleet-readiness ceremony below. When the user names a specific
+CLI, locate and inspect THAT exact CLI first; if it lacks the operation, stop
+and say so — never silently substitute undocumented file edits. A user
+correction ("just SSH", "use the CLI") cancels any unconsumed
+orchestration/readiness work and reclassifies to the direct path immediately.
 
-Before cross-host dispatch, invoke the installed Roundhouse skills:
+Before cross-host dispatch of a delegated AGENT (or any fleet-wide
+reconciliation) — never for a bounded one-host admin op, which skips straight to
+`roundhouse:remote-mac` — invoke the installed Roundhouse skills:
 `roundhouse:fleet-projects` (repository identity, checkout state,
 project baseline, saved-project readiness), `roundhouse:fleet-agents`
 (runtimes, plugin versions, skill hashes, capabilities), and

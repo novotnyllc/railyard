@@ -33,22 +33,28 @@ function nudge(prompt, env = {}) {
 
 test("delivery, orchestration, planning, and PR intents route", () => {
   assert.match(nudge("fix the login bug in the app"), /railyard:deliver\b/);
-  assert.match(nudge("can you also run this on my other mac"), /orchestrate/);
+  // A bounded op on ONE host is remote-mac, not orchestrate — SSH is the tool.
+  assert.match(nudge("can you also run this on my other mac"), /remote-mac/);
+  assert.match(nudge("ssh to boxcar and restart the app"), /remote-mac/);
+  assert.match(nudge("run the tests over on boxcar"), /remote-mac/);
+  assert.match(nudge("deploy it to silverstreak tonight"), /remote-mac/);
+  // Delegated remote-AGENT work and fleet-wide reconciliation stay orchestrate.
+  assert.match(nudge("run codex on boxcar to refactor the repo"), /orchestrate/);
+  assert.match(nudge("implement the feature on my other mac"), /orchestrate/);
   assert.match(
     nudge("1. add the endpoint 2. fix the tests 3. update the docs"),
     /orchestrate/,
   );
   assert.match(nudge("do these things in parallel please"), /orchestrate/);
   assert.match(nudge("update this across all my machines"), /orchestrate/);
-  // Registered machine names from the fleet registry, not hardcoded types.
-  assert.match(nudge("run the tests over on boxcar"), /orchestrate/);
-  assert.match(nudge("deploy it to silverstreak tonight"), /orchestrate/);
+  assert.match(nudge("apply this across every fleet machine"), /orchestrate/);
   // Unregistered machine-ish words no longer match.
   assert.equal(nudge("put the file on the studio shelf list"), "");
-  // Without a registry, generic phrasing still works and names do not.
+  // Without a registry, generic one-host phrasing is still remote-mac; a bare
+  // unregistered name is not.
   assert.match(
     nudge("run this on my other mac", { ROUNDHOUSE_CONFIG: "/nonexistent" }),
-    /orchestrate/,
+    /remote-mac/,
   );
   assert.equal(
     nudge("run the tests over on boxcar", { ROUNDHOUSE_CONFIG: "/nonexistent" }),
@@ -83,8 +89,9 @@ test("short machine names never fire — they collide with ordinary English", ()
   const env = { ROUNDHOUSE_CONFIG: shortCfg };
   assert.equal(nudge("lets do this at home tonight", env), "");
   assert.equal(nudge("blow some air on it and see", env), "");
-  // Long registered names still match from the same registry shape.
-  assert.match(nudge("run the tests over on boxcar"), /orchestrate/);
+  // Long registered names still match from the same registry shape — a bounded
+  // one-host op routes to remote-mac.
+  assert.match(nudge("run the tests over on boxcar"), /remote-mac/);
 });
 
 test("ordinary conversation stays silent", () => {
