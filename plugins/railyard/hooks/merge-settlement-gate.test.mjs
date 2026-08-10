@@ -26,6 +26,7 @@ echo "$1 $2" >> "$GH_CALL_LOG"
 echo "$GH_HOST" >> "$GH_HOST_LOG"
 echo "$GH_TOKEN" >> "$GH_TOKEN_LOG"
 echo "$XDG_CONFIG_HOME" >> "$GH_XDG_LOG"
+pwd >> "$GH_CWD_LOG"
 if [ -n "$GH_FIXTURE_SLEEP" ]; then sleep "$GH_FIXTURE_SLEEP"; fi
 if [ -n "$GH_FIXTURE_FAIL" ]; then echo "gh: could not authenticate" >&2; exit 1; fi
 case "$1 $2" in
@@ -93,6 +94,8 @@ function run(input, fixtures = {}) {
   writeFileSync(tokenLog, "");
   const xdgLog = path.join(dir, "xdg.log");
   writeFileSync(xdgLog, "");
+  const cwdLog = path.join(dir, "cwd.log");
+  writeFileSync(cwdLog, "");
 
   const result = spawnSync(process.execPath, [script], {
     input: typeof input === "string" ? input : JSON.stringify(input),
@@ -104,6 +107,7 @@ function run(input, fixtures = {}) {
       GH_HOST_LOG: hostLog,
       GH_TOKEN_LOG: tokenLog,
       GH_XDG_LOG: xdgLog,
+      GH_CWD_LOG: cwdLog,
       XDG_CONFIG_HOME: "",
       GH_HOST: fixtures.ambientHost ?? "",
       GH_TOKEN: "",
@@ -118,8 +122,9 @@ function run(input, fixtures = {}) {
   const hosts = readFileSync(hostLog, "utf8").split("\n").slice(0, calls.length);
   const tokens = readFileSync(tokenLog, "utf8").split("\n").slice(0, calls.length);
   const xdg = readFileSync(xdgLog, "utf8").split("\n").slice(0, calls.length);
+  const cwds = readFileSync(cwdLog, "utf8").split("\n").slice(0, calls.length);
   rmSync(dir, { recursive: true, force: true });
-  return { code: result.status, err: result.stderr, calls, hosts, tokens, xdg };
+  return { code: result.status, err: result.stderr, calls, hosts, tokens, xdg, cwds };
 }
 
 // --- refusals (the only two determinable violations) ----------------------
@@ -717,6 +722,40 @@ gated("inline XDG_CONFIG_HOME reaches the settlement calls", () => {
   });
   assert.equal(r.code, 2);
   assert.equal(r.xdg.at(-1), "/tmp/profile");
+});
+
+gated("an unquoted newline separates commands", () => {
+  // A multiline script is ordinary; treating the newline as whitespace left
+  // the merge inside an `echo` segment and it ran with no gate at all.
+  const r = run(bash("echo preparing\ngh pr merge 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("a cd before the merge moves the identity lookup too", () => {
+  // `cd ../other && gh pr merge 7` resolves PR 7 in ../other; checking PR 7
+  // here instead lets a settled local PR authorize an unsettled foreign one.
+  const target = mkdtempSync(path.join(tmpdir(), "merge-gate-cwd-"));
+  const r = run(bash(`cd ${target} && gh pr merge 7`), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  // macOS reports /private/var for /var, so compare the resolved leaf.
+  assert.ok(
+    r.cwds.every((c) => c.endsWith(path.basename(target))),
+    `gh ran in ${JSON.stringify(r.cwds)}, expected ${target}`,
+  );
+  rmSync(target, { recursive: true, force: true });
+});
+
+gated("a header value cannot decoy the gh api endpoint", () => {
+  const r = run(
+    bash("gh api -H 'X-Test: repos/decoy/settled/pulls/5/merge' -X PUT repos/real/unsettled/pulls/8/merge"),
+    { graphql: settlement({ threads: [false] }) },
+  );
+  assert.equal(r.code, 2);
+  assert.match(r.err, /PR #8/); // the real endpoint, not the header decoy
 });
 
 gated("the two gh timeouts leave real margin under the 5s hook cap", () => {

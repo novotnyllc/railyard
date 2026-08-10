@@ -24,6 +24,7 @@
 // fails CLOSED only on a violation it actually observed.
 
 const { execFileSync } = require("child_process");
+const path = require("path");
 
 // Bot reviewers observed posting 3m26s and 4m58s after the head commit on the
 // PR that motivated this gate; 10 minutes is ~2x that worst case.
@@ -157,7 +158,10 @@ function tokenizeSegments(text) {
       i += 1;
       continue;
     }
-    if (/\s/.test(char)) endToken();
+    // A newline separates commands exactly like `;` — a multiline script is
+    // the ordinary shape, and treating it as whitespace hid the merge.
+    if (char === "\n") endSegment();
+    else if (/\s/.test(char)) endToken();
     else if (char === ";" || char === "(" || char === ")") endSegment();
     else if (char === "&" || char === "|") {
       endSegment();
@@ -267,15 +271,24 @@ function wrapperScript(tokens) {
   return rest[0] && /\s/.test(rest[0]) ? rest[0] : null;
 }
 
-function mergeCommands(text) {
+function mergeCommands(text, baseCwd) {
   const found = [];
   const queue = tokenizeSegments(text);
+  // `cd ../other && gh pr merge 7` resolves PR 7 in ../other, so the gate's own
+  // lookup has to run there too — otherwise a settled PR 7 here authorizes an
+  // unsettled PR 7 there. Tracked across segments, not interpreted deeply: an
+  // unresolvable path just makes gh fail, which degrades open like any unknown.
+  let cwd = baseCwd || undefined;
   // Bounded: a pathological nest cannot spin the hook inside its budget.
   for (let i = 0; i < queue.length && i < 64; i += 1) {
     const segment = queue[i];
     const script = wrapperScript(segment);
     if (script) {
       for (const sub of tokenizeSegments(script)) queue.push(sub);
+      continue;
+    }
+    if (segment[0] === "cd" && segment[1]) {
+      cwd = path.resolve(cwd || process.cwd(), segment[1]);
       continue;
     }
     const gh = ghArgs(segment);
@@ -287,20 +300,24 @@ function mergeCommands(text) {
     // blocks a command that merges nothing. Checked against real options only.
     if ([...NON_MERGE_FLAGS].some((f) => flags.has(f))) continue;
     if (words[0] === "pr" && words[1] === "merge") {
-      found.push({ kind: "pr", tokens, env, flags, ref: words[2] || null });
+      found.push({ kind: "pr", tokens, env, flags, cwd, ref: words[2] || null });
     } else if (words[0] === "api") {
-      const path = tokens.join(" ").match(REST_MERGE_RE);
+      // Only the endpoint positional — a `-H 'X-Test: repos/x/y/pulls/5/merge'`
+      // header value must not be mistaken for the endpoint being called.
+      const path = words.join(" ").match(REST_MERGE_RE);
       if (path) {
         // Placeholders expand from the current repo, exactly as `gh pr view N`
         // resolves, so hand the number to that path rather than querying a
         // literal `{owner}`.
-        found.push({ kind: "api", tokens, env, flags, ref: path[3] });
+        found.push({
+          kind: "api", tokens, env, flags, cwd, endpoint: path, ref: path[3],
+        });
       } else if (tokens.some((t) => t.includes("mergePullRequest"))) {
         // A raw GraphQL merge mutation carries a PR node id, not owner/repo/
         // number, so the gate cannot verify it. ponytail: report it loudly
         // instead of passing it in silence — upgrade to resolving the node id
         // if this form ever shows up in real use.
-        found.push({ kind: "graphql", tokens, env, flags, ref: null });
+        found.push({ kind: "graphql", tokens, env, flags, cwd, ref: null });
       }
     }
   }
@@ -356,7 +373,7 @@ function explicitTarget(command) {
   if (command.kind === "api") {
     // The REST path names the repo directly — unless it is still `{owner}`,
     // which parseRepo rejects so gh resolves it the way gh itself would.
-    const path = command.tokens.join(" ").match(REST_MERGE_RE);
+    const path = command.endpoint;
     const fromPath = path && parseRepo(`${path[1]}/${path[2]}`);
     if (fromPath) {
       return {
@@ -389,7 +406,7 @@ function ghEnv(host, captured) {
 
 // `host` routes the call at the same GitHub the merge targets, so an
 // enterprise selector cannot leave the gate querying github.com.
-function gh(args, timeout, { host, env } = {}) {
+function gh(args, timeout, { host, env, cwd } = {}) {
   const budget = Math.min(timeout, DEADLINE - Date.now());
   if (budget <= 0) {
     throw new Error(
@@ -402,6 +419,7 @@ function gh(args, timeout, { host, env } = {}) {
     encoding: "utf8",
     timeout: budget,
     env: ghEnv(host, env),
+    cwd,
     // stdin ignored so a gh auth prompt can never hang the hook.
     stdio: ["ignore", "pipe", "ignore"],
   });
@@ -416,7 +434,11 @@ function resolveViaGh(command) {
   const view = JSON.parse(
     // hostFromCommand, not repo.host: the host can be explicit even when the
     // repository is not (placeholders, bare number).
-    gh(args, VIEW_TIMEOUT_MS, { host: hostFromCommand(command), env: command.env }),
+    gh(args, VIEW_TIMEOUT_MS, {
+      host: hostFromCommand(command),
+      env: command.env,
+      cwd: command.cwd,
+    }),
   );
   // Any GitHub host, not just github.com — an enterprise URL must still parse.
   const url = String(view.url || "").match(
@@ -443,7 +465,7 @@ function settlement(target, command) {
       "-F", `number=${target.number}`,
     ],
     GRAPHQL_TIMEOUT_MS,
-    { host: target.host, env: command.env },
+    { host: target.host, env: command.env, cwd: command.cwd },
   );
   const pr = JSON.parse(raw)?.data?.repository?.pullRequest;
   if (!pr || typeof pr.headRefOid !== "string") {
@@ -556,7 +578,7 @@ process.stdin.on("end", () => {
 
   const text = commandText(args);
   if (!text) return; // nothing to read: silent pass-through
-  const commands = mergeCommands(text);
+  const commands = mergeCommands(text, typeof input.cwd === "string" ? input.cwd : undefined);
   if (!commands.length) return; // not a PR merge: silent pass-through
 
   // A shell runs every command in the string, so ONE unsettled merge anywhere
