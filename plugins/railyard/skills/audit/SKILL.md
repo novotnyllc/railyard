@@ -125,6 +125,10 @@ fire by default; the retrospective asks whether each actually did, and any
   produced) built by sweeping the primary record, with every flagged item and
   every mid-run workaround mapped to captured/not-captured? A workaround left
   in place is an open defect; if it is not captured, capture it now.
+- **Owning skill named** — did any dispatch brief inline a workflow another
+  skill owns instead of naming that skill and passing a frozen contract? Check
+  the inlined copy against the real skill for a dropped gate; that omission,
+  not the inlining itself, is what reaches production.
 
 Look for waste the log makes visible: sequential dispatches with no
 dependency, duplicated reading across workers, a tier higher than the work

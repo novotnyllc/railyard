@@ -158,7 +158,7 @@ actually shows:
 
 > The intake picked Opus for a mechanical rename. What did the extra tier buy?
 
-Alongside the run-specific questions, five standing **discipline lenses** run
+Alongside the run-specific questions, six standing **discipline lenses** run
 every time — the charter's default triggers, asked in the past tense. Each is
 pass/fail against the evidence, and a fail is a finding that must land in a
 sink:
@@ -170,6 +170,7 @@ sink:
 | Never override a guard | Was a tripped safety guard bypassed instead of fixed or routed through the sanctioned path? |
 | Bytes, not version | Where a fix shipped under an unchanged version, were installed bytes (resolved SHA) verified rather than the version string? |
 | Completeness | Was the plan/handoff/retrospective built by sweeping the primary record, mapping every flagged item and every mid-run workaround to captured/not-captured — never re-summarizing a summary? Every workaround (shim, alias, hand-edit) is an open defect to capture. |
+| Owning skill named | Did a dispatch brief inline a workflow another skill owns instead of naming that skill and passing a frozen contract? Diff the inlined copy against the real skill: the dropped gate, not the inlining, is what ships. |
 
 Answer honestly, including "nothing was wasteful here". An answer that yields
 an improvement goes to one of exactly two sinks:
