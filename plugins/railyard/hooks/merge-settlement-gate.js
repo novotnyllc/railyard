@@ -36,6 +36,13 @@ const SETTLEMENT_WINDOW_MS = 10 * 60 * 1000;
 // execFileSync has NO default timeout, so an unbounded call would hang.
 const VIEW_TIMEOUT_MS = 1200;
 const GRAPHQL_TIMEOUT_MS = 2500;
+// Per-call limits alone are not enough: one command can carry several merges,
+// and checking them sequentially at the per-call worst case would outlive the
+// harness cap (2 merges x 3.7s = 7.4s), which kills the hook before it
+// returns any verdict. This is the whole-process budget every gh call draws
+// down; running out degrades open with a notice, like any other unknown.
+const TOTAL_BUDGET_MS = 4000;
+const DEADLINE = Date.now() + TOTAL_BUDGET_MS;
 
 const SETTLEMENT_QUERY = `
 query($owner:String!,$name:String!,$number:Int!){
@@ -82,6 +89,9 @@ const SHELL_WRAPPERS = new Set(["bash", "sh", "zsh", "dash", "env"]);
 const VALUE_FLAGS = new Set([
   "-R", "--repo", "-b", "--body", "-F", "--body-file", "-t", "--subject",
   "--match-head-commit", "--author-email",
+  // gh api's own value-taking flags, so `--hostname HOST` is read as a host
+  // and `--method PUT` does not leak `PUT` into the positional words.
+  "--hostname", "--method", "-X", "-f", "-H", "--header", "--input",
 ]);
 const NON_MERGE_FLAGS = new Set(["--help", "-h", "--disable-auto"]);
 const REST_MERGE_RE = /repos\/([^\s/]+)\/([^\s/]+)\/pulls\/(\d+)\/merge/;
@@ -135,23 +145,34 @@ function parseRepo(value) {
   return { host: parts.length > 2 ? parts[parts.length - 3] : null, owner, name };
 }
 
-// Positional words in order, with flags and their consumed values removed —
-// so the subcommand path reads the same whether or not global flags precede it.
-function positionals(tokens) {
-  const out = [];
+// One pass over gh's arguments yielding positionals and real options. A
+// value is never mistaken for an option: `gh pr merge 7 --body --help` uses
+// `--help` as the commit body, and a token-wide scan for `--help` would skip
+// the gate entirely. Everything downstream reads this, so the rule holds once.
+function parseArgs(tokens) {
+  const words = [];
+  const flags = new Map();
   for (let i = 0; i < tokens.length; i += 1) {
     const token = tokens[i];
     if (token === "--") {
-      for (const rest of tokens.slice(i + 1)) out.push(rest);
+      for (const rest of tokens.slice(i + 1)) words.push(rest);
       break;
     }
-    if (token.startsWith("-")) {
-      if (VALUE_FLAGS.has(token)) i += 1; // `--flag=value` consumes nothing
+    if (!token.startsWith("-")) {
+      words.push(token);
       continue;
     }
-    out.push(token);
+    const eq = token.indexOf("=");
+    if (eq > 0) {
+      flags.set(token.slice(0, eq), token.slice(eq + 1)); // --flag=value
+    } else if (VALUE_FLAGS.has(token)) {
+      flags.set(token, tokens[i + 1] ?? true);
+      i += 1; // consume the value so it is never read as an option
+    } else {
+      flags.set(token, true);
+    }
   }
-  return out;
+  return { words, flags };
 }
 
 // EVERY merge command in this text. A shell runs them all, so checking only
@@ -163,26 +184,26 @@ function mergeCommands(text) {
     const gh = ghArgs(segment);
     if (!gh) continue;
     const { tokens, env } = gh;
+    const { words, flags } = parseArgs(tokens);
     // `--help` prints usage; `--disable-auto` TURNS OFF auto-merge, which is
     // the mitigation to reach for during a settlement window. Refusing either
-    // blocks a command that merges nothing.
-    if (tokens.some((t) => NON_MERGE_FLAGS.has(t))) continue;
-    const words = positionals(tokens);
+    // blocks a command that merges nothing. Checked against real options only.
+    if ([...NON_MERGE_FLAGS].some((f) => flags.has(f))) continue;
     if (words[0] === "pr" && words[1] === "merge") {
-      found.push({ kind: "pr", tokens, env, ref: words[2] || null });
+      found.push({ kind: "pr", tokens, env, flags, ref: words[2] || null });
     } else if (words[0] === "api") {
       const path = tokens.join(" ").match(REST_MERGE_RE);
       if (path) {
         // Placeholders expand from the current repo, exactly as `gh pr view N`
         // resolves, so hand the number to that path rather than querying a
         // literal `{owner}`.
-        found.push({ kind: "api", tokens, env, ref: path[3] });
+        found.push({ kind: "api", tokens, env, flags, ref: path[3] });
       } else if (/mergePullRequest/.test(segment)) {
         // A raw GraphQL merge mutation carries a PR node id, not owner/repo/
         // number, so the gate cannot verify it. ponytail: report it loudly
         // instead of passing it in silence — upgrade to resolving the node id
         // if this form ever shows up in real use.
-        found.push({ kind: "graphql", tokens, env, ref: null });
+        found.push({ kind: "graphql", tokens, env, flags, ref: null });
       }
     }
   }
@@ -192,24 +213,20 @@ function mergeCommands(text) {
 // An explicit -R/--repo wins; otherwise GH_REPO on this same command, which gh
 // honors for any command that would otherwise use the local repository.
 function repoFromCommand(command) {
-  const { tokens, env } = command;
-  for (let i = 0; i < tokens.length; i += 1) {
-    const token = tokens[i];
-    let value = null;
-    if ((token === "-R" || token === "--repo") && tokens[i + 1]) {
-      value = tokens[i + 1];
-    } else if (token.startsWith("--repo=")) value = token.slice(7);
-    else if (token.startsWith("-R=")) value = token.slice(3);
-    const repo = value && parseRepo(value);
-    if (repo) return repo;
-  }
-  const fromEnv = env && env.GH_REPO ? parseRepo(env.GH_REPO) : null;
-  if (fromEnv) {
-    return fromEnv.host || !env.GH_HOST
-      ? fromEnv
-      : { ...fromEnv, host: env.GH_HOST };
-  }
-  return null;
+  const { flags, env } = command;
+  const selector = [flags.get("-R"), flags.get("--repo")]
+    .find((v) => typeof v === "string");
+  const repo = (selector && parseRepo(selector)) ||
+    (env && env.GH_REPO ? parseRepo(env.GH_REPO) : null);
+  if (!repo) return null;
+  // `gh api --hostname` selects the host for REST/GraphQL calls just as a
+  // host-qualified selector does; missing it sends the settlement query to
+  // github.com while the merge goes to the enterprise host.
+  const explicitHost = flags.get("--hostname");
+  const host = repo.host ||
+    (typeof explicitHost === "string" ? explicitHost : null) ||
+    (env && env.GH_HOST) || null;
+  return { ...repo, host };
 }
 
 // owner + repo + number, or null when the command does not carry all three —
@@ -227,7 +244,11 @@ function explicitTarget(command) {
     const path = command.tokens.join(" ").match(REST_MERGE_RE);
     const fromPath = path && parseRepo(`${path[1]}/${path[2]}`);
     if (fromPath) {
-      return { ...fromPath, number: Number(path[3]) };
+      const explicitHost = command.flags.get("--hostname");
+      const host = fromPath.host ||
+        (typeof explicitHost === "string" ? explicitHost : null) ||
+        (command.env && command.env.GH_HOST) || null;
+      return { ...fromPath, host, number: Number(path[3]) };
     }
   }
   const repo = repoFromCommand(command);
@@ -241,9 +262,17 @@ function explicitTarget(command) {
 // both `gh pr view` and `gh api graphql` with one mechanism, so an enterprise
 // selector cannot leave the gate querying github.com.
 function gh(args, timeout, host) {
+  const budget = Math.min(timeout, DEADLINE - Date.now());
+  if (budget <= 0) {
+    throw new Error(
+      "the gate's " + Math.round(TOTAL_BUDGET_MS / 1000) + "s budget ran out" +
+        " before every merge in this command could be checked — merge one PR" +
+        " per command so each gets verified",
+    );
+  }
   return execFileSync("gh", args, {
     encoding: "utf8",
-    timeout,
+    timeout: budget,
     env: host ? { ...process.env, GH_HOST: host } : process.env,
     // stdin ignored so a gh auth prompt can never hang the hook.
     stdio: ["ignore", "pipe", "ignore"],

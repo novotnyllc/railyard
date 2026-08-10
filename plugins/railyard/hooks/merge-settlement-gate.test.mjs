@@ -538,6 +538,39 @@ gated("the documented AGENTS.md verify command lists every CI suite", () => {
   assert.deepEqual(suites(agents), [...new Set(suites(workflow))].sort());
 });
 
+gated("--help as a flag VALUE does not skip the gate", () => {
+  // `gh pr merge 7 --body --help` uses --help as the commit body. A token-wide
+  // scan treated it as the help flag and skipped the gate entirely.
+  const r = run(bash("gh pr merge 7 --body --help"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("gh api --hostname routes the settlement query at that host", () => {
+  const r = run(
+    bash("gh api --hostname github.example.com --method PUT repos/owner/repo/pulls/7/merge"),
+    { graphql: settlement({ threads: [false] }) },
+  );
+  assert.equal(r.code, 2);
+  assert.equal(r.hosts.at(-1), "github.example.com");
+});
+
+gated("a batch of merges cannot outlive the whole-process budget", () => {
+  // Per-call limits alone let N sequential merges exceed the harness's 5s cap,
+  // which kills the hook before it returns ANY verdict. The shared budget must
+  // end the run itself, fail-open, well inside the cap.
+  const started = Date.now();
+  const r = run(
+    bash("gh pr merge 5 && gh pr merge 6 && gh pr merge 7 && gh pr merge 8"),
+    { sleep: "2" },
+  );
+  const elapsed = Date.now() - started;
+  assert.equal(r.code, 0); // degraded, never a hang
+  assert.match(r.err, /DEGRADED/);
+  assert.ok(elapsed < 5000, `took ${elapsed}ms, must stay under the 5s cap`);
+});
+
 gated("the two gh timeouts leave real margin under the 5s hook cap", () => {
   // Sequential worst case must clear the harness cap, or the harness kills the
   // hook before its own fail-open path runs.
