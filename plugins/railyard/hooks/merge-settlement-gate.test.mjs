@@ -24,6 +24,7 @@ const gated = (name, fn) => test(name, { skip: SKIP_WIN }, fn);
 const SHIM = `#!/bin/sh
 echo "$1 $2" >> "$GH_CALL_LOG"
 echo "$GH_HOST" >> "$GH_HOST_LOG"
+echo "$GH_TOKEN" >> "$GH_TOKEN_LOG"
 if [ -n "$GH_FIXTURE_SLEEP" ]; then sleep "$GH_FIXTURE_SLEEP"; fi
 if [ -n "$GH_FIXTURE_FAIL" ]; then echo "gh: could not authenticate" >&2; exit 1; fi
 case "$1 $2" in
@@ -87,6 +88,8 @@ function run(input, fixtures = {}) {
   writeFileSync(callLog, "");
   const hostLog = path.join(dir, "hosts.log");
   writeFileSync(hostLog, "");
+  const tokenLog = path.join(dir, "tokens.log");
+  writeFileSync(tokenLog, "");
 
   const result = spawnSync(process.execPath, [script], {
     input: typeof input === "string" ? input : JSON.stringify(input),
@@ -96,7 +99,9 @@ function run(input, fixtures = {}) {
       PATH: `${dir}${path.delimiter}${process.env.PATH}`,
       GH_CALL_LOG: callLog,
       GH_HOST_LOG: hostLog,
-      GH_HOST: "",
+      GH_TOKEN_LOG: tokenLog,
+      GH_HOST: fixtures.ambientHost ?? "",
+      GH_TOKEN: "",
       GH_FIXTURE_VIEW: fixtures.view ?? VIEW_OK,
       GH_FIXTURE_GRAPHQL: fixtures.graphql ?? settlement(),
       GH_FIXTURE_FAIL: fixtures.fail ? "1" : "",
@@ -106,8 +111,9 @@ function run(input, fixtures = {}) {
   const calls = readFileSync(callLog, "utf8").split("\n").filter(Boolean);
   // Trailing "" entries matter (no host override), so do not filter these.
   const hosts = readFileSync(hostLog, "utf8").split("\n").slice(0, calls.length);
+  const tokens = readFileSync(tokenLog, "utf8").split("\n").slice(0, calls.length);
   rmSync(dir, { recursive: true, force: true });
-  return { code: result.status, err: result.stderr, calls, hosts };
+  return { code: result.status, err: result.stderr, calls, hosts, tokens };
 }
 
 // --- refusals (the only two determinable violations) ----------------------
@@ -569,6 +575,41 @@ gated("a batch of merges cannot outlive the whole-process budget", () => {
   assert.equal(r.code, 0); // degraded, never a hang
   assert.match(r.err, /DEGRADED/);
   assert.ok(elapsed < 5000, `took ${elapsed}ms, must stay under the 5s cap`);
+});
+
+gated("inline GH_TOKEN is forwarded to the settlement calls", () => {
+  // Without it the settlement query is unauthenticated and degrades open,
+  // while the shell's merge succeeds using the very token we ignored.
+  const r = run(bash("GH_TOKEN=ghp_secret gh pr merge 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.equal(r.tokens.at(-1), "ghp_secret");
+});
+
+gated("an ambient enterprise GH_HOST cannot capture a github.com URL", () => {
+  // The URL names the host; leaving it unset let the ambient enterprise host
+  // decide, so the gate verified an unrelated PR on the wrong GitHub.
+  const r = run(
+    bash("gh pr merge https://github.com/owner/repo/pull/7"),
+    { ambientHost: "github.example.com", graphql: settlement({ threads: [false] }) },
+  );
+  assert.equal(r.code, 2);
+  assert.equal(r.hosts.at(-1), "github.com");
+});
+
+gated("a merge inside shell grouping is still gated", () => {
+  const r = run(bash("(gh pr merge 7)"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("a merge behind an if-condition is still gated", () => {
+  const r = run(bash("if gh pr merge 7; then echo merged; fi"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
 });
 
 gated("the two gh timeouts leave real margin under the 5s hook cap", () => {

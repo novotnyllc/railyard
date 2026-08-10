@@ -83,6 +83,20 @@ const SEGMENT_SPLIT = /\|\||&&|[;\n|&]/;
 // Wrappers an agent puts in front of the real command — notably Codex's argv
 // form ["bash","-lc","gh pr merge 7"], which joins to a wrapper-prefixed string.
 const SHELL_WRAPPERS = new Set(["bash", "sh", "zsh", "dash", "env"]);
+// Control words and grouping punctuation a merge can legitimately sit behind:
+// `(gh pr merge 7)`, `if gh pr merge 7; then ...`. Missing these means the
+// segment looks unrelated and the merge runs with no gate and no notice.
+const CONTROL_WORDS = new Set([
+  "if", "then", "else", "elif", "do", "while", "until", "time", "command",
+  "exec", "nohup", "builtin",
+]);
+// Authentication the merge command carries inline. Without forwarding it the
+// settlement query is unauthenticated, degrades open, and the shell's merge
+// then succeeds unchecked with the very token we ignored.
+const AUTH_ENV = [
+  "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN",
+  "GH_CONFIG_DIR",
+];
 // Flags that consume the following token, so `--match-head-commit 7` never
 // yields `7` as the PR number. One union set covers gh's global flags and
 // `gh pr merge`'s own; over-listing is harmless, under-listing is a bug.
@@ -96,7 +110,9 @@ const VALUE_FLAGS = new Set([
 const NON_MERGE_FLAGS = new Set(["--help", "-h", "--disable-auto"]);
 const REST_MERGE_RE = /repos\/([^\s/]+)\/([^\s/]+)\/pulls\/(\d+)\/merge/;
 
-const unquote = (token) => token.replace(/^['"]+/, "").replace(/['"]+$/, "");
+// Also sheds grouping punctuation, so `(gh` and `7)` tokenize as `gh` and `7`.
+const unquote = (token) =>
+  token.replace(/^['"({!]+/, "").replace(/['")};]+$/, "");
 
 function basename(token) {
   const cut = token.lastIndexOf("/");
@@ -112,6 +128,10 @@ function ghArgs(segment) {
   for (;;) {
     const head = tokens[0];
     if (!head) return null;
+    if (CONTROL_WORDS.has(head)) {
+      tokens = tokens.slice(1);
+      continue;
+    }
     // Keep the assignment, don't just skip it: `GH_REPO=o/r gh pr merge 7`
     // retargets the merge, and discarding it verifies PR 7 in the WRONG repo.
     const assignment = head.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
@@ -235,8 +255,12 @@ function repoFromCommand(command) {
 function explicitTarget(command) {
   if (command.kind === "pr") {
     const url = command.ref &&
-      command.ref.match(/github\.com\/([^\s/]+)\/([^\s/]+)\/pull\/(\d+)/);
-    if (url) return { owner: url[1], name: url[2], number: Number(url[3]) };
+      command.ref.match(/https?:\/\/([^\s/]+)\/([^\s/]+)\/([^\s/]+)\/pull\/(\d+)/);
+    // Keep the URL's host even when it is github.com: an ambient enterprise
+    // GH_HOST would otherwise capture this target.
+    if (url) {
+      return { host: url[1], owner: url[2], name: url[3], number: Number(url[4]) };
+    }
   }
   if (command.kind === "api") {
     // The REST path names the repo directly — unless it is still `{owner}`,
@@ -258,10 +282,23 @@ function explicitTarget(command) {
   return null;
 }
 
-// `host` routes the call at the same GitHub the merge targets. GH_HOST covers
-// both `gh pr view` and `gh api graphql` with one mechanism, so an enterprise
-// selector cannot leave the gate querying github.com.
-function gh(args, timeout, host) {
+// The child's environment: pin GH_HOST whenever the host is KNOWN — including
+// plain github.com, since an ambient enterprise GH_HOST would otherwise
+// capture a github.com URL target — and forward any authentication the merge
+// command carried inline. When the host is unknown, inherit, because gh would
+// resolve the merge the same ambient way.
+function ghEnv(host, captured) {
+  const env = { ...process.env };
+  if (host) env.GH_HOST = host;
+  for (const key of AUTH_ENV) {
+    if (captured && typeof captured[key] === "string") env[key] = captured[key];
+  }
+  return env;
+}
+
+// `host` routes the call at the same GitHub the merge targets, so an
+// enterprise selector cannot leave the gate querying github.com.
+function gh(args, timeout, { host, env } = {}) {
   const budget = Math.min(timeout, DEADLINE - Date.now());
   if (budget <= 0) {
     throw new Error(
@@ -273,7 +310,7 @@ function gh(args, timeout, host) {
   return execFileSync("gh", args, {
     encoding: "utf8",
     timeout: budget,
-    env: host ? { ...process.env, GH_HOST: host } : process.env,
+    env: ghEnv(host, env),
     // stdin ignored so a gh auth prompt can never hang the hook.
     stdio: ["ignore", "pipe", "ignore"],
   });
@@ -285,21 +322,23 @@ function resolveViaGh(command) {
   const repo = repoFromCommand(command);
   if (repo) args.push("--repo", `${repo.owner}/${repo.name}`);
   args.push("--json", "number,url");
-  const view = JSON.parse(gh(args, VIEW_TIMEOUT_MS, repo && repo.host));
+  const view = JSON.parse(
+    gh(args, VIEW_TIMEOUT_MS, { host: repo && repo.host, env: command.env }),
+  );
   // Any GitHub host, not just github.com — an enterprise URL must still parse.
   const url = String(view.url || "").match(
     /https?:\/\/([^\s/]+)\/([^\s/]+)\/([^\s/]+)\/pull\/(\d+)/,
   );
   if (!url) throw new Error("gh pr view returned no resolvable PR url");
   return {
-    host: url[1] === "github.com" ? null : url[1],
+    host: url[1],
     owner: url[2],
     name: url[3],
     number: Number(view.number || url[4]),
   };
 }
 
-function settlement(target) {
+function settlement(target, command) {
   const raw = gh(
     [
       "api", "graphql",
@@ -311,7 +350,7 @@ function settlement(target) {
       "-F", `number=${target.number}`,
     ],
     GRAPHQL_TIMEOUT_MS,
-    target.host,
+    { host: target.host, env: command.env },
   );
   const pr = JSON.parse(raw)?.data?.repository?.pullRequest;
   if (!pr || typeof pr.headRefOid !== "string") {
@@ -359,7 +398,7 @@ function verdictFor(command) {
   let state;
   try {
     target = explicitTarget(command) || resolveViaGh(command);
-    state = settlement(target);
+    state = settlement(target, command);
   } catch (error) {
     return degrade(String((error && error.message) || error).split("\n")[0]);
   }
