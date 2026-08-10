@@ -1,5 +1,5 @@
 {
-  "description": "Lightweight routing nudges plus the dispatch gate: ambient charter at session start, one-line just-in-time hint on delivery/planning/orchestration prompts, a PreToolUse gate refusing subagent dispatches that omit an explicit model, a SubagentStop marker so railyard:audit can tell a drained fan-out from an abandoned one, and a Stop reminder to run the retrospective when a substantial run would end without one. The gate and the charter also append their run-log lines. The Codex-only SessionEnd cleanup hook lives separately in codex/hooks.json and must never load here.",
+  "description": "Lightweight routing nudges plus two PreToolUse gates: ambient charter at session start, one-line just-in-time hint on delivery/planning/orchestration prompts, a gate refusing subagent dispatches that omit an explicit model, a gate refusing a pull-request merge issued before review settlement (unresolved threads, or a fresh head no reviewer has seen yet), a SubagentStop marker so railyard:audit can tell a drained fan-out from an abandoned one, and a Stop reminder to run the retrospective when a substantial run would end without one. The dispatch gate and the charter also append their run-log lines. The Codex-only SessionEnd cleanup hook lives separately in codex/hooks.json and must never load here.",
   "hooks": {
     "PreToolUse": [
       {
@@ -9,6 +9,17 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-gate.js\"",
             "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\dispatch-gate.js\" }",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/merge-settlement-gate.js\"",
+            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\merge-settlement-gate.js\" }",
             "timeout": 5
           }
         ]

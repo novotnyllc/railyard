@@ -1,0 +1,353 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+const script = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "merge-settlement-gate.js",
+);
+
+// The gh boundary is mocked with a PATH shim rather than a seam in the hook:
+// the production path stays completely real (the hook still spawns `gh` and
+// parses real JSON) and no production code exists only for testability.
+// ponytail: POSIX sh, so these cases are skipped on Windows — validate.yml's
+// matrix is ubuntu + macOS. The gate itself is cross-platform.
+const SKIP_WIN = process.platform === "win32"
+  ? "gh shim is POSIX sh; the gate itself is cross-platform"
+  : false;
+const gated = (name, fn) => test(name, { skip: SKIP_WIN }, fn);
+
+const SHIM = `#!/bin/sh
+echo "$1 $2" >> "$GH_CALL_LOG"
+if [ -n "$GH_FIXTURE_SLEEP" ]; then sleep "$GH_FIXTURE_SLEEP"; fi
+if [ -n "$GH_FIXTURE_FAIL" ]; then echo "gh: could not authenticate" >&2; exit 1; fi
+case "$1 $2" in
+  "pr view") printf '%s' "$GH_FIXTURE_VIEW" ;;
+  "api graphql") printf '%s' "$GH_FIXTURE_GRAPHQL" ;;
+  *) echo "unexpected gh invocation: $*" >&2; exit 3 ;;
+esac
+`;
+
+const HEAD = "a36a1cf89334911b243c7e9e3d368ce21598394a";
+const OLD_SHA = "1111111111111111111111111111111111111111";
+
+// Mirrors the shape the real query returns (verified live against a real PR).
+function settlement({
+  head = HEAD,
+  reviewedHeads = [],
+  threads = [],
+  threadTotal,
+  headAgeMs = 30 * 1000,
+  committedDate,
+} = {}) {
+  return JSON.stringify({
+    data: {
+      repository: {
+        pullRequest: {
+          headRefOid: head,
+          reviews: { nodes: reviewedHeads.map((oid) => ({ commit: { oid } })) },
+          reviewThreads: {
+            totalCount: threadTotal ?? threads.length,
+            nodes: threads.map((isResolved) => ({ isResolved })),
+          },
+          commits: {
+            nodes: [{
+              commit: {
+                committedDate: committedDate === undefined
+                  ? new Date(Date.now() - headAgeMs).toISOString()
+                  : committedDate,
+              },
+            }],
+          },
+        },
+      },
+    },
+  });
+}
+
+const VIEW_OK = JSON.stringify({
+  number: 7,
+  url: "https://github.com/novotnyllc/railyard/pull/7",
+});
+
+// Bash-tool payload (Claude Code): tool_input.command is a string.
+const bash = (command) => ({ tool_name: "Bash", tool_input: { command } });
+
+function run(input, fixtures = {}) {
+  const dir = mkdtempSync(path.join(tmpdir(), "merge-gate-"));
+  const shim = path.join(dir, "gh");
+  writeFileSync(shim, SHIM);
+  chmodSync(shim, 0o755);
+  const callLog = path.join(dir, "calls.log");
+  writeFileSync(callLog, "");
+
+  const result = spawnSync(process.execPath, [script], {
+    input: typeof input === "string" ? input : JSON.stringify(input),
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: `${dir}${path.delimiter}${process.env.PATH}`,
+      GH_CALL_LOG: callLog,
+      GH_FIXTURE_VIEW: fixtures.view ?? VIEW_OK,
+      GH_FIXTURE_GRAPHQL: fixtures.graphql ?? settlement(),
+      GH_FIXTURE_FAIL: fixtures.fail ? "1" : "",
+      GH_FIXTURE_SLEEP: fixtures.sleep ?? "",
+    },
+  });
+  const calls = readFileSync(callLog, "utf8").split("\n").filter(Boolean);
+  rmSync(dir, { recursive: true, force: true });
+  return { code: result.status, err: result.stderr, calls };
+}
+
+// --- refusals (the only two determinable violations) ----------------------
+
+gated("unresolved threads are refused, naming the count and the remedy", () => {
+  const r = run(bash("gh pr merge 7 --squash"), {
+    graphql: settlement({ threads: [true, false, false, false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /3 unresolved review thread/);
+  assert.match(r.err, /resolveReviewThread/);
+  assert.match(r.err, /never\s+bypassed/);
+});
+
+gated("zero reviews on a fresh head is refused with wait guidance", () => {
+  const r = run(bash("gh pr merge 7 --squash"), {
+    graphql: settlement({ reviewedHeads: [], headAgeMs: 90 * 1000 }),
+  });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /no reviews yet/);
+  assert.match(r.err, /Wait 9m more/);
+  assert.match(r.err, /settlement window 10m/);
+  assert.match(r.err, /a36a1cf/); // names the head it judged
+  // The message is the whole remedy: it must never offer an escape hatch.
+  // (`gh pr merge --admin` is the real bypass, so name it explicitly.)
+  assert.doesNotMatch(r.err, /--no-verify|--admin|skip the gate|disable the (gate|hook)/i);
+  // Waiting must be stated as always sufficient, or the model will hunt for
+  // another route around the guard.
+  assert.match(r.err, /waiting is always sufficient/);
+});
+
+gated("a review on an older SHA is not settlement for a new head", () => {
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({ reviewedHeads: [OLD_SHA], headAgeMs: 60 * 1000 }),
+  });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /no reviews yet/);
+});
+
+// --- allows ---------------------------------------------------------------
+
+gated("reviews on the head with all threads resolved is allowed silently", () => {
+  const r = run(bash("gh pr merge 7 --squash"), {
+    graphql: settlement({ reviewedHeads: [HEAD], threads: [true, true] }),
+  });
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+});
+
+gated("a stale head with zero reviews is allowed (repo has no reviewers)", () => {
+  const r = run(bash("gh pr merge 7 --squash"), {
+    graphql: settlement({ reviewedHeads: [], threads: [], headAgeMs: 3 * 60 * 60 * 1000 }),
+  });
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+});
+
+// --- fail open (never block every merge in the repo) ----------------------
+
+gated("gh failure allows with a degradation notice", () => {
+  const r = run(bash("gh pr merge 7 --squash"), { fail: true });
+  assert.equal(r.code, 0);
+  assert.match(r.err, /DEGRADED/);
+  assert.match(r.err, /allowing the merge/);
+});
+
+gated("a hung identity call times out, allows, and reports degradation", () => {
+  // The gh pr view call is bounded at ~1500ms; without its own timeout this
+  // would hang until the harness killed the hook.
+  const r = run(bash("gh pr merge 7 --squash"), { sleep: "3" });
+  assert.equal(r.code, 0);
+  assert.match(r.err, /DEGRADED/);
+});
+
+gated("non-JSON gh output allows with a degradation notice", () => {
+  const r = run(bash("gh pr merge 7 --squash"), { graphql: "<html>rate limited</html>" });
+  assert.equal(r.code, 0);
+  assert.match(r.err, /DEGRADED/);
+});
+
+gated("threads beyond one page are indeterminate, so allowed + degraded", () => {
+  const r = run(bash("gh pr merge 7 --squash"), {
+    graphql: settlement({ threads: Array(100).fill(true), threadTotal: 250 }),
+  });
+  assert.equal(r.code, 0);
+  assert.match(r.err, /DEGRADED/);
+  assert.match(r.err, /250 review threads/);
+});
+
+gated("an unreadable head commit date allows with a degradation notice", () => {
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({ reviewedHeads: [], committedDate: null }),
+  });
+  assert.equal(r.code, 0);
+  assert.match(r.err, /DEGRADED/);
+});
+
+// --- pass-through (must never touch gh) ----------------------------------
+
+gated("a non-merge command passes through silently without calling gh", () => {
+  const r = run(bash("git status"));
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+  assert.deepEqual(r.calls, []);
+});
+
+gated("gh pr view is not a merge", () => {
+  const r = run(bash("gh pr view 7 --json state"));
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.calls, []);
+});
+
+gated("git merge is not a PR merge", () => {
+  const r = run(bash("git merge origin/main"));
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.calls, []);
+});
+
+gated("malformed stdin allows silently", () => {
+  const r = run("not json");
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+  assert.deepEqual(r.calls, []);
+});
+
+gated("a missing tool_input allows silently", () => {
+  const r = run({ tool_name: "Bash" });
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+});
+
+// --- identity resolution -------------------------------------------------
+
+gated("a bare number calls gh pr view (the common path)", () => {
+  const r = run(bash("gh pr merge 7 --squash"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  // A bare number names the PR but not its repo, so identity must be resolved.
+  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
+});
+
+gated("a full PR URL resolves without calling gh pr view", () => {
+  const r = run(bash("gh pr merge https://github.com/novotnyllc/railyard/pull/7 --squash"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.calls, ["api graphql"]);
+});
+
+gated("-R owner/repo plus a number resolves without gh pr view", () => {
+  const r = run(bash("gh pr merge -R novotnyllc/railyard 7 --squash"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.calls, ["api graphql"]);
+});
+
+gated("--repo=owner/repo form also resolves without gh pr view", () => {
+  const r = run(bash("gh pr merge --repo=novotnyllc/railyard 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.calls, ["api graphql"]);
+});
+
+gated("a bare gh pr merge with no ref resolves via gh pr view", () => {
+  const r = run(bash("gh pr merge --squash"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
+});
+
+gated("a value-flag argument is not mistaken for the PR number", () => {
+  const r = run(bash("gh pr merge --match-head-commit 7 --squash"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  // No usable positional, so identity resolution is required.
+  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
+});
+
+gated("gh pr view failing is its own fail-open path", () => {
+  const r = run(bash("gh pr merge 7"), { view: "not json" });
+  assert.equal(r.code, 0);
+  assert.match(r.err, /DEGRADED/);
+  assert.deepEqual(r.calls, ["pr view"]); // never reached graphql
+});
+
+gated("the REST merge endpoint is gated, not skipped", () => {
+  const r = run(
+    bash("gh api --method PUT repos/novotnyllc/railyard/pulls/7/merge"),
+    { graphql: settlement({ threads: [false] }) },
+  );
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.calls, ["api graphql"]); // owner/repo/number came from the path
+});
+
+// --- Codex command shapes ------------------------------------------------
+
+gated("Codex shell argv array is extracted and gated", () => {
+  const r = run({
+    tool_name: "shell",
+    tool_input: {
+      command: ["bash", "-lc", "gh pr merge 7 --squash"],
+      timeout_ms: 120000,
+      working_directory: "/tmp",
+    },
+  }, { graphql: settlement({ threads: [false, false] }) });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /2 unresolved review thread/);
+});
+
+gated("Codex exec_command string cmd is extracted and gated", () => {
+  const r = run({
+    tool_name: "exec_command",
+    tool_input: { cmd: "gh pr merge 7 --squash", yield_time_ms: 250 },
+  }, { graphql: settlement({ reviewedHeads: [], headAgeMs: 60 * 1000 }) });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /no reviews yet/);
+});
+
+gated("Codex unified_exec input array is extracted and gated", () => {
+  const r = run({
+    tool_name: "unified_exec",
+    tool_input: { input: ["bash", "-lc", "gh pr merge 7"] },
+  }, { graphql: settlement({ threads: [false] }) });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /1 unresolved review thread/);
+});
+
+gated("Codex local_shell argv array that is not a merge passes through", () => {
+  const r = run({
+    tool_name: "local_shell",
+    tool_input: { command: ["bash", "-lc", "git status --short"] },
+  });
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+  assert.deepEqual(r.calls, []);
+});
+
+gated("an argv array allowed after settlement stays silent", () => {
+  const r = run({
+    tool_name: "shell",
+    tool_input: { command: ["bash", "-lc", "gh pr merge 7 --squash"] },
+  }, { graphql: settlement({ reviewedHeads: [HEAD], threads: [true] }) });
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+});

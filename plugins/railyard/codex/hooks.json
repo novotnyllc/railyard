@@ -1,5 +1,5 @@
 {
-  "description": "Codex hooks: bounded exact-process SessionEnd cleanup (macOS-only at runtime; no-ops with exit 0 elsewhere), a SessionEnd retrospective reminder when a substantial run would end without one, the shared routing charter and prompt nudge, and the PreToolUse dispatch gate refusing spawn_agent calls that omit model or reasoning_effort. The charter and the gate also append run-log lines for railyard:audit; Codex has no subagent-completion event to subscribe, so worker completion comes from doctrine lines here.",
+  "description": "Codex hooks: bounded exact-process SessionEnd cleanup (macOS-only at runtime; no-ops with exit 0 elsewhere), a SessionEnd retrospective reminder when a substantial run would end without one, the shared routing charter and prompt nudge, the PreToolUse dispatch gate refusing spawn_agent calls that omit model or reasoning_effort, and the PreToolUse merge-settlement gate refusing a pull-request merge issued before review settlement (matched across every exec surface Codex may expose, since which one is active depends on enabled features). The charter and the dispatch gate also append run-log lines for railyard:audit; Codex has no subagent-completion event to subscribe, so worker completion comes from doctrine lines here.",
   "hooks": {
     "PreToolUse": [
       {
@@ -9,6 +9,17 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-gate.js\"",
             "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\dispatch-gate.js\" }",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "shell|local_shell|exec_command|unified_exec",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/merge-settlement-gate.js\"",
+            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\merge-settlement-gate.js\" }",
             "timeout": 5
           }
         ]
