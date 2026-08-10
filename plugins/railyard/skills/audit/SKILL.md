@@ -80,6 +80,20 @@ Stop (Claude Code) / SessionEnd (Codex) hook is the backstop that reminds when
 a substantial run would end without one. Run it also whenever asked how the
 work could have gone better.
 
+**Substantial is by cost, not by route.** A run is substantial when it either
+fans out (a small fan-out of dispatches) *or* is expensive on its own —
+multi-host, multi-repo, or multi-hour — even with zero dispatches. A pure ops
+or release run is exactly that case, and it **must open an approach line
+before executing**, the same first decision line a deliver run opens:
+
+```bash
+node <this plugin>/hooks/run-log.js note '{"event":"decision","what":"approach","because":"..."}'
+```
+
+That one line is the whole audit spine for an ops run: it gives the
+retrospective its baseline and it is what makes the Stop/SessionEnd hook fire
+at all. Without it a multi-hour fleet run records nothing and closes silently.
+
 Read the audit report and the session history, then **generate 3–7 pointed
 questions specific to this run** — not a fixed checklist — and answer each
 against the evidence. Question quality is the whole skill here: "phase 3
@@ -94,6 +108,23 @@ was the literal route executed and stopped at? A missing `approach` line is
 itself the first finding — name it so the next run derives one. This is the
 same lens for the process reflex (worktree isolation, scoped verification,
 verify-don't-trust) the charter names: was it applied, or re-learned mid-run?
+
+**Run the discipline lenses.** These are the reflexes the charter says must
+fire by default; the retrospective asks whether each actually did, and any
+"no" is a finding with a sink entry:
+
+- **Greenfield-disposable** — was production-migration caution applied to state
+  nobody depends on? Was "who depends on this?" asked before preserving it?
+- **Scope→plan threshold** — did the run cross multi-host, multi-repo, or
+  multi-hour scope and keep executing reactively instead of producing a plan?
+- **Safety guards** — was a tripped guard bypassed rather than fixed or routed
+  through the sanctioned path?
+- **Bytes, not version** — where a fix shipped under an unchanged version, was
+  the installed byte/SHA verified, or was the version string trusted?
+- **Completeness** — was this retrospective (and any plan or handoff the run
+  produced) built by sweeping the primary record, with every flagged item and
+  every mid-run workaround mapped to captured/not-captured? A workaround left
+  in place is an open defect; if it is not captured, capture it now.
 
 Look for waste the log makes visible: sequential dispatches with no
 dependency, duplicated reading across workers, a tier higher than the work

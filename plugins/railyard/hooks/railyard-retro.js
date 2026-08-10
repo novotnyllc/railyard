@@ -23,6 +23,11 @@ try {
 
 // A run with at least this many dispatches is "substantial" enough to be
 // worth a retrospective. Overridable for tests.
+//
+// Dispatches are not the only evidence of substance: a pure-ops run (fleet
+// work, a release — multi-host/multi-repo/hours with zero subagents) records
+// no dispatch at all. What it does record, per doctrine, is an `approach`
+// decision line. Either signal makes the run substantial.
 const MIN = Number(process.env.RAILYARD_RETRO_MIN || 2);
 
 let raw = "";
@@ -40,6 +45,7 @@ process.stdin.on("end", () => {
     if (!file || !fs.existsSync(file)) return; // no log: nothing to nudge about
 
     let dispatches = 0;
+    let hasApproach = false;
     let hasRetro = false;
     let alreadyNudged = false;
     for (const ln of fs.readFileSync(file, "utf8").split("\n")) {
@@ -54,20 +60,23 @@ process.stdin.on("end", () => {
       // whole day (coarse, but errs toward reminding).
       if (session && e.session_id && e.session_id !== session) continue;
       if (e.event === "dispatch") dispatches++;
+      else if (e.event === "decision") hasApproach = true;
       else if (e.event === "retrospective" || e.event === "recap") hasRetro = true;
       else if (e.event === "retro_prompt") alreadyNudged = true;
     }
 
-    if (dispatches < MIN || hasRetro || alreadyNudged) return;
+    if ((dispatches < MIN && !hasApproach) || hasRetro || alreadyNudged) return;
 
     // Mark that we nudged so repeated Stop events stay quiet (once per run).
     // Metadata only — a count and the session id, never content.
     record({ event: "retro_prompt", session_id: session || undefined, dispatches });
 
     const msg =
-      "Railyard: this run dispatched " +
-      dispatches +
-      " workers and is ending without a retrospective. Before you close it, run the" +
+      "Railyard: this run " +
+      (dispatches >= MIN
+        ? "dispatched " + dispatches + " workers"
+        : "opened an approach line") +
+      " and is ending without a retrospective. Before you close it, run the" +
       " closing loop railyard:audit defines: the recap, then the retrospective —" +
       " generate pointed questions about THIS run, grade it against the kickoff" +
       " approach line (was the loop/isolation/evidence derived, did first" +

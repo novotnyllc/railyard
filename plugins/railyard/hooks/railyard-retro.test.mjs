@@ -40,6 +40,12 @@ function readLog(dir) {
 }
 
 const dispatch = (session) => ({ event: "dispatch", session_id: session, model: "opus" });
+const approach = (session) => ({
+  event: "decision",
+  what: "approach",
+  because: "multi-host ops run",
+  session_id: session,
+});
 
 test("substantial run without a retrospective is nudged", () => {
   const dir = seedLog([dispatch("s1"), dispatch("s1")]);
@@ -114,6 +120,46 @@ test("garbage stdin fails open", () => {
     env: { ...process.env, RAILYARD_RUN_LOG_DIR: mkdtempSync(path.join(tmpdir(), "retro-empty-")) },
   });
   assert.equal(r.status, 0);
+});
+
+// A pure-ops run (multi-host, hours, zero subagents) is substantial by cost.
+// Its only spine is the approach line, so that alone must arm the reminder.
+test("ops run with an approach line and no dispatches is nudged", () => {
+  const dir = seedLog([approach("s1")]);
+  const r = run("s1", dir);
+  assert.equal(r.code, 0);
+  assert.match(r.out.systemMessage, /approach line/);
+  assert.match(r.out.systemMessage, /retrospective/i);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("an ops run that already recorded a retrospective is silent", () => {
+  const dir = seedLog([approach("s1"), { event: "retrospective", session_id: "s1" }]);
+  const r = run("s1", dir);
+  assert.equal(r.stdout.trim(), "");
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("an ops run closed with a recap is silent", () => {
+  const dir = seedLog([approach("s1"), { event: "recap", session_id: "s1" }]);
+  const r = run("s1", dir);
+  assert.equal(r.stdout.trim(), "");
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("a trivial run with no approach line and no dispatches is silent", () => {
+  const dir = seedLog([{ event: "session", session_id: "s1" }]);
+  const r = run("s1", dir);
+  assert.equal(r.code, 0);
+  assert.equal(r.stdout.trim(), "");
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("another session's approach line does not arm our reminder", () => {
+  const dir = seedLog([approach("other")]);
+  const r = run("s1", dir);
+  assert.equal(r.stdout.trim(), "");
+  rmSync(dir, { recursive: true, force: true });
 });
 
 test("threshold is overridable", () => {
