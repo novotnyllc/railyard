@@ -137,6 +137,19 @@ actually shows:
 
 > The intake picked Opus for a mechanical rename. What did the extra tier buy?
 
+Alongside the run-specific questions, five standing **discipline lenses** run
+every time — the charter's default triggers, asked in the past tense. Each is
+pass/fail against the evidence, and a fail is a finding that must land in a
+sink:
+
+| Lens | The question |
+| --- | --- |
+| Greenfield-disposable | Was migration/production caution spent on state nobody depends on? Was "who depends on this?" asked before preserving it? |
+| Scope→plan threshold | Did scope cross multi-host / multi-repo / multi-hour with no plan artifact produced before execution continued? |
+| Never override a guard | Was a tripped safety guard bypassed instead of fixed or routed through the sanctioned path? |
+| Bytes, not version | Where a fix shipped under an unchanged version, were installed bytes (resolved SHA) verified rather than the version string? |
+| Completeness | Was the plan/handoff/retrospective built by sweeping the primary record, mapping every flagged item and every mid-run workaround to captured/not-captured — never re-summarizing a summary? Every workaround (shim, alias, hand-edit) is an open defect to capture. |
+
 Answer honestly, including "nothing was wasteful here". An answer that yields
 an improvement goes to one of exactly two sinks:
 

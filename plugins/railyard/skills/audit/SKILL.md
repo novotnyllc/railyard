@@ -95,6 +95,23 @@ itself the first finding — name it so the next run derives one. This is the
 same lens for the process reflex (worktree isolation, scoped verification,
 verify-don't-trust) the charter names: was it applied, or re-learned mid-run?
 
+**Run the discipline lenses.** These are the reflexes the charter says must
+fire by default; the retrospective asks whether each actually did, and any
+"no" is a finding with a sink entry:
+
+- **Greenfield-disposable** — was production-migration caution applied to state
+  nobody depends on? Was "who depends on this?" asked before preserving it?
+- **Scope→plan threshold** — did the run cross multi-host, multi-repo, or
+  multi-hour scope and keep executing reactively instead of producing a plan?
+- **Safety guards** — was a tripped guard bypassed rather than fixed or routed
+  through the sanctioned path?
+- **Bytes, not version** — where a fix shipped under an unchanged version, was
+  the installed byte/SHA verified, or was the version string trusted?
+- **Completeness** — was this retrospective (and any plan or handoff the run
+  produced) built by sweeping the primary record, with every flagged item and
+  every mid-run workaround mapped to captured/not-captured? A workaround left
+  in place is an open defect; if it is not captured, capture it now.
+
 Look for waste the log makes visible: sequential dispatches with no
 dependency, duplicated reading across workers, a tier higher than the work
 needed, the same expensive command re-run on unchanged input, a review round a
