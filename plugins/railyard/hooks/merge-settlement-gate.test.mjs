@@ -343,6 +343,107 @@ gated("Codex local_shell argv array that is not a merge passes through", () => {
   assert.deepEqual(r.calls, []);
 });
 
+// --- parser regressions (each of these once defeated the gate) -----------
+
+gated("a global --repo BEFORE the pr subcommand is still gated", () => {
+  // gh accepts global flags before the subcommand; requiring `pr` immediately
+  // after `gh` let this real, documented form pass through silently.
+  const r = run(bash("gh --repo novotnyllc/railyard pr merge 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.calls, ["api graphql"]); // -R supplied owner/repo
+});
+
+gated("a global -R before the pr subcommand is still gated", () => {
+  const r = run(bash("gh -R novotnyllc/railyard pr merge 7 --squash"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.calls, ["api graphql"]);
+});
+
+gated("gh at an absolute path is still gated", () => {
+  const r = run(bash("/opt/homebrew/bin/gh pr merge 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("an env-prefixed invocation is still gated", () => {
+  const r = run(bash("GH_HOST=github.com gh pr merge 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("a decoy phrase in an earlier segment cannot hijack the identity", () => {
+  // The decoy names PR 5; the real merge targets PR 8. Reading the first
+  // textual "gh pr merge" resolved 5 — verifying the wrong PR, whose settled
+  // state could wrongly ALLOW this merge.
+  const r = run(
+    bash('git commit -m "docs: gh pr merge 5 workflow notes" && gh pr merge 8'),
+    { view: JSON.stringify({ number: 8, url: "https://github.com/novotnyllc/railyard/pull/8" }),
+      graphql: settlement({ threads: [false] }) },
+  );
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
+});
+
+gated("a --repo on an unrelated earlier gh command is not borrowed", () => {
+  // `--repo attacker/decoy` belongs to `gh issue list`, not to the merge.
+  const r = run(
+    bash("gh issue list --repo attacker/decoy && gh pr merge 8"),
+    { view: JSON.stringify({ number: 8, url: "https://github.com/novotnyllc/railyard/pull/8" }),
+      graphql: settlement({ threads: [false] }) },
+  );
+  assert.equal(r.code, 2);
+  // No repo on the merge segment, so identity must be resolved, not assumed.
+  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
+});
+
+gated("gh pr merge --help is not a merge", () => {
+  const r = run(bash("gh pr merge --help"));
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+  assert.deepEqual(r.calls, []);
+});
+
+gated("gh pr merge -h is not a merge", () => {
+  const r = run(bash("gh pr merge -h"));
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.calls, []);
+});
+
+gated("a raw GraphQL merge mutation is reported, never silently passed", () => {
+  const r = run(bash(
+    "gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: \"PR_x\"}) { clientMutationId } }'",
+  ));
+  assert.equal(r.code, 0); // fail open: no repo/number to verify
+  assert.match(r.err, /DEGRADED/);
+  assert.match(r.err, /mergePullRequest/);
+  assert.deepEqual(r.calls, []);
+});
+
+gated("a merge inside a bash -lc string wrapper is still gated", () => {
+  const r = run(bash('bash -lc "gh pr merge 7 --squash"'), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("the two gh timeouts leave real margin under the 5s hook cap", () => {
+  // Sequential worst case must clear the harness cap, or the harness kills the
+  // hook before its own fail-open path runs.
+  const source = readFileSync(
+    new URL("./merge-settlement-gate.js", import.meta.url),
+    "utf8",
+  );
+  const view = Number(source.match(/VIEW_TIMEOUT_MS = (\d+)/)[1]);
+  const graphql = Number(source.match(/GRAPHQL_TIMEOUT_MS = (\d+)/)[1]);
+  assert.ok(view + graphql <= 4000, `sum ${view + graphql}ms leaves no margin`);
+});
+
 gated("an argv array allowed after settlement stays silent", () => {
   const r = run({
     tool_name: "shell",
