@@ -97,10 +97,15 @@ function basename(token) {
 // `FOO=1 bash -lc "/usr/local/bin/gh pr merge 7"` still resolves.
 function ghArgs(segment) {
   let tokens = segment.trim().split(/\s+/).map(unquote).filter(Boolean);
+  const env = {};
   for (;;) {
     const head = tokens[0];
     if (!head) return null;
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(head)) {
+    // Keep the assignment, don't just skip it: `GH_REPO=o/r gh pr merge 7`
+    // retargets the merge, and discarding it verifies PR 7 in the WRONG repo.
+    const assignment = head.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+    if (assignment) {
+      env[assignment[1]] = assignment[2];
       tokens = tokens.slice(1);
       continue;
     }
@@ -111,7 +116,20 @@ function ghArgs(segment) {
     }
     break;
   }
-  return basename(tokens[0]) === "gh" ? tokens.slice(1) : null;
+  return basename(tokens[0]) === "gh" ? { tokens: tokens.slice(1), env } : null;
+}
+
+// gh accepts `[HOST/]OWNER/REPO`, so take the last two path segments. An
+// unexpanded `{owner}`/`{repo}` placeholder means gh will fill it from the
+// current repository, so it is not a usable target — return null and let
+// `gh pr view` resolve the same way gh itself would.
+function parseRepo(value) {
+  const parts = String(value || "").split("/").filter(Boolean);
+  if (parts.length < 2) return null;
+  const owner = parts[parts.length - 2];
+  const name = parts[parts.length - 1];
+  if (/[{}]/.test(owner + name)) return null;
+  return { owner, name };
 }
 
 // Positional words in order, with flags and their consumed values removed —
@@ -133,33 +151,42 @@ function positionals(tokens) {
   return out;
 }
 
-// The one merge command in this text, or null. `--help` is not a merge.
-function mergeCommand(text) {
+// EVERY merge command in this text. A shell runs them all, so checking only
+// the first lets `gh pr merge 5 && gh pr merge 8` merge PR 8 unverified the
+// moment PR 5 is settled. `--help` is not a merge.
+function mergeCommands(text) {
+  const found = [];
   for (const segment of text.split(SEGMENT_SPLIT)) {
-    const tokens = ghArgs(segment);
-    if (!tokens) continue;
+    const gh = ghArgs(segment);
+    if (!gh) continue;
+    const { tokens, env } = gh;
     if (tokens.some((t) => t === "--help" || t === "-h")) continue;
     const words = positionals(tokens);
     if (words[0] === "pr" && words[1] === "merge") {
-      return { kind: "pr", tokens, ref: words[2] || null };
-    }
-    if (words[0] === "api") {
-      if (tokens.some((t) => REST_MERGE_RE.test(t))) {
-        return { kind: "api", tokens, ref: null };
-      }
-      // A raw GraphQL merge mutation carries a PR node id, not owner/repo/
-      // number, so the gate cannot verify it. ponytail: report it loudly
-      // instead of passing it in silence — upgrade to resolving the node id
-      // if this form ever shows up in real use.
-      if (/mergePullRequest/.test(segment)) {
-        return { kind: "graphql", tokens, ref: null };
+      found.push({ kind: "pr", tokens, env, ref: words[2] || null });
+    } else if (words[0] === "api") {
+      const path = tokens.join(" ").match(REST_MERGE_RE);
+      if (path) {
+        // Placeholders expand from the current repo, exactly as `gh pr view N`
+        // resolves, so hand the number to that path rather than querying a
+        // literal `{owner}`.
+        found.push({ kind: "api", tokens, env, ref: path[3] });
+      } else if (/mergePullRequest/.test(segment)) {
+        // A raw GraphQL merge mutation carries a PR node id, not owner/repo/
+        // number, so the gate cannot verify it. ponytail: report it loudly
+        // instead of passing it in silence — upgrade to resolving the node id
+        // if this form ever shows up in real use.
+        found.push({ kind: "graphql", tokens, env, ref: null });
       }
     }
   }
-  return null;
+  return found;
 }
 
-function repoFromTokens(tokens) {
+// An explicit -R/--repo wins; otherwise GH_REPO on this same command, which gh
+// honors for any command that would otherwise use the local repository.
+function repoFromCommand(command) {
+  const { tokens, env } = command;
   for (let i = 0; i < tokens.length; i += 1) {
     const token = tokens[i];
     let value = null;
@@ -167,27 +194,31 @@ function repoFromTokens(tokens) {
       value = tokens[i + 1];
     } else if (token.startsWith("--repo=")) value = token.slice(7);
     else if (token.startsWith("-R=")) value = token.slice(3);
-    const match = value && value.match(/^([^\s/]+)\/([^\s/]+)$/);
-    if (match) return { owner: match[1], name: match[2] };
+    const repo = value && parseRepo(value);
+    if (repo) return repo;
   }
-  return null;
+  return env && env.GH_REPO ? parseRepo(env.GH_REPO) : null;
 }
 
 // owner + repo + number, or null when the command does not carry all three —
 // a BARE NUMBER (`gh pr merge 7`) names the PR but not its repository, so it
 // falls through to resolveViaGh. That is the common case.
 function explicitTarget(command) {
-  if (command.kind === "api") {
-    const path = command.tokens.join(" ").match(REST_MERGE_RE);
-    return path
-      ? { owner: path[1], name: path[2], number: Number(path[3]) }
-      : null;
+  if (command.kind === "pr") {
+    const url = command.ref &&
+      command.ref.match(/github\.com\/([^\s/]+)\/([^\s/]+)\/pull\/(\d+)/);
+    if (url) return { owner: url[1], name: url[2], number: Number(url[3]) };
   }
-  const url = command.ref &&
-    command.ref.match(/github\.com\/([^\s/]+)\/([^\s/]+)\/pull\/(\d+)/);
-  if (url) return { owner: url[1], name: url[2], number: Number(url[3]) };
-
-  const repo = repoFromTokens(command.tokens);
+  if (command.kind === "api") {
+    // The REST path names the repo directly — unless it is still `{owner}`,
+    // which parseRepo rejects so gh resolves it the way gh itself would.
+    const path = command.tokens.join(" ").match(REST_MERGE_RE);
+    const fromPath = path && parseRepo(`${path[1]}/${path[2]}`);
+    if (fromPath) {
+      return { owner: fromPath.owner, name: fromPath.name, number: Number(path[3]) };
+    }
+  }
+  const repo = repoFromCommand(command);
   if (repo && command.ref && /^\d+$/.test(command.ref)) {
     return { owner: repo.owner, name: repo.name, number: Number(command.ref) };
   }
@@ -206,7 +237,7 @@ function gh(args, timeout) {
 function resolveViaGh(command) {
   const args = ["pr", "view"];
   if (command.ref) args.push(command.ref);
-  const repo = repoFromTokens(command.tokens);
+  const repo = repoFromCommand(command);
   if (repo) args.push("--repo", `${repo.owner}/${repo.name}`);
   args.push("--json", "number,url");
   const view = JSON.parse(gh(args, VIEW_TIMEOUT_MS));
@@ -257,6 +288,74 @@ function humanDuration(ms) {
   return `${Math.ceil(seconds / 60)}m`;
 }
 
+const ALLOW = { kind: "allow" };
+const refuse = (why) => ({ kind: "refuse", why });
+const degrade = (why) => ({ kind: "degrade", why });
+
+// One command's verdict. Pure decision over gathered facts, so the handler
+// below stays a loop over commands rather than a nest of branches.
+function verdictFor(command) {
+  if (command.kind === "graphql") {
+    return degrade(
+      "a raw GraphQL mergePullRequest mutation carries a PR node id the gate" +
+        " cannot map to a repo and number. Use `gh pr merge` so review" +
+        " settlement can be checked",
+    );
+  }
+
+  let target;
+  let state;
+  try {
+    target = explicitTarget(command) || resolveViaGh(command);
+    state = settlement(target);
+  } catch (error) {
+    return degrade(String((error && error.message) || error).split("\n")[0]);
+  }
+
+  const unresolved = state.threads.filter((thread) => !thread?.isResolved);
+  if (unresolved.length) {
+    return refuse(
+      "PR #" + target.number + " has " + unresolved.length +
+        " unresolved review thread(s). Reviews that arrive after CI turns" +
+        " green are still real findings. Address each one — fix it, or reply" +
+        " on the thread with the rationale for declining — then resolve the" +
+        " threads (resolveReviewThread via gh api graphql) and retry this" +
+        " merge. A tripped guard is waited out or fixed, never bypassed.",
+    );
+  }
+
+  if (state.threadTotal > state.threads.length) {
+    return degrade(
+      "PR #" + target.number + " has " + state.threadTotal +
+        " review threads, more than the gate reads in one page",
+    );
+  }
+
+  if (state.reviewedHead) return ALLOW; // reviewed, nothing unresolved
+
+  const committed = state.committedDate ? Date.parse(state.committedDate) : NaN;
+  if (Number.isNaN(committed)) {
+    return degrade("could not read the head commit date for PR #" + target.number);
+  }
+
+  const age = Date.now() - committed;
+  if (age < SETTLEMENT_WINDOW_MS) {
+    return refuse(
+      "the head commit " + state.head.slice(0, 7) + " of PR #" + target.number +
+        " has no reviews yet and is only " + humanDuration(age) +
+        " old. Bot reviewers (Copilot, the Codex connector) post minutes" +
+        " AFTER a push, so green CI is not merge authority yet. Wait " +
+        humanDuration(SETTLEMENT_WINDOW_MS - age) + " more (settlement window " +
+        humanDuration(SETTLEMENT_WINDOW_MS) + " from the head commit), then" +
+        " retry — if no review has arrived by then the gate allows the merge," +
+        " so waiting is always sufficient. Do not bypass this guard.",
+    );
+  }
+  // Past the window with no reviews: this repo has no reviewers. Allow, always
+  // — never block such a repository indefinitely.
+  return ALLOW;
+}
+
 let raw = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => (raw += chunk));
@@ -273,88 +372,27 @@ process.stdin.on("end", () => {
 
   const text = commandText(args);
   if (!text) return; // nothing to read: silent pass-through
-  const command = mergeCommand(text);
-  if (!command) return; // not a PR merge: silent pass-through
+  const commands = mergeCommands(text);
+  if (!commands.length) return; // not a PR merge: silent pass-through
 
-  const block = (msg) => {
-    process.stderr.write(msg + "\n");
+  // A shell runs every command in the string, so ONE unsettled merge anywhere
+  // condemns the whole call. A determinable violation outranks a degradation.
+  const verdicts = commands.map(verdictFor);
+  const blocked = verdicts.find((v) => v.kind === "refuse");
+  if (blocked) {
+    process.stderr.write("[railyard] Merge refused: " + blocked.why + "\n");
     process.exitCode = 2;
-  };
-  // Fail open, but say so: the model should know the gate could not judge.
-  const degraded = (why) => {
+    return;
+  }
+  for (const v of verdicts) {
+    if (v.kind !== "degrade") continue;
+    // Fail open, but say so: the model must know the gate could not judge.
     process.stderr.write(
-      "[railyard] Merge-settlement gate DEGRADED (allowing the merge): " + why +
-        ". Review settlement was not verified — confirm reviews have landed" +
-        " and threads are resolved before relying on this merge.\n",
+      "[railyard] Merge-settlement gate DEGRADED (allowing the merge): " +
+        v.why + ". Review settlement was not verified — confirm reviews have" +
+        " landed and threads are resolved before relying on this merge.\n",
     );
-  };
-
-  if (command.kind === "graphql") {
-    degraded(
-      "this is a raw GraphQL mergePullRequest mutation, which carries a PR" +
-        " node id the gate cannot map to a repo and number. Use `gh pr merge`" +
-        " so review settlement can be checked",
-    );
-    return;
   }
-
-  let state;
-  let target;
-  try {
-    target = explicitTarget(command) || resolveViaGh(command);
-    state = settlement(target);
-  } catch (error) {
-    degraded(String((error && error.message) || error).split("\n")[0]);
-    return;
-  }
-
-  const unresolved = state.threads.filter((thread) => !thread?.isResolved);
-  if (unresolved.length) {
-    block(
-      "[railyard] Merge refused: PR #" + target.number + " has " +
-        unresolved.length + " unresolved review thread(s). Reviews that arrive" +
-        " after CI turns green are still real findings. Address each one —" +
-        " fix it, or reply on the thread with the rationale for declining —" +
-        " then resolve the threads (resolveReviewThread via gh api graphql)" +
-        " and retry this merge. A tripped guard is waited out or fixed, never" +
-        " bypassed.",
-    );
-    return;
-  }
-
-  if (state.threadTotal > state.threads.length) {
-    degraded(
-      "PR #" + target.number + " has " + state.threadTotal +
-        " review threads, more than the gate reads in one page",
-    );
-    return;
-  }
-
-  if (state.reviewedHead) return; // reviewed and nothing unresolved: allow
-
-  const committed = state.committedDate ? Date.parse(state.committedDate) : NaN;
-  if (Number.isNaN(committed)) {
-    degraded("could not read the head commit date for PR #" + target.number);
-    return;
-  }
-
-  const age = Date.now() - committed;
-  if (age < SETTLEMENT_WINDOW_MS) {
-    block(
-      "[railyard] Merge refused: the head commit " + state.head.slice(0, 7) +
-        " of PR #" + target.number + " has no reviews yet and is only " +
-        humanDuration(age) + " old. Bot reviewers (Copilot, the Codex" +
-        " connector) post minutes AFTER a push, so green CI is not merge" +
-        " authority yet. Wait " + humanDuration(SETTLEMENT_WINDOW_MS - age) +
-        " more (settlement window " +
-        humanDuration(SETTLEMENT_WINDOW_MS) + " from the head commit), then" +
-        " retry — if no review has arrived by then the gate allows the merge," +
-        " so waiting is always sufficient. Do not bypass this guard.",
-    );
-    return;
-  }
-  // Past the window with no reviews: this repo has no reviewers. Allow, always
-  // — never block such a repository indefinitely.
 });
 
 // No process.exit(): on Windows, pipe-backed stdout flushes asynchronously and

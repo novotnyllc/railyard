@@ -432,6 +432,59 @@ gated("a merge inside a bash -lc string wrapper is still gated", () => {
   assert.equal(r.code, 2);
 });
 
+gated("GH_REPO on the merge command retargets the check", () => {
+  // Discarding the assignment verified PR 7 in the CURRENT repo, so a settled
+  // local PR #7 could vouch for an unsettled merge in the target repo.
+  const r = run(bash("GH_REPO=other/target gh pr merge 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.calls, ["api graphql"]); // GH_REPO supplied owner/repo
+});
+
+gated("env-prefixed GH_REPO through an env wrapper also retargets", () => {
+  const r = run(bash("env GH_REPO=other/target gh pr merge 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.calls, ["api graphql"]);
+});
+
+gated("EVERY merge in a chained command is checked, not just the first", () => {
+  // A shell runs both. Checking only the first let `gh pr merge 5 && gh pr
+  // merge 8` merge PR 8 unverified as soon as PR 5 was settled.
+  const r = run(bash("gh pr merge 5 && gh pr merge 8"), {
+    graphql: settlement({ reviewedHeads: [HEAD], threads: [true] }),
+  });
+  assert.equal(r.code, 0);
+  assert.equal(r.calls.filter((c) => c === "api graphql").length, 2);
+});
+
+gated("an unsettled second merge condemns the whole command", () => {
+  const r = run(bash("gh pr merge 5 && gh pr merge 8"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("gh api {owner}/{repo} placeholders resolve, never query literally", () => {
+  // The placeholders expand from the current repo; querying `{owner}` made the
+  // settlement call fail, degrade open, and let the real merge through.
+  const r = run(bash("gh api --method PUT repos/{owner}/{repo}/pulls/7/merge"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
+});
+
+gated("a host-qualified -R HOST/OWNER/REPO selector is honored", () => {
+  const r = run(bash("gh -R github.example.com/owner/repo pr merge 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.calls, ["api graphql"]); // selector parsed, not dropped
+});
+
 gated("the two gh timeouts leave real margin under the 5s hook cap", () => {
   // Sequential worst case must clear the harness cap, or the harness kills the
   // hook before its own fail-open path runs.
