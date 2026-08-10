@@ -109,10 +109,20 @@ const AUTH_ENV = [
 const VALUE_FLAGS = new Set([
   "-R", "--repo", "-b", "--body", "-F", "--body-file", "-t", "--subject",
   "--match-head-commit", "--author-email", "-A",
-  // gh api's own value-taking flags, so `--hostname HOST` is read as a host
-  // and `--method PUT` does not leak `PUT` into the positional words.
+  // gh api's own value-taking flags, so `--hostname HOST` is read as a host,
+  // `--method PUT` does not leak `PUT` into the positional words, and a value
+  // that happens to be `--help` (e.g. `--jq --help`) is never read as the help
+  // option and used to skip the gate.
   "--hostname", "--method", "-X", "-f", "-H", "--header", "--input",
+  "-q", "--jq", "-p", "--preview", "--template", "--cache", "--raw-field",
+  "--field",
 ]);
+// Single-dash flags gh also accepts with the value attached (`-Rowner/repo`).
+// Missing these records the whole token as a boolean flag, so the selector is
+// lost and the gate silently resolves the PR in the wrong repository.
+const SHORT_VALUE_FLAGS = new Set(
+  [...VALUE_FLAGS].filter((f) => /^-[A-Za-z]$/.test(f)),
+);
 const NON_MERGE_FLAGS = new Set(["--help", "-h", "--disable-auto"]);
 const REST_MERGE_RE = /repos\/([^\s/]+)\/([^\s/]+)\/pulls\/(\d+)\/merge/;
 
@@ -189,8 +199,11 @@ function parseArgs(tokens) {
       continue;
     }
     const eq = token.indexOf("=");
-    if (eq > 0) {
+    const attached = token.match(/^(-[A-Za-z])(.+)$/);
+    if (eq > 0 && token.startsWith("--")) {
       flags.set(token.slice(0, eq), token.slice(eq + 1)); // --flag=value
+    } else if (attached && SHORT_VALUE_FLAGS.has(attached[1])) {
+      flags.set(attached[1], attached[2].replace(/^=/, "")); // -Rowner/repo
     } else if (VALUE_FLAGS.has(token)) {
       flags.set(token, tokens[i + 1] ?? true);
       i += 1; // consume the value so it is never read as an option
@@ -238,21 +251,30 @@ function mergeCommands(text) {
 
 // An explicit -R/--repo wins; otherwise GH_REPO on this same command, which gh
 // honors for any command that would otherwise use the local repository.
+// The host resolves independently of the repository, because the repo can be
+// unknown (a bare number, or `{owner}` placeholders) while the host is still
+// explicitly selected — and losing it there sends the settlement query to the
+// wrong GitHub while the merge goes to the enterprise host.
+function hostFromCommand(command) {
+  const { flags, env } = command;
+  const explicit = flags.get("--hostname");
+  if (typeof explicit === "string") return explicit;
+  const selector = [flags.get("-R"), flags.get("--repo")]
+    .find((v) => typeof v === "string");
+  const fromSelector = selector && parseRepo(selector);
+  if (fromSelector && fromSelector.host) return fromSelector.host;
+  const fromEnv = env && env.GH_REPO ? parseRepo(env.GH_REPO) : null;
+  if (fromEnv && fromEnv.host) return fromEnv.host;
+  return (env && env.GH_HOST) || null;
+}
+
 function repoFromCommand(command) {
   const { flags, env } = command;
   const selector = [flags.get("-R"), flags.get("--repo")]
     .find((v) => typeof v === "string");
   const repo = (selector && parseRepo(selector)) ||
     (env && env.GH_REPO ? parseRepo(env.GH_REPO) : null);
-  if (!repo) return null;
-  // `gh api --hostname` selects the host for REST/GraphQL calls just as a
-  // host-qualified selector does; missing it sends the settlement query to
-  // github.com while the merge goes to the enterprise host.
-  const explicitHost = flags.get("--hostname");
-  const host = repo.host ||
-    (typeof explicitHost === "string" ? explicitHost : null) ||
-    (env && env.GH_HOST) || null;
-  return { ...repo, host };
+  return repo ? { ...repo, host: hostFromCommand(command) } : null;
 }
 
 // owner + repo + number, or null when the command does not carry all three —
@@ -274,11 +296,11 @@ function explicitTarget(command) {
     const path = command.tokens.join(" ").match(REST_MERGE_RE);
     const fromPath = path && parseRepo(`${path[1]}/${path[2]}`);
     if (fromPath) {
-      const explicitHost = command.flags.get("--hostname");
-      const host = fromPath.host ||
-        (typeof explicitHost === "string" ? explicitHost : null) ||
-        (command.env && command.env.GH_HOST) || null;
-      return { ...fromPath, host, number: Number(path[3]) };
+      return {
+        ...fromPath,
+        host: fromPath.host || hostFromCommand(command),
+        number: Number(path[3]),
+      };
     }
   }
   const repo = repoFromCommand(command);
@@ -329,7 +351,9 @@ function resolveViaGh(command) {
   if (repo) args.push("--repo", `${repo.owner}/${repo.name}`);
   args.push("--json", "number,url");
   const view = JSON.parse(
-    gh(args, VIEW_TIMEOUT_MS, { host: repo && repo.host, env: command.env }),
+    // hostFromCommand, not repo.host: the host can be explicit even when the
+    // repository is not (placeholders, bare number).
+    gh(args, VIEW_TIMEOUT_MS, { host: hostFromCommand(command), env: command.env }),
   );
   // Any GitHub host, not just github.com — an enterprise URL must still parse.
   const url = String(view.url || "").match(

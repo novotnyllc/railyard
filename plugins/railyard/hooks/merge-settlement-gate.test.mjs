@@ -634,6 +634,44 @@ gated("a merge inside command substitution is still gated", () => {
   assert.equal(r.code, 2);
 });
 
+gated("an attached -Rowner/repo selector is parsed, not treated as a flag", () => {
+  // Recorded as a boolean flag, the selector was lost and the gate resolved
+  // PR 7 in the CURRENT repo — a settled local PR authorizing a foreign merge.
+  const r = run(bash("gh -Rother/target pr merge 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.calls, ["api graphql"]); // resolved without gh pr view
+});
+
+gated("--hostname survives when the repo itself is a placeholder", () => {
+  // Placeholders mean no repo object; the host must still reach the query.
+  const r = run(
+    bash("gh api --hostname github.example.com -X PUT repos/{owner}/{repo}/pulls/7/merge"),
+    {
+      // gh pr view, run at the enterprise host, returns an enterprise URL.
+      view: JSON.stringify({
+        number: 7,
+        url: "https://github.example.com/owner/repo/pull/7",
+      }),
+      graphql: settlement({ threads: [false] }),
+    },
+  );
+  assert.equal(r.code, 2);
+  // Both calls must reach the enterprise host: the identity lookup because the
+  // placeholders expand there, the settlement query because that is where the
+  // PR lives.
+  assert.deepEqual(r.hosts, ["github.example.com", "github.example.com"]);
+});
+
+gated("--jq taking --help as its value does not skip the gate", () => {
+  const r = run(
+    bash("gh api -X PUT repos/o/r/pulls/7/merge --jq --help"),
+    { graphql: settlement({ threads: [false] }) },
+  );
+  assert.equal(r.code, 2);
+});
+
 gated("the two gh timeouts leave real margin under the 5s hook cap", () => {
   // Sequential worst case must clear the harness cap, or the harness kills the
   // hook before its own fail-open path runs.
