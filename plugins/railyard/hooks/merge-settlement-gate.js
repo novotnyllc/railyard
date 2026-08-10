@@ -128,6 +128,27 @@ const REST_MERGE_RE = /repos\/([^\s/]+)\/([^\s/]+)\/pulls\/(\d+)\/merge/;
 // `--help` is a value, not an option), and unquoted separators end a command.
 // Parens separate too — they close a subshell, terminate a case pattern, and
 // open a substitution, all places a merge hides behind a non-gh first token.
+// A heredoc body is data the shell never executes, so a `gh pr merge` line
+// inside one must not be gated — otherwise writing a release script gets
+// refused. ponytail: line-based, delimiter-matched; a `<<` inside quotes is
+// not distinguished, which at worst hides a real command in the same
+// (fail-open) direction as any other unparsed shape.
+function stripHeredocs(text) {
+  if (!text.includes("<<")) return text;
+  const out = [];
+  let delimiter = null;
+  for (const line of text.split("\n")) {
+    if (delimiter !== null) {
+      if (line.trim() === delimiter) delimiter = null;
+      continue;
+    }
+    out.push(line);
+    const open = line.match(/<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/);
+    if (open) delimiter = open[2];
+  }
+  return out.join("\n");
+}
+
 function tokenizeSegments(text) {
   const segments = [];
   let tokens = [];
@@ -175,7 +196,10 @@ function tokenizeSegments(text) {
     }
     else if (char === "&" || char === "|") {
       endSegment();
-      if (text[i + 1] === char) i += 1;
+      const doubled = text[i + 1] === char;
+      if (doubled) i += 1;
+      // Marker: `&&`/`||` make what FOLLOWS conditional.
+      if (doubled) segments.push([char + char]);
     } else current += char;
   }
   endSegment();
@@ -190,6 +214,21 @@ function basename(token) {
 // Reduce one shell command to gh's own arguments, or null when it is not a gh
 // invocation. Strips leading env assignments and any shell wrapper, so
 // `FOO=1 bash -lc "/usr/local/bin/gh pr merge 7"` still resolves.
+// Drop the wrapper and its own options. `env -u GH_HOST gh …` must consume
+// `GH_HOST` too, or it is left at the front and the segment stops looking
+// like a gh invocation at all.
+const ENV_VALUE_FLAGS = new Set(["-u", "--unset", "-C", "--chdir", "-S", "--split-string"]);
+function dropWrapperFlags(tokens) {
+  const isEnv = basename(tokens[0]) === "env";
+  let rest = tokens.slice(1);
+  while (rest[0] && rest[0].startsWith("-")) {
+    const flag = rest[0];
+    rest = rest.slice(1);
+    if (isEnv && ENV_VALUE_FLAGS.has(flag) && rest.length) rest = rest.slice(1);
+  }
+  return rest;
+}
+
 function ghArgs(segmentTokens) {
   let tokens = segmentTokens.map((t) => t.replace(/^!+/, "")).filter(Boolean);
   const env = {};
@@ -209,8 +248,7 @@ function ghArgs(segmentTokens) {
       continue;
     }
     if (SHELL_WRAPPERS.has(basename(head))) {
-      tokens = tokens.slice(1);
-      while (tokens[0] && tokens[0].startsWith("-")) tokens = tokens.slice(1);
+      tokens = dropWrapperFlags(tokens);
       continue;
     }
     break;
@@ -276,8 +314,7 @@ function wrapperScript(tokens) {
   let rest = tokens;
   while (rest.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[0])) rest = rest.slice(1);
   if (!rest.length || !SHELL_WRAPPERS.has(basename(rest[0]))) return null;
-  rest = rest.slice(1);
-  while (rest[0] && rest[0].startsWith("-")) rest = rest.slice(1);
+  rest = dropWrapperFlags(rest);
   return rest[0] && /\s/.test(rest[0]) ? rest[0] : null;
 }
 
@@ -290,12 +327,18 @@ function mergeCommands(text, baseCwd) {
   // unresolvable path just makes gh fail, which degrades open like any unknown.
   let cwd = baseCwd || undefined;
   const cwdStack = [];
+  let conditional = false; // the previous separator was && or ||
+  let cwdUnknown = false;
   // Bounded: a pathological nest cannot spin the hook inside its budget.
   for (let i = 0; i < queue.length && i < 64; i += 1) {
     const segment = queue[i];
     const script = wrapperScript(segment);
     if (script) {
       for (const sub of tokenizeSegments(script)) queue.push(sub);
+      continue;
+    }
+    if (segment.length === 1 && (segment[0] === "&&" || segment[0] === "||")) {
+      conditional = true;
       continue;
     }
     if (segment.length === 1 && (segment[0] === "(" || segment[0] === ")")) {
@@ -305,10 +348,17 @@ function mergeCommands(text, baseCwd) {
       continue;
     }
     if (segment[0] === "cd" && segment[1]) {
-      cwd = path.resolve(cwd || process.cwd(), segment[1]);
+      // `false && cd ../other; gh pr merge 7` never runs the cd, so applying
+      // it would query the wrong repository. We cannot evaluate the branch,
+      // so mark the directory unknown and let the merge degrade rather than
+      // verify somewhere the merge will not happen.
+      if (conditional) cwdUnknown = true;
+      else cwd = path.resolve(cwd || process.cwd(), segment[1]);
+      conditional = false;
       continue;
     }
     const gh = ghArgs(segment);
+    conditional = false;
     if (!gh) continue;
     const { tokens, env } = gh;
     const { words, flags } = parseArgs(tokens);
@@ -317,7 +367,7 @@ function mergeCommands(text, baseCwd) {
     // blocks a command that merges nothing. Checked against real options only.
     if ([...NON_MERGE_FLAGS].some((f) => flags.has(f))) continue;
     if (words[0] === "pr" && words[1] === "merge") {
-      found.push({ kind: "pr", tokens, env, flags, cwd, ref: words[2] || null });
+      found.push({ kind: "pr", tokens, env, flags, cwd, cwdUnknown, ref: words[2] || null });
     } else if (words[0] === "api") {
       // Only the endpoint positional — a `-H 'X-Test: repos/x/y/pulls/5/merge'`
       // header value must not be mistaken for the endpoint being called.
@@ -327,14 +377,14 @@ function mergeCommands(text, baseCwd) {
         // resolves, so hand the number to that path rather than querying a
         // literal `{owner}`.
         found.push({
-          kind: "api", tokens, env, flags, cwd, endpoint: path, ref: path[3],
+          kind: "api", tokens, env, flags, cwd, cwdUnknown, endpoint: path, ref: path[3],
         });
       } else if (tokens.some((t) => t.includes("mergePullRequest"))) {
         // A raw GraphQL merge mutation carries a PR node id, not owner/repo/
         // number, so the gate cannot verify it. ponytail: report it loudly
         // instead of passing it in silence — upgrade to resolving the node id
         // if this form ever shows up in real use.
-        found.push({ kind: "graphql", tokens, env, flags, cwd, ref: null });
+        found.push({ kind: "graphql", tokens, env, flags, cwd, cwdUnknown, ref: null });
       }
     }
   }
@@ -518,6 +568,13 @@ const degrade = (why) => ({ kind: "degrade", why });
 // One command's verdict. Pure decision over gathered facts, so the handler
 // below stays a loop over commands rather than a nest of branches.
 function verdictFor(command) {
+  if (command.cwdUnknown) {
+    return degrade(
+      "a conditional `cd` in this command means the merge's working directory" +
+        " is not knowable without running the shell, so the gate cannot tell" +
+        " which repository it would verify. Run the merge as its own command",
+    );
+  }
   if (command.kind === "graphql") {
     return degrade(
       "a raw GraphQL mergePullRequest mutation carries a PR node id the gate" +
@@ -599,7 +656,7 @@ process.stdin.on("end", () => {
   // the gate's lookup must too. Falls back to the hook payload's own cwd.
   const requestedCwd = [args.working_directory, args.workdir, args.cwd, input.cwd]
     .find((value) => typeof value === "string" && value);
-  const commands = mergeCommands(text, requestedCwd);
+  const commands = mergeCommands(stripHeredocs(text), requestedCwd);
   if (!commands.length) return; // not a PR merge: silent pass-through
 
   // A shell runs every command in the string, so ONE unsettled merge anywhere

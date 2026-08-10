@@ -801,6 +801,44 @@ gated("a subshell cd does not leak into the merge that follows it", () => {
   rmSync(base, { recursive: true, force: true });
 });
 
+gated("a heredoc body is data, not a command to gate", () => {
+  // Writing a release script that mentions gh pr merge must not be refused.
+  const r = run(bash("cat >release.sh <<'EOF'\ngh pr merge 7\nEOF"));
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+  assert.deepEqual(r.calls, []);
+});
+
+gated("a conditional cd makes the directory unknown, so the merge degrades", () => {
+  // `false && cd ../other; gh pr merge 7` never runs the cd, so applying it
+  // would verify a repository the merge will not touch.
+  const r = run(bash("false && cd /tmp; gh pr merge 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 0);
+  assert.match(r.err, /DEGRADED/);
+  assert.match(r.err, /conditional `cd`/);
+  assert.deepEqual(r.calls, []);
+});
+
+gated("an unconditional cd before && still applies", () => {
+  // The legitimate shape must keep working: cd runs, then the merge.
+  const target = mkdtempSync(path.join(tmpdir(), "merge-gate-uncond-"));
+  const r = run(bash(`cd ${target} && gh pr merge 7`), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.ok(r.cwds.every((c) => c.endsWith(path.basename(target))));
+  rmSync(target, { recursive: true, force: true });
+});
+
+gated("env -u consumes its variable name before gh is located", () => {
+  const r = run(bash("env -u GH_HOST gh pr merge 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
 gated("the two gh timeouts leave real margin under the 5s hook cap", () => {
   // Sequential worst case must clear the harness cap, or the harness kills the
   // hook before its own fail-open path runs.
