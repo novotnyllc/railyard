@@ -21,10 +21,12 @@ its closing step, and a **Stop** hook (Claude Code) / **SessionEnd** hook
 runs the loop.
 
 **Substantial is by cost, not by route.** The hook fires on either signal: a
-small fan-out of dispatches, *or* an `approach`/`decision` line with no closing
-marker. The second signal is what covers a run that spends hours without
-dispatching anything — a fleet or release run — which the dispatch count alone
-reads as trivial.
+small fan-out of dispatches, *or* this session's own `what:"approach"` line
+with no closing marker. The second signal is what covers a run that spends
+hours without dispatching anything — a fleet or release run — which the
+dispatch count alone reads as trivial. Only `what:"approach"` counts, not the
+other `decision` kinds, and only when the line carries this session's
+`session_id`: an unscoped approach line arms nobody's reminder.
 
 ## Run log
 
@@ -73,6 +75,13 @@ chosen. The orchestrating session appends those itself:
 ```bash
 node <plugin>/hooks/run-log.js note '{"event":"decision","what":"...","because":"...","fed_by":"..."}'
 ```
+
+`note` stamps `session_id` itself, from the id the harness exports to the
+commands it spawns — `CODEX_THREAD_ID` if present, else
+`CLAUDE_CODE_SESSION_ID`. Codex wins because a `codex exec` worker inherits
+its parent's Claude session id and adds its own thread id, and it is the
+worker's own SessionEnd that reads the line back. So a doctrine line binds to
+the run that wrote it; passing `session_id` explicitly overrides that.
 
 Three event kinds, no more:
 

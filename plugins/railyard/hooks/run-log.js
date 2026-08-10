@@ -46,6 +46,30 @@ function harness() {
   return "";
 }
 
+// Which session is running us, when the harness says so in the environment.
+// Hook-written lines take the session id from their payload; a session-written
+// `note` has no payload, so it reads the id the harness exports to the
+// commands it spawns. Unknown is a fine answer — the field is omitted, and
+// readers that need the binding treat an unscoped line as not theirs.
+//
+// CODEX_THREAD_ID wins when both are set. A `codex exec` worker launched from
+// Claude Code inherits the parent's CLAUDE_CODE_SESSION_ID and adds its own
+// thread id, so claude-first would stamp the parent's id and Codex's own
+// SessionEnd payload would never match the line. `harness()` cannot arbitrate
+// this: it reads CLAUDE_PLUGIN_ROOT, which the harness sets for its hooks —
+// a `note` run from a tool call may see it absent or inherited from the parent.
+// Plain Claude Code never sees CODEX_THREAD_ID (a parent does not inherit its
+// child's environment), so this costs that case nothing.
+//
+// ponytail: presence, not nesting order — a Claude session launched from
+// `codex exec` sees both and stamps the Codex ancestor's id. That direction is
+// the cheaper miss: Claude Code's reminder still has the dispatch count as a
+// second signal, while a zero-dispatch Codex ops run has only this line.
+// Revisit if either harness ever exports a depth or innermost marker.
+function sessionId() {
+  return clip(process.env.CODEX_THREAD_ID) || clip(process.env.CLAUDE_CODE_SESSION_ID);
+}
+
 function clip(value, max = 120) {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
@@ -81,7 +105,10 @@ if (require.main === module) {
     try {
       entry = JSON.parse(arg || "");
     } catch {}
-    if (entry && typeof entry === "object" && !Array.isArray(entry)) record(entry);
+    // Stamp the session so the line binds to the run that wrote it; an
+    // explicit session_id in the entry still wins.
+    if (entry && typeof entry === "object" && !Array.isArray(entry))
+      record({ session_id: sessionId(), ...entry });
   } else if (mode === "hook") {
     // Hook-authored line: harness payload on stdin, event name in argv.
     let raw = "";

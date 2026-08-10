@@ -17,8 +17,9 @@ const fs = require("fs");
 
 let logPath = null;
 let record = () => {};
+let clip = (v) => (typeof v === "string" ? v.trim() || undefined : undefined);
 try {
-  ({ logPath, record } = require("./run-log.js"));
+  ({ logPath, record, clip } = require("./run-log.js"));
 } catch {}
 
 // A run with at least this many dispatches is "substantial" enough to be
@@ -39,7 +40,9 @@ process.stdin.on("end", () => {
     try {
       payload = JSON.parse(raw) || {};
     } catch {}
-    const session = typeof payload.session_id === "string" ? payload.session_id : "";
+    // Normalize exactly as the writer does (trim + clip), or a long or padded
+    // harness id would never equal the id stamped on our own lines.
+    const session = clip(payload.session_id) || "";
 
     const file = logPath ? logPath() : null;
     if (!file || !fs.existsSync(file)) return; // no log: nothing to nudge about
@@ -60,7 +63,18 @@ process.stdin.on("end", () => {
       // whole day (coarse, but errs toward reminding).
       if (session && e.session_id && e.session_id !== session) continue;
       if (e.event === "dispatch") dispatches++;
-      else if (e.event === "decision") hasApproach = true;
+      // Only the kickoff `approach` line is the ops-run signal: the grammar
+      // uses `decision` for tier choices, replans, and phase boundaries too.
+      // And only when it is bound to THIS session — an unscoped line (legacy,
+      // or written where no session id was available) deliberately stays
+      // silent rather than nudging every unrelated session ending that day.
+      else if (
+        e.event === "decision" &&
+        e.what === "approach" &&
+        session &&
+        e.session_id === session
+      )
+        hasApproach = true;
       else if (e.event === "retrospective" || e.event === "recap") hasRetro = true;
       else if (e.event === "retro_prompt") alreadyNudged = true;
     }

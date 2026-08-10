@@ -162,6 +162,87 @@ test("another session's approach line does not arm our reminder", () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+// The grammar uses `decision` for tier choices, replans, and phase
+// boundaries — only `what:"approach"` is the substantial-by-cost signal.
+test("ordinary decision lines are not approach lines", () => {
+  for (const what of ["tier", "replan", "phase boundary"]) {
+    const dir = seedLog([{ ...approach("s1"), what }]);
+    const r = run("s1", dir);
+    assert.equal(r.stdout.trim(), "", `decision what=${what} must not nudge`);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// A legacy (or otherwise unbound) approach line belongs to no session, so it
+// must not nudge every session that ends later the same day.
+test("an unscoped approach line arms nobody's reminder", () => {
+  const { session_id, ...unscoped } = approach("s1");
+  const dir = seedLog([unscoped]);
+  const r = run("s1", dir);
+  assert.equal(r.stdout.trim(), "");
+  rmSync(dir, { recursive: true, force: true });
+});
+
+// Write an approach line the way a session does — through `run-log.js note`,
+// with no session_id of its own — under the given harness environment.
+function note(dir, env) {
+  const r = spawnSync(
+    process.execPath,
+    [
+      path.join(path.dirname(script), "run-log.js"),
+      "note",
+      JSON.stringify({ event: "decision", what: "approach", because: "multi-host ops run" }),
+    ],
+    { encoding: "utf8", env: { ...process.env, RAILYARD_RUN_LOG_DIR: dir, ...env } },
+  );
+  assert.equal(r.status, 0);
+  return readLog(dir).at(-1);
+}
+
+// `note` has no hook payload, so it stamps the session id the harness exports
+// — which is what binds the approach line to the run that wrote it.
+test("run-log note stamps the harness session id, and that line nudges", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "retro-note-"));
+  assert.equal(note(dir, { CLAUDE_CODE_SESSION_ID: "s1", CODEX_THREAD_ID: "" }).session_id, "s1");
+  assert.match(run("s1", dir).out.systemMessage, /approach line/);
+  assert.equal(run("other", dir).stdout.trim(), ""); // and only for that session
+  rmSync(dir, { recursive: true, force: true });
+});
+
+// A `codex exec` worker inherits the parent's CLAUDE_CODE_SESSION_ID and adds
+// its own thread id, so the thread id has to win — otherwise the Codex
+// SessionEnd payload never matches the approach line the worker wrote. This
+// must not depend on CLAUDE_PLUGIN_ROOT: a `note` run from a tool call sees it
+// absent or inherited from the parent, so both are exercised here.
+test("note stamps the Codex thread id over an inherited Claude session id", () => {
+  const both = { CLAUDE_CODE_SESSION_ID: "parent-claude", CODEX_THREAD_ID: "codex-thread" };
+  for (const root of ["", path.join("/x", ".claude", "plugins")]) {
+    const dir = mkdtempSync(path.join(tmpdir(), "retro-note-codex-"));
+    assert.equal(note(dir, { ...both, CLAUDE_PLUGIN_ROOT: root }).session_id, "codex-thread");
+    assert.match(run("codex-thread", dir).out.systemMessage, /approach line/);
+    assert.equal(run("parent-claude", dir).stdout.trim(), "");
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("note falls back to the Claude session id when Codex is not in the picture", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "retro-note-claude-"));
+  const env = { CLAUDE_CODE_SESSION_ID: "s1", CODEX_THREAD_ID: "", CLAUDE_PLUGIN_ROOT: "" };
+  assert.equal(note(dir, env).session_id, "s1");
+  rmSync(dir, { recursive: true, force: true });
+});
+
+// The writer trims and clips ids; the hook must compare the same shape or a
+// padded/overlong harness id reads as "some other session".
+test("a padded or overlong session id still matches its own approach line", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "retro-note-clip-"));
+  const long = "s".repeat(200);
+  const stamped = note(dir, { CLAUDE_CODE_SESSION_ID: "  " + long + "  ", CODEX_THREAD_ID: "" });
+  assert.equal(stamped.session_id, "s".repeat(120)); // trimmed and clipped
+  assert.match(run("  " + long + "  ", dir).out.systemMessage, /approach line/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test("threshold is overridable", () => {
   const dir = seedLog([dispatch("s1")]);
   const r = run("s1", dir, 1); // MIN=1 makes a single dispatch substantial
