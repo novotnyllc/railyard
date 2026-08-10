@@ -758,6 +758,49 @@ gated("a header value cannot decoy the gh api endpoint", () => {
   assert.match(r.err, /PR #8/); // the real endpoint, not the header decoy
 });
 
+gated("a backslash line continuation does not become the PR ref", () => {
+  const r = run(bash("gh pr merge \\\n7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
+});
+
+gated("the shell tool's working_directory is where the lookup runs", () => {
+  // Codex shell calls carry a per-call directory; the merge runs there.
+  const target = mkdtempSync(path.join(tmpdir(), "merge-gate-wd-"));
+  const r = run({
+    tool_name: "shell",
+    tool_input: { command: ["bash", "-lc", "gh pr merge 7"], working_directory: target },
+  }, { graphql: settlement({ threads: [false] }) });
+  assert.equal(r.code, 2);
+  assert.ok(
+    r.cwds.every((c) => c.endsWith(path.basename(target))),
+    `gh ran in ${JSON.stringify(r.cwds)}, expected ${target}`,
+  );
+  rmSync(target, { recursive: true, force: true });
+});
+
+gated("a subshell cd does not leak into the merge that follows it", () => {
+  // `(cd ../other && run-tests); gh pr merge 7` merges in the ORIGINAL repo.
+  const target = mkdtempSync(path.join(tmpdir(), "merge-gate-sub-"));
+  const base = mkdtempSync(path.join(tmpdir(), "merge-gate-base-"));
+  const r = run({
+    tool_name: "Bash",
+    tool_input: {
+      command: `(cd ${target} && echo testing); gh pr merge 7`,
+      working_directory: base,
+    },
+  }, { graphql: settlement({ threads: [false] }) });
+  assert.equal(r.code, 2);
+  assert.ok(
+    r.cwds.every((c) => c.endsWith(path.basename(base))),
+    `gh ran in ${JSON.stringify(r.cwds)}, expected ${base}`,
+  );
+  rmSync(target, { recursive: true, force: true });
+  rmSync(base, { recursive: true, force: true });
+});
+
 gated("the two gh timeouts leave real margin under the 5s hook cap", () => {
   // Sequential worst case must clear the harness cap, or the harness kills the
   // hook before its own fail-open path runs.

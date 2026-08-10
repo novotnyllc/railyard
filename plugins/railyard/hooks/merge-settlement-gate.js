@@ -154,6 +154,12 @@ function tokenizeSegments(text) {
       continue;
     }
     if (char === "\\" && i + 1 < text.length) {
+      // Line continuation: the shell removes the backslash AND the newline,
+      // so keeping the newline made it the PR reference.
+      if (text[i + 1] === "\n") {
+        i += 1;
+        continue;
+      }
       current += text[i + 1];
       i += 1;
       continue;
@@ -162,7 +168,11 @@ function tokenizeSegments(text) {
     // the ordinary shape, and treating it as whitespace hid the merge.
     if (char === "\n") endSegment();
     else if (/\s/.test(char)) endToken();
-    else if (char === ";" || char === "(" || char === ")") endSegment();
+    else if (char === ";") endSegment();
+    else if (char === "(" || char === ")") {
+      endSegment();
+      segments.push([char]); // marker: a subshell scopes `cd`
+    }
     else if (char === "&" || char === "|") {
       endSegment();
       if (text[i + 1] === char) i += 1;
@@ -279,12 +289,19 @@ function mergeCommands(text, baseCwd) {
   // unsettled PR 7 there. Tracked across segments, not interpreted deeply: an
   // unresolvable path just makes gh fail, which degrades open like any unknown.
   let cwd = baseCwd || undefined;
+  const cwdStack = [];
   // Bounded: a pathological nest cannot spin the hook inside its budget.
   for (let i = 0; i < queue.length && i < 64; i += 1) {
     const segment = queue[i];
     const script = wrapperScript(segment);
     if (script) {
       for (const sub of tokenizeSegments(script)) queue.push(sub);
+      continue;
+    }
+    if (segment.length === 1 && (segment[0] === "(" || segment[0] === ")")) {
+      // Bash restores the directory when a subshell closes.
+      if (segment[0] === "(") cwdStack.push(cwd);
+      else if (cwdStack.length) cwd = cwdStack.pop();
       continue;
     }
     if (segment[0] === "cd" && segment[1]) {
@@ -578,7 +595,11 @@ process.stdin.on("end", () => {
 
   const text = commandText(args);
   if (!text) return; // nothing to read: silent pass-through
-  const commands = mergeCommands(text, typeof input.cwd === "string" ? input.cwd : undefined);
+  // Codex's shell tools carry a per-call directory; the merge runs there, so
+  // the gate's lookup must too. Falls back to the hook payload's own cwd.
+  const requestedCwd = [args.working_directory, args.workdir, args.cwd, input.cwd]
+    .find((value) => typeof value === "string" && value);
+  const commands = mergeCommands(text, requestedCwd);
   if (!commands.length) return; // not a PR merge: silent pass-through
 
   // A shell runs every command in the string, so ONE unsettled merge anywhere
