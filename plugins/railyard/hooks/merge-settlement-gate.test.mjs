@@ -839,6 +839,33 @@ gated("env -u consumes its variable name before gh is located", () => {
   assert.equal(r.code, 2);
 });
 
+gated("env -C runs the lookup in the directory the merge will use", () => {
+  const target = mkdtempSync(path.join(tmpdir(), "merge-gate-envc-"));
+  const r = run(bash(`env -C ${target} gh pr merge 7`), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.ok(
+    r.cwds.every((c) => c.endsWith(path.basename(target))),
+    `gh ran in ${JSON.stringify(r.cwds)}, expected ${target}`,
+  );
+  rmSync(target, { recursive: true, force: true });
+});
+
+gated("a GET on the merge endpoint is a status check, not a merge", () => {
+  // gh api defaults to GET; refusing this would block a read-only check.
+  const r = run(bash("gh api repos/o/r/pulls/7/merge"));
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+  assert.deepEqual(r.calls, []);
+});
+
+gated("an explicit -X GET on the merge endpoint is also not a merge", () => {
+  const r = run(bash("gh api -X GET repos/o/r/pulls/7/merge"));
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.calls, []);
+});
+
 gated("the two gh timeouts leave real margin under the 5s hook cap", () => {
   // Sequential worst case must clear the harness cap, or the harness kills the
   // hook before its own fail-open path runs.

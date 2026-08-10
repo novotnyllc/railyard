@@ -221,17 +221,23 @@ const ENV_VALUE_FLAGS = new Set(["-u", "--unset", "-C", "--chdir", "-S", "--spli
 function dropWrapperFlags(tokens) {
   const isEnv = basename(tokens[0]) === "env";
   let rest = tokens.slice(1);
+  let chdir = null;
   while (rest[0] && rest[0].startsWith("-")) {
     const flag = rest[0];
     rest = rest.slice(1);
-    if (isEnv && ENV_VALUE_FLAGS.has(flag) && rest.length) rest = rest.slice(1);
+    if (isEnv && ENV_VALUE_FLAGS.has(flag) && rest.length) {
+      // `-C DIR` runs the command from DIR, so the gate must look there too.
+      if (flag === "-C" || flag === "--chdir") chdir = rest[0];
+      rest = rest.slice(1);
+    }
   }
-  return rest;
+  return { rest, chdir };
 }
 
 function ghArgs(segmentTokens) {
   let tokens = segmentTokens.map((t) => t.replace(/^!+/, "")).filter(Boolean);
   const env = {};
+  let chdir = null;
   for (;;) {
     const head = tokens[0];
     if (!head) return null;
@@ -248,12 +254,16 @@ function ghArgs(segmentTokens) {
       continue;
     }
     if (SHELL_WRAPPERS.has(basename(head))) {
-      tokens = dropWrapperFlags(tokens);
+      const dropped = dropWrapperFlags(tokens);
+      if (dropped.chdir) chdir = dropped.chdir;
+      tokens = dropped.rest;
       continue;
     }
     break;
   }
-  return basename(tokens[0]) === "gh" ? { tokens: tokens.slice(1), env } : null;
+  return basename(tokens[0]) === "gh"
+    ? { tokens: tokens.slice(1), env, chdir }
+    : null;
 }
 
 // gh accepts `[HOST/]OWNER/REPO`. Keep the HOST: dropping it makes the gate
@@ -314,7 +324,7 @@ function wrapperScript(tokens) {
   let rest = tokens;
   while (rest.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[0])) rest = rest.slice(1);
   if (!rest.length || !SHELL_WRAPPERS.has(basename(rest[0]))) return null;
-  rest = dropWrapperFlags(rest);
+  rest = dropWrapperFlags(rest).rest;
   return rest[0] && /\s/.test(rest[0]) ? rest[0] : null;
 }
 
@@ -361,30 +371,36 @@ function mergeCommands(text, baseCwd) {
     conditional = false;
     if (!gh) continue;
     const { tokens, env } = gh;
+    // `env -C DIR gh …` runs the merge from DIR.
+    const at = gh.chdir ? path.resolve(cwd || process.cwd(), gh.chdir) : cwd;
     const { words, flags } = parseArgs(tokens);
     // `--help` prints usage; `--disable-auto` TURNS OFF auto-merge, which is
     // the mitigation to reach for during a settlement window. Refusing either
     // blocks a command that merges nothing. Checked against real options only.
     if ([...NON_MERGE_FLAGS].some((f) => flags.has(f))) continue;
     if (words[0] === "pr" && words[1] === "merge") {
-      found.push({ kind: "pr", tokens, env, flags, cwd, cwdUnknown, ref: words[2] || null });
+      found.push({ kind: "pr", tokens, env, flags, cwd: at, cwdUnknown, ref: words[2] || null });
     } else if (words[0] === "api") {
       // Only the endpoint positional — a `-H 'X-Test: repos/x/y/pulls/5/merge'`
       // header value must not be mistaken for the endpoint being called.
-      const path = words.join(" ").match(REST_MERGE_RE);
+      const method = String(flags.get("-X") || flags.get("--method") || "GET")
+        .toUpperCase();
+      // gh api defaults to GET; only PUT actually merges. Refusing a
+      // merge-status check would block a read-only call.
+      const path = method === "PUT" ? words.join(" ").match(REST_MERGE_RE) : null;
       if (path) {
         // Placeholders expand from the current repo, exactly as `gh pr view N`
         // resolves, so hand the number to that path rather than querying a
         // literal `{owner}`.
         found.push({
-          kind: "api", tokens, env, flags, cwd, cwdUnknown, endpoint: path, ref: path[3],
+          kind: "api", tokens, env, flags, cwd: at, cwdUnknown, endpoint: path, ref: path[3],
         });
       } else if (tokens.some((t) => t.includes("mergePullRequest"))) {
         // A raw GraphQL merge mutation carries a PR node id, not owner/repo/
         // number, so the gate cannot verify it. ponytail: report it loudly
         // instead of passing it in silence — upgrade to resolving the node id
         // if this form ever shows up in real use.
-        found.push({ kind: "graphql", tokens, env, flags, cwd, cwdUnknown, ref: null });
+        found.push({ kind: "graphql", tokens, env, flags, cwd: at, cwdUnknown, ref: null });
       }
     }
   }
