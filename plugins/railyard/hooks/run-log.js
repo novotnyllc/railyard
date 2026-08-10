@@ -46,6 +46,15 @@ function harness() {
   return "";
 }
 
+// Which session is running us, when the harness says so in the environment.
+// Hook-written lines take the session id from their payload; a session-written
+// `note` has no payload, so it reads the id both harnesses export to the
+// commands they spawn. Unknown is a fine answer — the field is omitted, and
+// readers that need the binding treat an unscoped line as not theirs.
+function sessionId() {
+  return clip(process.env.CLAUDE_CODE_SESSION_ID || process.env.CODEX_THREAD_ID);
+}
+
 function clip(value, max = 120) {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
@@ -81,7 +90,10 @@ if (require.main === module) {
     try {
       entry = JSON.parse(arg || "");
     } catch {}
-    if (entry && typeof entry === "object" && !Array.isArray(entry)) record(entry);
+    // Stamp the session so the line binds to the run that wrote it; an
+    // explicit session_id in the entry still wins.
+    if (entry && typeof entry === "object" && !Array.isArray(entry))
+      record({ session_id: sessionId(), ...entry });
   } else if (mode === "hook") {
     // Hook-authored line: harness payload on stdin, event name in argv.
     let raw = "";

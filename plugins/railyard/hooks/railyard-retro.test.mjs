@@ -162,6 +162,55 @@ test("another session's approach line does not arm our reminder", () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+// The grammar uses `decision` for tier choices, replans, and phase
+// boundaries — only `what:"approach"` is the substantial-by-cost signal.
+test("ordinary decision lines are not approach lines", () => {
+  for (const what of ["tier", "replan", "phase boundary"]) {
+    const dir = seedLog([{ ...approach("s1"), what }]);
+    const r = run("s1", dir);
+    assert.equal(r.stdout.trim(), "", `decision what=${what} must not nudge`);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// A legacy (or otherwise unbound) approach line belongs to no session, so it
+// must not nudge every session that ends later the same day.
+test("an unscoped approach line arms nobody's reminder", () => {
+  const { session_id, ...unscoped } = approach("s1");
+  const dir = seedLog([unscoped]);
+  const r = run("s1", dir);
+  assert.equal(r.stdout.trim(), "");
+  rmSync(dir, { recursive: true, force: true });
+});
+
+// `note` has no hook payload, so it stamps the session id the harness exports
+// — which is what binds the approach line to the run that wrote it.
+test("run-log note stamps the harness session id, and that line nudges", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "retro-note-"));
+  const note = spawnSync(
+    process.execPath,
+    [
+      path.join(path.dirname(script), "run-log.js"),
+      "note",
+      JSON.stringify({ event: "decision", what: "approach", because: "multi-host ops run" }),
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        RAILYARD_RUN_LOG_DIR: dir,
+        CLAUDE_CODE_SESSION_ID: "s1",
+        CODEX_THREAD_ID: "",
+      },
+    },
+  );
+  assert.equal(note.status, 0);
+  assert.equal(readLog(dir).at(-1).session_id, "s1");
+  assert.match(run("s1", dir).out.systemMessage, /approach line/);
+  assert.equal(run("other", dir).stdout.trim(), ""); // and only for that session
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test("threshold is overridable", () => {
   const dir = seedLog([dispatch("s1")]);
   const r = run("s1", dir, 1); // MIN=1 makes a single dispatch substantial
