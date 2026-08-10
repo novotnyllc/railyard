@@ -222,21 +222,35 @@ function dropWrapperFlags(tokens) {
   const isEnv = basename(tokens[0]) === "env";
   let rest = tokens.slice(1);
   let chdir = null;
+  const unset = [];
   while (rest[0] && rest[0].startsWith("-")) {
-    const flag = rest[0];
+    const token = rest[0];
     rest = rest.slice(1);
-    if (isEnv && ENV_VALUE_FLAGS.has(flag) && rest.length) {
+    // `--chdir=DIR` / `--unset=NAME` are documented too, so normalize the
+    // attached form before matching — an exact-match-only check drops the
+    // value silently and the wrapper looks like it took no argument.
+    const eq = token.indexOf("=");
+    const flag = eq > 0 ? token.slice(0, eq) : token;
+    let value = eq > 0 ? token.slice(eq + 1) : null;
+    if (isEnv && ENV_VALUE_FLAGS.has(flag)) {
+      if (value === null && rest.length) {
+        value = rest[0];
+        rest = rest.slice(1);
+      }
       // `-C DIR` runs the command from DIR, so the gate must look there too.
-      if (flag === "-C" || flag === "--chdir") chdir = rest[0];
-      rest = rest.slice(1);
+      if (flag === "-C" || flag === "--chdir") chdir = value;
+      // `-u NAME` REMOVES the variable, so the child must not inherit it —
+      // otherwise the merge runs without it while the gate runs with it.
+      if ((flag === "-u" || flag === "--unset") && value) unset.push(value);
     }
   }
-  return { rest, chdir };
+  return { rest, chdir, unset };
 }
 
 function ghArgs(segmentTokens) {
   let tokens = segmentTokens.map((t) => t.replace(/^!+/, "")).filter(Boolean);
   const env = {};
+  const unset = [];
   let chdir = null;
   for (;;) {
     const head = tokens[0];
@@ -256,13 +270,14 @@ function ghArgs(segmentTokens) {
     if (SHELL_WRAPPERS.has(basename(head))) {
       const dropped = dropWrapperFlags(tokens);
       if (dropped.chdir) chdir = dropped.chdir;
+      for (const name of dropped.unset) unset.push(name);
       tokens = dropped.rest;
       continue;
     }
     break;
   }
   return basename(tokens[0]) === "gh"
-    ? { tokens: tokens.slice(1), env, chdir }
+    ? { tokens: tokens.slice(1), env, chdir, unset }
     : null;
 }
 
@@ -357,13 +372,23 @@ function mergeCommands(text, baseCwd) {
       else if (cwdStack.length) cwd = cwdStack.pop();
       continue;
     }
-    if (segment[0] === "cd" && segment[1]) {
+    // `if true; then cd ../other; fi` puts `cd` behind control words. Strip
+    // them to see it, but treat it as conditional: the branch is not knowable.
+    const bare = segment[0] !== "cd"
+      ? segment.filter((t, idx) => !(idx < segment.length && CONTROL_WORDS.has(t) && segment.slice(0, idx).every((p) => CONTROL_WORDS.has(p))))
+      : segment;
+    if (bare[0] === "cd" && bare[1]) {
+      if (bare !== segment) {
+        cwdUnknown = true; // behind a control word: branch not evaluable
+        conditional = false;
+        continue;
+      }
       // `false && cd ../other; gh pr merge 7` never runs the cd, so applying
       // it would query the wrong repository. We cannot evaluate the branch,
       // so mark the directory unknown and let the merge degrade rather than
       // verify somewhere the merge will not happen.
       if (conditional) cwdUnknown = true;
-      else cwd = path.resolve(cwd || process.cwd(), segment[1]);
+      else cwd = path.resolve(cwd || process.cwd(), bare[1]);
       conditional = false;
       continue;
     }
@@ -371,6 +396,7 @@ function mergeCommands(text, baseCwd) {
     conditional = false;
     if (!gh) continue;
     const { tokens, env } = gh;
+    const unset = gh.unset;
     // `env -C DIR gh …` runs the merge from DIR.
     const at = gh.chdir ? path.resolve(cwd || process.cwd(), gh.chdir) : cwd;
     const { words, flags } = parseArgs(tokens);
@@ -379,7 +405,7 @@ function mergeCommands(text, baseCwd) {
     // blocks a command that merges nothing. Checked against real options only.
     if ([...NON_MERGE_FLAGS].some((f) => flags.has(f))) continue;
     if (words[0] === "pr" && words[1] === "merge") {
-      found.push({ kind: "pr", tokens, env, flags, cwd: at, cwdUnknown, ref: words[2] || null });
+      found.push({ kind: "pr", tokens, env, unset, flags, cwd: at, cwdUnknown, ref: words[2] || null });
     } else if (words[0] === "api") {
       // Only the endpoint positional — a `-H 'X-Test: repos/x/y/pulls/5/merge'`
       // header value must not be mistaken for the endpoint being called.
@@ -393,14 +419,14 @@ function mergeCommands(text, baseCwd) {
         // resolves, so hand the number to that path rather than querying a
         // literal `{owner}`.
         found.push({
-          kind: "api", tokens, env, flags, cwd: at, cwdUnknown, endpoint: path, ref: path[3],
+          kind: "api", tokens, env, unset, flags, cwd: at, cwdUnknown, endpoint: path, ref: path[3],
         });
       } else if (tokens.some((t) => t.includes("mergePullRequest"))) {
         // A raw GraphQL merge mutation carries a PR node id, not owner/repo/
         // number, so the gate cannot verify it. ponytail: report it loudly
         // instead of passing it in silence — upgrade to resolving the node id
         // if this form ever shows up in real use.
-        found.push({ kind: "graphql", tokens, env, flags, cwd: at, cwdUnknown, ref: null });
+        found.push({ kind: "graphql", tokens, env, unset, flags, cwd: at, cwdUnknown, ref: null });
       }
     }
   }
@@ -478,8 +504,9 @@ function explicitTarget(command) {
 // capture a github.com URL target — and forward any authentication the merge
 // command carried inline. When the host is unknown, inherit, because gh would
 // resolve the merge the same ambient way.
-function ghEnv(host, captured) {
+function ghEnv(host, captured, unset) {
   const env = { ...process.env };
+  for (const name of unset || []) delete env[name];
   if (host) env.GH_HOST = host;
   for (const key of AUTH_ENV) {
     if (captured && typeof captured[key] === "string") env[key] = captured[key];
@@ -489,7 +516,7 @@ function ghEnv(host, captured) {
 
 // `host` routes the call at the same GitHub the merge targets, so an
 // enterprise selector cannot leave the gate querying github.com.
-function gh(args, timeout, { host, env, cwd } = {}) {
+function gh(args, timeout, { host, env, cwd, unset } = {}) {
   const budget = Math.min(timeout, DEADLINE - Date.now());
   if (budget <= 0) {
     throw new Error(
@@ -501,7 +528,7 @@ function gh(args, timeout, { host, env, cwd } = {}) {
   return execFileSync("gh", args, {
     encoding: "utf8",
     timeout: budget,
-    env: ghEnv(host, env),
+    env: ghEnv(host, env, unset),
     cwd,
     // stdin ignored so a gh auth prompt can never hang the hook.
     stdio: ["ignore", "pipe", "ignore"],
@@ -521,6 +548,7 @@ function resolveViaGh(command) {
       host: hostFromCommand(command),
       env: command.env,
       cwd: command.cwd,
+      unset: command.unset,
     }),
   );
   // Any GitHub host, not just github.com — an enterprise URL must still parse.
@@ -548,7 +576,7 @@ function settlement(target, command) {
       "-F", `number=${target.number}`,
     ],
     GRAPHQL_TIMEOUT_MS,
-    { host: target.host, env: command.env, cwd: command.cwd },
+    { host: target.host, env: command.env, cwd: command.cwd, unset: command.unset },
   );
   const pr = JSON.parse(raw)?.data?.repository?.pullRequest;
   if (!pr || typeof pr.headRefOid !== "string") {

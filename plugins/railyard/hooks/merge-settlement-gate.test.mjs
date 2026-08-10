@@ -866,6 +866,47 @@ gated("an explicit -X GET on the merge endpoint is also not a merge", () => {
   assert.deepEqual(r.calls, []);
 });
 
+gated("env -u removes the variable from the gate's own calls", () => {
+  // With ambient GH_HOST set, the merge defaults to github.com after the
+  // unset; the gate must not keep querying the enterprise host.
+  const r = run(bash("env -u GH_HOST gh pr merge 7"), {
+    ambientHost: "github.example.com",
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  // The identity lookup must run with GH_HOST removed, exactly as the merge
+  // would. (The settlement call then pins whatever host the PR resolved to.)
+  assert.equal(r.hosts[0], "");
+  assert.ok(
+    r.hosts.every((h) => h !== "github.example.com"),
+    `enterprise host leaked into ${JSON.stringify(r.hosts)}`,
+  );
+});
+
+gated("env --chdir=DIR (attached form) is honored", () => {
+  const target = mkdtempSync(path.join(tmpdir(), "merge-gate-attach-"));
+  const r = run(bash(`env --chdir=${target} gh pr merge 7`), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.ok(
+    r.cwds.every((c) => c.endsWith(path.basename(target))),
+    `gh ran in ${JSON.stringify(r.cwds)}, expected ${target}`,
+  );
+  rmSync(target, { recursive: true, force: true });
+});
+
+gated("a cd behind control words makes the directory indeterminate", () => {
+  // `if true; then cd ../other; fi` — the branch is not evaluable here, so
+  // degrade rather than verify a directory the merge may not use.
+  const r = run(bash("if true; then cd /tmp; fi; gh pr merge 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 0);
+  assert.match(r.err, /DEGRADED/);
+  assert.deepEqual(r.calls, []);
+});
+
 gated("the two gh timeouts leave real margin under the 5s hook cap", () => {
   // Sequential worst case must clear the harness cap, or the harness kills the
   // hook before its own fail-open path runs.
