@@ -612,6 +612,28 @@ gated("a merge behind an if-condition is still gated", () => {
   assert.equal(r.code, 2);
 });
 
+gated("-A consumes its value and does not become the PR ref", () => {
+  const r = run(bash("gh pr merge -A dev@example.com 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
+});
+
+gated("a merge inside a case block is still gated", () => {
+  const r = run(bash("case yes in yes) gh pr merge 7;; esac"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("a merge inside command substitution is still gated", () => {
+  const r = run(bash("echo $(gh pr merge 7)"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
 gated("the two gh timeouts leave real margin under the 5s hook cap", () => {
   // Sequential worst case must clear the harness cap, or the harness kills the
   // hook before its own fail-open path runs.

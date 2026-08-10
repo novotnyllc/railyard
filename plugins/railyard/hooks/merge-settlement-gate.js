@@ -79,7 +79,12 @@ function commandText(args) {
 // identity onto the wrong PR, whose settled state can wrongly ALLOW the real
 // merge. So: split into commands, find the one that really is a merge, and
 // read its identity from that command's tokens only.
-const SEGMENT_SPLIT = /\|\||&&|[;\n|&]/;
+// Parens split too: they close a subshell `(gh pr merge 7)`, terminate a case
+// pattern `yes) gh pr merge 7`, and open a substitution `$(gh pr merge 7)` —
+// all forms where the merge is not the segment's first token and would
+// otherwise run with no gate and no notice. Splitting there puts `gh` at the
+// front of its own segment, which keeps the decoy protection intact.
+const SEGMENT_SPLIT = /\|\||&&|[;\n|&()]/;
 // Wrappers an agent puts in front of the real command — notably Codex's argv
 // form ["bash","-lc","gh pr merge 7"], which joins to a wrapper-prefixed string.
 const SHELL_WRAPPERS = new Set(["bash", "sh", "zsh", "dash", "env"]);
@@ -87,8 +92,9 @@ const SHELL_WRAPPERS = new Set(["bash", "sh", "zsh", "dash", "env"]);
 // `(gh pr merge 7)`, `if gh pr merge 7; then ...`. Missing these means the
 // segment looks unrelated and the merge runs with no gate and no notice.
 const CONTROL_WORDS = new Set([
-  "if", "then", "else", "elif", "do", "while", "until", "time", "command",
-  "exec", "nohup", "builtin",
+  "if", "then", "else", "elif", "fi", "do", "done", "while", "until", "for",
+  "case", "esac", "in", "select", "function", "time", "command", "exec",
+  "nohup", "builtin",
 ]);
 // Authentication the merge command carries inline. Without forwarding it the
 // settlement query is unauthenticated, degrades open, and the shell's merge
@@ -102,7 +108,7 @@ const AUTH_ENV = [
 // `gh pr merge`'s own; over-listing is harmless, under-listing is a bug.
 const VALUE_FLAGS = new Set([
   "-R", "--repo", "-b", "--body", "-F", "--body-file", "-t", "--subject",
-  "--match-head-commit", "--author-email",
+  "--match-head-commit", "--author-email", "-A",
   // gh api's own value-taking flags, so `--hostname HOST` is read as a host
   // and `--method PUT` does not leak `PUT` into the positional words.
   "--hostname", "--method", "-X", "-f", "-H", "--header", "--input",
