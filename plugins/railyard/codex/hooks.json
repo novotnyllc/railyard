@@ -27,7 +27,7 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/railyard-retro.js\"",
             "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\railyard-retro.js\" }",
-            "timeout": 5
+            "timeout": 3
           }
         ]
       }

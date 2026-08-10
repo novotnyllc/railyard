@@ -285,6 +285,9 @@ test("plugin packaging exposes actual root SessionEnd cleanup and no Claude hook
   const retroHook = hooks.hooks.SessionEnd[0].hooks[1];
   assert.match(retroHook.command, /railyard-retro\.js/);
   assert.doesNotMatch(retroHook.command, /cleanup-codex/);
+  // Same 3s clamp: anything higher only earns a load warning. The reminder
+  // reads one day file and writes one line — ~30ms measured.
+  assert.equal(retroHook.timeout, 3);
 });
 
 test("Claude loader excludes the Codex-only SessionEnd hook", (context) => {
