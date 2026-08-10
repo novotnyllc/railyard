@@ -83,6 +83,7 @@ const VALUE_FLAGS = new Set([
   "-R", "--repo", "-b", "--body", "-F", "--body-file", "-t", "--subject",
   "--match-head-commit", "--author-email",
 ]);
+const NON_MERGE_FLAGS = new Set(["--help", "-h", "--disable-auto"]);
 const REST_MERGE_RE = /repos\/([^\s/]+)\/([^\s/]+)\/pulls\/(\d+)\/merge/;
 
 const unquote = (token) => token.replace(/^['"]+/, "").replace(/['"]+$/, "");
@@ -119,17 +120,19 @@ function ghArgs(segment) {
   return basename(tokens[0]) === "gh" ? { tokens: tokens.slice(1), env } : null;
 }
 
-// gh accepts `[HOST/]OWNER/REPO`, so take the last two path segments. An
-// unexpanded `{owner}`/`{repo}` placeholder means gh will fill it from the
-// current repository, so it is not a usable target — return null and let
-// `gh pr view` resolve the same way gh itself would.
+// gh accepts `[HOST/]OWNER/REPO`. Keep the HOST: dropping it makes the gate
+// query github.com while the merge targets an enterprise host, which usually
+// degrades open and lets an unsettled merge through. An unexpanded
+// `{owner}`/`{repo}` placeholder means gh will fill it from the current
+// repository, so it is not a usable target — return null and let `gh pr view`
+// resolve the same way gh itself would.
 function parseRepo(value) {
   const parts = String(value || "").split("/").filter(Boolean);
   if (parts.length < 2) return null;
   const owner = parts[parts.length - 2];
   const name = parts[parts.length - 1];
   if (/[{}]/.test(owner + name)) return null;
-  return { owner, name };
+  return { host: parts.length > 2 ? parts[parts.length - 3] : null, owner, name };
 }
 
 // Positional words in order, with flags and their consumed values removed —
@@ -160,7 +163,10 @@ function mergeCommands(text) {
     const gh = ghArgs(segment);
     if (!gh) continue;
     const { tokens, env } = gh;
-    if (tokens.some((t) => t === "--help" || t === "-h")) continue;
+    // `--help` prints usage; `--disable-auto` TURNS OFF auto-merge, which is
+    // the mitigation to reach for during a settlement window. Refusing either
+    // blocks a command that merges nothing.
+    if (tokens.some((t) => NON_MERGE_FLAGS.has(t))) continue;
     const words = positionals(tokens);
     if (words[0] === "pr" && words[1] === "merge") {
       found.push({ kind: "pr", tokens, env, ref: words[2] || null });
@@ -197,7 +203,13 @@ function repoFromCommand(command) {
     const repo = value && parseRepo(value);
     if (repo) return repo;
   }
-  return env && env.GH_REPO ? parseRepo(env.GH_REPO) : null;
+  const fromEnv = env && env.GH_REPO ? parseRepo(env.GH_REPO) : null;
+  if (fromEnv) {
+    return fromEnv.host || !env.GH_HOST
+      ? fromEnv
+      : { ...fromEnv, host: env.GH_HOST };
+  }
+  return null;
 }
 
 // owner + repo + number, or null when the command does not carry all three —
@@ -215,20 +227,24 @@ function explicitTarget(command) {
     const path = command.tokens.join(" ").match(REST_MERGE_RE);
     const fromPath = path && parseRepo(`${path[1]}/${path[2]}`);
     if (fromPath) {
-      return { owner: fromPath.owner, name: fromPath.name, number: Number(path[3]) };
+      return { ...fromPath, number: Number(path[3]) };
     }
   }
   const repo = repoFromCommand(command);
   if (repo && command.ref && /^\d+$/.test(command.ref)) {
-    return { owner: repo.owner, name: repo.name, number: Number(command.ref) };
+    return { ...repo, number: Number(command.ref) };
   }
   return null;
 }
 
-function gh(args, timeout) {
+// `host` routes the call at the same GitHub the merge targets. GH_HOST covers
+// both `gh pr view` and `gh api graphql` with one mechanism, so an enterprise
+// selector cannot leave the gate querying github.com.
+function gh(args, timeout, host) {
   return execFileSync("gh", args, {
     encoding: "utf8",
     timeout,
+    env: host ? { ...process.env, GH_HOST: host } : process.env,
     // stdin ignored so a gh auth prompt can never hang the hook.
     stdio: ["ignore", "pipe", "ignore"],
   });
@@ -240,12 +256,18 @@ function resolveViaGh(command) {
   const repo = repoFromCommand(command);
   if (repo) args.push("--repo", `${repo.owner}/${repo.name}`);
   args.push("--json", "number,url");
-  const view = JSON.parse(gh(args, VIEW_TIMEOUT_MS));
+  const view = JSON.parse(gh(args, VIEW_TIMEOUT_MS, repo && repo.host));
+  // Any GitHub host, not just github.com — an enterprise URL must still parse.
   const url = String(view.url || "").match(
-    /github\.com\/([^\s/]+)\/([^\s/]+)\/pull\/(\d+)/,
+    /https?:\/\/([^\s/]+)\/([^\s/]+)\/([^\s/]+)\/pull\/(\d+)/,
   );
   if (!url) throw new Error("gh pr view returned no resolvable PR url");
-  return { owner: url[1], name: url[2], number: Number(view.number || url[3]) };
+  return {
+    host: url[1] === "github.com" ? null : url[1],
+    owner: url[2],
+    name: url[3],
+    number: Number(view.number || url[4]),
+  };
 }
 
 function settlement(target) {
@@ -260,6 +282,7 @@ function settlement(target) {
       "-F", `number=${target.number}`,
     ],
     GRAPHQL_TIMEOUT_MS,
+    target.host,
   );
   const pr = JSON.parse(raw)?.data?.repository?.pullRequest;
   if (!pr || typeof pr.headRefOid !== "string") {

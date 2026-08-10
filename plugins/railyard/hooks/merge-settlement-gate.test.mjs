@@ -23,6 +23,7 @@ const gated = (name, fn) => test(name, { skip: SKIP_WIN }, fn);
 
 const SHIM = `#!/bin/sh
 echo "$1 $2" >> "$GH_CALL_LOG"
+echo "$GH_HOST" >> "$GH_HOST_LOG"
 if [ -n "$GH_FIXTURE_SLEEP" ]; then sleep "$GH_FIXTURE_SLEEP"; fi
 if [ -n "$GH_FIXTURE_FAIL" ]; then echo "gh: could not authenticate" >&2; exit 1; fi
 case "$1 $2" in
@@ -84,6 +85,8 @@ function run(input, fixtures = {}) {
   chmodSync(shim, 0o755);
   const callLog = path.join(dir, "calls.log");
   writeFileSync(callLog, "");
+  const hostLog = path.join(dir, "hosts.log");
+  writeFileSync(hostLog, "");
 
   const result = spawnSync(process.execPath, [script], {
     input: typeof input === "string" ? input : JSON.stringify(input),
@@ -92,6 +95,8 @@ function run(input, fixtures = {}) {
       ...process.env,
       PATH: `${dir}${path.delimiter}${process.env.PATH}`,
       GH_CALL_LOG: callLog,
+      GH_HOST_LOG: hostLog,
+      GH_HOST: "",
       GH_FIXTURE_VIEW: fixtures.view ?? VIEW_OK,
       GH_FIXTURE_GRAPHQL: fixtures.graphql ?? settlement(),
       GH_FIXTURE_FAIL: fixtures.fail ? "1" : "",
@@ -99,8 +104,10 @@ function run(input, fixtures = {}) {
     },
   });
   const calls = readFileSync(callLog, "utf8").split("\n").filter(Boolean);
+  // Trailing "" entries matter (no host override), so do not filter these.
+  const hosts = readFileSync(hostLog, "utf8").split("\n").slice(0, calls.length);
   rmSync(dir, { recursive: true, force: true });
-  return { code: result.status, err: result.stderr, calls };
+  return { code: result.status, err: result.stderr, calls, hosts };
 }
 
 // --- refusals (the only two determinable violations) ----------------------
@@ -483,6 +490,52 @@ gated("a host-qualified -R HOST/OWNER/REPO selector is honored", () => {
   });
   assert.equal(r.code, 2);
   assert.deepEqual(r.calls, ["api graphql"]); // selector parsed, not dropped
+});
+
+gated("a host-qualified selector routes the gh calls at that host", () => {
+  // Parsing the selector but discarding its host left the gate querying
+  // github.com while the merge targeted the enterprise host — usually
+  // degrading open on an unsettled merge.
+  const r = run(bash("gh -R github.example.com/owner/repo pr merge 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.equal(r.hosts.at(-1), "github.example.com");
+});
+
+gated("a plain OWNER/REPO selector sets no host override", () => {
+  const r = run(bash("gh -R owner/repo pr merge 7"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+  assert.equal(r.hosts.at(-1), "");
+});
+
+gated("--disable-auto turns auto-merge OFF and is not a merge", () => {
+  // This is the mitigation to reach for during a settlement window; refusing
+  // it blocks the very command that stands the merge down.
+  const r = run(bash("gh pr merge 7 --disable-auto"));
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+  assert.deepEqual(r.calls, []);
+});
+
+gated("--auto is still a merge (it merges once checks pass)", () => {
+  const r = run(bash("gh pr merge 7 --auto --squash"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("the documented AGENTS.md verify command lists every CI suite", () => {
+  // AGENTS.md states its list is exactly what validate.yml runs; drift means
+  // the documented local path silently skips a suite.
+  const root = new URL("../../../", import.meta.url);
+  const agents = readFileSync(new URL("AGENTS.md", root), "utf8");
+  const workflow = readFileSync(new URL(".github/workflows/validate.yml", root), "utf8");
+  const suites = (text) =>
+    [...text.matchAll(/plugins\/railyard\/[^\s\\]+\.test\.mjs/g)].map((m) => m[0]).sort();
+  assert.deepEqual(suites(agents), [...new Set(suites(workflow))].sort());
 });
 
 gated("the two gh timeouts leave real margin under the 5s hook cap", () => {
