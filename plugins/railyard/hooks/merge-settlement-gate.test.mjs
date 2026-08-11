@@ -965,6 +965,45 @@ gated("env -i does not let the gate inherit the ambient environment", () => {
   assert.match(r.err, /DEGRADED/);
 });
 
+gated("argv boundaries survive: a spaced --body value stays one argument", () => {
+  // Joining argv on spaces turned the body text into tokens and made --help a
+  // real option again, skipping the gate on a Codex-native payload shape.
+  const r = run({
+    tool_name: "shell",
+    tool_input: { command: ["gh", "pr", "merge", "7", "--body", "normal text --help"] },
+  }, { graphql: settlement({ threads: [false] }) });
+  assert.equal(r.code, 2);
+});
+
+gated("stacked wrappers are peeled to find the merge", () => {
+  const r = run(bash("env bash -lc 'gh pr merge 7'"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("a backtick substitution is still gated", () => {
+  const r = run(bash("echo `gh pr merge 7`"), {
+    graphql: settlement({ threads: [false] }),
+  });
+  assert.equal(r.code, 2);
+});
+
+gated("a cd inside a pipeline does not move the later merge", () => {
+  // `cd /tmp | cat` runs in a subshell; the merge stays in the original dir.
+  const base = mkdtempSync(path.join(tmpdir(), "merge-gate-pipe-"));
+  const r = run({
+    tool_name: "Bash",
+    tool_input: { command: "cd /tmp | cat; gh pr merge 7", working_directory: base },
+  }, { graphql: settlement({ threads: [false] }) });
+  assert.equal(r.code, 2);
+  assert.ok(
+    r.cwds.every((c) => c.endsWith(path.basename(base))),
+    `gh ran in ${JSON.stringify(r.cwds)}, expected ${base}`,
+  );
+  rmSync(base, { recursive: true, force: true });
+});
+
 gated("the two gh timeouts leave real margin under the 5s hook cap", () => {
   // Sequential worst case must clear the harness cap, or the harness kills the
   // hook before its own fail-open path runs.

@@ -61,12 +61,20 @@ query($owner:String!,$name:String!,$number:Int!){
 // tool sends tool_input.command as a STRING; Codex's shell/local_shell send an
 // argv ARRAY there, exec_command uses `cmd`, unified_exec uses `input`.
 // Unknown shapes contribute nothing and the gate skips.
+// An argv ARRAY already carries its word boundaries, so joining on spaces
+// destroys them: ["--body","normal text --help"] would turn the body's text
+// into separate tokens and `--help` back into a real option. Re-quote any
+// element containing whitespace so the tokenizer sees one token again.
+const requote = (item) => (/[\s'"]/.test(item)
+  ? "'" + item.replace(/'/g, "'\\''") + "'"
+  : item);
+
 function commandText(args) {
   const parts = [];
   for (const value of [args.command, args.cmd, args.input]) {
     if (typeof value === "string") parts.push(value);
     else if (Array.isArray(value)) {
-      for (const item of value) if (typeof item === "string") parts.push(item);
+      for (const item of value) if (typeof item === "string") parts.push(requote(item));
     }
   }
   return parts.join(" ");
@@ -194,6 +202,11 @@ function tokenizeSegments(text) {
       quote = char;
       continue;
     }
+    // `` `gh pr merge 7` `` runs the merge just like $( ).
+    if (char === "`") {
+      endSegment();
+      continue;
+    }
     if (char === "\\" && i + 1 < text.length) {
       // Line continuation: the shell removes the backslash AND the newline,
       // so keeping the newline made it the PR reference.
@@ -221,8 +234,10 @@ function tokenizeSegments(text) {
       endSegment();
       const doubled = text[i + 1] === char;
       if (doubled) i += 1;
-      // Marker: `&&`/`||` make what FOLLOWS conditional.
+      // Marker: `&&`/`||` make what FOLLOWS conditional. A single `|` is a
+      // pipeline, whose stages run in subshells — a `cd` there never persists.
       if (doubled) segments.push([char + char]);
+      else if (char === "|") segments.push(["|"]);
     } else current += char;
   }
   endSegment();
@@ -388,12 +403,17 @@ function parseArgs(tokens) {
 // (Codex's argv form joins to separate tokens and is handled by ghArgs.)
 function wrapperScript(tokens) {
   let rest = tokens;
-  while (rest.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[0])) rest = rest.slice(1);
-  if (!rest.length || !SHELL_WRAPPERS.has(basename(rest[0]))) return null;
-  const dropped = dropWrapperFlags(rest);
-  if (dropped.splitString) return dropped.splitString; // env -S 'gh pr merge 7'
-  rest = dropped.rest;
-  return rest[0] && /\s/.test(rest[0]) ? rest[0] : null;
+  // Wrappers stack: `env bash -lc '…'`, `env -C dir bash -lc '…'`. Peel each
+  // layer until a script payload appears or there is no wrapper left.
+  for (let depth = 0; depth < 8; depth += 1) {
+    while (rest.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[0])) rest = rest.slice(1);
+    if (!rest.length || !SHELL_WRAPPERS.has(basename(rest[0]))) return null;
+    const dropped = dropWrapperFlags(rest);
+    if (dropped.splitString) return dropped.splitString; // env -S 'gh pr merge 7'
+    rest = dropped.rest;
+    if (rest[0] && /\s/.test(rest[0])) return rest[0];
+  }
+  return null;
 }
 
 function mergeCommands(text, baseCwd) {
@@ -406,6 +426,7 @@ function mergeCommands(text, baseCwd) {
   let cwd = baseCwd || undefined;
   const cwdStack = [];
   let conditional = false; // the previous separator was && or ||
+  let pipeline = false; // the previous separator was a single |
   let cwdUnknown = false;
   // Bounded: a pathological nest cannot spin the hook inside its budget.
   for (let i = 0; i < queue.length && i < 64; i += 1) {
@@ -417,6 +438,10 @@ function mergeCommands(text, baseCwd) {
     }
     if (segment.length === 1 && (segment[0] === "&&" || segment[0] === "||")) {
       conditional = true;
+      continue;
+    }
+    if (segment.length === 1 && segment[0] === "|") {
+      pipeline = true; // stages run in subshells
       continue;
     }
     if (segment.length === 1 && (segment[0] === "(" || segment[0] === ")")) {
@@ -440,13 +465,20 @@ function mergeCommands(text, baseCwd) {
       // it would query the wrong repository. We cannot evaluate the branch,
       // so mark the directory unknown and let the merge degrade rather than
       // verify somewhere the merge will not happen.
+      // A `cd` in a pipeline stage runs in a subshell and is discarded, so it
+      // must not move the gate's directory either. The `|` marker follows the
+      // stage it terminates, so look ahead as well as behind.
+      const piped = pipeline ||
+        (queue[i + 1] && queue[i + 1].length === 1 && queue[i + 1][0] === "|");
       if (conditional) cwdUnknown = true;
-      else cwd = path.resolve(cwd || process.cwd(), bare[1]);
+      else if (!piped) cwd = path.resolve(cwd || process.cwd(), bare[1]);
       conditional = false;
+      pipeline = false;
       continue;
     }
     const gh = ghArgs(segment);
     conditional = false;
+    pipeline = false;
     if (!gh) continue;
     const { tokens, env } = gh;
     const unset = gh.unset;
