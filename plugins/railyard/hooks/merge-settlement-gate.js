@@ -64,8 +64,10 @@ query($owner:String!,$name:String!,$number:Int!){
 // An argv ARRAY already carries its word boundaries, so joining on spaces
 // destroys them: ["--body","normal text --help"] would turn the body's text
 // into separate tokens and `--help` back into a real option. Re-quote any
-// element containing whitespace so the tokenizer sees one token again.
-const requote = (item) => (/[\s'"]/.test(item)
+// element containing whitespace OR a shell metacharacter, so that a literal
+// argument like ";" stays data instead of becoming a command separator and
+// refusing a harmless command.
+const requote = (item) => (/[\s'"`;|&()<>{}$]/.test(item)
   ? "'" + item.replace(/'/g, "'\\''") + "'"
   : item);
 

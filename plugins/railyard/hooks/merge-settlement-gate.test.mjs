@@ -1004,6 +1004,18 @@ gated("a cd inside a pipeline does not move the later merge", () => {
   rmSync(base, { recursive: true, force: true });
 });
 
+gated("a literal ; in argv is data, not a command separator", () => {
+  // `printf %s ";" gh pr merge 7` runs printf — no merge. Letting the argument
+  // split the command would refuse a harmless call.
+  const r = run({
+    tool_name: "shell",
+    tool_input: { command: ["printf", "%s", ";", "gh", "pr", "merge", "7"] },
+  });
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+  assert.deepEqual(r.calls, []);
+});
+
 gated("the two gh timeouts leave real margin under the 5s hook cap", () => {
   // Sequential worst case must clear the harness cap, or the harness kills the
   // hook before its own fail-open path runs.
