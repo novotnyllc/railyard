@@ -35,7 +35,8 @@ node --test \
   plugins/railyard/hooks/routing-nudge.test.mjs \
   plugins/railyard/hooks/dispatch-gate.test.mjs \
   plugins/railyard/hooks/routing-charter.test.mjs \
-  plugins/railyard/hooks/railyard-retro.test.mjs
+  plugins/railyard/hooks/railyard-retro.test.mjs \
+  plugins/railyard/hooks/merge-settlement-gate.test.mjs
 ```
 
 These are exactly the suites `.github/workflows/validate.yml` runs on Linux
