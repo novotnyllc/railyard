@@ -105,23 +105,24 @@ only understands macOS process semantics, so everywhere else it's a guaranteed-s
 pass-through. Claude Code exposes this skill for explicit, manual use but does not install the
 Codex `SessionEnd` hook itself.
 
-## Boundaries
+## Scope
 
-- `reap` and the hook's live mutation logic are macOS-only; every other platform gets a clean
-  no-op exit rather than weaker, best-guess evidence.
-- Incomplete process, ancestry, descriptor, or socket evidence is always treated as a refusal —
-  never filled in with a guess.
-- Never signals by name, age, or resource pressure, and never uses `killall` or broad
-  process-pattern matching. Age, descriptor counts, and child-process counts identify pressure
-  worth looking at — they never by themselves authorize cleanup.
-- Never breaks a contended mutation lock automatically; a live lock owner has to resolve before
-  a retry.
-- Never unlinks `app-server-control.sock` — that belongs to native app-server startup.
-- Never archives tasks, infers task completion, changes launchers, or changes descriptor limits.
-- Never runs a live `recycle` without your explicit approval at the confirmation step.
-- JSON output carries process metadata and canonical identities only — raw command arguments,
-  prompts, transcripts, environment values, and unrelated process arguments are discarded, never
-  recorded.
+- `reap` and the hook's live mutation logic operate on macOS; every other platform returns a clean
+  no-op exit, keeping the evidence requirement intact.
+- Complete process, ancestry, descriptor, and socket evidence is required for cleanup; incomplete
+  evidence produces a refusal and preserves evidence integrity.
+- Cleanup authorization uses canonical process identities and complete evidence. The cleanup signal
+  set uses those identities and evidence; process name, age, resource pressure, `killall`, and broad
+  process-pattern matching provide diagnostic context. Age, descriptor counts, and child-process
+  counts support investigation, while complete evidence governs cleanup authorization.
+- Contended mutation locks remain with their live owner until that owner resolves the contention;
+  cleanup retries afterward.
+- `app-server-control.sock` stays under native app-server startup ownership.
+- Task archiving, completion inference, launcher changes, and descriptor-limit changes remain with
+  their owning workflows.
+- A live `recycle` runs only after the confirmation step records your explicit approval.
+- JSON output carries process metadata and canonical identities; raw command arguments, prompts,
+  transcripts, environment values, and unrelated process arguments are discarded at serialization.
 
 ## Exit codes
 
@@ -147,4 +148,3 @@ the owner is authoritatively absent, sends `TERM` to the exact recorded PIDs, wa
 `KILL` only to survivors, and exits `0` once the final check confirms the old identities are
 gone. Nothing else on the machine — including any GUI-attached Codex process — was ever a
 candidate.
-

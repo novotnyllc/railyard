@@ -158,19 +158,20 @@ persona, legitimacy checks, writer ownership, review authority, or terminal boun
 exact carrier/seam isn't attested, the router returns `transport_unsupported` or a disclosed
 fallback — it doesn't improvise a substitute.
 
-## Boundaries
+## Scope
 
-- Model routing decides; it never executes. It doesn't spin up a browser, call a provider API,
-  or run a command — the calling workflow does that with the decision it was handed.
-- It doesn't invent model names, tiers, or ranking rules. The normative contract — commands,
-  request shapes, catalog schema, budget rules, CE override clauses — lives in
-  `references/model-routing.md`; this skill is the entrypoint, not a second source of truth.
-- A skill cannot switch its own session's model. If a session is running a premium tier and the
-  next unit of work is mechanical, that unit goes to a freshly dispatched child carrying the
-  routed tier — it does not run inline just because the session is already there.
-- `refresh` is local-only. It never probes a live provider, and none of this skill's commands
-  mint "the provider actually worked" evidence — that requires a separately authorized canary or
-  an equivalently bound trusted receipt.
+- Model routing selects a route; the calling workflow performs execution with
+  that decision. Browser calls, provider APIs, and commands belong to that
+  workflow.
+- Model names, tiers, and ranking rules come from the normative contract —
+  commands, request shapes, catalog schema, budget rules, and CE override
+  clauses in `references/model-routing.md`. This skill is the entrypoint while
+  that normative contract remains the source of truth.
+- Each session keeps its model fixed. Mechanical work from a premium session
+  runs in a fresh child carrying the routed tier, so the parent remains the
+  controller.
+- `refresh` reads local evidence only. Provider capability evidence comes from
+  a separately authorized canary or an equivalently bound trusted receipt.
 
 ## Example session
 
@@ -187,4 +188,3 @@ call is missing the `model` field for any reason, the `PreToolUse` gate refuses 
 with a message naming the fix, and the retry succeeds once the field is set. Deliver never
 reports the fix as done because CI is green; it reports the model/effort actually used alongside
 the merge and post-merge proof.
-

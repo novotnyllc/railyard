@@ -77,15 +77,14 @@ retrospective, it reminds you to run this loop. The hook only surfaces the
 reminder; it reads the run log's own counts, captures no prompt or content, and
 never blocks the session ending.
 
-## Boundaries
+## Scope
 
-- Audit reads evidence; it never mutates state and never resolves a new routing
-  decision during an audit.
-- When the record does not capture why a thing happened, audit says the record
-  doesn't capture why — it never reconstructs a plausible rationale that was not
-  written down. A missing reason is itself a finding.
-- Writing a suggestion is not permission to post or implement it. Audit offers the
-  paths and stops.
+- Audit reads the recorded evidence. The owning workflow handles state mutation
+  and new routing decisions after the audit.
+- When the record omits why something happened, audit reports the absent recorded
+  rationale rather than reconstructing one. A missing reason is itself a finding.
+- Suggestions remain proposals until their owning workflow authorizes posting or
+  implementation. Audit offers the paths and stops.
 
 ## Example session
 

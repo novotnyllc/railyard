@@ -157,18 +157,15 @@ Doctor never mutates anything during the diagnostic pass itself, never uses
 touches enrolled or privileged state outside the skill that actually owns that
 ceremony.
 
-## Boundaries
+## Scope
 
-- Diagnosis is always read-only; every mutation is a separate, consented,
+- Diagnosis reads state; each mutation travels through its own consented,
   delegated step.
-- Doctor doesn't own the fix for anything — it identifies the problem and routes
-  the fix to the
-  skill that owns that surface (Roundhouse skills for fleet/host issues, setup for
-missing
+- Doctor identifies the problem and routes the fix to the skill that owns that
+  surface (Roundhouse skills for fleet/host issues, setup for missing
   prerequisites).
-- It never touches privileged or enrolled state (SSH certificate signing, host
-  enrollment)
-  outside that state's own owning skill and ceremony.
+- Privileged or enrolled state (SSH certificate signing, host enrollment) stays
+  under its own owning skill and ceremony, with Doctor routing requests there.
 
 ## Example session
 

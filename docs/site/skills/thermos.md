@@ -92,18 +92,16 @@ recorded with its evidence rather than silently dropped. If individual reviewer 
 already visible to you, Thermos doesn't restate them wholesale — it surfaces the unified
 verdict, the highest-signal findings, and whatever uncertainty remains.
 
-## Boundaries
+## Scope
 
-- Thermos reviews; it doesn't implement fixes itself, and it doesn't decide whether to merge —
-  that decision belongs to whichever workflow invoked it (typically [deliver](./deliver.md)'s
-  delivery tail).
-- It's a pre-commit gate, not a replacement for tests, React Doctor, CE code review, or CI —
-  those still run on their own schedule.
-- The correctness lens only reports issues in code the diff actually touches; it's explicitly
-  instructed not to flag pre-existing issues in unrelated code.
-- The code-quality lens is deliberately strict and structural — it's not tuned for style nits,
-  and it's told to prefer a small number of high-conviction structural findings over a long list
-  of cosmetic ones.
+- Thermos reviews the diff; fixes are implemented by the owning workflow, and merge is decided by
+  the workflow that invoked it (typically [deliver](./deliver.md)'s delivery tail).
+- Thermos is the pre-commit gate alongside tests, React Doctor, CE code review, and CI; each remains
+  an independent gate on its own schedule.
+- The correctness lens reports issues in code touched by the diff; unrelated pre-existing code stays
+  with its existing owner.
+- The code-quality lens targets structural findings with a small number of high-conviction results;
+  cosmetic style nits stay with ordinary style review.
 
 ## Example session
 
@@ -121,4 +119,3 @@ near-duplicate retry helper when an existing one already covers the case, and fl
 canonical-helper duplication rather than a style nit. Thermos synthesizes both into one findings
 list, both get fixed before commit, and the chunk proceeds to the React gate (skipped here — no
 UI touched) and then commit.
-

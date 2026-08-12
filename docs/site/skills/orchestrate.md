@@ -174,21 +174,23 @@ surface in one pass rather than found one expensive run at a time.
    children are revised or canceled, and the new contract propagates without restarting
    unaffected work.
 
-## Boundaries
+## Scope
 
-- Orchestrate is scoped to the objective, not to one project or one machine. For cross-project
-  delivery, each project gets an explicit integration and baseline owner.
-- It never implements, tests, commits, pushes, or merges child work — that authority stays with
-  the child (typically a [deliver](./deliver.md) lane) and gets verified, not repeated, by the
-  orchestrator.
-- A checkpoint push is not a review-ready branch, an open PR, green CI, or completion —
-  orchestrate records that evidence but never pushes it itself; the delivery owner does.
-- A task is only eligible for archive once its acceptance criteria have inspectable evidence,
-  required tests/reviews/docs are complete, delivery tasks show authorized merge and post-merge
-  proof, every task-created worktree is gone from both the registry and the filesystem, and
-  merged/closed/abandoned branches are cleaned up. Harness "stopped" or "idle" signals are never
-  treated as that evidence.
-- Never a dirty worktree or unmerged ref deleted without your explicit authorization.
+- Orchestrate is scoped to the objective, with each cross-project delivery
+  receiving an explicit integration and baseline owner.
+- Child work owns implementation, tests, commits, pushes, and merges (typically
+  through a [deliver](./deliver.md) lane); the orchestrator verifies that work
+  rather than repeating it.
+- A checkpoint push records resumability. Review-ready branch, open PR, green
+  CI, and completion are later states; the delivery owner performs branch
+  pushes and the orchestrator records and verifies their evidence.
+- Archive eligibility requires inspectable acceptance evidence, complete
+  tests/reviews/docs, authorized merge and post-merge proof for delivery tasks,
+  absent task worktrees from the registry and filesystem, and cleaned
+  merged/closed/abandoned branches. Harness stop and idle signals remain
+  observational until that evidence exists.
+- Dirty worktrees and unmerged refs remain until explicit authorization covers
+  their deletion.
 
 ## Example session
 
@@ -206,4 +208,3 @@ as a real `claude` process launched over SSH through the WSL side of the Windows
 tmux session it reports the attach command for. It tracks both lanes to terminal acceptance
 (merge plus post-merge proof for each), synthesizes the combined result, and only then retitles
 and closes out each child.
-

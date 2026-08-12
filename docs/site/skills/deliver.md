@@ -190,21 +190,21 @@ a boundary test; the plan or PR can't name its exact verification surface; a Rea
 skipped the React gate; or risky work skipped its final Thermos gate (or a chunk-hardened route
 skipped a chunk gate).
 
-## Boundaries
+## Scope
 
-- Deliver owns one host-local implementation or PR lane, start to its requested terminal state.
-  If the outcome needs multiple independently resumable scopes, multiple PRs, or work on another
-  host, that's [orchestrate.md](./orchestrate.md) — deliver doesn't duplicate decomposition,
-  host allocation, or cross-lane dependency tracking.
-- It never archives tasks or mutates agent runtime when returning locally verified,
-  review-ready, PR-ready, blocked, or owner-action-required work — the work stays visible and
-  resumable. A harness "stopped" or "idle" signal is never treated as cleanup or completion
-  authority.
-- Compound Engineering is a required external dependency, never modified. PR monitoring needs
-  `ce-babysit-pr` at CE v3.20.0 or newer; if CE is missing or too old, deliver offers to install
-  or update it rather than hand-rolling a watcher.
-- If blocked, deliver stops with the exact failing gate, the evidence, and the next decision
-  that needs a human — and leaves the work resumable rather than half-finished and silent.
+- Deliver owns one host-local implementation or PR lane from start to its requested terminal
+  state. Multiple independently resumable scopes, multiple PRs, or work on another host route to
+  [orchestrate.md](./orchestrate.md), which owns decomposition, host allocation, and cross-lane
+  dependency tracking.
+- Locally verified, review-ready, PR-ready, blocked, and owner-action-required results remain
+  visible and resumable. Task archiving and agent-runtime mutation belong to the terminal cleanup
+  workflow; harness stop and idle signals remain observational until explicit cleanup or completion
+  evidence exists.
+- Compound Engineering remains a required external dependency and its source stays unchanged. PR
+  monitoring uses `ce-babysit-pr` at CE v3.20.0 or newer; when CE is missing or too old, deliver
+  offers the documented install or update path and uses the supported watcher.
+- A blocked route reports the exact failing gate, evidence, and next human decision while leaving
+  the work resumable.
 
 ## Example session
 
@@ -221,4 +221,3 @@ merges once nothing is holding it, and then proves the merge with `gh pr view` a
 merge-base --is-ancestor` check plus the smallest applicable post-merge test run. The final
 report includes the merge commit, the post-merge proof, and — if the fix revealed a reusable
 pattern — a `ce-compound` learning capture.
-

@@ -105,16 +105,16 @@ it's `true`, the persistent manual-login profile is used and `--copy-profile` is
 user has deliberately set it to `false`, `--copy-profile` is used instead. If it's missing or
 invalid, the skill asks which mode to use rather than guessing or editing the config itself.
 
-## Boundaries
+## Scope
 
-- Oracle output is advisory. Every answer gets verified against the actual codebase and tests
-  before it's acted on — Oracle never runs code or makes changes itself.
-- API runs cost real money and always need your explicit consent before the first call; browser
-  runs don't skip this by defaulting to API silently.
-- Secrets are never attached by default — `.env` files, key files, auth tokens are excluded; the
-  rule of thumb is fewer files and a better prompt over a whole-repo dump.
-- Routed mode is narrower than manual mode on purpose: one channel (`chatgpt_current_pro`), one
-  engine/model pair, no environment overrides, no redispatch of a detached session.
+- Oracle output is advisory and reaches action only after verification against the actual codebase
+  and tests; code execution and changes remain with the owning workflow.
+- API calls carry real cost and require explicit consent before the first call; browser mode remains
+  the browser path unless separately authorized.
+- The default file set excludes `.env` files, key files, and auth tokens; choose fewer files and a
+  stronger prompt over a whole-repo dump.
+- Routed mode uses one channel (`chatgpt_current_pro`), one engine/model pair, a fixed environment,
+  and a single attached session; manual mode owns broader choices.
 
 ## Example session
 
@@ -129,4 +129,3 @@ gpt-5-pro -p "<task>" --file "src/cache/**"`. The run takes several minutes; if 
 session is reattached with `oracle session <id> --render` rather than restarted. The transcript
 and any generated artifacts land under `~/.oracle/sessions/<id>/artifacts/`, and the findings
 get checked against the actual test suite before anything changes.
-

@@ -162,16 +162,17 @@ the interview loop, not waved off.
 If the inventory in step 1 turns up breakage rather than absence — something installed but not
 working — setup hands off to [doctor.md](./doctor.md) rather than trying to fix it itself.
 
-## Boundaries
+## Scope
 
-- Signing (`certify-ssh-node`) and privilege-broker enrollment always get their own explicit
-  consent naming the exact host, even inside a larger setup run.
-- Never writes credentials, tokens, or secrets into config.
-- Never modifies Compound Engineering. Setup only mutates other machines through the consented
-  `roundhouse:fleet-hosts` flow — never directly.
+- Signing (`certify-ssh-node`) and privilege-broker enrollment each receive their own explicit
+  consent naming the exact host, including inside a larger setup run.
+- Configuration excludes credentials, tokens, and secrets; their custody follows the owning
+  authentication workflow.
+- Compound Engineering remains unchanged. Other-machine mutations travel through the consented
+  `roundhouse:fleet-hosts` flow, with setup routing that work through its owner.
 - A zero-fleet, zero-config outcome is a valid, complete result: the router's built-in defaults
-  and local delivery work with nothing configured, so setup never manufactures configuration you
-  didn't ask for.
+  and local delivery work with nothing configured, and setup creates configuration only when
+  requested.
 
 ## Example session
 
@@ -187,4 +188,3 @@ installs, re-trusts any new Codex hooks, and then runs the configuration intervi
 validates the (mostly empty) fleet config, and finishes with a readiness table showing
 everything green, naming `railyard:deliver` as the entry point for "implement/fix/ship X"
 requests.
-
