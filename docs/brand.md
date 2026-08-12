@@ -1,7 +1,7 @@
 # The Railyard Family — Brand Kit
 
 One railroad, two core products, and named integrations. This document keeps
-every surface — icons, READMEs, guides, announcement copy, a future website —
+every surface — icons, READMEs, guides, announcement copy, the public site —
 speaking with one voice. When adding or regenerating any visual or tagline,
 start here.
 
@@ -77,6 +77,6 @@ Regeneration prompt skeleton (Atlas Cloud, current flagship image model):
 - Never stretch, recolor outside the palette, or add text to an icon.
 - The core product family is named together where it helps ("the railyard
   family"), and each core README links its sibling.
-- For a future website or richer collateral, run the `impeccable` design
+- For the public site or richer collateral, run the `impeccable` design
   skill against this document — it owns UI polish; this document owns
   identity.
