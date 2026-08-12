@@ -1,9 +1,9 @@
 # Third-party notices
 
 railyard incorporates the material below. This file is the licensing record;
-[`docs/site/credits.md`](docs/site/credits.md) is the human-facing credit
-page, and [`upstreams.json`](upstreams.json) is the machine-readable pin
-ledger.
+the [public credits page](https://novotnyllc.github.io/credits/) is the
+human-facing credit page, and [`upstreams.json`](upstreams.json) is the
+machine-readable pin ledger.
 
 Only *incorporated* material is listed — code or text copied or adapted into
 this repository. Projects railyard merely depends on or was inspired by
