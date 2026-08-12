@@ -46,8 +46,15 @@ test("delivery, orchestration, planning, and PR intents route", () => {
     /orchestrate/,
   );
   assert.match(nudge("do these things in parallel please"), /orchestrate/);
-  assert.match(nudge("update this across all my machines"), /orchestrate/);
-  assert.match(nudge("apply this across every fleet machine"), /orchestrate/);
+  for (const prompt of [
+    "update this across all my machines",
+    "apply this across every fleet machine",
+    "reconcile this fleet-wide",
+    "apply this across the whole fleet",
+    "apply this to the entire fleet",
+  ]) {
+    assert.match(nudge(prompt), /orchestrate/, prompt);
+  }
   // Unregistered machine-ish words no longer match.
   assert.equal(nudge("put the file on the studio shelf list"), "");
   // Without a registry, generic one-host phrasing is still remote-mac; a bare
@@ -74,6 +81,7 @@ test("delivery, orchestration, planning, and PR intents route", () => {
   );
   assert.match(nudge("update the plugins"), /Maintenance intent/);
   assert.match(nudge("can you sync my skills and packages"), /Maintenance intent/);
+  assert.doesNotMatch(nudge("apply this across the whole fleet"), /Maintenance intent/);
   assert.match(nudge("update the login page styling"), /Delivery intent/);
 });
 

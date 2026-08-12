@@ -129,9 +129,9 @@ Only ask what the inventory shows unset; restate each answer before writing.
   history, rollback, an apply-time review of every changed item on the host
   where it will run, and one owned scheduler entry per host that absorbs the
   fleet-update autoupdate run. It is owned by roundhouse's own store — a jj
-  repository colocated with git under the config root's `store/` — never by
-  chezmoi or any other personal sync engine, which it detects as an
-  *upstream* and never depends on as infrastructure. On opt-in, run §3a;
+  repository colocated with git under the config root's `store/` — and
+  cooperates with chezmoi or another personal sync engine when present as an
+  *upstream*. On opt-in, run §3a;
   declining is a complete answer and disables nothing else.
 - **Auto-sync + update schedule** [none] — opt-in daily or weekly unattended
   maintenance. If fleet sync was taken, §3a already installed the single

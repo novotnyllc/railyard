@@ -30,7 +30,7 @@ process.stdin.on("end", () => {
     /\b(in parallel|at the same time|simultaneously|while you'?re at it|these (tasks|things|changes|items)|split (this|it) up|divide (this|the work))\b/i.test(p);
   // Fleet-wide desired-state / privileged reconciliation is orchestrate.
   const fleetWide =
-    /\b((on|across|to) (all|every|each)( of)?( my| the)? (fleet )?(machines?|macs?|hosts?|computers?|boxes)|everywhere\b|fleet-?wide|the fleet\b)\b/i;
+    /\b((on|across|to) (all|every|each)( of)?( my| the)? ((whole|entire) )?(fleet )?(machines?|macs?|hosts?|computers?|boxes)|(on|across|to) (the )?(whole|entire) fleet( machines?| macs?| hosts?| computers?| boxes)?|everywhere\b|fleet-?wide|the (whole|entire) fleet\b|the fleet\b)\b/i;
   // A single other host — bounded remote work, not inherently orchestrate.
   const oneOtherHost =
     /\b(on (my|the) (other|second) (mac|machine|laptop|desktop|computer|box)|remote (machine|host|mac|box))\b/i;
