@@ -27,12 +27,9 @@ Deciding and driving work —
 Keeping machines and infrastructure serviceable — readiness, inventory,
 parity, packages, dotfiles, auth, SSH transport and enrollment, privileged
 installs, network gear — lives in
-[`roundhouse`](https://github.com/novotnyllc/roundhouse); the orchestrator
+[`roundhouse`](https://novotnyllc.github.io/roundhouse/); the orchestrator
 consults `roundhouse:fleet-readiness` before dispatch and never administers
 hosts itself.
-
-How to do a specific *kind* of work (craft skills) lives in
-[`agent-utilities`](https://github.com/novotnyllc/agent-utilities).
 
 ## External dependencies
 
