@@ -8,28 +8,28 @@ import ScenarioCard from '../components/ScenarioCard.astro';
 import { withBase } from '../config/site.mjs';
 
 const scenarios = [
-  ['01', 'Ship a change', 'A merged result with a focused post-merge receipt.', 'ship-a-change', 'ship'],
-  ['02', 'Harden review', 'Correctness, security, and maintainability in the receipt.', 'harden-review', 'review'],
-  ['03', 'Keep machines current', 'Inventory, drift, and an update path you can act on.', 'keep-machines-current', 'fleet'],
-  ['04', 'Distribute a skill', 'Item-level review, canary evidence, signed journal.', 'distribute-a-skill', 'skill'],
-  ['05', 'Declare desired state', 'Readable maps that converge with evidence.', 'declare-desired-state', 'state'],
-  ['06', 'Work across harnesses', 'One request, explicit carrier and transport.', 'work-across-harnesses', 'harness'],
-  ['07', 'Build iOS and Mac apps', 'Disposable VMs for native builds and UI tests.', 'ios-and-mac-apps', 'build'],
-  ['08', 'Run work on another machine', 'Place work where project and transport are ready.', 'run-work-on-another-machine', 'machine'],
-  ['09', 'Administer remotely', 'Named, resumable lanes with identity checks.', 'administer-remotely', 'remote'],
-  ['10', 'Control model cost', 'Match model and effort to the work shape.', 'control-model-cost', 'cost'],
+  ['01', 'Ship a change', 'Carry one request through merge and prove the result on the base branch.', 'ship-a-change', 'ship'],
+  ['02', 'Harden review', 'Concentrate correctness, security, and maintainability where the risk lives.', 'harden-review', 'review'],
+  ['03', 'Keep machines current', 'Turn exact inventory and drift into a fleet that converges itself.', 'keep-machines-current', 'fleet'],
+  ['04', 'Distribute a skill', 'Promote one declared skill through item review, canary evidence, and signed history.', 'distribute-a-skill', 'skill'],
+  ['05', 'Declare desired state', 'Give operators a readable map and machines an evidence-backed convergence target.', 'declare-desired-state', 'state'],
+  ['06', 'Work across harnesses', 'Keep one delivery contract while carrier and transport stay explicit.', 'work-across-harnesses', 'harness'],
+  ['07', 'Build iOS and Mac apps', 'Put native builds and UI tests on disposable VMs with repeatable evidence.', 'ios-and-mac-apps', 'build'],
+  ['08', 'Run work on another machine', 'Place work where the project, identity, and transport are ready to receive it.', 'run-work-on-another-machine', 'machine'],
+  ['09', 'Administer remotely', 'Keep remote operations named, resumable, and bound to verified identity.', 'administer-remotely', 'remote'],
+  ['10', 'Control model cost', 'Spend premium reasoning on hard seams and price every dispatch as engineering work.', 'control-model-cost', 'cost'],
 ];
 ---
-<SiteLayout title="The delivery system for agent work" description="Say what should change. Get back a merged, verified change — not a claim that it’s done.">
+<SiteLayout title="The operating model for verifiable agent delivery" description="Run agent work as a bounded, reviewed delivery and get back a merged result with proof that it arrived.">
   <main id="main">
     <Hero />
     <PromiseGrid />
     <ReceiptShowcase />
     <ProofStrip />
     <section class="scenarios wrap" aria-labelledby="scenarios-title">
-      <div class="section-heading scenarios-heading"><p class="eyebrow">Value first</p><h2 id="scenarios-title">Pick the outcome.<br /><span>See the path.</span></h2><a class="text-link" href={withBase('/what-it-does/')}>See all ten outcomes <span aria-hidden="true">↗</span></a></div>
+      <div class="section-heading scenarios-heading"><p class="eyebrow">Practice in context</p><h2 id="scenarios-title">Choose the stakes.<br /><span>Follow the delivery.</span></h2><a class="text-link" href={withBase('/what-it-does/')}>See all ten practices <span aria-hidden="true">↗</span></a></div>
       <div class="scenario-grid">{scenarios.map(([number, title, text, slug, icon]) => <ScenarioCard number={number} title={title} text={text} slug={slug} icon={icon} />)}</div>
     </section>
-    <section class="start-callout wrap" aria-labelledby="start-title"><div><p class="eyebrow">A short first run</p><h2 id="start-title">Move from intent<br /><em>to arrival.</em></h2></div><div><p>Install the surface, make a first delivery on the machine you already use, then add fleet context when it creates value.</p><a class="button button-primary" href={withBase('/start/')}>Start in ten minutes <span aria-hidden="true">→</span></a></div></section>
+    <section class="start-callout wrap" aria-labelledby="start-title"><div><p class="eyebrow">Prove the practice once</p><h2 id="start-title">Start with one<br /><em>real change.</em></h2></div><div><p>Install the surface, carry a useful delivery from intent to arrival on the machine you already use, then add fleet context as the work expands.</p><a class="button button-primary" href={withBase('/start/')}>Run it in ten minutes <span aria-hidden="true">→</span></a></div></section>
   </main>
 </SiteLayout>

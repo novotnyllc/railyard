@@ -7,7 +7,7 @@ nav_order: 3
 
 # Keep machines current
 
-Keep the agent surface aligned across a five-machine macOS/Linux mix with inventory, item digests, and evidence you can act on.
+A five-machine macOS/Linux fleet has accumulated one stale skill, two package updates, and a project checkout that needs attention. Inventory the fleet, route each item to its owner, and apply approved updates through native managers. The agent surface stays aligned, with digests and per-machine evidence an operator can act on.
 
 ## Easy path
 

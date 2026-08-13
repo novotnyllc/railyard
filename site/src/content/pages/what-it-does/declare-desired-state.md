@@ -7,7 +7,7 @@ nav_order: 5
 
 # Declare desired state
 
-Describe the machine surface as readable maps, then let each host converge it with a canary and evidence trail.
+A development group needs one tool version while a particular machine needs a local exception. Express both as readable maps, resolve one value per item, and let each host converge through a canary and evidence trail. Operators can understand the final state before apply and prove what each host received afterward.
 
 ## Easy path
 
@@ -24,7 +24,7 @@ machines/<machine>.yaml
 
 ## What happens
 
-The four-layer fold resolves one value per item. Maps merge by key, scalar values replace as a unit, and an explicit `absent` value removes an item from the effective set. Each host reviews the resolved digest before applying it.
+The four-layer fold resolves one value per item. Maps merge by key, scalar values replace as a unit, and an explicit `absent` value removes an item from the effective set. Before applying it, each host reviews the resolved digest.
 
 ## Proof point
 

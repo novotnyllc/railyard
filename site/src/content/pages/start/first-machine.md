@@ -7,7 +7,7 @@ nav_order: 3
 
 # First machine
 
-Give a machine a readable baseline, a signed fleet identity, and a readiness result before placing work on it.
+Make a machine earn placement through readable state and current evidence. Give it a baseline, a signed fleet identity, and a readiness result first; every later dispatch can then rely on an explicit operating contract.
 
 ## Easy path
 
@@ -15,7 +15,7 @@ Give a machine a readable baseline, a signed fleet identity, and a readiness res
 > Set up the fleet on this machine, then show me its readiness.
 ```
 
-`roundhouse` inventories the host, validates the configuration, establishes the store when you opt into convergence, and reports the rows that support a placement decision.
+This plain-language request activates the mechanism: `roundhouse` inventories the host, validates the configuration, establishes the store when you opt into convergence, and reports the rows that support a placement decision.
 
 ## What happens
 
@@ -37,6 +37,6 @@ The [fleet-readiness reference](/skills/fleet-readiness/) describes a three-part
 
 ## Scope
 
-The first machine can remain a one-machine fleet. Add a second machine when placement, parity, or shared desired state earns its place.
+A one-machine fleet is a complete first operating surface. Add a second machine when placement, parity, or shared desired state earns its place.
 
 Next: [declare desired state](/what-it-does/declare-desired-state/).

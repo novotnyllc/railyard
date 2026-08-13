@@ -7,13 +7,17 @@ nav_order: 2
 
 # Pull, gate, apply, prove
 
-One store edit travels through signed history, host-local review, canary evidence, an owning manager, and a journal record before another machine adopts it. The loop is crash-resumable and keeps each item's applied value visible while a decision is held.
+Treat convergence as an evidence pipeline. Move each store edit through signed history, host-local review, canary evidence, an owning manager, and a journal record before another machine adopts it. Operators gain a crash-resumable loop that keeps the last applied value visible while a decision is held and makes every rollout outcome explainable.
+
+Roundhouse carries that practice through one repeatable host-owned loop.
 
 ![Fleet convergence pipeline: poll, fetch, resume, promote, fold, review, apply, journal, and publish, with clean exits and named holds.](/diagrams/m1-convergence.svg)
 
 The diagram is the short path: a clean floor exits early; a passing verdict applies and journals; a blocked verdict holds and alerts by name.
 
 ## Run order
+
+The operator's intent enters once; every later stage either strengthens the evidence or produces a named hold:
 
 1. Poll the remote head and the local publication floor.
 2. Fetch the shared history when the floor shows work.
@@ -28,11 +32,13 @@ The diagram is the short path: a clean floor exits early; a passing verdict appl
 
 ## Canary evidence
 
-A non-canary host applies item X at digest D only when a canary journaled `applied` or `satisfied` for D at least 41 hours ago, nothing later reverted or held D, and the canary has published any record since the wait began. A silent canary closes the evidence window as a hold; it does not read as a pass.
+Fleet-wide reach is earned one digest at a time. A non-canary host applies item X at digest D only when a canary journaled `applied` or `satisfied` for D at least 41 hours ago, nothing later reverted or held D, and the canary has published any record since the wait began. A silent canary closes the evidence window as a hold and never reads as a pass.
 
 The wait and the per-run removal caps bound how far a bad item can travel. `satisfied` counts as liveness because the desired identity is still present and observed. `held` carries a reason and keeps the prior value, so it cannot satisfy the canary gate.
 
 ## Journal outcomes
+
+When an operator investigates a mixed rollout, these records keep successful adoption, observed satisfaction, and a policy hold distinct:
 
 ```yaml
 - item: skills.my-review
@@ -49,10 +55,10 @@ The wait and the per-run removal caps bound how far a bad item can travel. `sati
 
 Conflict reconciliation follows a strict evidence ladder: signed history first, replicated journal second, self-asserted trailers last. A trailer can escalate a finding, but it cannot win the decision. A `resolved` record carries both parents and the rationale that produced the new reviewed commit.
 
-Rollback is an ordinary signed change through review, canary, and apply. The revert-signature predicate is `applied → withdrawn → reincoming`; when that sequence appears, the returning value receives a fresh review rather than inheriting the old pass.
+Rollback is an ordinary signed change through review, canary, and apply. The revert-signature predicate is `applied → withdrawn → reincoming`; when that sequence appears, the returning value receives a fresh review.
 
 ## Offline return
 
-An offline host resumes from its reviewed reference, fetches the available history, reviews changed items, and publishes its own evidence when it reconnects. Parse errors and open conflicts keep affected items at their applied values and name the hold reason.
+Reconnect from the last trusted position. An offline host resumes from its reviewed reference, fetches the available history, reviews changed items, and publishes its own evidence when it reconnects. Parse errors and open conflicts keep affected items at their applied values and name the hold reason.
 
 Next: [inspect the store](/roundhouse/store/) or [run the cadence and CLI](/roundhouse/operating/).

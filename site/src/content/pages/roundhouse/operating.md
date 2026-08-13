@@ -7,11 +7,11 @@ nav_order: 3
 
 # Run it
 
-Roundhouse keeps routine convergence moving with one owned scheduler entry per host, then gives the operator focused verbs for explain, review, apply, membership, rollback, and doctor.
+Make convergence routine enough to run unattended and legible enough to inspect under pressure. Give each host one scheduler authority, then expose focused operator verbs for explain, review, apply, membership, rollback, and doctor. Roundhouse turns that practice into a steady cadence with bounded change and receipts an operator can act on.
 
 ## Cadence and schedulers
 
-The fast pass runs about every 20 minutes with ±5 minutes of name-seeded jitter. The full pass runs about every 12 hours with ±90 minutes of jitter. A prior autoupdate entry is absorbed into the owned scheduler entry so one host has one authority for each cadence.
+Use two rhythms: one for quick convergence and one for deeper maintenance. The fast pass runs about every 20 minutes with ±5 minutes of name-seeded jitter. The full pass runs about every 12 hours with ±90 minutes of jitter. A prior autoupdate entry is absorbed into the owned scheduler entry so one host has one authority for each cadence.
 
 The native shapes are:
 
@@ -26,13 +26,13 @@ The fast run polls, fetches, reconciles, reviews, applies, journals, publishes, 
 
 ## CLI reference
 
-The owning skill resolves `CLI` to the installed script before use:
+Start an investigation by resolving `CLI` to the installed script through the owning skill:
 
 ```sh
 CLI="$SKILL_DIR/../../scripts/roundhouse"
 ```
 
-Inspect and decide:
+An operator facing a held change can inspect fleet health, identify the pending item, explain its provenance, record a review, and apply the approved item with these focused commands:
 
 ```sh
 "$CLI" fleet-doctor
@@ -58,7 +58,7 @@ item=packages.legacy-tool reason=review-required    host=host-a
 count=2
 ```
 
-Membership and lifecycle:
+When a machine joins, retires, rolls back an item, or returns from loss, keep the lifecycle in the same evidence surface:
 
 ```sh
 "$CLI" fleet-add host-a --job fleet-agent
@@ -95,6 +95,6 @@ result=journaled
 
 ## Operator bounds
 
-A run removes at most 5 items or 25% of the current item set, whichever is smaller. A retirement is one signed edit; the fleet sees it within one fast interval. Reparenting and reconstitution preserve the reviewed history and create new evidence for the changed relationship.
+Bound the consequence of every unattended pass. A run removes at most 5 items or 25% of the current item set, whichever is smaller. A retirement is one signed edit; the fleet sees it within one fast interval. Reparenting and reconstitution preserve the reviewed history and create new evidence for the changed relationship.
 
 Next: [read the trust and security controls](/roundhouse/security/) or [inspect the scaling breakpoints](/desired-state/scaling/).

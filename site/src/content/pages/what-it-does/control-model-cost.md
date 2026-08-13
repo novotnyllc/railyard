@@ -7,7 +7,7 @@ nav_order: 10
 
 # Control model cost
 
-Match model and effort to the work shape, then carry the choice in the dispatch and run record.
+A delivery contains a broad design seam, a mechanical edit across many call sites, and a focused review. Route each work unit by its actual shape, carry the model and effort in the dispatch, and record the budget evidence. Expensive judgment lands where it matters, while routine volume stays efficient and inspectable.
 
 ## Easy path
 
@@ -15,11 +15,11 @@ Match model and effort to the work shape, then carry the choice in the dispatch 
 > Use the smallest suitable route for this task and show the budget evidence.
 ```
 
-`railyard:model-routing` classifies the work before a carrier starts it.
+`railyard:model-routing` supplies the classification before a carrier starts the work.
 
 ## What happens
 
-The router resolves role, work shape, privacy, transport, and budget policy into one selected carrier. Implementation, mechanical work, orchestration, and review can each use their own tier. Forecasts and route disclosures make the decision inspectable.
+The router resolves role, work shape, privacy, transport, and budget policy into one selected carrier. Implementation, mechanical work, orchestration, and review can each use their own tier. Forecasts and route disclosures make every decision inspectable.
 
 ## Proof point
 

@@ -7,15 +7,15 @@ nav_order: 2
 
 # Orchestrate
 
-Orchestrate turns a multi-lane objective into dependency-aware work placed on machines with current readiness evidence.
+Decompose a large objective around real seams, then let dependency-ready lanes move together under one frozen acceptance contract. A typical delivery may have dozens of mechanical call sites and one gnarly concurrency seam; giving each a bounded owner accelerates the whole run while protecting the integration boundary.
 
 ## What it adds
 
-The skill classifies each turn, freezes an objective and acceptance contract, consults fleet readiness, creates bounded lanes, and tracks each lane to a terminal result.
+Orchestrate carries that practice across machines with current readiness evidence. It classifies each turn, freezes an objective and acceptance contract, consults fleet readiness, creates bounded lanes, and tracks each lane to a terminal result.
 
 ## How it works
 
-Host, task, and transport evidence feed placement. Dependency-ready lanes can start together, while handoffs carry the same scope, owner, constraints, and evidence contract.
+Host, task, and transport evidence feed placement. Dependency-ready lanes can start together, while every handoff carries the same scope, owner, constraints, and evidence contract.
 
 ```text
 > Split this delivery into dependency-ready lanes and place each one only where readiness is complete.

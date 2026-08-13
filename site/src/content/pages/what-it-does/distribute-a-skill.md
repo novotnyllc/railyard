@@ -7,7 +7,7 @@ nav_order: 4
 
 # Distribute a skill
 
-Write a skill once and move it across enrolled machines through item-level review, canary evidence, and a signed journal trail.
+A review skill proves useful on one machine and now belongs on every enrolled development host. Declare it once, preserve its source ownership, and move the exact item through review, canary evidence, and a signed journal trail. Every receiver can prove which bytes arrived and how the rollout ended.
 
 ## Easy path
 
@@ -19,7 +19,7 @@ Declare the skill as a desired item, then run the fleet convergence path.
 
 ## What happens
 
-The store folds the skill's desired value through fleet, platform, group, and machine layers. Each receiving machine checks the signed change, ownership, review decision, canary evidence, and apply result. The journal records the item digest and outcome for later inspection.
+The store folds the skill's desired value through fleet, platform, group, and machine layers. Each receiving machine checks the signed change, ownership, review decision, canary evidence, and apply result. For later inspection, the journal records the item digest and outcome.
 
 ## Proof point
 

@@ -8,9 +8,11 @@ has_children: true
 
 # Trust that keeps converging changes contained
 
+Trust has to travel with every unattended fleet change, earn wider propagation through signed evidence and canary results, and leave a receipt on each host. That operating discipline lets a fleet move at machine speed while keeping authority, blast radius, and operator intervention explicit.
+
 Roundhouse reduces fleet authority to two operator-held facts: custody of the private store and integrity of the instruction chain. Signed history, parent-position checks, canary evidence, redaction, privilege isolation, and explicit residuals turn those facts into controls that contain, detect, or refuse a change.
 
-Roundhouse's signed trust ratchet answers the same “is this genuinely what it claims to be” question MCP provenance proposals are reaching for, but ships it today as a pull-based convergence loop across a whole personal fleet, not a one-time check at connection time.
+Its signed trust ratchet gives every host a pull-based answer to “is this genuinely what it claims to be,” carrying provenance from connection through fleet-wide convergence.
 
 ## Security map
 

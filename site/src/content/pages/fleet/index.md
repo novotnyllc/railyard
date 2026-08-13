@@ -6,7 +6,9 @@ nav_order: 5
 
 # Fleet
 
-The fleet surface keeps machines visible, trusted, and converged through a readable store and host-owned evidence. The standalone product section is [Roundhouse](/roundhouse/), which owns this operating model beyond delivery placement.
+Run the fleet as a set of accountable hosts, each converging from readable intent and publishing its own proof. Shared policy gives operators reach; signed trust, paced adoption, and host-owned evidence keep that reach explainable. The payoff is unattended delivery across many machines with a durable answer to what changed, why it changed, and where it landed.
+
+The fleet surface organizes that practice around a readable store and host-owned evidence. The standalone product section is [Roundhouse](/roundhouse/), which owns this operating model beyond delivery placement.
 
 - [Roundhouse store](/roundhouse/store/) — the layered desired-state repository.
 - [Roundhouse convergence](/roundhouse/convergence/) — one edit from source to applied state.

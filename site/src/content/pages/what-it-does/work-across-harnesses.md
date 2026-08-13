@@ -7,7 +7,7 @@ nav_order: 6
 
 # Work across harnesses
 
-Use one request across Claude Code and Codex while the route records the harness, model, effort, and transport for each work unit.
+A delivery begins in Claude Code, sends a bounded implementation unit to Codex, and brings the evidence back to one owning workflow. Freeze the route at each dispatch and record harness, model, effort, and transport. The request stays coherent across execution surfaces, and every handoff remains inspectable.
 
 ## Easy path
 

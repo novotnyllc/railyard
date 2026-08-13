@@ -7,7 +7,7 @@ nav_order: 2
 
 # Roles, tiers, and carriers
 
-The routing contract makes the work shape visible before a model runs. A role enters an ordered tier ladder; the first eligible carrier wins, with a disclosed fallback when a hard constraint removes the first candidate.
+Spend premium reasoning on premium difficulty. Start by naming the work role, place it on an ordered tier ladder, and choose the first eligible carrier whose economics and capabilities fit. The routing contract makes that work shape visible before a model runs and discloses the fallback when a hard constraint removes the first candidate.
 
 ## Built-in no-config policy
 
@@ -17,7 +17,7 @@ The routing contract makes the work shape visible before a model runs. A role en
 | orchestration or independent review | `gpt-5.6-sol` at `high`; `max` for high, critical, or explicitly complex work |
 | unavailable or unselectable Luna implementation | A runtime-attested Terra model at `max`, disclosed as `implementation_model_substitute`; the router does not invent a Terra slug |
 
-This is the delegated carrier route, independent of the interactive session model. A Codex or Claude session can hand implementation to the same Luna route. The carrier reports `offline_implementation_ready`, `host_capability_attested`, or `live_carrier_verified` as separate states; a local resolver pass proves only the first.
+Apply the policy to the work unit, independent of the interactive session model. A Codex or Claude session can hand implementation to the same Luna route. The carrier reports `offline_implementation_ready`, `host_capability_attested`, or `live_carrier_verified` as separate states; a local resolver pass proves only the first.
 
 ## Carrier table
 
@@ -34,7 +34,7 @@ This is the delegated carrier route, independent of the interactive session mode
 
 ## Dispatch-kind table
 
-The adapter controls are fixed by the contract. A catalog can choose among these rows; it cannot add a provider command, an endpoint, or a new trust-domain bridge.
+Keep transport authority bounded while the catalog optimizes selection. The adapter controls are fixed by the contract. A catalog can choose among these rows; it cannot add a provider command, an endpoint, or a new trust-domain bridge.
 
 | Adapter | Dispatch kind | Required knobs | Constraint and receipt behavior |
 | --- | --- | --- | --- |
@@ -51,9 +51,9 @@ The adapter controls are fixed by the contract. A catalog can choose among these
 
 ## How tiers choose
 
-Configured `roles` map to ordered `tiers`. A tier is a list of model aliases, or a tier-zero object with `models` and optional `softPriorities`. `cost`, `latency`, `quality`, `reliability`, and `learnedEstimate` are legal soft priorities only at tier zero. They order eligible candidates within that tier; they never cross a tier, reorder a hard route, or create a fallback.
+Let hard requirements choose the tier and soft economics choose within it. Configured `roles` map to ordered `tiers`. A tier is a list of model aliases, or a tier-zero object with `models` and optional `softPriorities`. `cost`, `latency`, `quality`, `reliability`, and `learnedEstimate` are legal soft priorities only at tier zero. They order eligible candidates within that tier; they never cross a tier, reorder a hard route, or create a fallback.
 
-Unknown cost is never zero. Claude family checks preserve Fable versus Opus: a numeric version by itself cannot cross the family boundary. On a premium Claude session, a dispatched worker names Opus explicitly rather than inheriting the session tier silently; the explicit model and effort are part of the dispatch contract.
+Unknown cost is never zero. Claude family checks preserve Fable versus Opus: a numeric version by itself cannot cross the family boundary. On a premium Claude session, a dispatched worker names Opus explicitly; the explicit model and effort are part of the dispatch contract.
 
 ## Catalog receipt
 
@@ -75,6 +75,6 @@ Unknown cost is never zero. Claude family checks preserve Fable versus Opus: a n
 }
 ```
 
-The receipt names the tier that won. It does not turn a representative relative index into a dollar rate; rate-stamped catalog data owns that conversion.
+The receipt names the tier that won and keeps economic interpretation source-owned. It does not turn a representative relative index into a dollar rate; rate-stamped catalog data owns that conversion.
 
 Next: [budgets and admission](/delivery/model-routing/budgets/) or [the worked ledgers](/delivery/model-routing/worked-runs/).

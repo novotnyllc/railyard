@@ -7,15 +7,15 @@ nav_order: 7
 
 # Setup
 
-Setup takes a machine from inventory to a validated delivery-ready baseline through one consented configuration path.
+Establish a delivery baseline by observing the machine first, proposing the exact delta, and applying one consented configuration path. Repeatable setup preserves operator choices and makes readiness a verified result.
 
 ## What it adds
 
-The skill inventories installed plugins, marketplaces, tools, configuration, and credential presence, then proposes the missing pieces and writes only the answers you provide.
+Setup carries that practice from inventory to a validated delivery-ready baseline. It inventories installed plugins, marketplaces, tools, configuration, and credential presence, then proposes the missing pieces and writes only the answers you provide.
 
 ## How it works
 
-Setup separates local installation, optional fleet enrollment, model policy, auth artifact custody, and privileged lanes. A repeat run reads the current state and proposes only the delta.
+Setup keeps local installation, optional fleet enrollment, model policy, auth artifact custody, and privileged lanes distinct. A repeat run reads the current state and proposes only the delta.
 
 ```text
 > Inspect this machine, install the delivery surface, and show the proposed delta before any optional enrollment.

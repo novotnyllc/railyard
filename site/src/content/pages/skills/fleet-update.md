@@ -7,15 +7,15 @@ nav_order: 17
 
 # Fleet update
 
-Fleet update turns approved package and plugin maintenance into a sealed, fresh, evidence-backed apply plan.
+Apply maintenance from a fresh, sealed plan that names every package, manager, precondition, and permission boundary. Operators get predictable updates, attended privilege stays visible, and the fleet journal records what actually happened.
 
 ## What it adds
 
-The skill snapshots current state, selects native manager operations, calculates a bounded plan, validates preconditions, and records the result in the fleet journal.
+Fleet update carries that practice for approved package and plugin maintenance. It snapshots current state, selects native manager operations, calculates a bounded plan, validates preconditions, and records the result in the fleet journal.
 
 ## How it works
 
-Updates are grouped by owner, platform, and action type. Protected package actions carry an exact payload and permission context; interactive privilege remains an explicit host decision. The next run rechecks the state before applying.
+Updates are grouped by owner, platform, and action type. Protected package actions carry an exact payload and permission context; interactive privilege remains an explicit host decision. Each new run rechecks the state before applying.
 
 ```text
 > Prepare the approved update for host-a, show the sealed plan, and wait at the apply boundary.

@@ -7,15 +7,15 @@ nav_order: 12
 
 # Fleet inventory
 
-Fleet inventory gives the operator an evidenced view of platform, tools, harnesses, plugins, skills, projects, startup tasks, and auth presence.
+Inventory a machine before deciding what it needs. Capture native facts, compare them with declared intent, and preserve partial evidence so operators can route each drift item directly to its owner.
 
 ## What it adds
 
-The inventory gathers observed and desired values per machine, reports an `in_sync` result where the check applies, and preserves partial evidence when a row needs attention.
+Fleet inventory applies that practice across platform, tools, harnesses, plugins, skills, projects, startup tasks, and auth presence. It gathers observed and desired values per machine, reports an `in_sync` result where the check applies, and preserves partial evidence when a row needs attention.
 
 ## How it works
 
-It validates the machine configuration, collects native facts through the platform-appropriate lane, and hands findings to fleet readiness, agents, projects, auth, or updates according to ownership.
+The skill validates the machine configuration, collects native facts through the platform-appropriate lane, and hands findings to fleet readiness, agents, projects, auth, or updates according to ownership.
 
 ```text
 > Inventory host-a, compare the installed agent surface, and show the rows that need an owner.

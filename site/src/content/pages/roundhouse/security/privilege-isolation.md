@@ -7,11 +7,15 @@ nav_order: 9
 
 # Privileged actions use a sealed semantic surface
 
-Two root-owned components protect the privileged boundary. `roundhouse-trustd` materializes roster, reviewed reference, generation, and KRL state by re-deriving the roster from signed history. The privilege broker executes only a fixed catalog of sealed semantic actions.
+Privilege in an unattended fleet should enter only after signed evidence and canary gates resolve it to a named, bounded action; the root boundary then executes sealed meaning. Operators gain unattended maintenance with an inspectable catalog, explicit grants, and protected trust state.
+
+Roundhouse enforces that practice with two root-owned components. `roundhouse-trustd` materializes roster, reviewed reference, generation, and KRL state by re-deriving the roster from signed history. The privilege broker executes only a fixed catalog of sealed semantic actions.
 
 Invoking the trust daemon cannot inject a caller-supplied hostile roster: the daemon computes the materialized state from the signed store. The broker receives an action name and bounded data, not an arbitrary root shell.
 
 ## Shared hardening pattern
+
+Keep every path to privilege narrow and independently inspectable:
 
 - sudoers grants the exact binary, not a directory or interpreter.
 - The invocation uses a hermetic `env -i … sudo -n` environment.
@@ -20,7 +24,7 @@ Invoking the trust daemon cannot inject a caller-supplied hostile roster: the da
 
 ## Unattended update gates
 
-An unattended privileged binding needs both flags: the catalog flag and the per-binding grant. It also needs three provenance anchors:
+Earn unattended privilege through two explicit flags: the catalog flag and the per-binding grant. The binding also needs three provenance anchors:
 
 1. channel-bound, root-anchored provenance;
 2. publisher-bound signed payloads with stapled notarization, or a fail-closed result;
@@ -29,6 +33,8 @@ An unattended privileged binding needs both flags: the catalog flag and the per-
 Every unattended binding carries a mandatory version floor and canary gate. For Homebrew, root executes only from a root-owned attested tap snapshot, never a user-owned path.
 
 ## Receipt
+
+When a package binding reaches root, the operator needs evidence that trust material came from signed history and the install request satisfied catalog, grant, provenance, version, canary, and payload gates:
 
 ```text
 roundhouse-trustd action=materialize-roster

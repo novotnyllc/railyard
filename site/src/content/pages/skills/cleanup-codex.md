@@ -7,15 +7,15 @@ nav_order: 9
 
 # Cleanup Codex
 
-Cleanup Codex identifies and reclaims residue from a crashed or detached Codex session through identity-bound process evidence.
+Reclaim detached session residue only after the process, launcher, and thread all prove the same identity. This turns a risky cleanup into a precise recovery and leaves the machine ready for a trustworthy restart.
 
 ## What it adds
 
-Inspection reports matching session servers, process age, descriptors, and launcher state. Reap uses the exact session identity, a host-local lock, paired snapshots, and proves final absence; recycle owns replacement and restart attestation.
+Cleanup Codex applies that recovery practice. Inspection reports matching session servers, process age, descriptors, and launcher state. Reap uses the exact session identity, a host-local lock, paired snapshots, and proves final absence; recycle owns replacement and restart attestation.
 
 ## How it works
 
-The cleanup path checks ownership, thread identity, process arguments, and launcher relationship before acting. The macOS SessionEnd hook uses the same identity-bound contract.
+The cleanup path checks ownership, thread identity, process arguments, and launcher relationship before acting. The macOS SessionEnd hook carries the same identity-bound contract.
 
 ```text
 > Inspect the detached Codex residue for this thread; reclaim it only when identity evidence is complete.

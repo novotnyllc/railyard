@@ -7,9 +7,13 @@ nav_order: 2
 
 # Tart Xcode Runner
 
-Tart Xcode Runner adds disposable macOS VMs for Xcode builds, simulator tests, and XCUITests; the core system operates fully without it.
+Run native Apple validation in a clean, disposable environment that preserves the developer's screen and produces a distinct execution receipt. This makes Xcode builds, simulator tests, and XCUITests repeatable while keeping them inside the same review and delivery lifecycle as the app change.
+
+The optional Tart Xcode Runner integration supplies those macOS VMs; the core system remains fully operational on its own.
 
 ## Easy path
+
+An app change is ready for native validation, and the developer needs the build and UI tests to run in a fresh macOS environment while the host display stays available:
 
 ```text
 > Run the app build and UI tests in a clean macOS VM.
@@ -19,7 +23,7 @@ Delivery offers the runner when the work needs native Apple tooling. The app cha
 
 ## What it adds
 
-The VM supplies a separate execution boundary for the native build and test workload. Your host screen remains available while the test run progresses in its own environment.
+Use the VM as a separate execution boundary for the native build and test workload. Your host screen remains available while the test run progresses in its own environment.
 
 ## Source
 

@@ -7,7 +7,7 @@ has_children: true
 
 # Skills
 
-The public skill reference is grouped by the job a reader wants to do. Each page names the shipping plugin and shows a worked invocation with an anonymized receipt.
+Start with the operating job, learn the practice that makes it reliable, and use the interface only when the work is clear. This reference groups the public skills by practitioner intent; every page names the shipping plugin and pairs a worked invocation with an anonymized receipt.
 
 ## Deliver work
 
@@ -46,6 +46,6 @@ The public skill reference is grouped by the job a reader wants to do. Each page
 
 - [UniFi Network API](/skills/unifi-network-api/) — `roundhouse`
 
-These references cover the public shipping skill set. Thermos carries its two review lenses as one reviewed surface; their implementation details stay behind the Thermos reference.
+Together these references cover the public shipping skill set. Thermos carries its two review lenses as one reviewed surface, with their implementation details behind the Thermos reference.
 
 Next: [read delivery](/delivery/) or [explore integrations](/integrations/).

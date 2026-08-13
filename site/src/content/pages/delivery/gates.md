@@ -7,20 +7,20 @@ nav_order: 3
 
 # Delivery gates
 
-The delivery path makes quality and completion observable through focused gates owned by the stage they protect.
+Put each quality decision beside the stage that can act on it. Focused gates turn review, merge authority, and post-merge proof into observable delivery facts, so agents can move quickly while operators retain a trustworthy finish line.
 
 ## Thermos
 
-Thermos runs two lenses against one frozen packet:
+Review a coherent change while its reasoning is still local. Thermos runs two lenses against one frozen packet:
 
 - `thermo-nuclear-review` covers correctness, security, breakage, developer experience, and feature-leak risk.
 - `thermo-nuclear-code-quality-review` covers structure, duplication, maintainability, and complexity.
 
-The synthesis deduplicates findings. Real findings are fixed before the chunk commits, and affected checks run again.
+The synthesis deduplicates findings into one actionable list. Real findings are fixed before the chunk commits, and affected checks run again.
 
 ![Review gate sequence from a ready diff through parallel Thermos review, synthesis, merge settlement, independent review, merge, post-merge proof, and focused quality gates.](/diagrams/m6-review-gates.svg)
 
-Findings return to the implementation lane, so the diagram describes a loop with a short success path rather than a one-way green check.
+Findings return to the implementation lane, so the diagram describes a loop whose success path stays short.
 
 The dispatch gate keeps the worker identity explicit. A Codex child missing both fields returns:
 
@@ -30,7 +30,7 @@ The dispatch gate keeps the worker identity explicit. A Codex child missing both
 
 ## Merge settlement
 
-The merge-settlement hook connects review evidence to merge authority. A new branch head receives review evidence before merge; unresolved review threads remain part of the settlement state.
+Tie merge authority to the latest branch head and its settled review evidence. The merge-settlement hook gives a new head time to receive reviews and carries unresolved threads in the settlement state.
 
 An unresolved thread returns:
 
@@ -48,11 +48,11 @@ The [merge-settlement hook](https://github.com/novotnyllc/railyard/blob/main/plu
 
 ## Independent review
 
-The delivery tail checks for a separate review pass at the required tier. The implementation author and the merge authority therefore have distinct evidence surfaces.
+Reserve an independent perspective for the final decision. The delivery tail checks for a separate review pass at the required tier, giving the implementation author and merge authority distinct evidence surfaces.
 
 ## Post-merge proof
 
-The merge commit is checked for ancestry on the base branch, then the smallest applicable test or verification command runs against the merged state. The report names the commit and command.
+Prove the state users and downstream systems will receive. The merge commit is checked for ancestry on the base branch, then the smallest applicable test or verification command runs against the merged state. The report names the commit and command.
 
 ```text
 merge=4e1d... ancestry=verified
@@ -62,7 +62,7 @@ result=proven
 
 ## Focused quality gates
 
-Docs-only changes use link and content scans. UI changes use the project's browser-visible quality gate. Native app work uses the isolated test integration when selected. Fleet work uses per-host readiness, trust, canary, and journal evidence.
+Spend verification effort where the change can fail. Docs-only changes use link and content scans. UI changes use the project's browser-visible quality gate. Native app work uses the isolated test integration when selected. Fleet work uses per-host readiness, trust, canary, and journal evidence.
 
 ```text
 dispatch_gate=explicit-model pass

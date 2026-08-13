@@ -7,7 +7,7 @@ parent: Start here
 
 # Custom-domain cutover
 
-The project site serves from `https://novotnyllc.github.io/railyard/` until DNS for `railyard.express` has propagated. The Astro source keeps the domain move deliberately small.
+Cut a documentation domain over as one observable handoff: prepare the source, ship one signed commit, then bind Pages after DNS is ready. This keeps content stable, makes rollback reasoning straightforward, and confines the operator action to the domain boundary. The project site serves from `https://novotnyllc.github.io/railyard/` until DNS for `railyard.express` has propagated; the Astro source keeps the move deliberately small.
 
 ## The one-commit handoff
 
@@ -25,4 +25,4 @@ The project site serves from `https://novotnyllc.github.io/railyard/` until DNS 
 
 ## Why the content stays stable
 
-Markdown links are rewritten at build time from the single base constant, so the page content, navigation, and generated routes do not need a second migration. DNS and certificate state remain operator-controlled.
+Keep content independent from deployment location. Markdown links are rewritten at build time from the single base constant, so the page content, navigation, and generated routes do not need a second migration. DNS and certificate state remain operator-controlled.

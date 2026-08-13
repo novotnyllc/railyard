@@ -7,15 +7,15 @@ nav_order: 16
 
 # Fleet hosts
 
-Fleet hosts establishes and retires machine membership with identity, transport, prerequisite, and readiness evidence.
+Make machine membership a witnessed lifecycle. Bind roster identity to transport identity during enrollment, carry prerequisite evidence into readiness, and publish revocation as a visible authority change so every later operation starts from current trust.
 
 ## What it adds
 
-The skill records the machine entry, checks reachability, creates or verifies the machine key, handles explicit enrollment steps, and hands the final result to fleet readiness.
+Fleet hosts provides that lifecycle. It records the machine entry, checks reachability, creates or verifies the machine key, handles explicit enrollment steps, and hands the final result to fleet readiness.
 
 ## How it works
 
-Enrollment binds the roster identity to the configured transport identity. Revocation records the chain change, cleans the machine's managed state, and makes the future authority result visible across the fleet.
+Enrollment binds the roster identity to the configured transport identity. Revocation records the chain change, cleans the machine's managed state, and makes the resulting authority state visible across the fleet.
 
 ```text
 > Add host-a through the trusted channel, verify key possession, and show its readiness handoff.

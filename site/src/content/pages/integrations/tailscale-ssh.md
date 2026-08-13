@@ -7,9 +7,13 @@ nav_order: 5
 
 # Tailscale SSH integration
 
-Tailscale SSH adds an authenticated transport path for reaching an enrolled machine; the core system operates fully without it.
+Choose transport as an explicit part of the delivery route, then verify machine identity and readiness independently. This keeps remote work fast, fleet trust authoritative, and the route record clear enough to explain later.
+
+The optional Tailscale SSH integration supplies an authenticated transport path for reaching an enrolled machine; the core system remains fully operational on its own.
 
 ## Easy path
+
+An operator is about to open a remote lane and wants proof that the selected address reaches the enrolled machine through the intended transport:
 
 ```text
 > Check the selected transport, confirm the machine identity, and start the remote lane.
@@ -17,11 +21,11 @@ Tailscale SSH adds an authenticated transport path for reaching an enrolled mach
 
 ## What it adds
 
-The fleet registry can use a Tailscale address when the machine advertises one. Remote administration still runs its identity, shell, tmux, and evidence checks through the named lane.
+Use the advertised address while preserving the full readiness check. The fleet registry can use a Tailscale address when the machine advertises one. Remote administration still runs its identity, shell, tmux, and evidence checks through the named lane.
 
 ## The seam
 
-Tailscale supplies transport. Fleet trust, readiness, and delivery remain owned by their respective systems, so the transport choice stays visible in the route record.
+Keep the seam narrow: Tailscale supplies transport. Fleet trust, readiness, and delivery remain owned by their respective systems, so the transport choice stays visible in the route record.
 
 ## Proof point
 

@@ -7,15 +7,15 @@ nav_order: 6
 
 # Audit
 
-Audit reconstructs how a run moved from its opening approach to its terminal evidence.
+Treat every delivery run as a decision record: start with the intended approach, follow each consequential turn, and finish with evidence that another operator can inspect. That discipline makes a run explainable, resumable, and honest about anything still unresolved.
 
 ## What it adds
 
-The report groups route decisions, dispatches, checks, review rounds, retries, Git state, pull-request state, merge state, and retrospective outcomes.
+Audit turns that practice into a report grouping route decisions, dispatches, checks, review rounds, retries, Git state, pull-request state, merge state, and retrospective outcomes.
 
 ## How it works
 
-Audit reads the primary run log, maps planned items and workarounds to captured evidence, and marks the boundary between observed fact and unresolved state. It preserves the reason for deviations through metadata events.
+The skill reads the primary run log, maps planned items and workarounds to captured evidence, and marks the boundary between observed fact and unresolved state. Metadata events preserve the reason for each deviation.
 
 ```text
 > Reconstruct this delivery run and show the decision chain, checks, review rounds, and terminal proof.
@@ -27,7 +27,7 @@ terminal=local-verified  merge=owner-action-required
 
 ## Scope
 
-Audit reads and reports. It provides evidence for the owner to interpret and leaves route changes to the owning workflow.
+Audit reads and reports. It gives the owner evidence to interpret, while the owning workflow retains route-change authority.
 
 ## Source
 

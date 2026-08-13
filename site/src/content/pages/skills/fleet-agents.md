@@ -7,15 +7,15 @@ nav_order: 13
 
 # Fleet agents
 
-Fleet agents keeps harnesses, plugins, skills, hooks, agents, MCP servers, and selected settings aligned with observable per-machine evidence.
+Manage the agent surface as declared, inspectable state on every machine. Give each artifact one source owner, compare its resolved bytes, and record the action outcome so the fleet stays aligned with its provenance intact.
 
 ## What it adds
 
-The skill inventories the installed agent surface, refreshes managed plugin sources, compares desired and observed digests, and prepares the desired-state path when you opt into fleet convergence.
+Fleet agents implements that practice for harnesses, plugins, skills, hooks, agents, MCP servers, and selected settings. It inventories the installed surface, refreshes managed plugin sources, compares desired and observed digests, and prepares the desired-state path when you opt into fleet convergence.
 
 ## How it works
 
-Each artifact is handled by its owning installer or source. Plugin payloads flow through their source, local skills retain their source ownership, and configuration keys use an allowlist. The result records version, resolved bytes, and action outcome.
+Each artifact moves through its owning installer or source. Plugin payloads flow through their source, local skills retain source ownership, and configuration keys use an allowlist. The result records version, resolved bytes, and action outcome.
 
 ```text
 > Compare the desired agent surface with host-a and prepare the smallest sync plan.

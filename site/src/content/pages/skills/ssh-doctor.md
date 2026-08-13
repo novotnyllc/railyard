@@ -7,11 +7,11 @@ nav_order: 10
 
 # SSH Doctor
 
-SSH Doctor turns remote transport failures into a layered diagnosis that begins with identity and loopback evidence.
+Diagnose remote transport from the inside out: prove local configuration and identity, follow the connection through the login shell, and assign the first failing layer to its repair owner. This gives operators a precise intervention grounded in the failing layer.
 
 ## What it adds
 
-The skill checks local configuration, target reachability, the login shell, service state, keys, certificates, and the selected transport path in a fixed order.
+SSH Doctor applies that layered practice. It checks local configuration, target reachability, the login shell, service state, keys, certificates, and the selected transport path in a fixed order.
 
 ## How it works
 

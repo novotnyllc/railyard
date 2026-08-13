@@ -7,15 +7,15 @@ nav_order: 15
 
 # Fleet auth
 
-Fleet auth reports the presence and health of configured credential artifacts while keeping their contents inside their custody surface.
+Treat credentials as custody-bound capabilities: verify presence, health, and recovery metadata while their values remain inside the system entrusted with them. Readiness becomes visible while secret custody stays intact.
 
 ## What it adds
 
-The skill verifies metadata, paths, file modes, native stores, encrypted references, and reauthentication commands for the selected machine.
+Fleet auth applies that practice to the selected machine. It verifies metadata, paths, file modes, native stores, encrypted references, and reauthentication commands.
 
 ## How it works
 
-Each artifact declares a strategy, portability class, verification command, and optional reauthentication path. The report distinguishes healthy, missing, stale, and held artifacts for readiness and operations.
+Each artifact declares a strategy, portability class, verification command, and optional reauthentication path. The resulting readiness report distinguishes healthy, missing, stale, and held artifacts for operations.
 
 ```text
 > Check the configured auth artifacts for host-a and show presence without revealing values.
