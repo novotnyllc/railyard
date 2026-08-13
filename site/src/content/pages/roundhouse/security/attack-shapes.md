@@ -17,7 +17,7 @@ The boundary map keeps store custody and instruction integrity visible as the tw
 
 ## Compromised member enrolls an attacker
 
-Picture a compromised member proposing a roster edit for an attacker. Review, held hooks, canary evidence, removal caps, soak, and fleet-wide alerts contain the new authority and surface the attempt. The result is a named roster change for operator action.
+A compromised member proposes a roster edit for an attacker. Review, held hooks, canary evidence, removal caps, soak, and fleet-wide alerts contain the new authority and surface the attempt. The result is a named roster change for operator action.
 
 ## Stolen machine key
 
@@ -57,5 +57,3 @@ fleet_availability=continues
 ```
 
 The receipt names the control outcome and residual separately, so a contained attack is not reported as a universal prevention claim.
-
-Next: [security hub](/roundhouse/security/) or [anti-rollback](/roundhouse/security/anti-rollback/).

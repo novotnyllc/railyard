@@ -19,7 +19,8 @@ const current = ordered.findIndex((item) => item.id === entry.id);
 const previous = current > 0 ? ordered[current - 1] : undefined;
 const next = current >= 0 && current < ordered.length - 1 ? ordered[current + 1] : undefined;
 const section = nav.find((group) => group.items.some((item) => item.id === entry.id))?.label || 'Reference';
+const isSectionIndex = entry.id === 'index' || entry.id.endsWith('/index');
 ---
-<DocsLayout title={entry.data.title} description={entry.data.description} nav={nav} active={entry.id} previous={previous} next={next} section={section}>
+<DocsLayout title={entry.data.title} description={entry.data.description} nav={nav} active={entry.id} previous={previous} next={next} section={section} breadcrumb={isSectionIndex ? null : section} hasChildren={Boolean(entry.data.has_children)}>
   <Content />
 </DocsLayout>

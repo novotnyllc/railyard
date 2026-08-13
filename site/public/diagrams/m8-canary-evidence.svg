@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 610" role="img" aria-labelledby="title desc">
   <title id="title">M8 canary evidence</title>
-  <desc id="desc">A canary journals an applied item digest, waits at least 41 hours with no later hold or revert, and publishes a later record or alive heartbeat. A non-canary checks the replicated journal: evidence with liveness applies the item, while a silent or reverted canary holds it.</desc>
+  <desc id="desc">A canary journals an applied item digest, waits for the configured canary_wait_hours with a 24-hour default and fallback, and publishes a later record or alive heartbeat. A non-canary checks the replicated journal: evidence with liveness applies the item, while a silent or reverted canary holds it.</desc>
   <style>
     .bg{fill:#fffaf1}.actor{fill:#f4bf84;stroke:#8b5e34;stroke-width:2}.node{fill:#fffaf1;stroke:#b45309;stroke-width:2}.edge{stroke:#8b5e34;stroke-width:2;marker-end:url(#arrow)}.label{fill:#171716;font:600 17px system-ui,sans-serif;text-anchor:middle}.small{fill:#6a6258;font:15px system-ui,sans-serif;text-anchor:middle}.arrow{fill:#8b5e34}
     @media(prefers-color-scheme:dark){.bg{fill:#1c1b19}.actor{fill:#76512f;stroke:#dfa05b}.node{fill:#25231f;stroke:#dfa05b}.edge{stroke:#dfa05b}.label{fill:#eee9df}.small{fill:#b2ada3}.arrow{fill:#dfa05b}}
@@ -13,5 +13,5 @@
   <g class="edge"><path d="M170 145h380"/><path d="M170 255h380"/><path d="M930 355H550"/><path d="M550 470h380"/><path d="M930 525H700"/></g>
   <g class="small"><text x="360" y="137">applied(item X, digest D) at t0</text><text x="360" y="247">any record or alive heartbeat after t0 + wait</text><text x="740" y="347">gate check for X@D</text><text x="740" y="462">evidence + liveness present</text><text x="810" y="517">canary silent or reverted</text></g>
   <g class="node"><rect x="325" y="175" width="450" height="70" rx="10"/><rect x="760" y="430" width="170" height="70" rx="10"/><rect x="940" y="430" width="130" height="70" rx="10"/><rect x="760" y="535" width="170" height="45" rx="10"/></g>
-  <g class="label"><text x="550" y="202">wait ≥ 41h</text><text x="550" y="224">no later held / reverted</text><text x="845" y="458">Apply X</text><text x="1005" y="458">Hold X</text><text x="845" y="563">silence is never a pass</text></g>
+  <g class="label"><text x="550" y="202">wait ≥ canary_wait_hours</text><text x="550" y="224">24h default / fallback</text><text x="845" y="458">Apply X</text><text x="1005" y="458">Hold X</text><text x="845" y="563">silence is never a pass</text></g>
 </svg>

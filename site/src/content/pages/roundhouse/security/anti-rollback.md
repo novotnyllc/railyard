@@ -45,5 +45,3 @@ alert: anti-rollback
 In the higher-stakes case, an anonymized host sees generation 17 after it has already trusted generation 18. An absent archive leaves the re-root unauthorized, so the host preserves the reviewed state and raises `anti-rollback`.
 
 The mark is root-owned where the privileged lane exists. The store's ordinary signed history remains the source of the reviewed reference.
-
-Next: [canary evidence](/roundhouse/security/canary-evidence/) or [trust ratchet](/roundhouse/security/trust-ratchet/).

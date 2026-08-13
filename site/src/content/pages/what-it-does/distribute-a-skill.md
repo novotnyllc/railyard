@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Distribute a skill
-parent: What it does
+parent: Practices
 nav_order: 4
 ---
 

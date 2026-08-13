@@ -7,7 +7,7 @@ nav_order: 2
 
 # Budgets, admission, and receipts
 
-Treat budget as part of the design: forecast the work, reserve capacity at the right scope, and commit spend only when a specific carrier action is ready. This keeps model economics visible before execution and gives every task, run, and project an auditable constraint. Railyard expresses that practice through soft, `hardAdmission`, and `strict` meters; the carrier receives work only after the applicable forecast fits.
+Treat budget as part of the design: forecast the work, reserve capacity at the right scope, and commit spend only when a specific carrier action is ready. This keeps model economics visible before execution and gives every task, run, and project an auditable constraint. Railyard expresses these controls through soft, `hardAdmission`, and `strict` meters; the carrier receives work only after the applicable forecast fits.
 
 ## Admission behavior
 
@@ -55,5 +55,3 @@ A fresh head with no review waits through the ten-minute settlement window. If t
 ```
 
 Read the receipt at the unit it actually proves. It reports a relative ledger unit only. The policy's rate record owns any monetary interpretation and includes its own source, freshness, model digest, carrier version, effort, and billing surface.
-
-Next: [roles, tiers, and carriers](/delivery/model-routing/tiers/) or [two worked runs](/delivery/model-routing/worked-runs/).

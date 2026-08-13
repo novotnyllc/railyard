@@ -11,7 +11,7 @@ Diagnose remote transport from the inside out: prove local configuration and ide
 
 ## What it adds
 
-SSH Doctor applies that layered practice. It checks local configuration, target reachability, the login shell, service state, keys, certificates, and the selected transport path in a fixed order.
+SSH Doctor checks local configuration, target reachability, the login shell, service state, keys, certificates, and the selected transport path in a fixed order.
 
 ## How it works
 
@@ -26,7 +26,7 @@ service=held reason=listener-not-ready owner=remote-admin
 
 ## Scope
 
-SSH Doctor diagnoses transport health. Remote mutation belongs to the explicitly selected remote administration lane.
+SSH Doctor diagnoses transport health. Remote mutation belongs to the explicitly selected remote administration channel.
 
 ## Source
 
@@ -40,5 +40,3 @@ command_timeout=bounded identity=verified
 finding=listener-not-ready owner=remote-admin
 result=diagnosed
 ```
-
-Next: [administer remotely](/what-it-does/administer-remotely/).

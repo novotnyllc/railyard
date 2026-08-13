@@ -11,7 +11,7 @@ Decompose a large objective around real seams, then let dependency-ready lanes m
 
 ## What it adds
 
-Orchestrate carries that practice across machines with current readiness evidence. It classifies each turn, freezes an objective and acceptance contract, consults fleet readiness, creates bounded lanes, and tracks each lane to a terminal result.
+Orchestrate coordinates work across machines with current readiness evidence. It classifies each turn, freezes an objective and acceptance contract, consults fleet readiness, creates bounded lanes, and tracks each lane to a terminal result.
 
 ## How it works
 
@@ -40,5 +40,3 @@ lane=lane-a carrier=codex-luna claim=claim-opaque-a result=settled
 lane=lane-b carrier=codex-sol claim=claim-opaque-b result=settled
 contract_digest=sha256:7c1a... synthesis=complete
 ```
-
-Next: [run work on another machine](/what-it-does/run-work-on-another-machine/).

@@ -69,5 +69,3 @@ dispatch_gate=explicit-model pass
 merge_settlement=threads-resolved window-passed
 post_merge=ancestry+focused-check pass
 ```
-
-Next: [reconstruct a run](/delivery/audit/) or [ship a change](/what-it-does/ship-a-change/).

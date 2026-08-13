@@ -7,7 +7,7 @@ nav_order: 2
 
 # Two worked runs, with the ledger
 
-Route by economic shape: give mechanical volume to the implementation tier, reserve stronger reasoning for subtle seams and hard review, and make the quality purchase legible in the ledger. The payoff is controlled spend with depth exactly where failure would hurt. Every number below is a representative relative cost unit on the contract's `relativeCostIndex` scale. Dollar rates remain catalog-owned, source-linked, rate-stamped, and meter-specific.
+Route by economic shape: give mechanical volume to the implementation tier, reserve stronger reasoning for subtle seams and hard review, and make the quality purchase legible in the ledger. The ledger keeps spend controlled, with depth exactly where failure would hurt. Every number below is a representative relative cost unit on the contract's `relativeCostIndex` scale. Dollar rates remain catalog-owned, source-linked, rate-stamped, and meter-specific.
 
 ## Run 1 — Fleet-utility API migration
 
@@ -47,5 +47,3 @@ The quality purchase is deliberate: about 70% of this representative ledger sits
 run=fleet-utility-api-migration relative_cost_units=36 findings=4 outcome=proven
 run=concurrency-bug-fix relative_cost_units=34 findings=2 ci_reproducer_runs=500 outcome=proven
 ```
-
-Next: [read the sync surface](/sync/) or [return to delivery](/delivery/).

@@ -11,7 +11,7 @@ Use a second frontier model as a bounded advisor: attach the exact files and sou
 
 ## What it adds
 
-Oracle provides that advisory practice. It packages a prompt, file set, route claim, and budget context for a second frontier model, then returns a checkpointed result for verification by the owning workflow.
+Oracle packages a prompt, file set, route claim, and budget context for a second frontier model, then returns a checkpointed result for verification by the owning workflow.
 
 ## How it works
 
@@ -40,5 +40,3 @@ files_digest=sha256:12af... findings=2
 repository_check=owner-verified merge_authority=workflow
 result=advisory
 ```
-
-Next: [read harden review](/what-it-does/harden-review/).

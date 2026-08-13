@@ -11,7 +11,7 @@ Establish a delivery baseline by observing the machine first, proposing the exac
 
 ## What it adds
 
-Setup carries that practice from inventory to a validated delivery-ready baseline. It inventories installed plugins, marketplaces, tools, configuration, and credential presence, then proposes the missing pieces and writes only the answers you provide.
+Setup runs the machine from inventory to a validated delivery-ready baseline. It inventories installed plugins, marketplaces, tools, configuration, and credential presence, then proposes the missing pieces and writes only the answers you provide.
 
 ## How it works
 
@@ -42,4 +42,9 @@ step=readiness host=ready task=ready transport=ready
 result=setup-complete
 ```
 
-Next: [read first machine](/start/first-machine/).
+## Troubleshooting
+
+- **The marketplace is missing:** return to [Install](/start/install/) and add the shared marketplace before asking Setup to inspect plugin state.
+- **A plugin is present at the wrong version:** compare the marketplace identity and version, then update through the harness that owns the install.
+- **A required tool or credential is absent:** keep the proposed delta visible, install or authenticate through the native owner, and rerun Setup.
+- **A host is not ready:** use [Fleet readiness](/skills/fleet-readiness/) to separate project, agent, auth, and transport evidence before enrolling it.

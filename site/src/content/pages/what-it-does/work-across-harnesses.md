@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Work across harnesses
-parent: What it does
+parent: Practices
 nav_order: 6
 ---
 

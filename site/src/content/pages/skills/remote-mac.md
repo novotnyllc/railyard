@@ -11,7 +11,7 @@ Make remote work resumable from the first command. Verify the destination, run l
 
 ## What it adds
 
-Remote Mac provides that bounded operating lane. It checks the destination first, uses the configured login shell, starts long work inside a named tmux session, and returns the session and log handles for follow-up.
+Remote Mac provides that bounded operating channel. It checks the destination first, uses the configured login shell, starts long work inside a named tmux session, and returns the session and log handles for follow-up.
 
 ## How it works
 
@@ -41,5 +41,3 @@ identity=verified cwd=/work/project
 last_line="tests: 48 passed"
 result=reconnectable
 ```
-
-Next: [administer remotely](/what-it-does/administer-remotely/).

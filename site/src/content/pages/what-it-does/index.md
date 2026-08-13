@@ -1,13 +1,13 @@
 ---
 layout: default
-title: What it does
+title: Practices
 nav_order: 3
 has_children: true
 ---
 
-# What it does
+# Practices
 
-Start with the delivery outcome that carries real stakes: merge a change, harden a concurrency seam, align five machines, or place work on the host prepared to run it. Each story leads with the operating practice and payoff, then shows an easy path, the mechanism as evidence, one proof point, and a next link.
+Start with the delivery outcome that carries real stakes: merge a change, harden a concurrency seam, align four reference hosts, or place work on the host prepared to run it. Each story leads with the operating practice and outcome, then shows an easy path, the mechanism as evidence, one proof point, and a continuation link.
 
 1. [Ship a change](/what-it-does/ship-a-change/)
 2. [Harden review](/what-it-does/harden-review/)
@@ -28,5 +28,3 @@ Start with the delivery outcome that carries real stakes: merge a change, harden
 | A trustworthy review pass | [Harden review](/what-it-does/harden-review/) |
 | A consistent fleet | [Keep machines current](/what-it-does/keep-machines-current/) |
 | A new skill across machines | [Distribute a skill](/what-it-does/distribute-a-skill/) |
-
-Next: [start with installation](/start/install/).

@@ -1,17 +1,20 @@
 ---
+import { withBase } from '../config/site.mjs';
 ---
 <section class="receipt-section wrap" aria-labelledby="receipt-title">
-  <div class="section-heading receipt-heading"><p class="eyebrow">The definition of done</p><h2 id="receipt-title">Treat delivery<br /><span>as an evidence chain.</span></h2><p>A branch shows work exists. Checks show it behaves. Review shows the risk was examined. Merge proof and a post-merge check show the result arrived. Railyard carries that whole chain in one receipt.</p></div>
-  <div class="terminal" aria-label="Example Railyard delivery receipt">
+  <div class="section-heading receipt-heading"><p class="eyebrow">The definition of done</p><h2 id="receipt-title">Treat delivery<br /><span>as an evidence chain.</span></h2><p>A branch shows work exists. Checks show it behaves. Review shows the risk was examined. Merge proof and a post-merge check show the result arrived. Railyard carries that whole chain in one receipt, and <a class="text-link" href={withBase('/delivery/audit/')}>every run reconstructs into a decision chain you can retrospect against.</a></p></div>
+  <div class="terminal" aria-label="Illustrative chat transcript for an agent delivery">
     <div class="terminal-bar"><span></span><span></span><span></span><b>railyard / receipt</b></div>
     <div class="terminal-body">
-      <p><i>$</i> <strong>railyard deliver</strong> <mark>“ship the retry fix”</mark></p>
+      <p class="speaker">you</p>
+      <p><mark>“Ship the retry fix and get it merged.”</mark></p>
       <p class="muted">routing <span>implementation</span> · effort max</p>
       <p><b class="check">✓</b> plan → implementation → review</p>
       <p><b class="check">✓</b> independent correctness + quality lenses</p>
-      <p><b class="check">✓</b> pull request checks settled</p>
+      <p><b class="check">✓</b> <a href={withBase('/delivery/gates/#merge-settlement')}>pull request checks settled</a></p>
       <p><b class="check">✓</b> merge reachable from <code>main</code></p>
       <p class="receipt-result"><span>post-merge proof</span><strong>verified</strong></p>
+      <p class="terminal-note">Illustrative transcript. Actual usage is a chat request to your agent, not a shell command.</p>
     </div>
   </div>
 </section>

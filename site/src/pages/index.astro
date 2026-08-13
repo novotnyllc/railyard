@@ -27,7 +27,7 @@ const scenarios = [
     <ReceiptShowcase />
     <ProofStrip />
     <section class="scenarios wrap" aria-labelledby="scenarios-title">
-      <div class="section-heading scenarios-heading"><p class="eyebrow">Practice in context</p><h2 id="scenarios-title">Choose the stakes.<br /><span>Follow the delivery.</span></h2><a class="text-link" href={withBase('/what-it-does/')}>See all ten practices <span aria-hidden="true">↗</span></a></div>
+      <div class="section-heading scenarios-heading"><p class="eyebrow">Practice in context</p><h2 id="scenarios-title">Choose the stakes.<br /><span>Follow the delivery.</span></h2><a class="text-link" href={withBase('/what-it-does/')}>See all ten practices <span aria-hidden="true">→</span></a></div>
       <div class="scenario-grid">{scenarios.map(([number, title, text, slug, icon]) => <ScenarioCard number={number} title={title} text={text} slug={slug} icon={icon} />)}</div>
     </section>
     <section class="start-callout wrap" aria-labelledby="start-title"><div><p class="eyebrow">Prove the practice once</p><h2 id="start-title">Start with one<br /><em>real change.</em></h2></div><div><p>Install the surface, carry a useful delivery from intent to arrival on the machine you already use, then add fleet context as the work expands.</p><a class="button button-primary" href={withBase('/start/')}>Run it in ten minutes <span aria-hidden="true">→</span></a></div></section>

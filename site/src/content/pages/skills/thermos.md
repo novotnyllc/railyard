@@ -7,11 +7,11 @@ nav_order: 4
 
 # Thermos
 
-Review a frozen change through two distinct practitioner lenses, then synthesize one actionable packet before commit. Correctness gets the same serious attention as code health, and the implementation lane receives a clear gate it can settle.
+Thermos is a review skill invoked during delivery. It reviews a frozen change through two distinct practitioner lenses, then synthesizes one actionable packet before commit. Correctness gets the same serious attention as code health, and the implementation lane receives a clear gate it can settle.
 
 ## What it adds
 
-Thermos carries this paired-review practice. Its correctness lens covers breakage, security, developer experience, and feature-leak risk. Its code-quality lens covers structure, duplication, complexity, and maintainability.
+Thermos runs this paired review. Its correctness lens covers breakage, security, developer experience, and feature-leak risk. Its code-quality lens covers structure, duplication, complexity, and maintainability.
 
 ## How it works
 
@@ -40,5 +40,3 @@ packet=sha256:7c1a... findings=2
 fixes=2 checks_rerun=2
 review=thermos-synthesis result=pass
 ```
-
-Next: [read delivery gates](/delivery/gates/).

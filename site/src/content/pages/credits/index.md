@@ -15,7 +15,7 @@ Build on visible lineage and give upstream work its due. Clear attribution makes
 
 ## Direct dependencies
 
-- [Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin) supplies the workflow engine used by delivery.
+- [Compound Engineering (3.20.0+)](https://github.com/EveryInc/compound-engineering-plugin) supplies the workflow engine used by delivery.
 - [ponytail](https://github.com/DietrichGebert/ponytail) supplies the efficiency discipline carried into implementation and verification.
 - [Claude Code](https://code.claude.com) and [Codex](https://openai.com/codex) supply the harness and plugin surfaces.
 - [gh-stack](https://github.com/github/gh-stack) supports dependent-PR delivery.

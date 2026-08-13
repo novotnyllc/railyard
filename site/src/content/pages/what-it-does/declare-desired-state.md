@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Declare desired state
-parent: What it does
+parent: Practices
 nav_order: 5
 ---
 

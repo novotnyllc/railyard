@@ -20,7 +20,7 @@ This plain-language request activates the mechanism: `roundhouse` inventories th
 ## What happens
 
 - The local configuration describes platform, transport, projects, capabilities, and auth artifacts.
-- The fleet store records desired agent state in readable layers.
+- The Roundhouse store records desired agent state in readable layers.
 - A host identity signs its store contributions and publishes host-keyed evidence.
 - `fleet-readiness` combines project, agent, inventory, and auth evidence into a placement result.
 
@@ -39,4 +39,9 @@ The [fleet-readiness reference](/skills/fleet-readiness/) describes a three-part
 
 A one-machine fleet is a complete first operating surface. Add a second machine when placement, parity, or shared desired state earns its place.
 
-Next: [declare desired state](/what-it-does/declare-desired-state/).
+## Troubleshooting
+
+- **The agent cannot reach the host:** run [SSH Doctor](/skills/ssh-doctor/) and confirm the configured SSH name resolves before retrying enrollment.
+- **Enrollment expired or was rejected:** inspect the trust receipt, renew the enrollment through [the trust ratchet](/roundhouse/security/trust-ratchet/), and keep the prior authority until the new evidence passes.
+- **The sponsor channel is unreachable:** restore the already-trusted channel and repeat the sponsor-initiated flow; do not substitute an unverified route.
+- **Key generation fails:** generate the key on the target host, keep the private key there, and ask [Fleet hosts](/skills/fleet-hosts/) to restart the enrollment ceremony.

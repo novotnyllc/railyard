@@ -53,5 +53,3 @@ reason=principal-not-in-parent-roster alert=unknown-key
 ```
 
 The held roster edit leaves the last reviewed roster in place and names the principal for operator action. A valid addition can advance only from a trusted parent position.
-
-Next: [anti-rollback](/roundhouse/security/anti-rollback/) or [enrollment and TOFU](/roundhouse/security/enrollment-and-tofu/).

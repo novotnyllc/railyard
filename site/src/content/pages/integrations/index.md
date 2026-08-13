@@ -9,7 +9,7 @@ has_children: true
 
 Add capability where an operational boundary is already clear. A focused integration should contribute one strong specialty, preserve the ownership of the systems on either side, and leave the route visible in the evidence. That discipline expands what a fleet can do while keeping delivery and convergence understandable.
 
-These integrations follow that practice, and each one is optional; the core delivery and fleet systems remain fully operational on their own.
+These integrations share a clear operational boundary, and each one is optional; the core delivery and fleet systems remain fully operational on their own.
 
 - [Chezmoi](/integrations/chezmoi/) — deliberate dotfile reconciliation.
 - [Tart Xcode Runner](/integrations/tart-xcode-runner/) — disposable macOS test VMs.

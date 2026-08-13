@@ -11,7 +11,7 @@ Earn delivery placement one repository at a time. Verify source identity, protec
 
 ## What it adds
 
-Fleet projects applies that practice to every configured project. It checks source identity, checkout path, Git state, branch state, working tree, and handoff eligibility on the selected machine.
+Fleet projects checks source identity, checkout path, Git state, branch state, working tree, and handoff eligibility on every configured project and selected machine.
 
 ## How it works
 
@@ -40,5 +40,3 @@ origin=verified checkout=clean handoff=eligible
 evidence=projects/host-a.yaml
 result=ready
 ```
-
-Next: [run work on another machine](/what-it-does/run-work-on-another-machine/).

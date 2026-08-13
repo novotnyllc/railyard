@@ -13,15 +13,15 @@ The optional Tailscale SSH integration supplies an authenticated transport path 
 
 ## Easy path
 
-An operator is about to open a remote lane and wants proof that the selected address reaches the enrolled machine through the intended transport:
+An operator is about to open a remote channel and wants proof that the selected address reaches the enrolled machine through the intended transport:
 
 ```text
-> Check the selected transport, confirm the machine identity, and start the remote lane.
+> Check the selected transport, confirm the machine identity, and start the remote channel.
 ```
 
 ## What it adds
 
-Use the advertised address while preserving the full readiness check. The fleet registry can use a Tailscale address when the machine advertises one. Remote administration still runs its identity, shell, tmux, and evidence checks through the named lane.
+Use the advertised address while preserving the full readiness check. The fleet registry can use a Tailscale address when the machine advertises one. Remote administration still runs its identity, shell, tmux, and evidence checks through the named channel.
 
 ## The seam
 

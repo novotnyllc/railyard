@@ -43,5 +43,3 @@ Start with the operating job, learn the practice that makes it reliable, and use
 - [Remote Mac](/skills/remote-mac/) — `roundhouse`
 
 Together these references cover the public shipping skill set. Thermos carries its two review lenses as one reviewed surface, with their implementation details behind the Thermos reference.
-
-Next: [read delivery](/delivery/) or [explore integrations](/integrations/).

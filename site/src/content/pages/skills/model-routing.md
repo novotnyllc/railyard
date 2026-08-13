@@ -59,5 +59,3 @@ Ships in the `railyard` plugin.
 ```
 
 Go deeper: [roles, tiers, and carriers](/delivery/model-routing/).
-
-Next: [read the model-routing section](/delivery/model-routing/).

@@ -11,7 +11,7 @@ Apply maintenance from a fresh, sealed plan that names every package, manager, p
 
 ## What it adds
 
-Fleet update carries that practice for approved package and plugin maintenance. It snapshots current state, selects native manager operations, calculates a bounded plan, validates preconditions, and records the result in the fleet journal.
+Fleet update handles approved package and plugin maintenance. It snapshots current state, selects native manager operations, calculates a bounded plan, validates preconditions, and records the result in the fleet journal.
 
 ## How it works
 
@@ -40,5 +40,3 @@ item=packages.tool desired=4.2 precondition=passed
 manager=native action=update
 journal=host-a/2026-08-13.yaml result=applied
 ```
-
-Next: [keep machines current](/what-it-does/keep-machines-current/).

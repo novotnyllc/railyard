@@ -27,7 +27,7 @@ handoff=fleet-readiness
 
 ## Scope
 
-Fleet hosts owns membership lifecycle, identity, enrollment, revocation, and prerequisite handoff. Remote administration owns the bounded command lane after the host is selected.
+Fleet hosts owns membership lifecycle, identity, enrollment, revocation, and prerequisite handoff. Remote administration owns the bounded command channel after the host is selected.
 
 ## Source
 
@@ -41,5 +41,3 @@ identity=verified transport=ready
 roster=published soak=24h
 result=ready-for-readiness
 ```
-
-Next: [read the trust ratchet](/roundhouse/security/trust-ratchet/) or [bring up a first machine](/start/first-machine/).

@@ -7,9 +7,9 @@ nav_order: 2
 
 # Pull, gate, apply, prove
 
-Treat convergence as an evidence pipeline. Move each store edit through signed history, host-local review, canary evidence, an owning manager, and a journal record before another machine adopts it. Operators gain a crash-resumable loop that keeps the last applied value visible while a decision is held and makes every rollout outcome explainable.
+Treat convergence as an evidence pipeline. Move each store edit through signed history, host-local review, canary evidence, an owning manager, and a journal record before another machine adopts it. The loop is crash-resumable: the last applied value stays visible while a decision is held, and every rollout outcome stays explainable.
 
-Roundhouse carries that practice through one repeatable host-owned loop.
+Roundhouse runs that loop through one repeatable host-owned cycle.
 
 ![Fleet convergence pipeline: poll, fetch, resume, promote, fold, review, apply, journal, and publish, with clean exits and named holds.](/diagrams/m1-convergence.svg)
 
@@ -32,7 +32,7 @@ The operator's intent enters once; every later stage either strengthens the evid
 
 ## Canary evidence
 
-Fleet-wide reach is earned one digest at a time. A non-canary host applies item X at digest D only when a canary journaled `applied` or `satisfied` for D at least 41 hours ago, nothing later reverted or held D, and the canary has published any record since the wait began. A silent canary closes the evidence window as a hold and never reads as a pass.
+Fleet-wide reach is earned one digest at a time. A non-canary host applies item X at digest D only when a canary journaled `applied` or `satisfied` for D at least the configured `canary_wait_hours` ago, with a 24-hour default and fallback, nothing later reverted or held D, and the canary has published any record since the wait began. A silent canary closes the evidence window as a hold and never reads as a pass.
 
 The wait and the per-run removal caps bound how far a bad item can travel. `satisfied` counts as liveness because the desired identity is still present and observed. `held` carries a reason and keeps the prior value, so it cannot satisfy the canary gate.
 
@@ -60,5 +60,3 @@ Rollback is an ordinary signed change through review, canary, and apply. The rev
 ## Offline return
 
 Reconnect from the last trusted position. An offline host resumes from its reviewed reference, fetches the available history, reviews changed items, and publishes its own evidence when it reconnects. Parse errors and open conflicts keep affected items at their applied values and name the hold reason.
-
-Next: [inspect the store](/roundhouse/store/) or [run the cadence and CLI](/roundhouse/operating/).

@@ -11,11 +11,11 @@ Inventory a machine before deciding what it needs. Capture native facts, compare
 
 ## What it adds
 
-Fleet inventory applies that practice across platform, tools, harnesses, plugins, skills, projects, startup tasks, and auth presence. It gathers observed and desired values per machine, reports an `in_sync` result where the check applies, and preserves partial evidence when a row needs attention.
+Fleet inventory gathers observed and desired values across platform, tools, harnesses, plugins, skills, projects, startup tasks, and auth presence. It reports an `in_sync` result where the check applies and preserves partial evidence when a row needs attention.
 
 ## How it works
 
-The skill validates the machine configuration, collects native facts through the platform-appropriate lane, and hands findings to fleet readiness, agents, projects, auth, or updates according to ownership.
+The skill validates the machine configuration, collects native facts through the platform-appropriate channel, and hands findings to fleet readiness, agents, projects, auth, or updates according to ownership.
 
 ```text
 > Inventory host-a, compare the installed agent surface, and show the rows that need an owner.
@@ -40,5 +40,3 @@ host=host-a os=macos
 item=skills.my-review desired_sha=sha256:7c1a... observed_sha=sha256:7c1a...
 result=in_sync evidence=inventory/host-a.yaml
 ```
-
-Next: [keep machines current](/what-it-does/keep-machines-current/).

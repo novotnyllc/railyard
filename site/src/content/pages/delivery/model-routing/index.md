@@ -8,7 +8,7 @@ has_children: true
 
 # Every dispatch gets a priced, recorded route
 
-Use the right model for the job, spend where the hardness lives, and treat budget as an engineering constraint. That is the economic foundation of agentic delivery: routine volume earns an efficient route, difficult seams earn deeper reasoning, and every choice arrives with a receipt. Railyard turns that practice into one decision for model, effort, transport, and budget before the carrier starts.
+Use the right model for the job, spend where the hardness lives, and treat budget as an engineering constraint. That is the economic foundation of agentic delivery: routine volume earns an efficient route, difficult seams earn deeper reasoning, and every choice arrives with a receipt. Railyard resolves model, effort, transport, and budget into one decision before the carrier starts.
 
 ## Four verbs, one accountable path
 

@@ -1,13 +1,13 @@
 ---
 layout: default
 title: Keep machines current
-parent: What it does
+parent: Practices
 nav_order: 3
 ---
 
 # Keep machines current
 
-A five-machine macOS/Linux fleet has accumulated one stale skill, two package updates, and a project checkout that needs attention. Inventory the fleet, route each item to its owner, and apply approved updates through native managers. The agent surface stays aligned, with digests and per-machine evidence an operator can act on.
+A four-host macOS/Linux reference fleet has accumulated one stale skill, two package updates, and a project checkout that needs attention. Inventory the fleet, route each item to its owner, and apply approved updates through native managers. The agent surface stays aligned, with digests and per-machine evidence an operator can act on.
 
 ## Easy path
 
@@ -23,7 +23,7 @@ The run validates configuration, collects per-machine evidence, compares desired
 
 ## Proof point
 
-The [fleet inventory reference](/skills/fleet-inventory/) records per-machine evidence and an `in_sync` result. This public proof is summarized as the live five-machine macOS/Linux mix.
+The [fleet inventory reference](/skills/fleet-inventory/) records per-machine evidence and an `in_sync` result. The reference hosts are mac-mini, mac-studio, macbook-pro, and iris-wsl.
 
 ## Next
 
