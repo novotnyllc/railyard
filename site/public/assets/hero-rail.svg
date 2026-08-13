@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 520" role="img" aria-labelledby="title desc">
   <title id="title">Railyard delivery route</title><desc id="desc">Three tracks carry intent through routing and review to a verified result.</desc>
+  <style>@media(prefers-color-scheme:dark){[fill="#fffdf9"]{fill:#25231f}[fill="#3d3d3d"]{fill:#eee9df}[stroke="#3d3d3d"]{stroke:#8a8680}[stroke="#ded8cd"]{stroke:#8a8680}[fill="#b45309"]{fill:#dfa05b}[stroke="#b45309"]{stroke:#dfa05b}}</style>
   <rect width="720" height="520" fill="#fffdf9"/>
   <g fill="none" stroke="#3d3d3d" stroke-width="5" stroke-linecap="round">
     <line x1="106" y1="468" x2="294" y2="78"/><line x1="174" y1="468" x2="330" y2="78"/><line x1="542" y1="468" x2="386" y2="78"/><line x1="614" y1="468" x2="426" y2="78"/>

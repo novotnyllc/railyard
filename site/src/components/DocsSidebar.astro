@@ -6,7 +6,7 @@ const { nav = [], active = '' } = Astro.props;
   <div class="sidebar-label">Explore the yard</div>
   {nav.map((group) => (
     <section class="nav-group">
-      <h2>{group.label}</h2>
+      <p class="nav-group-label">{group.label}</p>
       <ul>
         {group.items.map((item) => <li class:list={{ [`nav-depth-${item.depth}`]: item.depth > 0 }}><a class:list={{ active: active === item.id }} aria-current={active === item.id ? 'page' : undefined} href={withBase(item.href)}>{item.title}</a></li>)}
       </ul>
