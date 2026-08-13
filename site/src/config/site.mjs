@@ -1,5 +1,5 @@
 // Cutover: change this one value to '/' and add public/CNAME.
-export const BASE_PATH = '/railyard';
+export const BASE_PATH = '/';
 export const SITE_ORIGIN = BASE_PATH === '/' ? 'https://railyard.express' : 'https://novotnyllc.github.io';
 export const SITE_URL = `${SITE_ORIGIN}${BASE_PATH === '/' ? '' : BASE_PATH}`;
 export const SITE_NAME = 'Railyard';
