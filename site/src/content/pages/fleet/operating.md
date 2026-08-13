@@ -65,6 +65,6 @@ Journals, applied records, alerts, findings, and upstream records carry the mach
 
 ## Proof point
 
-The operating source documents the command surface, cadence, policy keys, doctor rows, and audit paths. Source: `roundhouse/docs/operating.md`.
+The command surface, cadence, policy keys, doctor rows, and audit paths stay together here so an operator can move from inspection to action.
 
 Next: [read configuration](/fleet/config/) or [inspect the store](/fleet/store/).

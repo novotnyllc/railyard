@@ -36,6 +36,6 @@ The workflow freezes seven semantic digests: objective, source of truth, scope, 
 
 ## Proof point
 
-The reference skill names the router script, contract version, dispatch controls, and receipt lifecycle. Source: `railyard/docs/skills/model-routing.md`.
+The [Model routing skill](/skills/model-routing/) names the router script, contract version, dispatch controls, and receipt lifecycle.
 
 Next: [read the gates](/delivery/gates/) or [control model cost](/what-it-does/control-model-cost/).

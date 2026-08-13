@@ -23,7 +23,7 @@ Fleet readiness synthesizes prerequisite evidence. Inventory, agent parity, proj
 
 ## Source
 
-Ships in the `roundhouse` plugin. Source: `plugins/roundhouse/skills/fleet-readiness/SKILL.md`.
+Ships in the `roundhouse` plugin.
 
 ## Proof point
 

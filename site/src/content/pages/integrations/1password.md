@@ -25,7 +25,7 @@ Auth-artifact records remain per machine or portable references according to the
 
 ## Proof point
 
-The configuration source documents encrypted-install references, reauthentication flows, modes, size bounds, and verification commands. Source: `roundhouse/docs/config.md`.
+The [fleet configuration reference](/fleet/config/) documents encrypted-install references, reauthentication flows, modes, size bounds, and verification commands.
 
 ## Next
 

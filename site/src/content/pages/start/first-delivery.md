@@ -27,7 +27,7 @@ Get a reviewed, merged change with an observable post-merge receipt from one sen
 
 ## Proof point
 
-The delivery lifecycle documents the observable terminal pair: `git merge-base --is-ancestor <merge-commit> origin/<base>` plus a real post-merge check. Source: `railyard/docs/lifecycle.md`.
+The [delivery lifecycle](/delivery/lifecycle/) documents the observable terminal pair: `git merge-base --is-ancestor <merge-commit> origin/<base>` plus a real post-merge check.
 
 ## Scope
 

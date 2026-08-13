@@ -23,7 +23,7 @@ Fleet auth owns artifact metadata and verification. Secret values remain with th
 
 ## Source
 
-Ships in the `roundhouse` plugin. Source: `plugins/roundhouse/skills/fleet-auth/SKILL.md`.
+Ships in the `roundhouse` plugin.
 
 ## Proof point
 

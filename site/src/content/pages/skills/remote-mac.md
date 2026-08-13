@@ -23,7 +23,7 @@ Remote Mac owns one bounded remote Mac operation. Fleet placement, SSH diagnosis
 
 ## Source
 
-Ships in the `roundhouse` plugin. Source: `plugins/roundhouse/skills/remote-mac/SKILL.md`.
+Ships in the `roundhouse` plugin.
 
 ## Proof point
 

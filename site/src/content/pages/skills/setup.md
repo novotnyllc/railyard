@@ -23,7 +23,7 @@ Setup handles initial presence and configuration. Doctor handles an installed su
 
 ## Source
 
-Ships in the `railyard` plugin. Source: `plugins/railyard/skills/setup/SKILL.md`.
+Ships in the `railyard` plugin.
 
 ## Proof point
 

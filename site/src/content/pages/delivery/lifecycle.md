@@ -58,6 +58,6 @@ A substantial run closes with a recap and retrospective. Reusable repo lessons c
 intent -> routed -> planned -> implemented -> gated -> reviewed -> merged -> proven -> learned
 ```
 
-Source basis: `railyard/docs/lifecycle.md`.
+The [delivery lifecycle](/delivery/lifecycle/) is the reader-facing reference for this terminal evidence contract.
 
 Next: [see the gates](/delivery/gates/).

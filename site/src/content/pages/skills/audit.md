@@ -23,7 +23,7 @@ Audit reads and reports. It provides evidence for the owner to interpret and lea
 
 ## Source
 
-Ships in the `railyard` plugin. Source: `plugins/railyard/skills/audit/SKILL.md`.
+Ships in the `railyard` plugin.
 
 ## Proof point
 

@@ -23,7 +23,7 @@ The router decides and records. The selected workflow or carrier performs the wo
 
 ## Source
 
-Ships in the `railyard` plugin. Source: `plugins/railyard/skills/model-routing/SKILL.md`.
+Ships in the `railyard` plugin.
 
 ## Proof point
 

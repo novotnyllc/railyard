@@ -23,7 +23,7 @@ Fleet hosts owns membership lifecycle, identity, enrollment, revocation, and pre
 
 ## Source
 
-Ships in the `roundhouse` plugin. Source: `plugins/roundhouse/skills/fleet-hosts/SKILL.md`.
+Ships in the `roundhouse` plugin.
 
 ## Proof point
 

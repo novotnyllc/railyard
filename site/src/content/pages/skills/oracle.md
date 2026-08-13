@@ -23,7 +23,7 @@ Oracle advises. The repository workflow owns implementation, verification, and m
 
 ## Source
 
-Ships in the `railyard` plugin. Source: `plugins/railyard/skills/oracle/SKILL.md`.
+Ships in the `railyard` plugin.
 
 ## Proof point
 

@@ -23,7 +23,7 @@ Fleet agents owns agent-surface parity and its desired-state half. Package, proj
 
 ## Source
 
-Ships in the `roundhouse` plugin. Source: `plugins/roundhouse/skills/fleet-agents/SKILL.md`.
+Ships in the `roundhouse` plugin.
 
 ## Proof point
 

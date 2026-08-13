@@ -23,7 +23,7 @@ Thermos reviews and synthesizes. The implementation lane fixes findings, and the
 
 ## Source
 
-Ships in the `railyard` plugin. Source: `plugins/railyard/skills/thermos/SKILL.md`.
+Ships in the `railyard` plugin.
 
 ## Proof point
 

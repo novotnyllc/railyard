@@ -36,6 +36,6 @@ railyard:model-routing inspect-claim
 railyard:audit
 ```
 
-The audit skill reads evidence and presents it as a decision chain. Source: `railyard/docs/skills/audit.md`.
+The [Audit skill](/skills/audit/) reads evidence and presents it as a decision chain.
 
 Next: [read lifecycle](/delivery/lifecycle/) or [inspect the fleet operating surface](/fleet/operating/).

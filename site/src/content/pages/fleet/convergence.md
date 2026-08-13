@@ -49,6 +49,6 @@ Rollback is a signed change through the same review, canary, and apply gates. Th
 
 ## Proof point
 
-The source page describes the receiving-host gate order, canary evidence, item-level divergence, offline return, and rollback flow. Source: `roundhouse/docs/convergence.md`.
+This page describes the receiving-host gate order, canary evidence, item-level divergence, offline return, and rollback flow.
 
 Next: [read trust](/fleet/trust/) or [inspect the operating commands](/fleet/operating/).

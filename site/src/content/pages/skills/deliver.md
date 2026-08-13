@@ -23,7 +23,7 @@ One host-local implementation or pull-request lane belongs here. Multi-lane or c
 
 ## Source
 
-Ships in the `railyard` plugin. Source: `plugins/railyard/skills/deliver/SKILL.md`.
+Ships in the `railyard` plugin.
 
 ## Proof point
 

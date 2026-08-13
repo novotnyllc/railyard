@@ -23,7 +23,7 @@ Inventory observes and compares. It leaves changes to the skill that owns the it
 
 ## Source
 
-Ships in the `roundhouse` plugin. Source: `plugins/roundhouse/skills/fleet-inventory/SKILL.md`.
+Ships in the `roundhouse` plugin.
 
 ## Proof point
 

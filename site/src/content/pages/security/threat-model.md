@@ -82,6 +82,6 @@ The design assumes a single operator, a private store, complete peer clones, sam
 
 Every change has an owner, a signed history position, a path scope, a receiving-host review, and an observable outcome. The result is a trust model that tells the operator who can write, what can apply, where the decision happened, and which evidence supports it.
 
-Source basis: `roundhouse/docs/security/threat-model.md`, adapted for reader-facing current-state guarantees.
+This page presents the current-state guarantees in reader-facing form.
 
 Next: [read the trust model](/fleet/trust/) or [follow convergence](/fleet/convergence/).

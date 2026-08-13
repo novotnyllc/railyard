@@ -23,7 +23,7 @@ The store folds the skill's desired value through fleet, platform, group, and ma
 
 ## Proof point
 
-`roundhouse/docs/convergence.md` documents the receiving-host gate order and the canary condition for an exact item digest. The per-machine journal and applied record make the rollout observable.
+The [fleet convergence guide](/fleet/convergence/) documents the receiving-host gate order and the canary condition for an exact item digest. The per-machine journal and applied record make the rollout observable.
 
 ## Next
 

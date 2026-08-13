@@ -39,6 +39,6 @@ Repository configuration pins the pager, editor, signing, and environment behavi
 
 ## Proof point
 
-The source page ties each jj property to a fleet behavior: item-level convergence, signed snapshots, precise undo, checkpoint replay, and ordinary Git transport. Source: `roundhouse/docs/why-jj.md`.
+Each jj property maps to a fleet behavior: item-level convergence, signed snapshots, precise undo, checkpoint replay, and ordinary Git transport.
 
 Next: [follow convergence](/fleet/convergence/) or [read trust](/fleet/trust/).

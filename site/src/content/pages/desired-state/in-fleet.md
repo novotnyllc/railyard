@@ -40,6 +40,6 @@ The output shows the winning layer and the value that produced the digest.
 
 ## Proof point
 
-The store and convergence sources describe the four-layer fold, canary release, item digest, journal outcome, and `fleet-explain` path. Sources: `roundhouse/docs/store.md` and `roundhouse/docs/convergence.md`.
+The [fleet store](/fleet/store/) and [fleet convergence](/fleet/convergence/) guides describe the four-layer fold, canary release, item digest, journal outcome, and `fleet-explain` path.
 
 Next: [see fleet scaling](/desired-state/scaling/) or [read trust](/fleet/trust/).

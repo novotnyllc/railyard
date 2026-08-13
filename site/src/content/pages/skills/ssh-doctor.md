@@ -23,7 +23,7 @@ SSH Doctor diagnoses transport health. Remote mutation belongs to the explicitly
 
 ## Source
 
-Ships in the `roundhouse` plugin. Source: `plugins/roundhouse/skills/ssh-doctor/SKILL.md`.
+Ships in the `roundhouse` plugin.
 
 ## Proof point
 

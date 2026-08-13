@@ -23,7 +23,7 @@ Read-only identity and reachability checks establish the target. Long work runs 
 
 ## Proof point
 
-The remote-mac source documents the named-session handoff and the ssh-doctor source documents the diagnostic order from local transport through the target shell. Sources: `roundhouse/docs/skills/remote-mac.md` and `roundhouse/docs/skills/ssh-doctor.md`.
+The [Remote Mac skill](/skills/remote-mac/) documents the named-session handoff, and [SSH Doctor](/skills/ssh-doctor/) documents the diagnostic order from local transport through the target shell.
 
 ## Next
 

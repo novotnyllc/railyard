@@ -28,7 +28,7 @@ The four-layer fold resolves one value per item. Maps merge by key, scalar value
 
 ## Proof point
 
-The convergence source names the canary-to-downstream evidence flow and the `journal/<machine>/` plus `applied/<machine>.yaml` records that prove what each host did. Source: `roundhouse/docs/convergence.md`.
+The [fleet convergence guide](/fleet/convergence/) names the canary-to-downstream evidence flow and the `journal/<machine>/` plus `applied/<machine>.yaml` records that prove what each host did.
 
 ## Next
 

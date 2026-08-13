@@ -7,8 +7,10 @@ has_children: true
 
 # Security
 
-Security is expressed as ownership, signed history, scoped authority, and observable decisions.
+Security gives every fleet change an owner, a signed history position, a scoped authority, and an observable decision.
 
-- [Threat model](/security/threat-model/) — current-state assets, boundaries, guarantees, and residuals.
+- **Trust model:** [follow the signed-history and receiving-host boundaries](/security/threat-model/#trust-flow).
+- **What's defended:** [see the assets, principals, and apply-time controls](/security/threat-model/#principal-capabilities).
+- **Named residuals:** [read the assumptions and operator responsibilities](/security/threat-model/#assumptions).
 
-Next: [read trust](/fleet/trust/) for the roster and enrollment mechanics.
+Start here for the current trust surface, then move into the deeper Roundhouse security section as it lands.

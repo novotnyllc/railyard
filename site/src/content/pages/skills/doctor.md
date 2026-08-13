@@ -23,7 +23,7 @@ Doctor diagnoses and reports. Mutation belongs to the approved owning workflow.
 
 ## Source
 
-Ships in the `railyard` plugin. Source: `plugins/railyard/skills/doctor/SKILL.md`.
+Ships in the `railyard` plugin.
 
 ## Proof point
 

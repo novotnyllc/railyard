@@ -44,6 +44,6 @@ The outer boundary is custody of the private store and integrity of the instruct
 
 ## Proof point
 
-The trust source documents the parent roster rule, durable and ephemeral classes, enrollment, revocation, root-owned materialization, and the actor/capability matrix. Source: `roundhouse/docs/trust.md`.
+The parent roster rule, durable and ephemeral classes, enrollment, revocation, root-owned materialization, and actor/capability matrix stay together here.
 
 Next: [read the reader-facing threat model](/security/threat-model/) or [follow convergence](/fleet/convergence/).

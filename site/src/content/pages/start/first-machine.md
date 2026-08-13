@@ -26,7 +26,7 @@ Give a machine a readable baseline, a signed fleet identity, and a readiness res
 
 ## Proof point
 
-The fleet-readiness source describes a three-part readiness surface: host, task, and transport evidence. The dispatcher consults that result before placing work. Source: `roundhouse/docs/skills/fleet-readiness.md`.
+The [fleet-readiness reference](/skills/fleet-readiness/) describes a three-part readiness surface: host, task, and transport evidence. The dispatcher consults that result before placing work.
 
 ## Scope
 

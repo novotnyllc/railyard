@@ -14,7 +14,14 @@ The project site serves from `https://novotnyllc.github.io/railyard/` until DNS 
 1. Change `BASE_PATH = '/railyard'` to `BASE_PATH = '/'` in `site/src/config/site.mjs`.
 2. Add `site/public/CNAME` containing `railyard.express`.
 3. Build and run the local asset and link receipts.
-4. After that signed commit reaches `main`, set the Pages custom domain with the `gh api` command in [`docs/site-cutover.md`](https://github.com/novotnyllc/railyard/blob/main/docs/site-cutover.md).
+4. After that signed commit reaches `main`, set the Pages custom domain:
+
+   ```sh
+   gh api --method PUT repos/novotnyllc/railyard/pages \
+     -H 'Accept: application/vnd.github+json' \
+     -f cname='railyard.express' \
+     -f build_type='workflow'
+   ```
 
 ## Why the content stays stable
 

@@ -23,7 +23,7 @@ The request enters intent routing, receives an explicit model and effort, moves 
 
 ## Proof point
 
-The lifecycle source records the terminal evidence contract: merge ancestry plus a real post-merge check. Source: `railyard/docs/lifecycle.md`.
+The [delivery lifecycle](/delivery/lifecycle/) records the terminal evidence contract: merge ancestry plus a real post-merge check.
 
 ## Next
 

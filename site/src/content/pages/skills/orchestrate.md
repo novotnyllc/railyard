@@ -23,7 +23,7 @@ Orchestrate owns decomposition, placement, coordination, and synthesis. Delivery
 
 ## Source
 
-Ships in the `railyard` plugin. Source: `plugins/railyard/skills/orchestrate/SKILL.md`.
+Ships in the `railyard` plugin.
 
 ## Proof point
 

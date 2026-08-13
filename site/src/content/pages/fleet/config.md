@@ -53,6 +53,6 @@ The validator checks version, required blocks, cross-field rules, exact-key sect
 
 ## Proof point
 
-The source configuration reference documents resolution order, machine cross-field checks, artifact shapes, URL predicates, and consuming skills. Source: `roundhouse/docs/config.md`.
+Configuration validation keeps the resolution order, machine cross-field checks, artifact shapes, URL predicates, and consuming skills in one inspectable surface.
 
 Next: [read the operating commands](/fleet/operating/) or [understand the store](/fleet/store/).

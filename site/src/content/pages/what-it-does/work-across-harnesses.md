@@ -23,7 +23,7 @@ The router derives a bounded work class from ambiguity, novelty, repetition, dec
 
 ## Proof point
 
-The routing contract is identified as `railyard/model-routing/v1`, and the source skill requires explicit model and effort on every dispatch. Source: `railyard/docs/skills/model-routing.md`.
+The [Model routing reference](/delivery/routing/) identifies the contract as `railyard/model-routing/v1` and requires explicit model and effort on every dispatch.
 
 ## Next
 

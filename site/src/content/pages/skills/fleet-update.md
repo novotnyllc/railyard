@@ -23,7 +23,7 @@ Fleet update owns packages, marketplace refresh, and the fleet scheduler's maint
 
 ## Source
 
-Ships in the `roundhouse` plugin. Source: `plugins/roundhouse/skills/fleet-update/SKILL.md`.
+Ships in the `roundhouse` plugin.
 
 ## Proof point
 

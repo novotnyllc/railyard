@@ -56,6 +56,6 @@ Logical names map to platform-specific artifacts in `definitions.yaml`. The map 
 
 ## Proof point
 
-The store source documents the four-layer fold, item identity, evidence paths, and `fleet-explain` output. Source: `roundhouse/docs/store.md`.
+The four-layer fold, item identity, evidence paths, and `fleet-explain` output stay together here.
 
 Next: [follow a change](/fleet/convergence/) or [declare desired state](/desired-state/).

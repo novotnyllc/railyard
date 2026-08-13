@@ -23,7 +23,7 @@ Cleanup covers session residue tied to the selected Codex thread. Incomplete evi
 
 ## Source
 
-Ships in the `railyard` plugin. Source: `plugins/railyard/skills/cleanup-codex/SKILL.md`.
+Ships in the `railyard` plugin.
 
 ## Proof point
 

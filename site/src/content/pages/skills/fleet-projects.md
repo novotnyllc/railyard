@@ -23,7 +23,7 @@ Fleet projects owns project checkouts and handoff readiness. It preserves dirty 
 
 ## Source
 
-Ships in the `roundhouse` plugin. Source: `plugins/roundhouse/skills/fleet-projects/SKILL.md`.
+Ships in the `roundhouse` plugin.
 
 ## Proof point
 

@@ -23,7 +23,7 @@ The optional runner supplies a clean Tart VM for the build and test commands. De
 
 ## Proof point
 
-The delivery source names the Tart runner as the preferred path for Xcode builds, simulator tests, and XCUITests. Source: `railyard/docs/skills/deliver.md`.
+The [Deliver skill](/skills/deliver/) names the Tart runner as the preferred path for Xcode builds, simulator tests, and XCUITests.
 
 ## Next
 
