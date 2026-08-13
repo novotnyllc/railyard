@@ -1,0 +1,8 @@
+---
+import { withBase } from '../config/site.mjs';
+const { previous, next } = Astro.props;
+---
+{(previous || next) && <nav class="prev-next" aria-label="Adjacent pages">
+  {previous ? <a class="prev" href={withBase(previous.href)}><span>Previous</span><strong>← {previous.title}</strong></a> : <span></span>}
+  {next ? <a class="next" href={withBase(next.href)}><span>Next</span><strong>{next.title} →</strong></a> : <span></span>}
+</nav>}

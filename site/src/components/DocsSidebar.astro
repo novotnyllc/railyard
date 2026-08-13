@@ -1,0 +1,15 @@
+---
+import { withBase } from '../config/site.mjs';
+const { nav = [], active = '' } = Astro.props;
+---
+<aside class="docs-sidebar" aria-label="Documentation navigation">
+  <div class="sidebar-label">Explore the yard</div>
+  {nav.map((group) => (
+    <section class="nav-group">
+      <h2>{group.label}</h2>
+      <ul>
+        {group.items.map((item) => <li><a class:list={{ active: active === item.id }} href={withBase(item.href)}>{item.title}</a></li>)}
+      </ul>
+    </section>
+  ))}
+</aside>

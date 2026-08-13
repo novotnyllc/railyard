@@ -1,0 +1,18 @@
+---
+import SiteLayout from './SiteLayout.astro';
+import DocsSidebar from '../components/DocsSidebar.astro';
+import PrevNext from '../components/PrevNext.astro';
+import { withBase } from '../config/site.mjs';
+
+const { title, description, nav = [], active = '', previous, next, section = 'Reference' } = Astro.props;
+---
+<SiteLayout title={title} description={description}>
+  <div class="docs-frame">
+    <DocsSidebar nav={nav} active={active} />
+    <main id="main" class="doc-main">
+      <div class="breadcrumbs"><a href={withBase('/')}>Railyard</a><span aria-hidden="true">/</span><span>{section}</span></div>
+      <article class="prose"><slot /></article>
+      <PrevNext previous={previous} next={next} />
+    </main>
+  </div>
+</SiteLayout>

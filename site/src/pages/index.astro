@@ -1,0 +1,35 @@
+---
+import SiteLayout from '../layouts/SiteLayout.astro';
+import Hero from '../components/Hero.astro';
+import PromiseGrid from '../components/PromiseGrid.astro';
+import ReceiptShowcase from '../components/ReceiptShowcase.astro';
+import ProofStrip from '../components/ProofStrip.astro';
+import ScenarioCard from '../components/ScenarioCard.astro';
+import { withBase } from '../config/site.mjs';
+
+const scenarios = [
+  ['01', 'Ship a change', 'A merged result with a focused post-merge receipt.', 'ship-a-change', 'ship'],
+  ['02', 'Harden review', 'Correctness, security, and maintainability in the receipt.', 'harden-review', 'review'],
+  ['03', 'Keep machines current', 'Inventory, drift, and an update path you can act on.', 'keep-machines-current', 'fleet'],
+  ['04', 'Distribute a skill', 'Item-level review, canary evidence, signed journal.', 'distribute-a-skill', 'skill'],
+  ['05', 'Declare desired state', 'Readable maps that converge with evidence.', 'declare-desired-state', 'state'],
+  ['06', 'Work across harnesses', 'One request, explicit carrier and transport.', 'work-across-harnesses', 'harness'],
+  ['07', 'Build iOS and Mac apps', 'Disposable VMs for native builds and UI tests.', 'ios-and-mac-apps', 'build'],
+  ['08', 'Run work on another machine', 'Place work where project and transport are ready.', 'run-work-on-another-machine', 'machine'],
+  ['09', 'Administer remotely', 'Named, resumable lanes with identity checks.', 'administer-remotely', 'remote'],
+  ['10', 'Control model cost', 'Match model and effort to the work shape.', 'control-model-cost', 'cost'],
+];
+---
+<SiteLayout title="The delivery system for agent work" description="Say what should change. Get back a merged, verified change — not a claim that it’s done.">
+  <main id="main">
+    <Hero />
+    <PromiseGrid />
+    <ReceiptShowcase />
+    <ProofStrip />
+    <section class="scenarios wrap" aria-labelledby="scenarios-title">
+      <div class="section-heading scenarios-heading"><p class="eyebrow">Value first</p><h2 id="scenarios-title">Pick the outcome.<br /><span>See the path.</span></h2><a class="text-link" href={withBase('/what-it-does/')}>See all ten outcomes <span aria-hidden="true">↗</span></a></div>
+      <div class="scenario-grid">{scenarios.map(([number, title, text, slug, icon]) => <ScenarioCard number={number} title={title} text={text} slug={slug} icon={icon} />)}</div>
+    </section>
+    <section class="start-callout wrap" aria-labelledby="start-title"><div><p class="eyebrow">A short first run</p><h2 id="start-title">Move from intent<br /><em>to arrival.</em></h2></div><div><p>Install the surface, make a first delivery on the machine you already use, then add fleet context when it creates value.</p><a class="button button-primary" href={withBase('/start/')}>Start in ten minutes <span aria-hidden="true">→</span></a></div></section>
+  </main>
+</SiteLayout>
