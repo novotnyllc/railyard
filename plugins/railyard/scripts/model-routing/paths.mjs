@@ -37,14 +37,16 @@ export function stickyWorldWritable(stat) {
  * Check every existing ancestor.  Default XDG paths go through this same
  * check: an environment default is still input, not a trusted exemption.
  *
- * The final config/state directory (the one directly holding the file) must
- * be privately owned, exactly as before. Ancestors above it are a different
- * threat model: on a standard multi-user machine (e.g. a secondary volume
- * where `/Volumes/Data/Users` is admin-owned, mode 755) plenty of safe
- * ancestors are not owned by the current user or root. What actually matters
- * for an ancestor is whether anyone other than its own owner can write into
- * it — group/other write bits, unless the sticky bit makes it /tmp-shaped.
- * Ownership of an ancestor is irrelevant to that property.
+ * The final config/state directory (the one directly holding the file) keeps
+ * the exact prior checks: owned by the caller or root, and not group/other
+ * writable, in each case unless the sticky bit makes it /tmp-shaped. Ancestors
+ * above it are a different threat model: on a standard multi-user machine
+ * (e.g. a secondary volume where `/Volumes/Data/Users` is admin-owned, mode
+ * 755) plenty of safe ancestors are not owned by the current user or root.
+ * What actually matters for an ancestor is whether anyone other than its own
+ * owner can write into it — group/other write bits, unless the sticky bit
+ * makes it /tmp-shaped. Ownership of an ancestor is irrelevant to that
+ * property.
  */
 export function pathSafetyIssue(candidate, { kind, cwd, platform, stat: statOf = safeStat }) {
   if (!isAbsoluteForPlatform(candidate, platform)) return "path_not_absolute";

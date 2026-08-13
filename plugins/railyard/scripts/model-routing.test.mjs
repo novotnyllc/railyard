@@ -1567,7 +1567,12 @@ test("state paths fail closed for a selected missing policy and the paired fast-
   assert.ok(measured.receipt.receiptBytes <= 4096);
 });
 
-test("ancestor safety checks writability, not ownership, while the final config/state directory stays strictly owned", () => {
+test("ancestor safety checks writability, not ownership, while the final config/state directory stays strictly owned", {
+  // The checks under test are uid-based (mirroring production's own
+  // typeof process.getuid === "function" guard), so there is nothing to
+  // assert on a platform without POSIX uids.
+  skip: typeof process.getuid !== "function" && "requires POSIX process.getuid",
+}, () => {
   const selfUid = process.getuid();
   const otherUid = selfUid + 1;
 
