@@ -18,6 +18,7 @@ const ogImage = `${SITE_ORIGIN}${withBase('/og/railyard-og.png')}`;
     <meta name="theme-color" content="#171716" />
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
+    <link rel="sitemap" type="application/xml" href={withBase('/sitemap.xml')} />
     <link rel="icon" type="image/png" sizes="16x16" href={withBase('/favicon-16.png')} />
     <link rel="alternate icon" type="image/png" href={withBase('/favicon-32.png')} />
     <link rel="apple-touch-icon" sizes="180x180" href={withBase('/apple-touch-icon.png')} />
@@ -41,6 +42,7 @@ const ogImage = `${SITE_ORIGIN}${withBase('/og/railyard-og.png')}`;
       <div class="footer-brand"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><strong>railyard</strong></div>
       <p>The delivery system for agent work.</p>
       <nav aria-label="Footer navigation"><a href={withBase('/start/')}>Start</a><a href={withBase('/what-it-does/')}>Scenarios</a><a href={withBase('/delivery/')}>Docs</a></nav>
+      <nav aria-label="GitHub project links"><a href="https://github.com/novotnyllc/railyard">Railyard on GitHub <span aria-hidden="true">↗</span></a><a href="https://github.com/novotnyllc/railyard/releases">Railyard releases <span aria-hidden="true">↗</span></a><a href="https://github.com/novotnyllc/railyard/pulls">Railyard PRs <span aria-hidden="true">↗</span></a><a href="https://github.com/novotnyllc/roundhouse">Roundhouse on GitHub <span aria-hidden="true">↗</span></a><a href="https://github.com/novotnyllc/roundhouse/releases">Roundhouse releases <span aria-hidden="true">↗</span></a><a href="https://github.com/novotnyllc/roundhouse/pulls">Roundhouse PRs <span aria-hidden="true">↗</span></a><a href="https://github.com/novotnyllc/marketplace">Marketplace source <span aria-hidden="true">↗</span></a></nav>
       <small>Built for work that arrives with evidence.</small>
     </footer>
   </body>

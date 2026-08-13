@@ -15,4 +15,4 @@ Integrations add focused capabilities at clear seams; the core delivery and flee
 - [UniFi](/integrations/unifi/) — network gear through the official API.
 - [Tailscale SSH](/integrations/tailscale-ssh/) — optional transport acceleration.
 
-The [skills index](/skills/) cross-links the two integration-owned skill references: `fleet-chezmoi` and `unifi-network-api`.
+The [skills index](/skills/) cross-links the operational references that have their own reusable workflow; Chezmoi remains fully documented on its integration page.

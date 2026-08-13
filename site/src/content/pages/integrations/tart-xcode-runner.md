@@ -27,7 +27,7 @@ Read the [Tart Xcode Runner repository](https://github.com/novotnyllc/tart-xcode
 
 ## Proof point
 
-`railyard/docs/skills/deliver.md` names Tart Xcode Runner as the preferred path for Xcode builds and UI tests.
+The [Deliver reference](/skills/deliver/) names Tart Xcode Runner as the preferred path for Xcode builds and UI tests.
 
 ## Next
 

@@ -25,8 +25,8 @@ Tailscale supplies transport. Fleet trust, readiness, and delivery remain owned 
 
 ## Proof point
 
-The remote and fleet sources describe named transport, host identity checks, and a transport field carried by machine configuration. Source: `roundhouse/docs/skills/remote-mac.md`.
+The [Remote Mac reference](/skills/remote-mac/) describes named transport, host identity checks, and the transport field carried by machine configuration.
 
 ## Next
 
-[Administer remotely](/what-it-does/administer-remotely/) or [read fleet configuration](/fleet/config/).
+[Administer remotely](/what-it-does/administer-remotely/) or [read the Roundhouse store](/roundhouse/store/).

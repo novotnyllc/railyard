@@ -1,0 +1,10 @@
+flowchart TD
+    A[Fetched head] --> B{Descends from reviewed-ref?}
+    B -->|yes| C{Generation >= high-water?}
+    C -->|yes| D[Adopt; advance marks]
+    C -->|no| H1[Hold + alert]
+    B -->|no| E{Published archive ref exists?}
+    E -->|yes| F[Verify own reviewed-ref inside archive\nby ordinary ratchet rule]
+    F -->|verifies| D
+    F -->|fails| H1
+    E -->|no| H1[Hold + alert = the rollback protection]

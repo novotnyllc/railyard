@@ -19,12 +19,9 @@ UniFi adds repeatable network administration through the official Integration AP
 
 The `unifi-network-api` skill refreshes the live OpenAPI description, selects the exact operation, applies a bounded request, and verifies controller and gateway state. The API key travels as a header and the request stays tied to the selected operation.
 
-## Skill reference
+## Public reference
 
-This page is the single public reference for the integration skill.
-
-- Ships in the `roundhouse` plugin.
-- Source: `plugins/roundhouse/skills/unifi-network-api/SKILL.md`.
+This integration page records the live-spec, bounded-operation, and verification contract. Read the [UniFi Network API skill reference](/skills/unifi-network-api/) for the worked invocation and receipt.
 
 ## Proof point
 

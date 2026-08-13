@@ -1,0 +1,12 @@
+flowchart LR
+    A[Intent intake] --> B[Model routing]
+    B --> C[Plan / implement]
+    C --> D[Thermos review]
+    D --> E[Browser-visible quality]
+    E --> F[Commit / publish]
+    F --> G[Review settlement]
+    G --> H[Merge]
+    H --> I[Post-merge proof]
+    I --> J[Durable learning]
+    D -->|findings| C
+    G -->|unresolved threads| D

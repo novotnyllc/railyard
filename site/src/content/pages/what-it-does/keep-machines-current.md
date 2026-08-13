@@ -23,8 +23,8 @@ The run validates configuration, collects per-machine evidence, compares desired
 
 ## Proof point
 
-The fleet inventory source records per-machine evidence and an `in_sync` result. This public proof is summarized as the live five-machine macOS/Linux mix. Source: `roundhouse/docs/skills/fleet-inventory.md`.
+The [fleet inventory reference](/skills/fleet-inventory/) records per-machine evidence and an `in_sync` result. This public proof is summarized as the live five-machine macOS/Linux mix.
 
 ## Next
 
-[Distribute a skill](/what-it-does/distribute-a-skill/) or [read the fleet store](/fleet/store/).
+[Distribute a skill](/what-it-does/distribute-a-skill/) or [read the Roundhouse store](/roundhouse/store/).

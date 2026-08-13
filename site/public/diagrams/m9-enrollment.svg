@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 720" role="img" aria-labelledby="title desc">
+  <title id="title">M9 sponsor enrollment</title>
+  <desc id="desc">An owner gives one fleet-add instruction to an enrolled sponsor. The sponsor reaches the new host over an already-trusted lane, installs prerequisites, and starts fleet-init. The new host mints its own key and returns a public key with possession proof. The sponsor publishes the roster line; durable policy writes soak 24 hours while evidence paths are live immediately.</desc>
+  <style>
+    .bg{fill:#fffaf1}.actor{fill:#f4bf84;stroke:#8b5e34;stroke-width:2}.node{fill:#fffaf1;stroke:#b45309;stroke-width:2}.edge{stroke:#8b5e34;stroke-width:2;marker-end:url(#arrow)}.label{fill:#171716;font:600 17px system-ui,sans-serif;text-anchor:middle}.small{fill:#6a6258;font:15px system-ui,sans-serif;text-anchor:middle}.arrow{fill:#8b5e34}
+    @media(prefers-color-scheme:dark){.bg{fill:#1c1b19}.actor{fill:#76512f;stroke:#dfa05b}.node{fill:#25231f;stroke:#dfa05b}.edge{stroke:#dfa05b}.label{fill:#eee9df}.small{fill:#b2ada3}.arrow{fill:#dfa05b}}
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow" d="M 0 0 L 10 5 L 0 10 z"/></marker></defs>
+  <rect class="bg" width="1100" height="720" rx="18"/>
+  <g class="actor"><rect x="55" y="30" width="220" height="55" rx="10"/><rect x="440" y="30" width="220" height="55" rx="10"/><rect x="825" y="30" width="220" height="55" rx="10"/></g>
+  <g class="label"><text x="165" y="63">Owner (one instruction)</text><text x="550" y="63">Sponsor host (enrolled)</text><text x="935" y="63">New host</text></g>
+  <g stroke="#8b5e34" stroke-width="2" stroke-dasharray="7 7"><path d="M165 85v610"/><path d="M550 85v610"/><path d="M935 85v610"/></g>
+  <g class="edge"><path d="M165 145h385"/><path d="M550 215h385"/><path d="M550 285h385"/><path d="M935 375H550"/><path d="M550 455h385"/><path d="M550 535h-385"/></g>
+  <g class="small"><text x="355" y="137">fleet-add host-a</text><text x="742" y="207">trusted SSH lane</text><text x="742" y="277">prerequisites + fleet-init</text><text x="742" y="367">pubkey + possession proof</text><text x="742" y="447">remote URL + store data</text><text x="355" y="527">commit roster line, push</text></g>
+  <g class="node"><rect x="365" y="165" width="370" height="50" rx="10"/><rect x="365" y="235" width="370" height="50" rx="10"/><rect x="745" y="345" width="380" height="60" rx="10"/><rect x="365" y="425" width="370" height="50" rx="10"/><rect x="175" y="505" width="370" height="50" rx="10"/><rect x="365" y="600" width="370" height="65" rx="10"/></g>
+  <g class="label"><text x="550" y="196">reach new host</text><text x="550" y="266">install prerequisites, fleet-init</text><text x="935" y="371">mint own key</text><text x="935" y="393">return proof</text><text x="550" y="456">remote URL + store_id</text><text x="360" y="536">published on main@origin</text><text x="550" y="626">writes soak 24h</text><text x="550" y="648">evidence paths live immediately</text></g>
+</svg>

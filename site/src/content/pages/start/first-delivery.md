@@ -25,9 +25,17 @@ Get a reviewed, merged change with an observable post-merge receipt from one sen
 4. The branch, pull request, checks, independent review, and merge are settled.
 5. The merged commit is checked for reachability from the base branch and the smallest applicable post-merge check runs.
 
+```text
+route=implementation model=gpt-5.6-luna effort=max
+claim=settled review=thermos-synthesis
+merge=4e1d... ancestry=verified
+post_merge_check=node --test test/retry.test.mjs exit=0
+result=verified
+```
+
 ## Proof point
 
-The delivery lifecycle documents the observable terminal pair: `git merge-base --is-ancestor <merge-commit> origin/<base>` plus a real post-merge check. Source: `railyard/docs/lifecycle.md`.
+The [delivery lifecycle](/delivery/lifecycle/) documents the observable terminal pair: `git merge-base --is-ancestor <merge-commit> origin/<base>` plus a real post-merge check.
 
 ## Scope
 

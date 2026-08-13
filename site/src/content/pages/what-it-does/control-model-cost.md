@@ -23,8 +23,8 @@ The router resolves role, work shape, privacy, transport, and budget policy into
 
 ## Proof point
 
-The source contract freezes `model`, `effort`, carrier, and budget effect before dispatch, then binds the decision to an action receipt. Source: `railyard/docs/skills/model-routing.md`.
+The [model-routing section](/delivery/model-routing/) freezes `model`, `effort`, carrier, and budget effect before dispatch, then binds the decision to an action receipt.
 
 ## Next
 
-[Read routing](/delivery/routing/) or [work across harnesses](/what-it-does/work-across-harnesses/).
+[Read model routing](/delivery/model-routing/) or [work across harnesses](/what-it-does/work-across-harnesses/).

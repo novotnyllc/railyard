@@ -17,16 +17,30 @@ The skill checks configuration, projects, agent surface, inventory, authenticati
 
 Readiness stays separate for execution host and target platform. The result is `ready`, `blocked`, or `unknown` with evidence for each required row; the dispatcher consumes the complete result before placement.
 
+```text
+> Prove whether host-a can run this delivery and show host, task, and transport separately.
+host=ready evidence=inventory+projects+agents
+task=ready evidence=scope+capabilities
+transport=ready evidence=ssh+identity
+execution_host=host-a target_platform=linux
+result=ready
+```
+
 ## Scope
 
 Fleet readiness synthesizes prerequisite evidence. Inventory, agent parity, project checks, auth, and remote administration own their detailed mechanics.
 
 ## Source
 
-Ships in the `roundhouse` plugin. Source: `plugins/roundhouse/skills/fleet-readiness/SKILL.md`.
+Ships in the `roundhouse` plugin.
 
 ## Proof point
 
-The source skill defines a readiness table with separate host, task, and transport surfaces.
+```text
+host=host-a state=ready
+task=delivery-opaque-01 state=ready
+transport=ssh state=ready
+placement=allowed
+```
 
 Next: [run work on another machine](/what-it-does/run-work-on-another-machine/).

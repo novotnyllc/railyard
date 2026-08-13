@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-labelledby="title desc">
+  <title id="title">M10 anti-rollback and re-root decision</title>
+  <desc id="desc">A fetched head first proves descent from the reviewed reference and then proves generation is at least the high-water mark. If ancestry fails, a published archive ref is required and the host verifies its reviewed reference inside the archive. Any failed check holds and alerts; a valid path adopts and advances marks.</desc>
+  <style>
+    .bg{fill:#fffaf1}.node{fill:#fffaf1;stroke:#b45309;stroke-width:2}.decision{fill:#f4bf84;stroke:#8b5e34;stroke-width:2}.edge{fill:none;stroke:#8b5e34;stroke-width:2;marker-end:url(#arrow)}.label{fill:#171716;font:600 18px system-ui,sans-serif;text-anchor:middle}.small{fill:#6a6258;font:15px system-ui,sans-serif}.arrow{fill:#8b5e34}
+    @media(prefers-color-scheme:dark){.bg{fill:#1c1b19}.node{fill:#25231f;stroke:#dfa05b}.decision{fill:#76512f;stroke:#dfa05b}.edge{stroke:#dfa05b}.label{fill:#eee9df}.small{fill:#b2ada3}.arrow{fill:#dfa05b}}
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow" d="M 0 0 L 10 5 L 0 10 z"/></marker></defs>
+  <rect class="bg" width="1200" height="800" rx="18"/>
+  <g class="edge"><path d="M600 75v55"/><path d="M530 180H310v55"/><path d="M670 180h220v55"/><path d="M310 295v70"/><path d="M890 295v70"/><path d="M310 425h290v55"/><path d="M890 425c0 55-290 55-290 55"/><path d="M600 545v70"/><path d="M530 680H305v55"/><path d="M670 680h225v55"/></g>
+  <g class="small"><text x="470" y="215">yes</text><text x="725" y="215">no</text><text x="420" y="350">yes</text><text x="930" y="350">no</text><text x="760" y="465">archive exists</text><text x="450" y="660">verifies</text><text x="760" y="660">fails / absent</text></g>
+  <g class="node"><rect x="430" y="25" width="340" height="50" rx="10"/><rect x="170" y="365" width="280" height="60" rx="10"/><rect x="750" y="365" width="280" height="60" rx="10"/><rect x="435" y="480" width="330" height="65" rx="10"/><rect x="180" y="735" width="250" height="45" rx="10"/><rect x="770" y="735" width="250" height="45" rx="10"/></g>
+  <g class="decision"><path d="M600 130l70 50-70 50-70-50z"/><path d="M600 365l70 60-70 60-70-60z"/></g>
+  <g class="label"><text x="600" y="57">Fetched head</text><text x="600" y="185">Descends from reviewed-ref?</text><text x="310" y="391">Generation ≥ high-water?</text><text x="890" y="391">Published archive ref?</text><text x="600" y="507">Verify own reviewed-ref</text><text x="600" y="530">inside archive</text><text x="305" y="763">Adopt; advance marks</text><text x="895" y="763">Hold + alert</text></g>
+</svg>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1420 310" role="img" aria-labelledby="title desc">
+  <title id="title">M2 delivery lifecycle</title>
+  <desc id="desc">A delivery moves from intent intake through model routing, implementation, Thermos review, browser quality, publish, review settlement, merge, post-merge proof, and durable learning. Review findings return to implementation, and unresolved threads return to review.</desc>
+  <style>
+    .bg{fill:#fffaf1}.node{fill:#fffaf1;stroke:#b45309;stroke-width:2}.edge{fill:none;stroke:#8b5e34;stroke-width:2;marker-end:url(#arrow)}.label{fill:#171716;font:600 16px system-ui,sans-serif;text-anchor:middle}.small{fill:#6a6258;font:14px system-ui,sans-serif}.arrow{fill:#8b5e34}
+    @media (prefers-color-scheme:dark){.bg{fill:#1c1b19}.node{fill:#25231f;stroke:#dfa05b}.edge{stroke:#dfa05b}.label{fill:#eee9df}.small{fill:#b2ada3}.arrow{fill:#dfa05b}}
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow" d="M 0 0 L 10 5 L 0 10 z"/></marker></defs>
+  <rect class="bg" width="1420" height="310" rx="18"/>
+  <g class="edge"><path d="M150 125h15"/><path d="M285 125h15"/><path d="M420 125h15"/><path d="M555 125h15"/><path d="M690 125h15"/><path d="M825 125h15"/><path d="M960 125h15"/><path d="M1095 125h15"/><path d="M1230 125h15"/><path d="M505 160c-25 110-175 110-205 0"/><path d="M910 160c-20 145-380 145-405 0"/></g>
+  <g class="small"><text x="430" y="275">findings</text><text x="715" y="295">unresolved threads</text></g>
+  <g class="node"><rect x="25" y="90" width="125" height="70" rx="10"/><rect x="160" y="90" width="125" height="70" rx="10"/><rect x="295" y="90" width="125" height="70" rx="10"/><rect x="430" y="90" width="125" height="70" rx="10"/><rect x="565" y="90" width="125" height="70" rx="10"/><rect x="700" y="90" width="125" height="70" rx="10"/><rect x="835" y="90" width="125" height="70" rx="10"/><rect x="970" y="90" width="125" height="70" rx="10"/><rect x="1105" y="90" width="125" height="70" rx="10"/><rect x="1240" y="90" width="150" height="70" rx="10"/></g>
+  <g class="label"><text x="87" y="120">Intent</text><text x="87" y="140">intake</text><text x="222" y="120">Model</text><text x="222" y="140">routing</text><text x="357" y="120">Plan /</text><text x="357" y="140">implement</text><text x="492" y="120">Thermos</text><text x="492" y="140">review</text><text x="627" y="120">Browser</text><text x="627" y="140">quality</text><text x="762" y="120">Commit /</text><text x="762" y="140">publish</text><text x="897" y="120">Review</text><text x="897" y="140">settlement</text><text x="1032" y="120">Merge</text><text x="1032" y="140"></text><text x="1167" y="120">Post-merge</text><text x="1167" y="140">proof</text><text x="1315" y="120">Durable</text><text x="1315" y="140">learning</text></g>
+</svg>

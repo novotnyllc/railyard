@@ -23,7 +23,7 @@ The destination produces host, task, and transport readiness evidence. The dispa
 
 ## Proof point
 
-The readiness source defines a placement table and the orchestration source consults readiness before creating a remote work task. Sources: `roundhouse/docs/skills/fleet-readiness.md` and `railyard/docs/skills/orchestrate.md`.
+The [fleet-readiness reference](/skills/fleet-readiness/) defines a placement table, and [Orchestrate](/skills/orchestrate/) consults readiness before creating a remote work task.
 
 ## Next
 

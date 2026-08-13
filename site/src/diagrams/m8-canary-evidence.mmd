@@ -1,0 +1,13 @@
+sequenceDiagram
+    participant Can as Canary host
+    participant J as Journal (replicated)
+    participant H as Non-canary host
+    Can->>J: applied(item X, digest D) at t0
+    Note over J: wait >= 41h, no later held/reverted
+    Can->>J: any record or alive heartbeat after t0+wait
+    H->>J: gate check for X@D
+    alt evidence + liveness present
+        H->>H: apply X
+    else canary silent or reverted
+        H->>H: hold X (silence is never a pass)
+    end

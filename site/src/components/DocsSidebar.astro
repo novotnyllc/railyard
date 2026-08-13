@@ -8,7 +8,7 @@ const { nav = [], active = '' } = Astro.props;
     <section class="nav-group">
       <h2>{group.label}</h2>
       <ul>
-        {group.items.map((item) => <li><a class:list={{ active: active === item.id }} href={withBase(item.href)}>{item.title}</a></li>)}
+        {group.items.map((item) => <li class:list={{ [`nav-depth-${item.depth}`]: item.depth > 0 }}><a class:list={{ active: active === item.id }} aria-current={active === item.id ? 'page' : undefined} href={withBase(item.href)}>{item.title}</a></li>)}
       </ul>
     </section>
   ))}

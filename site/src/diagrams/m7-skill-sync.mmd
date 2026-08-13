@@ -1,0 +1,9 @@
+flowchart LR
+    A[Skill published on one host] --> B[(Signed store commit)]
+    B --> C[Every host: fast pass ~20min]
+    C --> D[Fold -> item skills.name]
+    D --> E[Definition lookup]
+    E --> F[Harness manager verb\nClaude + Codex]
+    F --> G[Hook approval re-run on install/update]
+    G --> H[Journal: applied]
+    H --> I[Same skill, every machine]

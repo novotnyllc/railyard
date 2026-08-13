@@ -17,16 +17,29 @@ The report groups route decisions, dispatches, checks, review rounds, retries, G
 
 Audit reads the primary run log, maps planned items and workarounds to captured evidence, and marks the boundary between observed fact and unresolved state. It preserves the reason for deviations through metadata events.
 
+```text
+> Reconstruct this delivery run and show the decision chain, checks, review rounds, and terminal proof.
+route=codex-luna/max
+dispatches=3  parallel_rounds=1  retries=0
+checks=content-audit(exit=0), diff-check(exit=0)
+terminal=local-verified  merge=owner-action-required
+```
+
 ## Scope
 
 Audit reads and reports. It provides evidence for the owner to interpret and leaves route changes to the owning workflow.
 
 ## Source
 
-Ships in the `railyard` plugin. Source: `plugins/railyard/skills/audit/SKILL.md`.
+Ships in the `railyard` plugin.
 
 ## Proof point
 
-The source skill defines a recap and retrospective as the closing surface for a substantial run.
+```text
+decision approach captured=true
+outcome=delivery-terminal-proof captured=true
+deviations=0 captured=true
+retrospective questions=5 sink=local-learning
+```
 
 Next: [read audit](/delivery/audit/).

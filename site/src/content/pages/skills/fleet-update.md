@@ -17,16 +17,28 @@ The skill snapshots current state, selects native manager operations, calculates
 
 Updates are grouped by owner, platform, and action type. Protected package actions carry an exact payload and permission context; interactive privilege remains an explicit host decision. The next run rechecks the state before applying.
 
+```text
+> Prepare the approved update for host-a, show the sealed plan, and wait at the apply boundary.
+owner=package-manager platform=macos
+item=packages.tool from=4.1 to=4.2
+precondition=sha256:12af... permission=attended
+plan=sealed apply=awaiting-explicit-consent
+```
+
 ## Scope
 
 Fleet update owns packages, marketplace refresh, and the fleet scheduler's maintenance path. Agent parity and project readiness remain with their owning skills.
 
 ## Source
 
-Ships in the `roundhouse` plugin. Source: `plugins/roundhouse/skills/fleet-update/SKILL.md`.
+Ships in the `roundhouse` plugin.
 
 ## Proof point
 
-The source skill defines sealed plans, fresh preconditions, native manager ownership, and per-item journal evidence.
+```text
+item=packages.tool desired=4.2 precondition=passed
+manager=native action=update
+journal=host-a/2026-08-13.yaml result=applied
+```
 
 Next: [keep machines current](/what-it-does/keep-machines-current/).

@@ -17,16 +17,29 @@ The skill inventories installed plugins, marketplaces, tools, configuration, and
 
 Setup separates local installation, optional fleet enrollment, model policy, auth artifact custody, and privileged lanes. A repeat run reads the current state and proposes only the delta.
 
+```text
+> Inspect this machine, install the delivery surface, and show the proposed delta before any optional enrollment.
+plugins=railyard:missing roundhouse:present
+model_policy=default  signing=ready  auth_presence=checked
+fleet_enrollment=not-requested
+plan=install-railyard
+```
+
 ## Scope
 
 Setup handles initial presence and configuration. Doctor handles an installed surface whose observed state needs diagnosis.
 
 ## Source
 
-Ships in the `railyard` plugin. Source: `plugins/railyard/skills/setup/SKILL.md`.
+Ships in the `railyard` plugin.
 
 ## Proof point
 
-The source starts with a read-only inventory and finishes with a readiness table.
+```text
+step=inventory result=complete
+step=install action=railyard result=ready
+step=readiness host=ready task=ready transport=ready
+result=setup-complete
+```
 
 Next: [read first machine](/start/first-machine/).

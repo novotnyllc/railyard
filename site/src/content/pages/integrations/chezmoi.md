@@ -17,18 +17,15 @@ Chezmoi adds deliberate, path-scoped dotfile reconciliation between a source rep
 
 ## What it adds
 
-The optional `fleet-chezmoi` skill gathers native status and diff evidence, maps rendered files to source paths, compares semantic content and history, and produces a scoped plan. Approved applies use sealed arguments, immediate preconditions, and postconditions for the selected paths.
+The optional integration gathers native status and diff evidence, maps rendered files to source paths, compares semantic content and history, and produces a scoped plan. Approved applies use sealed arguments, immediate preconditions, and postconditions for the selected paths.
 
 ## The seam
 
 The fleet store owns machine desired state. Chezmoi remains the source and renderer for personal dotfiles. The integration connects the two surfaces through an explicit plan, target list, and verification result.
 
-## Skill reference
+## Public reference
 
-This page is the single public reference for the integration skill.
-
-- Ships in the `roundhouse` plugin.
-- Source: `plugins/roundhouse/skills/fleet-chezmoi/SKILL.md`.
+This page is the single public reference for the integration. The source and renderer remain owned by Chezmoi; the fleet surface records only the selected paths and their verification result.
 
 ## Proof point
 
@@ -36,4 +33,4 @@ The source skill describes per-target evidence, semantic reconciliation, sealed 
 
 ## Next
 
-[Read the fleet store](/fleet/store/) or [see the other integrations](/integrations/).
+[Read the Roundhouse store](/roundhouse/store/) or [see the other integrations](/integrations/).
