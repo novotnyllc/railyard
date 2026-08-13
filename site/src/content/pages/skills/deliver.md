@@ -17,6 +17,14 @@ The skill selects the delivery route from the requested artifact, invokes model 
 
 Route selection distinguishes plan, diagnosis, local implementation, and full delivery outcomes. The implementation path uses isolated work boundaries, focused checks, Thermos review, and a configured GitHub flow.
 
+```text
+> Fix the retry path in the webhook worker and get it merged with post-merge proof.
+route=implementation  model=gpt-5.6-luna  effort=max
+scope=one-worktree  review=thermos-pair
+tail=settlement -> merge -> ancestry -> focused-check
+stop=report signed commit, merge, and proof separately
+```
+
 ## Scope
 
 One host-local implementation or pull-request lane belongs here. Multi-lane or cross-host placement belongs to [Orchestrate](/skills/orchestrate/).
@@ -27,6 +35,10 @@ Ships in the `railyard` plugin.
 
 ## Proof point
 
-The delivery source defines merge ancestry plus a real post-merge check as the terminal proof pair.
+```text
+merge=4e1d... base=main ancestry=verified
+check=node --test test/retry.test.mjs exit=0
+receipt=post-merge-proof status=verified
+```
 
 Next: [read the lifecycle](/delivery/lifecycle/).

@@ -17,6 +17,15 @@ The skill checks harness parity, plugin and skill state, marketplaces, routing p
 
 Each row names the observed condition, evidence source, and owning fix surface. A follow-up fix routes through the skill that owns the affected surface, then the row is checked again.
 
+```text
+> Run the read-only doctor pass and group each finding by its owning fix surface.
+row=routing-policy       state=ready     owner=model-routing
+row=plugin-bytes         state=ready     owner=fleet-agents
+row=github-auth          state=present   owner=delivery-tail
+row=fleet-readiness      state=unknown   owner=fleet-readiness
+next=collect readiness evidence
+```
+
 ## Scope
 
 Doctor diagnoses and reports. Mutation belongs to the approved owning workflow.
@@ -27,6 +36,11 @@ Ships in the `railyard` plugin.
 
 ## Proof point
 
-The doctor source defines read-only diagnostics, explicit credential presence checks, and re-checks after a routed fix.
+```text
+finding=fleet-readiness before=unknown after=ready
+mutation=performed-by-owner
+recheck=complete
+result=ready
+```
 
 Next: [read setup](/skills/setup/) or [inspect fleet readiness](/skills/fleet-readiness/).

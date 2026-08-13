@@ -7,10 +7,10 @@ has_children: true
 
 # Security
 
-Security gives every fleet change an owner, a signed history position, a scoped authority, and an observable decision.
+Security gives every fleet change an owner, a signed history position, a scoped authority, and an observable decision. Roundhouse owns the fleet loop and its trust surface.
 
-- **Trust model:** [follow the signed-history and receiving-host boundaries](/security/threat-model/#trust-flow).
-- **What's defended:** [see the assets, principals, and apply-time controls](/security/threat-model/#principal-capabilities).
-- **Named residuals:** [read the assumptions and operator responsibilities](/security/threat-model/#assumptions).
+- [Roundhouse security](/roundhouse/security/) — trust ratchet, canary evidence, privilege boundaries, and named residuals.
+- [Trust ratchet](/roundhouse/security/trust-ratchet/) — the parent-position rule and membership classes.
+- [Attack shapes](/roundhouse/security/attack-shapes/) — concrete outcomes and honest residuals.
 
-Start here for the current trust surface, then move into the deeper Roundhouse security section as it lands.
+The [Railyard repository](https://github.com/novotnyllc/railyard) keeps delivery controls and their review trail visible beside the Roundhouse security surface.

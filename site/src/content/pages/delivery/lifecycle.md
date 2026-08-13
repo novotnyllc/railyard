@@ -17,6 +17,12 @@ A single request becomes a traceable sequence of intent, routing, implementation
 
 `railyard:model-routing` resolves the work class before a carrier starts. The decision records the selected model, effort, adapter, transport, privacy, and budget effect.
 
+```text
+route=implementation model=gpt-5.6-luna effort=max
+carrier=codex-luna transport=selector-native
+implementationEngine=prefer/codex budget=default_route_no_state
+```
+
 ## 3. Plan and implement
 
 The implementation workflow creates a bounded working boundary, plans the change, writes the smallest useful implementation, and runs the relevant checks. Independent work can run in isolated worktrees and converge into one integration branch.
@@ -24,6 +30,12 @@ The implementation workflow creates a bounded working boundary, plans the change
 ## 4. Thermos review
 
 The correctness/security lens and the maintainability lens review the same frozen packet. The synthesis gives the implementation lane one findings list, and the lane fixes real findings before the chunk moves forward.
+
+```text
+thermos correctness_findings=1 quality_findings=2
+synthesis=deduplicated actionable=2
+gate=fix-before-commit
+```
 
 ## 5. Browser-visible quality
 
@@ -37,6 +49,11 @@ The delivery owner creates the configured commit, pushes the working branch, and
 
 The delivery tail settles CI, review threads, branch currency, and stack order. Merge authority follows the latest review evidence and the repository's configured merge strategy.
 
+```text
+head=4e1d... reviews=head-settled threads=0
+settlement_window=passed merge_authority=allowed
+```
+
 ## 8. Post-merge proof
 
 The terminal pair is observable:
@@ -48,16 +65,23 @@ git merge-base --is-ancestor <merge-commit> origin/<base>
 
 The result reports both the merge ancestry and the check outcome.
 
+```text
+git merge-base --is-ancestor 4e1d... origin/main
+exit=0
+post_merge_check=node --test test/retry.test.mjs
+exit=0
+```
+
 ## 9. Durable learning
 
 A substantial run closes with a recap and retrospective. Reusable repo lessons can enter the compound workflow; cross-repo routing lessons stay in the routing learning surface.
 
 ## One-line shape
 
-```text
-intent -> routed -> planned -> implemented -> gated -> reviewed -> merged -> proven -> learned
-```
+The lifecycle is an observable chain from intent through routing, implementation, paired review, settlement, merge, post-merge proof, and durable learning. The [delivery lifecycle diagram](#diagram) makes the handoff order easy to scan.
 
-The [delivery lifecycle](/delivery/lifecycle/) is the reader-facing reference for this terminal evidence contract.
+<span id="diagram"></span>
+
+The [Railyard source repository](https://github.com/novotnyllc/railyard), [release record](https://github.com/novotnyllc/railyard/releases), and [review trail](https://github.com/novotnyllc/railyard/pulls) keep the delivery contract reviewable beside this guide.
 
 Next: [see the gates](/delivery/gates/).

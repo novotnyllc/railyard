@@ -23,4 +23,6 @@ Start with the smallest useful surface: install the plugins, make one delivery, 
 
 The delivery system and fleet system have separate value loops. The integration between them adds readiness-aware placement when both are installed.
 
+The [Railyard repository](https://github.com/novotnyllc/railyard) and [Roundhouse repository](https://github.com/novotnyllc/roundhouse) keep source, releases, and review evidence visible beside the product guide.
+
 Next: [see the ten outcomes](/what-it-does/).

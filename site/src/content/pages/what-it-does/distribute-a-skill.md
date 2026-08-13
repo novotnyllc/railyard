@@ -23,7 +23,7 @@ The store folds the skill's desired value through fleet, platform, group, and ma
 
 ## Proof point
 
-The [fleet convergence guide](/fleet/convergence/) documents the receiving-host gate order and the canary condition for an exact item digest. The per-machine journal and applied record make the rollout observable.
+The [skill-sync guide](/sync/) documents the manager-verb alignment, while [Roundhouse convergence](/roundhouse/convergence/) supplies the receiving-host gate order and canary condition for an exact item digest. The per-machine journal and applied record make the rollout observable.
 
 ## Next
 

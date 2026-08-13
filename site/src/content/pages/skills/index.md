@@ -44,7 +44,7 @@ The public skill reference is grouped by the job a reader wants to do. Each page
 
 ## Integrations
 
-- [UniFi Network API](/integrations/unifi/) — `roundhouse`
+- [UniFi Network API](/skills/unifi-network-api/) — `roundhouse`
 
 These references cover the public shipping skill set. Thermos carries its two review lenses as one reviewed surface; their implementation details stay behind the Thermos reference.
 

@@ -17,6 +17,14 @@ The router is the single decision surface for role, work shape, privacy, budget,
 
 `resolve`, `admit`, dispatch claim, and receipt reconciliation form the route lifecycle. Work contracts bind objective, source of truth, scope, constraints, authorization, acceptance, and stop condition through semantic digests.
 
+```text
+> Resolve the implementation route, admit its forecast, and show the receipt binding.
+role=implementation model=gpt-5.6-luna effort=max
+carrier=codex-luna adapter=native-subagent-create
+implementationEngine=prefer/codex
+admit=default_route_no_state claim=one-way
+```
+
 ## Scope
 
 The router decides and records. The selected workflow or carrier performs the work and returns fixed adapter evidence.
@@ -27,6 +35,29 @@ Ships in the `railyard` plugin.
 
 ## Proof point
 
-The contract identifier `railyard/model-routing/v1` and explicit dispatch fields are part of the source skill's callable surface.
+```json
+{
+  "contractVersion": "railyard/model-routing/v1",
+  "ok": true,
+  "reason": "default_route_no_state",
+  "decision": {
+    "role": "implementation",
+    "selected": {
+      "modelAlias": "codex-luna",
+      "model": "gpt-5.6-luna",
+      "effort": "max",
+      "carrierId": "codex-luna",
+      "adapterId": "native-subagent-create",
+      "transport": "selector-native",
+      "completionState": "offline_implementation_ready"
+    },
+    "implementationEngine": { "mode": "prefer", "target": "codex", "model": "gpt-5.6-luna", "source": "deliver" }
+  },
+  "reservation": "not_applicable",
+  "claimRequired": false
+}
+```
 
-Next: [read routing](/delivery/routing/).
+Go deeper: [roles, tiers, and carriers](/delivery/model-routing/).
+
+Next: [read the model-routing section](/delivery/model-routing/).

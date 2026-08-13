@@ -24,6 +24,13 @@ Give a machine a readable baseline, a signed fleet identity, and a readiness res
 - A host identity signs its store contributions and publishes host-keyed evidence.
 - `fleet-readiness` combines project, agent, inventory, and auth evidence into a placement result.
 
+```text
+host=host-a os=macos state=ready
+task=delivery-opaque-01 state=ready
+transport=ssh state=ready
+placement=allowed evidence=complete
+```
+
 ## Proof point
 
 The [fleet-readiness reference](/skills/fleet-readiness/) describes a three-part readiness surface: host, task, and transport evidence. The dispatcher consults that result before placing work.

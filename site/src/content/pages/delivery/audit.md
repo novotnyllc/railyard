@@ -38,4 +38,19 @@ railyard:audit
 
 The [Audit skill](/skills/audit/) reads evidence and presents it as a decision chain.
 
+```text
+railyard:model-routing status
+{"contractVersion":"railyard/model-routing/v1","ok":true,"reason":"status","readiness":{},"reservations":[],"spend":{},"learning":{"enabled":true,"outcomes":0,"aggregates":0}}
+
+railyard:model-routing inspect-claim --claim-id claim-opaque-01
+{"contractVersion":"railyard/model-routing/v1","ok":true,"reason":"claim_verified","claim":{"claimId":"claim-opaque-01","reservationId":"reservation-opaque-01","state":"claimed","selected":{"carrierId":"codex-luna","carrierVersion":"v1","executionSurface":"codex"}}}
+
+railyard:audit
+recap=route+dispatches+checks
+audit=primary-record sweep deviations=captured
+retrospective=5 questions sink=local-learning
+```
+
+`inspect-claim` is an active-claim check; a settled outcome comes from the fixed-adapter `reconcile` receipt. The three audit depths share one anonymized run: the recap reports the terminal state, the audit reconstructs the decision chain, and the retrospective grades the run against its opening approach.
+
 Next: [read lifecycle](/delivery/lifecycle/) or [inspect the fleet operating surface](/fleet/operating/).

@@ -4,6 +4,8 @@ export const NAV_GROUPS = [
   { key: 'delivery', label: 'Delivery' },
   { key: 'fleet', label: 'Fleet' },
   { key: 'desired-state', label: 'Desired state' },
+  { key: 'sync', label: 'Sync' },
+  { key: 'roundhouse', label: 'Roundhouse' },
   { key: 'integrations', label: 'Integrations' },
   { key: 'skills', label: 'Skills' },
   { key: 'security', label: 'Security' },
@@ -23,14 +25,30 @@ export function routeParamFromId(id) {
 }
 
 export function buildNav(entries) {
-  return NAV_GROUPS.map((group) => ({
-    ...group,
-    items: entries
-      .filter((entry) => entry.id === group.key || entry.id.startsWith(`${group.key}/`))
-      .sort((a, b) => {
-        const order = (entry) => (entry.id === group.key || entry.id.endsWith('/index')) ? -1 : (Number(entry.data.nav_order) || 99);
-        return order(a) - order(b) || String(a.data.title).localeCompare(String(b.data.title));
-      })
-      .map((entry) => ({ id: entry.id, title: entry.data.title || entry.id, href: routeFromId(entry.id) })),
-  })).filter((group) => group.items.length);
+  const groupKeyFor = (id) => id.split('/')[0];
+  const parentIdFor = (id, key) => {
+    const clean = id.endsWith('/index') ? id.slice(0, -6) : id;
+    const parts = clean.split('/');
+    if (parts.length <= 1) return null;
+    return parts.length === 2 ? `${key}/index` : `${parts.slice(0, -1).join('/')}/index`;
+  };
+
+  return NAV_GROUPS.map((group) => {
+    const groupEntries = entries.filter((entry) => entry.id === group.key || entry.id.startsWith(`${group.key}/`));
+    const children = new Map();
+    for (const entry of groupEntries) {
+      const parentId = parentIdFor(entry.id, group.key);
+      const list = children.get(parentId) || [];
+      list.push(entry);
+      children.set(parentId, list);
+    }
+    const order = (entry) => (entry.id === groupKeyFor(entry.id) || entry.id.endsWith('/index')) ? -1 : (Number(entry.data.nav_order) || 99);
+    const flatten = (parentId, depth = 0) => (children.get(parentId) || [])
+      .sort((a, b) => order(a) - order(b) || String(a.data.title).localeCompare(String(b.data.title)))
+      .flatMap((entry) => [
+        { id: entry.id, title: entry.data.title || entry.id, href: routeFromId(entry.id), depth },
+        ...flatten(entry.id, depth + 1),
+      ]);
+    return { ...group, items: flatten(null) };
+  }).filter((group) => group.items.length);
 }

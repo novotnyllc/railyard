@@ -17,6 +17,13 @@ The skill checks local configuration, target reachability, the login shell, serv
 
 Commands run through the target user's login shell with bounded timeouts. The report separates transport, authentication, shell, and service findings so the owning repair stays precise.
 
+```text
+> Diagnose host-a from loopback through the login shell, then show the owning repair surface.
+loopback=passed  config=passed  reachability=passed
+identity=verified  login_shell=passed
+service=held reason=listener-not-ready owner=remote-admin
+```
+
 ## Scope
 
 SSH Doctor diagnoses transport health. Remote mutation belongs to the explicitly selected remote administration lane.
@@ -27,6 +34,11 @@ Ships in the `roundhouse` plugin.
 
 ## Proof point
 
-The source skill defines loopback-first diagnosis, login-shell execution, identity confirmation, and bounded process handling.
+```text
+target=host-a layer=service
+command_timeout=bounded identity=verified
+finding=listener-not-ready owner=remote-admin
+result=diagnosed
+```
 
 Next: [administer remotely](/what-it-does/administer-remotely/).

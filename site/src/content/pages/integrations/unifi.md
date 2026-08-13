@@ -21,7 +21,7 @@ The `unifi-network-api` skill refreshes the live OpenAPI description, selects th
 
 ## Public reference
 
-This integration page records the live-spec, bounded-operation, and verification contract. A standalone skill reference is added with the skill upgrades.
+This integration page records the live-spec, bounded-operation, and verification contract. Read the [UniFi Network API skill reference](/skills/unifi-network-api/) for the worked invocation and receipt.
 
 ## Proof point
 
