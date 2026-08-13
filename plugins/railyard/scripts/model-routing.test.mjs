@@ -14,6 +14,7 @@ import {
   createEmptyState,
   handleRequest,
   measureFastPath,
+  pathSafetyIssue,
   resolvePaths,
   runCli,
   scopeAccountingId,
@@ -1564,6 +1565,77 @@ test("state paths fail closed for a selected missing policy and the paired fast-
   assert.equal(measured.receipt.paired.delta.tokenDelta, 0);
   assert.equal(measured.receipt.modelEvidence.unchanged, true);
   assert.ok(measured.receipt.receiptBytes <= 4096);
+});
+
+test("ancestor safety checks writability, not ownership, while the final config/state directory stays strictly owned", () => {
+  const selfUid = process.getuid();
+  const otherUid = selfUid + 1;
+
+  // Fakes the stat layer for a synthetic ancestry chain the way the
+  // cleanup-codex suite fakes fsApi.lstatSync: keyed by exact path, anything
+  // unlisted is "absent" (null), matching safeStat's ENOENT contract — so a
+  // test only has to describe the one or two ancestors it cares about.
+  const fakeStat = (entries) => (file) => {
+    const entry = entries[file];
+    if (!entry) return null;
+    return {
+      uid: entry.uid,
+      mode: entry.mode,
+      isDirectory: () => entry.isDirectory !== false,
+      isSymbolicLink: () => Boolean(entry.isSymbolicLink),
+    };
+  };
+
+  const candidate = "/Volumes/Data/Users/claire/.config/railyard/model-routing.json";
+  const finalDirectory = "/Volumes/Data/Users/claire/.config/railyard";
+  const options = { kind: "config", cwd: "/private/tmp/path-safety-cwd-fixture", platform: "darwin" };
+
+  // (a) The field case: a standard macOS secondary-volume layout where
+  // /Volumes/Data/Users is admin-owned, mode 755. Two levels above the
+  // config directory, it used to fail unexpected_config_directory_owner
+  // purely because the admin UID differs from the caller's. 755 has no
+  // group/other write bit, so nobody but its own owner can write into it —
+  // that is now accepted regardless of who that owner is.
+  assert.equal(pathSafetyIssue(candidate, { ...options, stat: fakeStat({
+    [finalDirectory]: { uid: selfUid, mode: 0o700 },
+    "/Volumes/Data/Users": { uid: otherUid, mode: 0o755 },
+  }) }), null);
+
+  // (b) A group-writable ancestor without the sticky bit is still rejected.
+  assert.equal(pathSafetyIssue(candidate, { ...options, stat: fakeStat({
+    [finalDirectory]: { uid: selfUid, mode: 0o700 },
+    "/Volumes/Data/Users": { uid: otherUid, mode: 0o775 },
+  }) }), "unsafe_config_ancestor_mode");
+
+  // (c) An other-writable ancestor without the sticky bit is still rejected.
+  assert.equal(pathSafetyIssue(candidate, { ...options, stat: fakeStat({
+    [finalDirectory]: { uid: selfUid, mode: 0o700 },
+    "/Volumes/Data/Users": { uid: otherUid, mode: 0o757 },
+  }) }), "unsafe_config_ancestor_mode");
+
+  // (d) A sticky world-writable ancestor (the /tmp shape, mode 1777) is
+  // accepted: the sticky bit means only an entry's own owner can remove or
+  // rename it, so world-writability there does not let another user replace
+  // what the real ancestor holds.
+  assert.equal(pathSafetyIssue(candidate, { ...options, stat: fakeStat({
+    [finalDirectory]: { uid: selfUid, mode: 0o700 },
+    "/Volumes/Data/Users": { uid: otherUid, mode: 0o1777 },
+  }) }), null);
+
+  // (e) The final config/state directory is untouched by the relaxation:
+  // owned by neither the caller nor root still fails...
+  assert.equal(pathSafetyIssue(candidate, { ...options, stat: fakeStat({
+    [finalDirectory]: { uid: otherUid, mode: 0o700 },
+  }) }), "unexpected_config_directory_owner");
+  // ...root ownership of the final directory still passes, same as before...
+  assert.equal(pathSafetyIssue(candidate, { ...options, stat: fakeStat({
+    [finalDirectory]: { uid: 0, mode: 0o700 },
+  }) }), null);
+  // ...and a self-owned but group-writable final directory still fails: the
+  // stricter final-directory rule never adopted the ancestor relaxation.
+  assert.equal(pathSafetyIssue(candidate, { ...options, stat: fakeStat({
+    [finalDirectory]: { uid: selfUid, mode: 0o770 },
+  }) }), "unsafe_config_directory_mode");
 });
 
 test("the learning command family inspects, disables, re-enables, and clears observational state", () => {
