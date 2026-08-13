@@ -2,7 +2,7 @@ sequenceDiagram
     participant O as Owner (one instruction)
     participant S as Sponsor host (enrolled)
     participant N as New host
-    O->>S: "fleet-add wren"
+    O->>S: "fleet-add host-a"
     S->>N: reach over already-trusted SSH lane
     S->>N: install prerequisites, fleet-init
     N->>N: mint own key

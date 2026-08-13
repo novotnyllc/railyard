@@ -25,7 +25,6 @@ export function routeParamFromId(id) {
 }
 
 export function buildNav(entries) {
-  const groupKeyFor = (id) => id.split('/')[0];
   const parentIdFor = (id, key) => {
     const clean = id.endsWith('/index') ? id.slice(0, -6) : id;
     const parts = clean.split('/');
@@ -44,7 +43,7 @@ export function buildNav(entries) {
       list.push(entry);
       children.set(parentId, list);
     }
-    const order = (entry) => (entry.id === groupKeyFor(entry.id) || entry.id.endsWith('/index')) ? -1 : (Number(entry.data.nav_order) || 99);
+    const order = (entry) => (entry.id === group.key || entry.id === `${group.key}/index`) ? -1 : (Number(entry.data.nav_order) || 99);
     const flatten = (parentId, depth = 0) => (children.get(parentId) || [])
       .sort((a, b) => order(a) - order(b) || String(a.data.title).localeCompare(String(b.data.title)))
       .flatMap((entry) => [
