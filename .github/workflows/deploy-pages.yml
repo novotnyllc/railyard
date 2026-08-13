@@ -6,6 +6,10 @@ on:
     paths:
       - 'site/**'
       - '.github/workflows/deploy-pages.yml'
+  pull_request:
+    paths:
+      - 'site/**'
+      - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
 permissions:
@@ -20,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pages: write
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
@@ -49,6 +54,7 @@ jobs:
         with:
           path: site/dist
   deploy:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
     permissions:
