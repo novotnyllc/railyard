@@ -29,4 +29,4 @@ The [Remote Mac reference](/skills/remote-mac/) describes named transport, host 
 
 ## Next
 
-[Administer remotely](/what-it-does/administer-remotely/) or [read fleet configuration](/fleet/config/).
+[Administer remotely](/what-it-does/administer-remotely/) or [read the Roundhouse store](/roundhouse/store/).

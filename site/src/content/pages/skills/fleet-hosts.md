@@ -42,4 +42,4 @@ roster=published soak=24h
 result=ready-for-readiness
 ```
 
-Next: [read trust](/fleet/trust/) or [bring up a first machine](/start/first-machine/).
+Next: [read the trust ratchet](/roundhouse/security/trust-ratchet/) or [bring up a first machine](/start/first-machine/).

@@ -29,6 +29,8 @@ Install `railyard` for routed delivery, review, merge, and proof. Install `round
 
 Keep the public source and release trail nearby: [Railyard on GitHub](https://github.com/novotnyllc/railyard), [Roundhouse on GitHub](https://github.com/novotnyllc/roundhouse), [marketplace source](https://github.com/novotnyllc/marketplace), [Railyard releases](https://github.com/novotnyllc/railyard/releases), and [Roundhouse releases](https://github.com/novotnyllc/roundhouse/releases).
 
+For the eventual domain move, keep the [custom-domain cutover](/docs/cutover/) handoff beside the install receipt.
+
 ## First conversation
 
 ```text

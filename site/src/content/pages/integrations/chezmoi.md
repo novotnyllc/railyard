@@ -33,4 +33,4 @@ The source skill describes per-target evidence, semantic reconciliation, sealed 
 
 ## Next
 
-[Read the fleet store](/fleet/store/) or [see the other integrations](/integrations/).
+[Read the Roundhouse store](/roundhouse/store/) or [see the other integrations](/integrations/).

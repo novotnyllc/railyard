@@ -53,4 +53,4 @@ retrospective=5 questions sink=local-learning
 
 `inspect-claim` is an active-claim check; a settled outcome comes from the fixed-adapter `reconcile` receipt. The three audit depths share one anonymized run: the recap reports the terminal state, the audit reconstructs the decision chain, and the retrospective grades the run against its opening approach.
 
-Next: [read lifecycle](/delivery/lifecycle/) or [inspect the fleet operating surface](/fleet/operating/).
+Next: [read lifecycle](/delivery/lifecycle/) or [inspect the Roundhouse operating surface](/roundhouse/operating/).

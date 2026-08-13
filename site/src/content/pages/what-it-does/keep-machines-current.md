@@ -27,4 +27,4 @@ The [fleet inventory reference](/skills/fleet-inventory/) records per-machine ev
 
 ## Next
 
-[Distribute a skill](/what-it-does/distribute-a-skill/) or [read the fleet store](/fleet/store/).
+[Distribute a skill](/what-it-does/distribute-a-skill/) or [read the Roundhouse store](/roundhouse/store/).

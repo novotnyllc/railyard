@@ -32,4 +32,4 @@ The [Roundhouse convergence guide](/roundhouse/convergence/) names the canary-to
 
 ## Next
 
-[See the standalone desired-state guide](/desired-state/) or [inspect the store](/fleet/store/).
+[See the standalone desired-state guide](/desired-state/) or [inspect the Roundhouse store](/roundhouse/store/).

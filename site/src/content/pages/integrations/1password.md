@@ -25,8 +25,8 @@ Auth-artifact records remain per machine or portable references according to the
 
 ## Proof point
 
-The [fleet configuration reference](/fleet/config/) documents encrypted-install references, reauthentication flows, modes, size bounds, and verification commands.
+The [Roundhouse store reference](/roundhouse/store/) documents the configuration fold that carries encrypted-install references, reauthentication flows, modes, size bounds, and verification commands.
 
 ## Next
 
-[Read fleet configuration](/fleet/config/) or [see integrations](/integrations/).
+[Read the Roundhouse store](/roundhouse/store/) or [see integrations](/integrations/).

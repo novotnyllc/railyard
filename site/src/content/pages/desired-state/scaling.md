@@ -35,4 +35,10 @@ Around 75 machines, roster replay and the aggregate “which machines carry this
 
 The scaling design identifies evidence retention as the first breakpoint, gives journal compaction as the next build, and names sharding, aggregation, and batched enrollment as later levers. This page presents that design as reader guidance.
 
-Next: [read the fleet store](/fleet/store/) or [follow convergence](/fleet/convergence/).
+```text
+machines=30 pressure=shared-history next=journal-compaction retention_floor=canary-wait
+machines=75 pressure=roster-replay-and-aggregate-reads next=derived-index
+machines=100 pressure=shared-bookmark-contention next=group-sharding
+```
+
+Next: [read the Roundhouse store](/roundhouse/store/) or [follow convergence](/roundhouse/convergence/).

@@ -43,4 +43,9 @@ An admitted `oracle-browser` route adds a second-model review. The gates catch t
 
 The quality purchase is deliberate: about 70% of this representative ledger sits in the hard seam and its review. The route records which line item purchased each finding, while the actual meter remains the policy's source-owned unit.
 
+```text
+run=fleet-utility-api-migration relative_cost_units=36 findings=4 outcome=proven
+run=concurrency-bug-fix relative_cost_units=34 findings=2 ci_reproducer_runs=500 outcome=proven
+```
+
 Next: [read the sync surface](/sync/) or [return to delivery](/delivery/).

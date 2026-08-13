@@ -27,4 +27,4 @@ The [skill-sync guide](/sync/) documents the manager-verb alignment, while [Roun
 
 ## Next
 
-[Declare desired state](/what-it-does/declare-desired-state/) or [read fleet convergence](/fleet/convergence/).
+[Declare desired state](/what-it-does/declare-desired-state/) or [read Roundhouse convergence](/roundhouse/convergence/).

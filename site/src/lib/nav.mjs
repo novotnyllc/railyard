@@ -35,9 +35,11 @@ export function buildNav(entries) {
 
   return NAV_GROUPS.map((group) => {
     const groupEntries = entries.filter((entry) => entry.id === group.key || entry.id.startsWith(`${group.key}/`));
+    const groupIds = new Set(groupEntries.map((entry) => entry.id));
     const children = new Map();
     for (const entry of groupEntries) {
-      const parentId = parentIdFor(entry.id, group.key);
+      const candidateParent = parentIdFor(entry.id, group.key);
+      const parentId = candidateParent && groupIds.has(candidateParent) ? candidateParent : null;
       const list = children.get(parentId) || [];
       list.push(entry);
       children.set(parentId, list);

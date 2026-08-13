@@ -27,4 +27,4 @@ The [Model routing reference](/delivery/model-routing/) identifies the contract 
 
 ## Next
 
-[Control model cost](/what-it-does/control-model-cost/) or [read routing details](/delivery/routing/).
+[Control model cost](/what-it-does/control-model-cost/) or [read model-routing details](/delivery/model-routing/).
