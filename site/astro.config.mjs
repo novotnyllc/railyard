@@ -18,6 +18,8 @@ export default defineConfig({
     '/security/threat-model': { status: 301, destination: '/roundhouse/security/attack-shapes/' },
     '/delivery/routing': { status: 301, destination: '/delivery/model-routing/' },
     '/desired-state/in-fleet': { status: 301, destination: '/roundhouse/store/' },
+    '/integrations/unifi/': '/integrations/',
+    '/skills/unifi-network-api/': '/skills/',
   },
   markdown: { processor: unified({ remarkPlugins: [[remarkBaseLinks, { base: BASE_PATH }]] }) },
 });
