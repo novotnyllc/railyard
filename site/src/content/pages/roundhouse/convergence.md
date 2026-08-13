@@ -55,7 +55,7 @@ When an operator investigates a mixed rollout, these records keep successful ado
 
 Conflict reconciliation follows a strict evidence ladder: signed history first, replicated journal second, self-asserted trailers last. A trailer can escalate a finding, but it cannot win the decision. A `resolved` record carries both parents and the rationale that produced the new reviewed commit.
 
-Rollback is an ordinary signed change through review, canary, and apply. The revert-signature predicate is `applied → withdrawn → reincoming`; when that sequence appears, the returning value receives a fresh review.
+Rollback is an ordinary signed change through review, canary, and apply. The revert-signature predicate is `applied → withdrawn → reincoming`; `reincoming` is the contract term for a value returning after withdrawal, and that sequence requires a fresh review.
 
 ## Offline return
 

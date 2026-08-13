@@ -27,7 +27,7 @@ codex plugin add roundhouse --marketplace novotnyllc
 
 Use `railyard` for routed delivery, review, merge, and proof. Use `roundhouse` for inventory, readiness, remote administration, and fleet convergence. Each plugin operates as a complete local surface; together they connect placement to readiness.
 
-The public source and release trail supplies the load-bearing evidence: [Railyard on GitHub](https://github.com/novotnyllc/railyard), [Roundhouse on GitHub](https://github.com/novotnyllc/roundhouse), [marketplace source](https://github.com/novotnyllc/marketplace), [Railyard releases](https://github.com/novotnyllc/railyard/releases), and [Roundhouse releases](https://github.com/novotnyllc/roundhouse/releases).
+The public source and release trail supply the load-bearing evidence: [Railyard on GitHub](https://github.com/novotnyllc/railyard), [Roundhouse on GitHub](https://github.com/novotnyllc/roundhouse), [marketplace source](https://github.com/novotnyllc/marketplace), [Railyard releases](https://github.com/novotnyllc/railyard/releases), and [Roundhouse releases](https://github.com/novotnyllc/roundhouse/releases).
 
 For the eventual domain move, keep the [custom-domain cutover](/docs/cutover/) handoff beside the install receipt.
 

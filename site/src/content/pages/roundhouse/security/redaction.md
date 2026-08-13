@@ -7,7 +7,7 @@ nav_order: 8
 
 # Keep secrets out of the store before publication
 
-Fleet evidence must remain safe to replicate across unattended hosts and canary gates, so scan each signed commit at the publication boundary while sensitive bytes are still local and recoverable. Operators get useful receipts and alerts while the shared store stays free of secret values.
+Fleet evidence must remain safe to replicate across unattended hosts and canary gates, so scan each signed commit at the publication boundary while sensitive bytes are still local and recoverable. Operators get useful receipts and alerts while the shared store is screened for named secret classes and high-entropy patterns, reducing publication risk without guaranteeing the total absence of secret values.
 
 Roundhouse's redaction floor scans every commit before it can publish. It combines named secret classes, an entropy check, and a 400-byte cap, then sweeps findings, alerts, commit descriptions, and trailers for that commit. A match refuses the push while the sensitive value is still local.
 
