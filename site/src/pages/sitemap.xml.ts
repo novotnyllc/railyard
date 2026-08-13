@@ -4,8 +4,8 @@ import { SITE_URL } from '../config/site.mjs';
 
 export async function GET() {
   const entries = await getCollection('pages');
-  const urls = entries
-    .map((entry) => `${SITE_URL}${routeFromId(entry.id)}`)
+  const urls = [`${SITE_URL}/`, ...entries
+    .map((entry) => `${SITE_URL}${routeFromId(entry.id)}`)]
     .sort()
     .map((url) => `  <url><loc>${url}</loc></url>`)
     .join('\n');
