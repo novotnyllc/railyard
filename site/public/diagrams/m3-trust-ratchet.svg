@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 520" role="img" aria-labelledby="title desc">
+  <title id="title">M3 trust ratchet parent rule</title>
+  <desc id="desc">A new roster edit asks the roster at its parent commit whether the signer was trusted and allowed the paths. Every merge parent verifies independently. A trusted edit advances the roster; an unknown, removed, or class-refused signer is held and alerted.</desc>
+  <style>
+    .bg{fill:#fffaf1}.actor{fill:#f4bf84;stroke:#8b5e34;stroke-width:2}.node{fill:#fffaf1;stroke:#b45309;stroke-width:2}.edge{stroke:#8b5e34;stroke-width:2;marker-end:url(#arrow)}.label{fill:#171716;font:600 18px system-ui,sans-serif;text-anchor:middle}.small{fill:#6a6258;font:15px system-ui,sans-serif;text-anchor:middle}.arrow{fill:#8b5e34}
+    @media(prefers-color-scheme:dark){.bg{fill:#1c1b19}.actor{fill:#76512f;stroke:#dfa05b}.node{fill:#25231f;stroke:#dfa05b}.edge{stroke:#dfa05b}.label{fill:#eee9df}.small{fill:#b2ada3}.arrow{fill:#dfa05b}}
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow" d="M 0 0 L 10 5 L 0 10 z"/></marker></defs>
+  <rect class="bg" width="1000" height="520" rx="18"/>
+  <g class="actor"><rect x="90" y="30" width="220" height="55" rx="10"/><rect x="390" y="30" width="220" height="55" rx="10"/><rect x="690" y="30" width="220" height="55" rx="10"/></g>
+  <g class="label"><text x="200" y="63">Roster at parent</text><text x="500" y="63">New commit</text><text x="800" y="63">Every host</text></g>
+  <g stroke="#8b5e34" stroke-width="2" stroke-dasharray="7 7"><path d="M200 85v370"/><path d="M500 85v370"/><path d="M800 85v370"/></g>
+  <g class="edge"><path d="M500 145H205"/><path d="M205 205h295"/><path d="M500 330h295"/><path d="M500 405h295"/></g>
+  <g class="small"><text x="350" y="137">Who signed me?</text><text x="350" y="197">trusted at parent? class permits paths?</text><text x="650" y="322">trusted at parent</text><text x="650" y="397">unknown / removed / class refusal</text></g>
+  <g class="node"><rect x="325" y="250" width="350" height="58" rx="10"/><rect x="690" y="350" width="220" height="70" rx="10"/><rect x="690" y="430" width="220" height="70" rx="10"/></g>
+  <g class="label"><text x="500" y="275">Merge: EVERY parent verifies</text><text x="800" y="380">Accept; roster</text><text x="800" y="402">advances</text><text x="800" y="460">HOLD held items</text><text x="800" y="482">+ alert by name</text></g>
+</svg>

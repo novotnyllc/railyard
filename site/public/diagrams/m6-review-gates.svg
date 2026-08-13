@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 320" role="img" aria-labelledby="title desc">
+  <title id="title">M6 review gate sequence</title>
+  <desc id="desc">A ready diff receives parallel Thermos bug, security, and quality reviews. Synthesis sends fixes back through the gate, then merge settlement checks resolved threads and the ten-minute window before independent review, merge, post-merge proof, and focused quality gates.</desc>
+  <style>
+    .bg{fill:#fffaf1}.node{fill:#fffaf1;stroke:#b45309;stroke-width:2}.edge{fill:none;stroke:#8b5e34;stroke-width:2;marker-end:url(#arrow)}.label{fill:#171716;font:600 16px system-ui,sans-serif;text-anchor:middle}.small{fill:#6a6258;font:14px system-ui,sans-serif}.arrow{fill:#8b5e34}
+    @media(prefers-color-scheme:dark){.bg{fill:#1c1b19}.node{fill:#25231f;stroke:#dfa05b}.edge{stroke:#dfa05b}.label{fill:#eee9df}.small{fill:#b2ada3}.arrow{fill:#dfa05b}}
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow" d="M 0 0 L 10 5 L 0 10 z"/></marker></defs>
+  <rect class="bg" width="1400" height="320" rx="18"/>
+  <g class="edge"><path d="M165 125h15"/><path d="M340 125h15"/><path d="M515 125h15"/><path d="M690 125h15"/><path d="M865 125h15"/><path d="M1040 125h15"/><path d="M1215 125h15"/><path d="M515 160c-35 105-230 105-265 0"/></g>
+  <g class="small"><text x="385" y="275">findings → fixes</text></g>
+  <g class="node"><rect x="30" y="90" width="135" height="70" rx="10"/><rect x="180" y="90" width="160" height="70" rx="10"/><rect x="355" y="90" width="160" height="70" rx="10"/><rect x="530" y="90" width="160" height="70" rx="10"/><rect x="705" y="90" width="160" height="70" rx="10"/><rect x="880" y="90" width="160" height="70" rx="10"/><rect x="1055" y="90" width="160" height="70" rx="10"/><rect x="1230" y="90" width="140" height="70" rx="10"/></g>
+  <g class="label"><text x="97" y="120">Diff ready</text><text x="97" y="140"></text><text x="260" y="116">Thermos: parallel</text><text x="260" y="138">bug/security + quality</text><text x="435" y="120">Synthesis + fixes</text><text x="435" y="140"></text><text x="610" y="116">Merge settlement</text><text x="610" y="138">threads + 10-min window</text><text x="785" y="120">Independent</text><text x="785" y="140">review</text><text x="960" y="120">Merge</text><text x="960" y="140"></text><text x="1135" y="120">Post-merge</text><text x="1135" y="140">proof</text><text x="1300" y="120">Focused quality</text><text x="1300" y="140">gates</text></g>
+</svg>

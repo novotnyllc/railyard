@@ -1,0 +1,11 @@
+flowchart TD
+    A[Work request] --> B[resolve: role -> tier ladder]
+    B --> C{Tier 0 eligible?}
+    C -->|yes| D[Route: model + effort + transport]
+    C -->|hard constraint fails| E[Next tier / disclosed substitute]
+    D --> F[admit: budget forecast vs meters]
+    F -->|blocked| G[Refuse before spend]
+    F -->|admitted| H[claim-dispatch: one-way claim]
+    H --> I[Carrier runs work]
+    I --> J[reconcile: imported receipt only]
+    J --> K[Run log: route + tier + cost + outcome]

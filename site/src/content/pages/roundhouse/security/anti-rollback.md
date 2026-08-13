@@ -11,14 +11,9 @@ Each privileged host keeps two monotonic high-water marks: `generation` never de
 
 ## Adoption decision
 
-```text
-head descends from reviewed-ref?  yes -> generation >= high-water? yes -> adopt
-                                  no  -> archive ref exists?        yes -> verify archived reviewed-ref
-                                                                                yes -> adopt
-                                                                                no  -> hold + alert
-                                                                  no  -> hold + alert
-generation below high-water?      no  -> hold + alert
-```
+![Anti-rollback decision: ancestry and generation checks adopt and advance marks; a re-root requires a published archive and ordinary ratchet verification, otherwise the host holds and alerts.](/diagrams/m10-anti-rollback.svg)
+
+The diagram is the decision fallback: a missing archive is itself a hold plus alert, which is the rollback protection.
 
 The checkpoint re-root protocol keeps a legitimate history migration byte-for-byte indistinguishable from a rollback attack except for one mandatory published archive ref. A host that was offline across the re-root verifies its own reviewed reference inside that archive using the ordinary trust ratchet. An absent archive produces hold plus alert; that refusal is the protection.
 

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">M1 fleet convergence pipeline</title>
+  <desc id="desc">A receiving host polls for work, fetches and resumes safely, promotes and folds state, reviews the hold set, applies passing changes, journals the result, and publishes a peer nudge. A clean floor exits early; blocked work is held and alerted by name.</desc>
+  <style>
+    .bg{fill:#fffaf1}.node{fill:#fffaf1;stroke:#b45309;stroke-width:2}.decision{fill:#f4bf84;stroke:#8b5e34;stroke-width:2}.edge{fill:none;stroke:#8b5e34;stroke-width:2;marker-end:url(#arrow)}.label{fill:#171716;font:600 18px system-ui,sans-serif;text-anchor:middle}.small{fill:#6a6258;font:15px system-ui,sans-serif}.arrow{fill:#8b5e34}
+    @media (prefers-color-scheme:dark){.bg{fill:#1c1b19}.node{fill:#25231f;stroke:#dfa05b}.decision{fill:#76512f;stroke:#dfa05b}.edge{stroke:#dfa05b}.label{fill:#eee9df}.small{fill:#b2ada3}.arrow{fill:#dfa05b}}
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrow" d="M 0 0 L 10 5 L 0 10 z"/></marker></defs>
+  <rect class="bg" width="1200" height="760" rx="18"/>
+  <g class="edge">
+    <path d="M165 90v50"/><path d="M275 65h75v100"/><path d="M165 190v50"/><path d="M165 290v50"/><path d="M165 390v50"/><path d="M165 490v50"/>
+    <path d="M290 565h55"/><path d="M545 565h55"/><path d="M740 565h75"/><path d="M930 590v45"/><path d="M1050 665h90"/><path d="M670 600v65h-70"/>
+  </g>
+  <g class="small"><text x="285" y="55">nothing to pull/push, clean @</text><text x="305" y="545">new work</text><text x="755" y="545">pass + canary evidence</text><text x="665" y="690">blocked</text></g>
+  <g class="node"><rect x="40" y="40" width="250" height="50" rx="10"/><rect x="40" y="140" width="250" height="50" rx="10"/><rect x="40" y="240" width="250" height="50" rx="10"/><rect x="40" y="340" width="250" height="50" rx="10"/><rect x="40" y="440" width="250" height="50" rx="10"/><rect x="40" y="540" width="250" height="50" rx="10"/><rect x="345" y="540" width="200" height="50" rx="10"/><rect x="600" y="540" width="140" height="50" rx="10"/><rect x="815" y="540" width="230" height="50" rx="10"/><rect x="815" y="635" width="230" height="50" rx="10"/><rect x="1040" y="635" width="145" height="50" rx="10"/><rect x="545" y="665" width="245" height="50" rx="10"/><rect x="345" y="140" width="200" height="50" rx="10"/></g>
+  <g class="label"><text x="165" y="71">Poll floor: head check</text><text x="165" y="171">Fetch</text><text x="165" y="271">Crash-resume check</text><text x="165" y="371">Promote gate</text><text x="165" y="461">Fold layers at R</text><text x="165" y="481">reconcile point</text><text x="165" y="571">Hold set</text><text x="445" y="571">Review</text><text x="670" y="571">Verdict</text><text x="930" y="571">Apply</text><text x="930" y="666">Journal: applied /</text><text x="930" y="682">satisfied</text><text x="1112" y="666">Publish +</text><text x="1112" y="682">peer nudge</text><text x="667" y="696">Hold + alert by name</text><text x="445" y="171">Exit early</text></g>
+</svg>

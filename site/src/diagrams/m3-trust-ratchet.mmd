@@ -1,0 +1,12 @@
+sequenceDiagram
+    participant P as Roster at parent commit
+    participant C as New commit (roster edit)
+    participant H as Every host
+    C->>P: Who signed me?
+    P-->>C: Key trusted at parent? class permits paths?
+    Note over C: Merge: EVERY parent must verify independently
+    alt trusted at parent
+        H->>H: Accept; roster advances
+    else unknown / removed / class refusal
+        H->>H: HOLD held items + alert by name
+    end

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 650" role="img" aria-labelledby="title desc">
+  <title id="title">M4 trust boundaries</title>
+  <desc id="desc">Owner instruction feeds an enrolled host's signing key. Signed commits enter the private store repository, which is an outer boundary rather than an authorization boundary. Every other host verifies each commit; good history applies after canary evidence and bad or unknown history is held and alerted.</desc>
+  <style>
+    .bg{fill:#fffaf1}.zone{fill:#f4bf8440;stroke:#b45309;stroke-width:2;stroke-dasharray:8 6}.node{fill:#fffaf1;stroke:#b45309;stroke-width:2}.edge{fill:none;stroke:#8b5e34;stroke-width:2;marker-end:url(#arrow)}.label{fill:#171716;font:600 18px system-ui,sans-serif;text-anchor:middle}.small{fill:#6a6258;font:15px system-ui,sans-serif;text-anchor:middle}.arrow{fill:#8b5e34}
+    @media(prefers-color-scheme:dark){.bg{fill:#1c1b19}.zone{fill:#76512f55;stroke:#dfa05b}.node{fill:#25231f;stroke:#dfa05b}.edge{stroke:#dfa05b}.label{fill:#eee9df}.small{fill:#b2ada3}.arrow{fill:#dfa05b}}
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow" d="M 0 0 L 10 5 L 0 10 z"/></marker></defs>
+  <rect class="bg" width="1200" height="650" rx="18"/>
+  <rect class="zone" x="30" y="25" width="1140" height="100" rx="14"/><text class="label" x="600" y="52">Owner</text><rect class="node" x="430" y="65" width="340" height="45" rx="10"/><text class="label" x="600" y="94">Owner instruction chain</text>
+  <rect class="zone" x="35" y="165" width="430" height="390" rx="14"/><text class="label" x="250" y="195">Enrolled host (one machine)</text>
+  <rect class="node" x="85" y="235" width="145" height="55" rx="10"/><text class="label" x="157" y="268">Signing key</text><rect class="node" x="275" y="235" width="145" height="55" rx="10"/><text class="label" x="347" y="268">Signed commits</text><rect class="node" x="125" y="365" width="250" height="70" rx="10"/><text class="label" x="250" y="394">roundhouse-trustd</text><text class="label" x="250" y="416">root-owned roster / refs</text>
+  <rect class="zone" x="505" y="165" width="265" height="390" rx="14"/><text class="label" x="637" y="195">GitHub outer boundary</text><rect class="node" x="545" y="305" width="185" height="70" rx="20"/><text class="label" x="637" y="335">Private store</text><text class="label" x="637" y="357">repository</text>
+  <rect class="zone" x="810" y="165" width="355" height="390" rx="14"/><text class="label" x="987" y="195">Every other host</text><rect class="node" x="850" y="285" width="275" height="70" rx="10"/><text class="label" x="987" y="315">Ratchet verification</text><text class="label" x="987" y="337">per commit</text><rect class="node" x="850" y="420" width="125" height="60" rx="10"/><rect class="node" x="1000" y="420" width="125" height="60" rx="10"/><text class="label" x="912" y="455">Apply after</text><text class="label" x="912" y="472">canary</text><text class="label" x="1062" y="455">Hold +</text><text class="label" x="1062" y="472">alert</text>
+  <g class="edge"><path d="M600 110v55"/><path d="M157 290v70"/><path d="M230 262h45"/><path d="M420 262c90 0 75 78 125 78"/><path d="M730 340h120"/><path d="M987 355v65"/><path d="M987 355c0 40-75 30-75 65"/><path d="M987 355c0 40 75 30 75 65"/></g>
+  <g class="small"><text x="245" y="335">trust material</text><text x="490" y="315">signed history</text><text x="1040" y="405">good</text><text x="1090" y="405">bad / unknown</text></g>
+</svg>

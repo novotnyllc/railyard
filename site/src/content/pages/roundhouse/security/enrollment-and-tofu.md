@@ -22,6 +22,10 @@ Durable enrollment over an already-trusted channel soaks shared-layer authority 
 
 The delay gives an attacker a slower path when starting from a new key than when using an already-compromised member. It also gives the operator a distinct alert and an explicit review surface.
 
+![Sponsor enrollment sequence: one owner instruction reaches an enrolled sponsor, which contacts the new host over a trusted lane, verifies key possession, and publishes the roster edit.](/diagrams/m9-enrollment.svg)
+
+The diagram covers the sponsor-initiated flow; newcomer requests remain inert until out-of-band verification, and ephemeral leaves remain channel-bound.
+
 ## Sponsor receipt
 
 ```text

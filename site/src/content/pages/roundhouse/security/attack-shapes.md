@@ -9,6 +9,10 @@ nav_order: 11
 
 Roundhouse describes security by outcome. The operator can see which path an attack takes, which gate stops it, and which residual remains outside the technical model.
 
+![Trust boundaries: owner instruction reaches a signing key, signed history crosses the store boundary, and every other host verifies before applying after canary evidence or holding with an alert.](/diagrams/m4-trust-boundaries.svg)
+
+The boundary map keeps store custody and instruction integrity visible as the two authority facts; the repository transports history but does not authorize it.
+
 ## Compromised member enrolls an attacker
 
 The attacker can propose a roster edit, but review, held hooks, canary evidence, removal caps, soak, and fleet-wide alerts keep the new authority from spreading silently. The result is a named, contained roster change for operator action.

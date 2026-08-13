@@ -17,6 +17,10 @@ One owned scheduler entry per host runs a fast pass at about 20 minutes with ±5
 
 Roundhouse treats a personal fleet's agent toolchain the way a package manager treats a system: pull-based convergence, canary evidence before a change fans out further, and a signed trust ratchet that raises confidence without standing up a certificate authority.
 
+![Skill-sync convergence loop from one host's publication through the signed store, fast pass, fold, manager verb, hook approval, journal, and the same skill on every machine.](/diagrams/m7-skill-sync.svg)
+
+The loop's text fallback is the receipt below: each host records `applied` or `satisfied`, and a hook-approval hold preserves the prior applied state.
+
 ## Worked receipt
 
 ```text

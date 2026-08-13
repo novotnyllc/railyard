@@ -9,6 +9,10 @@ nav_order: 2
 
 One store edit travels through signed history, host-local review, canary evidence, an owning manager, and a journal record before another machine adopts it. The loop is crash-resumable and keeps each item's applied value visible while a decision is held.
 
+![Fleet convergence pipeline: poll, fetch, resume, promote, fold, review, apply, journal, and publish, with clean exits and named holds.](/diagrams/m1-convergence.svg)
+
+The diagram is the short path: a clean floor exits early; a passing verdict applies and journals; a blocked verdict holds and alerts by name.
+
 ## Run order
 
 1. Poll the remote head and the local publication floor.

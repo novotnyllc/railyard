@@ -1,0 +1,13 @@
+flowchart TD
+    A[Poll floor: head check] -->|new work| B[Fetch]
+    A -->|nothing to pull/push, clean @| Z[Exit early]
+    B --> C[Crash-resume check]
+    C --> D[Promote gate]
+    D --> E[Fold layers at reconcile point R]
+    E --> F[Hold set: unknown categories, class refusals]
+    F --> G[Review]
+    G --> H{Verdict}
+    H -->|pass + canary evidence| I[Apply]
+    H -->|blocked| J[Hold + alert by name]
+    I --> K[Journal: applied / satisfied]
+    K --> L[Publish + peer nudge]

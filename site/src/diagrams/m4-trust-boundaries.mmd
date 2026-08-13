@@ -1,0 +1,18 @@
+flowchart TB
+    subgraph Owner
+        O[Owner instruction chain]
+    end
+    subgraph Host["Enrolled host (key = one machine)"]
+        K[Signing key] --> S[Signed commits]
+        T[roundhouse-trustd: root-owned roster/refs]
+    end
+    subgraph Hub["GitHub (outer boundary, never authorization)"]
+        R[(Private store repo)]
+    end
+    subgraph Fleet["Every other host"]
+        V[Ratchet verification per commit]
+    end
+    O --> K
+    S --> R --> V
+    V -->|good| A2[Apply after canary]
+    V -->|bad/unknown| HD[Hold + alert]

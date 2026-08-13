@@ -18,6 +18,10 @@ Thermos runs two lenses against one frozen packet:
 
 The synthesis deduplicates findings. Real findings are fixed before the chunk commits, and affected checks run again.
 
+![Review gate sequence from a ready diff through parallel Thermos review, synthesis, merge settlement, independent review, merge, post-merge proof, and focused quality gates.](/diagrams/m6-review-gates.svg)
+
+Findings return to the implementation lane, so the diagram describes a loop with a short success path rather than a one-way green check.
+
 The dispatch gate keeps the worker identity explicit. A Codex child missing both fields returns:
 
 ```text

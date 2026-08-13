@@ -9,6 +9,10 @@ nav_order: 5
 
 A roster edit counts only when a key trusted by the roster at the commit's parent signs it. A merge checks every parent independently. This parent-position rule gives every receiving host the same answer about who could write at the exact history position being adopted.
 
+![Trust ratchet parent rule: every parent verifies a roster edit before the roster advances; unknown, removed, or class-refused signers are held and alerted.](/diagrams/m3-trust-ratchet.svg)
+
+The sequence reads left to right for the decision and top to bottom for the resulting host action: accepted history advances the roster, while a refusal keeps held items at their last reviewed value.
+
 ## Six checks per commit
 
 1. The signature is cryptographically good.

@@ -82,6 +82,10 @@ The lifecycle is an observable chain from intent through routing, implementation
 
 <span id="diagram"></span>
 
+![Delivery lifecycle from intent intake through routing, implementation, review, settlement, merge, proof, and durable learning.](/diagrams/m2-delivery-lifecycle.svg)
+
+The diagram is also available as text above: findings return to implementation, and unresolved review threads return to the review gate.
+
 The [Railyard source repository](https://github.com/novotnyllc/railyard), [release record](https://github.com/novotnyllc/railyard/releases), and [review trail](https://github.com/novotnyllc/railyard/pulls) keep the delivery contract reviewable beside this guide.
 
 Next: [see the gates](/delivery/gates/).

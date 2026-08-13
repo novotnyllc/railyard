@@ -1,0 +1,8 @@
+flowchart LR
+    A[Diff ready] --> B[Thermos: parallel bug/security + quality reviews]
+    B --> C[Synthesis + fixes]
+    C --> D[Merge settlement gate:\nthreads resolved, 10-min window]
+    D --> E[Independent review]
+    E --> F[Merge]
+    F --> G[Post-merge proof]
+    G --> H[Focused quality gates]

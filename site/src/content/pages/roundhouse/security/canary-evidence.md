@@ -20,6 +20,10 @@ For item X at digest D, the downstream gate checks:
 
 The last condition closes the silenced-canary case. A canary that stops publishing cannot silently authorize further spread. `satisfied` counts because the desired identity is still observed; `held` carries a refusal and keeps the prior applied value.
 
+![Canary evidence sequence: a canary applies a digest, waits at least 41 hours without a later hold or revert, publishes liveness, and either authorizes application or causes a hold.](/diagrams/m8-canary-evidence.svg)
+
+The sequence keeps silence explicit: evidence without a later record or alive heartbeat is a hold, never a pass.
+
 The wait plus the per-run removal cap bounds blast radius. An operator sees a named hold before another host applies the affected item.
 
 ## Receipt
