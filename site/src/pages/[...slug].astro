@@ -1,0 +1,25 @@
+---
+import { getCollection, render } from 'astro:content';
+import DocsLayout from '../layouts/DocsLayout.astro';
+import { buildNav, routeFromId, routeParamFromId } from '../lib/nav.mjs';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('pages');
+  const nav = buildNav(entries);
+  return entries.map((entry) => ({
+    params: { slug: routeParamFromId(entry.id) },
+    props: { entry, nav },
+  }));
+}
+
+const { entry, nav } = Astro.props;
+const { Content } = await render(entry);
+const ordered = nav.flatMap((group) => group.items);
+const current = ordered.findIndex((item) => item.id === entry.id);
+const previous = current > 0 ? ordered[current - 1] : undefined;
+const next = current >= 0 && current < ordered.length - 1 ? ordered[current + 1] : undefined;
+const section = nav.find((group) => group.items.some((item) => item.id === entry.id))?.label || 'Reference';
+---
+<DocsLayout title={entry.data.title} description={entry.data.description} nav={nav} active={entry.id} previous={previous} next={next} section={section}>
+  <Content />
+</DocsLayout>

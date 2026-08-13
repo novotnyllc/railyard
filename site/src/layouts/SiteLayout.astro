@@ -1,0 +1,48 @@
+---
+import SiteHeader from '../components/SiteHeader.astro';
+import { BASE_PATH, SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, SITE_URL, withBase } from '../config/site.mjs';
+import '../styles/global.css';
+
+const { title = SITE_NAME, description = SITE_DESCRIPTION, kind = 'website' } = Astro.props;
+const fullTitle = title === SITE_NAME ? title : `${title} — ${SITE_NAME}`;
+const pathname = Astro.url.pathname;
+const pagePath = BASE_PATH !== '/' && (pathname === BASE_PATH || pathname.startsWith(`${BASE_PATH}/`)) ? pathname.slice(BASE_PATH.length) || '/' : pathname;
+const canonical = `${SITE_URL}${pagePath.endsWith('/') ? pagePath : `${pagePath}/`}`;
+const ogImage = `${SITE_ORIGIN}${withBase('/og/railyard-og.png')}`;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#171716" />
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href={withBase('/favicon.svg')} />
+    <link rel="icon" type="image/png" sizes="16x16" href={withBase('/favicon-16.png')} />
+    <link rel="alternate icon" type="image/png" href={withBase('/favicon-32.png')} />
+    <link rel="apple-touch-icon" sizes="180x180" href={withBase('/apple-touch-icon.png')} />
+    <meta property="og:type" content={kind} />
+    <meta property="og:site_name" content={SITE_NAME} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <title>{fullTitle}</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <SiteHeader />
+    <slot />
+    <footer class="site-footer">
+      <div class="footer-brand"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><strong>railyard</strong></div>
+      <p>The delivery system for agent work.</p>
+      <nav aria-label="Footer navigation"><a href={withBase('/start/')}>Start</a><a href={withBase('/what-it-does/')}>Scenarios</a><a href={withBase('/delivery/')}>Docs</a></nav>
+      <small>Built for work that arrives with evidence.</small>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,5 @@
+---
+import { withBase } from '../config/site.mjs';
+const { number, title, text, slug, icon } = Astro.props;
+---
+<a class="scenario-card" href={withBase(`/what-it-does/${slug}/`)}><span class="scenario-icon"><img src={withBase(`/assets/scenarios/${icon}.svg`)} alt="" width="44" height="44" /></span><span class="scenario-number">{number}</span><h3>{title}</h3><p>{text}</p><span class="card-arrow" aria-hidden="true">↗</span></a>
