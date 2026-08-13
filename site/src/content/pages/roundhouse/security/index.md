@@ -12,7 +12,7 @@ Trust has to travel with every unattended fleet change, earn wider propagation t
 
 Roundhouse reduces fleet authority to two operator-held facts: custody of the private store and integrity of the instruction chain. Signed history, parent-position checks, canary evidence, redaction, privilege isolation, and explicit residuals turn those facts into controls that contain, detect, or refuse a change.
 
-Its signed trust ratchet gives every host a pull-based answer to “is this genuinely what it claims to be,” carrying provenance from connection through fleet-wide convergence.
+Its signed trust ratchet gives every adopted host a pull-based answer to “is this genuinely what it claims to be,” carrying provenance from reviewed enrollment through fleet-wide convergence while keeping genuine first contact inside its documented TOFU soak and alert boundary.
 
 ## Security map
 
