@@ -1,0 +1,16 @@
+---
+import SiteLayout from '../layouts/SiteLayout.astro';
+import { withBase } from '../config/site.mjs';
+---
+<SiteLayout title="Page not found" description="The requested Railyard page was not found.">
+  <main id="main" class="wrap not-found">
+    <p class="eyebrow">404</p>
+    <h1>We couldn't find that page.</h1>
+    <p>Here's where to start:</p>
+    <nav aria-label="Suggested pages">
+      <a class="button button-primary" href={withBase('/start/')}>Start</a>
+      <a class="button" href={withBase('/what-it-does/')}>Practices</a>
+      <a class="button" href={withBase('/delivery/')}>Delivery docs</a>
+    </nav>
+  </main>
+</SiteLayout>

@@ -11,7 +11,7 @@ Treat credentials as custody-bound capabilities: verify presence, health, and re
 
 ## What it adds
 
-Fleet auth applies that practice to the selected machine. It verifies metadata, paths, file modes, native stores, encrypted references, and reauthentication commands.
+Fleet auth verifies metadata, paths, file modes, native stores, encrypted references, and reauthentication commands on the selected machine.
 
 ## How it works
 
@@ -41,5 +41,3 @@ presence=present mode=0600 verification=passed
 value=withheld custody=operator
 result=ready
 ```
-
-Next: [read the 1Password integration](/integrations/1password/).

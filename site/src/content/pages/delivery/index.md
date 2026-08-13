@@ -12,7 +12,7 @@ Run delivery as an evidence-producing practice: state the outcome, give each sta
 - [Lifecycle](/delivery/lifecycle/) — one request from intent to proof.
 - [Model routing](/delivery/model-routing/) — model, effort, carrier, budget, privacy, and transport.
 - [Gates](/delivery/gates/) — review settlement, merge authority, and post-merge proof.
-- [Audit](/delivery/audit/) — the run record and retrospective that explain how the result arrived.
+- [Audit](/delivery/audit/) — the run log and retrospective that explain how the result arrived.
 
 The [ship a change scenario](/what-it-does/ship-a-change/) shows the practice in its shortest useful form.
 

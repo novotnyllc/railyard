@@ -7,9 +7,9 @@ nav_order: 9
 
 # Privileged actions use a sealed semantic surface
 
-Privilege in an unattended fleet should enter only after signed evidence and canary gates resolve it to a named, bounded action; the root boundary then executes sealed meaning. Operators gain unattended maintenance with an inspectable catalog, explicit grants, and protected trust state.
+Privilege in an unattended fleet should enter only after signed evidence and canary gates resolve it to a named, bounded action; the root boundary then executes sealed meaning. Unattended maintenance runs against an inspectable catalog, explicit grants, and protected trust state.
 
-Roundhouse enforces that practice with two root-owned components. `roundhouse-trustd` materializes roster, reviewed reference, generation, and KRL state by re-deriving the roster from signed history. The privilege broker executes only a fixed catalog of sealed semantic actions.
+Roundhouse enforces this boundary with two root-owned components. `roundhouse-trustd` materializes roster, reviewed reference, generation, and KRL state by re-deriving the roster from signed history. The privilege broker executes only a fixed catalog of sealed semantic actions.
 
 Invoking the trust daemon cannot inject a caller-supplied hostile roster: the daemon computes the materialized state from the signed store. The broker receives an action name and bounded data, not an arbitrary root shell.
 
@@ -47,5 +47,3 @@ catalog_flag=true grant_flag=true provenance=channel-rooted
 version_floor=4.2 canary=passed payload=attested
 result=allowed
 ```
-
-Next: [enrollment and TOFU](/roundhouse/security/enrollment-and-tofu/) or [attack shapes](/roundhouse/security/attack-shapes/).

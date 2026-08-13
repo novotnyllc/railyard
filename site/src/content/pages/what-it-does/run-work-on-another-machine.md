@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Run work on another machine
-parent: What it does
+parent: Practices
 nav_order: 8
 ---
 

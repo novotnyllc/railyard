@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Harden review
-parent: What it does
+parent: Practices
 nav_order: 2
 ---
 
@@ -21,7 +21,7 @@ The delivery route uses the Thermos pair against the same frozen diff and releva
 
 - The correctness lens traces breakage, security, developer experience, and feature-leak risks.
 - The code-quality lens looks for duplicate helpers, structural drift, and avoidable complexity.
-- Findings are synthesized, real findings are fixed, and the affected checks run again.
+- Synthesis deduplicates findings, the route fixes real findings, and affected checks run again.
 - The merge-settlement hook keeps merge authority aligned with the latest review evidence.
 
 ## Proof point

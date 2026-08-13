@@ -23,6 +23,8 @@ carrier=codex-luna transport=selector-native
 implementationEngine=prefer/codex budget=default_route_no_state
 ```
 
+The lifecycle stays same-harness by default. Dispatching to Codex is opt-in and requires the Codex CLI already set up separately.
+
 ## 3. Plan and implement
 
 Give the change a bounded working boundary, plan the behavior, write the smallest useful implementation, and run the checks that can prove it. Independent work can run in isolated worktrees and converge into one integration branch.
@@ -72,6 +74,8 @@ post_merge_check=node --test test/retry.test.mjs
 exit=0
 ```
 
+The post-merge check is stack-specific and comes from the repository's existing tooling. A Python service might use `pytest -q` instead of the Node example.
+
 ## 9. Durable learning
 
 Close a substantial run by turning experience into operating leverage. A recap and retrospective capture the decision chain; reusable repo lessons can enter the compound workflow, while cross-repo routing lessons stay in the routing learning surface.
@@ -87,5 +91,3 @@ Run the lifecycle as an observable chain from intent through routing, implementa
 The diagram is also available as text above: findings return to implementation, and unresolved review threads return to the review gate.
 
 Railyard supplies the load-bearing evidence: its [source repository](https://github.com/novotnyllc/railyard), [release record](https://github.com/novotnyllc/railyard/releases), and [review trail](https://github.com/novotnyllc/railyard/pulls) keep the delivery contract reviewable beside this guide.
-
-Next: [see the gates](/delivery/gates/).

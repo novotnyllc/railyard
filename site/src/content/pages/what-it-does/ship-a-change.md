@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Ship a change
-parent: What it does
+parent: Practices
 nav_order: 1
 ---
 

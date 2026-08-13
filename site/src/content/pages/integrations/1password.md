@@ -13,7 +13,7 @@ The optional 1Password integration supplies controlled custody for auth-artifact
 
 ## Easy path
 
-An operator preparing a remote delivery lane needs to know which configured artifacts are healthy before work starts while their values stay inside the custody system:
+An operator preparing a remote delivery channel needs to know which configured artifacts are healthy before work starts while their values stay inside the custody system:
 
 ```text
 > Check the configured auth artifacts and show which ones need attention.

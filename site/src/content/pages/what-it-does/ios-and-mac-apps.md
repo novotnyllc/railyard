@@ -1,7 +1,7 @@
 ---
 layout: default
 title: iOS and Mac apps
-parent: What it does
+parent: Practices
 nav_order: 7
 ---
 

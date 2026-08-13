@@ -25,7 +25,7 @@ Build the decision from native evidence. The integration gathers status and diff
 
 ## The seam
 
-Keep ownership crisp. The fleet store owns machine desired state. Chezmoi remains the source and renderer for personal dotfiles. The integration connects the two surfaces through an explicit plan, target list, and verification result.
+Keep ownership crisp. The Roundhouse store owns machine desired state. Chezmoi remains the source and renderer for personal dotfiles. The integration connects the two surfaces through an explicit plan, target list, and verification result.
 
 ## Public reference
 

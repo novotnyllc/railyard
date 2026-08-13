@@ -11,7 +11,7 @@ Manage the agent surface as declared, inspectable state on every machine. Give e
 
 ## What it adds
 
-Fleet agents implements that practice for harnesses, plugins, skills, hooks, agents, MCP servers, and selected settings. It inventories the installed surface, refreshes managed plugin sources, compares desired and observed digests, and prepares the desired-state path when you opt into fleet convergence.
+Fleet agents keeps harnesses, plugins, skills, hooks, agents, MCP servers, and selected settings aligned. It inventories the installed surface, refreshes managed plugin sources, compares desired and observed digests, and prepares the desired-state path when you opt into fleet convergence.
 
 ## How it works
 
@@ -43,5 +43,3 @@ journal=host-a/2026-08-13.yaml
 ```
 
 Go deeper: [sync and state alignment](/sync/).
-
-Next: [distribute a skill](/what-it-does/distribute-a-skill/).

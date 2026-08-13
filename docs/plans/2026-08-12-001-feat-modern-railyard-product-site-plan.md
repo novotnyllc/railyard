@@ -305,7 +305,7 @@ The custom-domain cutover is a deliberately separate post-publish operation. It 
 ├── delivery/            # lifecycle, routing, gates, audit
 ├── fleet/               # store, convergence, trust, operating, config, why-jj
 ├── desired-state/       # index, in-fleet, scaling
-├── integrations/        # chezmoi, Tart, 1Password, UniFi, Tailscale SSH
+├── integrations/        # chezmoi, Tart, 1Password, Tailscale SSH
 ├── skills/              # grouped job-oriented references
 ├── security/            # index, threat model
 ├── credits/

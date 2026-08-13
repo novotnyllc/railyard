@@ -7,7 +7,7 @@ nav_order: 1
 
 # What converges, per harness
 
-Delegation stays dependable when Claude and Codex interpret the same declared agent surface on every machine. Align each desired item with its native manager verb, stable SHA+version identity, and journal outcome; the payoff is a host that can explain exactly what changed and why it is ready.
+Delegation stays dependable when Claude and Codex interpret the same declared agent surface on every machine. Align each desired item with its native manager verb, stable SHA+version identity, and journal outcome; a host can then explain exactly what changed and why it is ready.
 
 ## Manager-verb table
 
@@ -53,5 +53,3 @@ observed_at: 2026-08-13T09:41:16Z
 ```
 
 The receipt separates item identity from the current manager, preserving a trustworthy decision across harnesses. A future re-tag changes the SHA and creates a new review, even when the version string remains `2.4.0`.
-
-Next: [read the sync hub](/sync/) or [inspect Fleet agents](/skills/fleet-agents/).

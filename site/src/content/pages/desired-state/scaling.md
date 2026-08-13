@@ -40,5 +40,3 @@ machines=30 pressure=shared-history next=journal-compaction retention_floor=cana
 machines=75 pressure=roster-replay-and-aggregate-reads next=derived-index
 machines=100 pressure=shared-bookmark-contention next=group-sharding
 ```
-
-Next: [read the Roundhouse store](/roundhouse/store/) or [follow convergence](/roundhouse/convergence/).

@@ -5,11 +5,11 @@ nav_order: 1
 has_children: true
 ---
 
-# Machines that converge on their own
+# Roundhouse
 
-Run an agent fleet from declared intent and durable proof. Give every machine a readable desired state, require signed changes to earn their way through a canary, and let each host publish its own evidence. The payoff is a fleet that can move unattended while operators can still explain exactly why any item applied or held.
+Run an agent fleet from declared intent and durable proof. Give every machine a readable desired state, require signed changes to earn their way through a canary, and let each host publish its own evidence. The fleet can move unattended while operators can still explain exactly why any item applied or held.
 
-Roundhouse is one working expression of that practice. It borrows the desired-state discipline of DSC-style tooling and narrows it to exactly what an agent toolchain needs: skills, plugins, and config as the managed unit, canary gating before wider convergence, and a lightweight signed trust ratchet in place of a certificate authority. Each host pulls, reviews, applies through its owner, journals the result, and publishes the proof.
+Roundhouse is one working expression of the desired-state model. It borrows the discipline of DSC-style tooling and narrows it to exactly what an agent toolchain needs: skills, plugins, and config as the managed unit, canary gating before wider convergence, and a lightweight signed trust ratchet in place of a certificate authority. Each host pulls, reviews, applies through its owner, journals the result, and publishes the proof.
 
 ## The product surface
 
@@ -23,7 +23,7 @@ The delivery system consumes one thin interface: fleet-readiness go/no-go. Round
 
 ## A small receipt
 
-Picture an operator checking whether a review skill truly reached an anonymized host after a fleet change. This compact receipt carries the answer from the four-layer fold through review, apply, and publication:
+An operator needs to check whether a review skill truly reached an anonymized host after a fleet change. This compact receipt carries the answer from the four-layer fold through review, apply, and publication:
 
 ```text
 roundhouse run item=skills.my-review

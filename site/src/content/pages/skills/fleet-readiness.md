@@ -42,5 +42,3 @@ task=delivery-opaque-01 state=ready
 transport=ssh state=ready
 placement=allowed
 ```
-
-Next: [run work on another machine](/what-it-does/run-work-on-another-machine/).

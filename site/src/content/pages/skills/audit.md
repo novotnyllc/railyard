@@ -11,7 +11,7 @@ Treat every delivery run as a decision record: start with the intended approach,
 
 ## What it adds
 
-Audit turns that practice into a report grouping route decisions, dispatches, checks, review rounds, retries, Git state, pull-request state, merge state, and retrospective outcomes.
+Audit reports route decisions, dispatches, checks, review rounds, retries, Git state, pull-request state, merge state, and retrospective outcomes in one place.
 
 ## How it works
 
@@ -41,5 +41,3 @@ outcome=delivery-terminal-proof captured=true
 deviations=0 captured=true
 retrospective questions=5 sink=local-learning
 ```
-
-Next: [read audit](/delivery/audit/).

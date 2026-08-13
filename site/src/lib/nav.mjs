@@ -1,6 +1,9 @@
 export const NAV_GROUPS = [
   { key: 'start', label: 'Start' },
-  { key: 'what-it-does', label: 'Scenarios' },
+  { key: 'troubleshooting', label: 'Troubleshooting' },
+  { key: 'faq', label: 'FAQ' },
+  { key: 'why-railyard', label: 'Why Railyard' },
+  { key: 'what-it-does', label: 'Practices' },
   { key: 'delivery', label: 'Delivery' },
   { key: 'fleet', label: 'Fleet' },
   { key: 'desired-state', label: 'Desired state' },
@@ -10,7 +13,6 @@ export const NAV_GROUPS = [
   { key: 'skills', label: 'Skills' },
   { key: 'security', label: 'Security' },
   { key: 'credits', label: 'Credits' },
-  { key: 'docs', label: 'Site docs' },
 ];
 
 export function routeFromId(id) {

@@ -76,5 +76,3 @@ Unknown cost is never zero. Claude family checks preserve Fable versus Opus: a n
 ```
 
 The receipt names the tier that won and keeps economic interpretation source-owned. It does not turn a representative relative index into a dollar rate; rate-stamped catalog data owns that conversion.
-
-Next: [budgets and admission](/delivery/model-routing/budgets/) or [the worked ledgers](/delivery/model-routing/worked-runs/).

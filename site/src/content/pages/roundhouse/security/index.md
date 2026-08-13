@@ -6,7 +6,7 @@ nav_order: 4
 has_children: true
 ---
 
-# Trust that keeps converging changes contained
+# Security
 
 Trust has to travel with every unattended fleet change, earn wider propagation through signed evidence and canary results, and leave a receipt on each host. That operating discipline lets a fleet move at machine speed while keeping authority, blast radius, and operator intervention explicit.
 
@@ -18,13 +18,16 @@ Its signed trust ratchet gives every adopted host a pull-based answer to “is t
 
 - [Trust ratchet](/roundhouse/security/trust-ratchet/) — parent-position signatures, membership classes, and revocation.
 - [Anti-rollback](/roundhouse/security/anti-rollback/) — reviewed references, generations, and checkpoint re-rooting.
-- [Canary evidence](/roundhouse/security/canary-evidence/) — the 41-hour wait, liveness, and blast-radius cap.
+- [Canary evidence](/roundhouse/security/canary-evidence/) — the configured canary wait, 24 hours by default and fallback, plus liveness and blast-radius caps.
+- [Marketplace trust](/roundhouse/security/marketplace-trust/) — public catalog review, version pinning, and dependency disclosure.
 - [Redaction](/roundhouse/security/redaction/) — per-commit secret scanning with an entropy floor and 400-byte cap.
 - [Privilege isolation](/roundhouse/security/privilege-isolation/) — root-owned trust material and sealed semantic actions.
 - [Enrollment and TOFU](/roundhouse/security/enrollment-and-tofu/) — four enrollment flows and class-scoped soak.
 - [Attack shapes](/roundhouse/security/attack-shapes/) — outcomes and named residuals.
 
 The outer boundary remains operator custody and instruction intent. Availability is handled as a hold-and-alert concern; the controls below make authorship, scope, review, and propagation observable.
+
+The [marketplace trust page](/roundhouse/security/marketplace-trust/) names the public catalog as a reviewable trust surface and discloses the dependencies included in the grouped install.
 
 ```text
 authority = store custody + instruction-chain integrity

@@ -87,5 +87,3 @@ skills:
 ```
 
 These paths are ordinary YAML. `fleet-explain` can show the winning layer, the folded value, and the digest that produced the journal line.
-
-Next: [follow convergence](/roundhouse/convergence/) or [run the operator surface](/roundhouse/operating/).

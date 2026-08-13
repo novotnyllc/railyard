@@ -4,13 +4,13 @@ import DocsSidebar from '../components/DocsSidebar.astro';
 import PrevNext from '../components/PrevNext.astro';
 import { withBase } from '../config/site.mjs';
 
-const { title, description, nav = [], active = '', previous, next, section = 'Reference' } = Astro.props;
+const { title, description, nav = [], active = '', previous, next, section = 'Reference', breadcrumb = section, hasChildren = false } = Astro.props;
 ---
 <SiteLayout title={title} description={description}>
   <div class="docs-frame">
     <DocsSidebar nav={nav} active={active} />
-    <main id="main" class="doc-main">
-      <div class="breadcrumbs"><a href={withBase('/')}>Railyard</a><span aria-hidden="true">/</span><span>{section}</span></div>
+    <main id="main" class:list={{ 'doc-main': true, 'hub-page': hasChildren }}>
+      <div class="breadcrumbs"><a href={withBase('/')}>Railyard</a>{breadcrumb && <><span aria-hidden="true">/</span><span>{breadcrumb}</span></>}</div>
       <article class="prose"><slot /></article>
       <PrevNext previous={previous} next={next} />
     </main>

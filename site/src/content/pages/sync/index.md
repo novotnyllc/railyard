@@ -5,9 +5,9 @@ nav_order: 7
 has_children: true
 ---
 
-# Your agents resolve the right surface everywhere — so they just run
+# Sync
 
-Delegation works when every machine agrees what an agent is. Declare plugins, skills, MCP servers, hooks, and agent configuration once; converge every enrolled host on the resolved identity; retain evidence of each manager action. The payoff is simple: an agent can land on any ready machine and find the operating surface the task expects. Roundhouse makes that practice concrete, bringing a published skill to each host within one fast interval.
+Delegation works when every machine agrees what an agent is. Declare plugins, skills, MCP servers, hooks, and agent configuration once; converge every enrolled host on the resolved identity; retain evidence of each manager action. An agent can land on any ready machine and find the operating surface the task expects. Roundhouse makes that mechanism concrete, bringing a published skill to each host within one fast interval.
 
 ## The alignment loop
 

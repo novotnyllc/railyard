@@ -15,7 +15,7 @@ Record the approach before the work starts, then append route decisions, outcome
 
 ## The report
 
-Read the primary run record as a decision chain, then map each planned item and workaround to captured evidence. The audit report separates:
+Read the primary run log as a decision chain, then map each planned item and workaround to captured evidence. The audit report separates:
 
 - route selected and actual carrier
 - active lanes and dispatch count
@@ -52,5 +52,3 @@ retrospective=5 questions sink=local-learning
 ```
 
 `inspect-claim` is an active-claim check; a settled outcome comes from the fixed-adapter `reconcile` receipt. The three audit depths share one anonymized run: the recap reports the terminal state, the audit reconstructs the decision chain, and the retrospective grades the run against its opening approach.
-
-Next: [read lifecycle](/delivery/lifecycle/) or [inspect the Roundhouse operating surface](/roundhouse/operating/).

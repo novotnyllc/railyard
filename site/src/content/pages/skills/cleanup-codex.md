@@ -11,7 +11,7 @@ Reclaim detached session residue only after the process, launcher, and thread al
 
 ## What it adds
 
-Cleanup Codex applies that recovery practice. Inspection reports matching session servers, process age, descriptors, and launcher state. Reap uses the exact session identity, a host-local lock, paired snapshots, and proves final absence; recycle owns replacement and restart attestation.
+Cleanup Codex owns recovery. Inspection reports matching session servers, process age, descriptors, and launcher state. Reap uses the exact session identity, a host-local lock, paired snapshots, and proves final absence; recycle owns replacement and restart attestation.
 
 ## How it works
 
@@ -42,5 +42,3 @@ process_identity=verified
 after_snapshot=absent
 result=reclaimed
 ```
-
-Next: [read doctor](/skills/doctor/).

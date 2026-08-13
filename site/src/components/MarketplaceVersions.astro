@@ -1,0 +1,6 @@
+---
+import { getMarketplaceVersions } from '../config/marketplace.mjs';
+
+const versions = await getMarketplaceVersions();
+---
+<span class="version-links">Current releases: <a href="https://github.com/novotnyllc/railyard/releases">Railyard {versions.railyard} <span aria-hidden="true">↗</span></a> and <a href="https://github.com/novotnyllc/roundhouse/releases">Roundhouse {versions.roundhouse} <span aria-hidden="true">↗</span></a>.</span>

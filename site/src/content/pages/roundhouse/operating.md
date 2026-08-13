@@ -7,7 +7,7 @@ nav_order: 3
 
 # Run it
 
-Make convergence routine enough to run unattended and legible enough to inspect under pressure. Give each host one scheduler authority, then expose focused operator verbs for explain, review, apply, membership, rollback, and doctor. Roundhouse turns that practice into a steady cadence with bounded change and receipts an operator can act on.
+Make convergence routine enough to run unattended and legible enough to inspect under pressure. Give each host one scheduler authority, then expose focused operator verbs for explain, review, apply, membership, rollback, and doctor. Roundhouse runs that cadence with bounded change and receipts an operator can act on.
 
 ## Cadence and schedulers
 
@@ -96,5 +96,3 @@ result=journaled
 ## Operator bounds
 
 Bound the consequence of every unattended pass. A run removes at most 5 items or 25% of the current item set, whichever is smaller. A retirement is one signed edit; the fleet sees it within one fast interval. Reparenting and reconstitution preserve the reviewed history and create new evidence for the changed relationship.
-
-Next: [read the trust and security controls](/roundhouse/security/) or [inspect the scaling breakpoints](/desired-state/scaling/).

@@ -7,11 +7,11 @@ nav_order: 8
 
 # Doctor
 
-Diagnose the delivery system as an ownership map: observe each surface, attach evidence, and route every finding to the workflow that can resolve it. Operators gain a clear next action while preserving the health check as a trustworthy baseline.
+Diagnose the delivery system as an ownership map: observe each surface, attach evidence, and route every finding to the workflow that can resolve it. The report names a clear next action while preserving the health check as a trustworthy baseline.
 
 ## What it adds
 
-Doctor expresses that practice as a read-only health table. It checks harness parity, plugin and skill state, marketplaces, routing policy, credential presence, fleet readiness, store state, and runtime health.
+Doctor reports a read-only health table. It checks harness parity, plugin and skill state, marketplaces, routing policy, credential presence, fleet readiness, store state, and runtime health.
 
 ## How it works
 
@@ -42,5 +42,3 @@ mutation=performed-by-owner
 recheck=complete
 result=ready
 ```
-
-Next: [read setup](/skills/setup/) or [inspect fleet readiness](/skills/fleet-readiness/).

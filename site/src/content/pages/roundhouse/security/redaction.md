@@ -38,5 +38,3 @@ publication=stopped
 ```
 
 The only successful publication receipt is a commit with a clean per-commit scan. The store and its journals therefore contain the decision without carrying the secret value.
-
-Next: [privilege isolation](/roundhouse/security/privilege-isolation/) or [trust ratchet](/roundhouse/security/trust-ratchet/).

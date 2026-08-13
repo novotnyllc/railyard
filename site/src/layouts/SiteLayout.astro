@@ -1,5 +1,6 @@
 ---
 import SiteHeader from '../components/SiteHeader.astro';
+import MarketplaceVersions from '../components/MarketplaceVersions.astro';
 import { BASE_PATH, SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, SITE_URL, withBase } from '../config/site.mjs';
 import '../styles/global.css';
 
@@ -41,9 +42,9 @@ const ogImage = `${SITE_ORIGIN}${withBase('/og/railyard-og.png')}`;
     <footer class="site-footer">
       <div class="footer-brand"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><strong>railyard</strong></div>
       <p>The delivery system for agent work.</p>
-      <nav aria-label="Footer navigation"><a href={withBase('/start/')}>Start</a><a href={withBase('/what-it-does/')}>Scenarios</a><a href={withBase('/delivery/')}>Docs</a></nav>
+      <nav aria-label="Footer navigation"><a href={withBase('/start/')}>Start</a><a href={withBase('/what-it-does/')}>Practices</a><a href={withBase('/delivery/')}>Delivery</a></nav>
       <nav aria-label="GitHub project links"><a href="https://github.com/novotnyllc/railyard">Railyard on GitHub <span aria-hidden="true">↗</span></a><a href="https://github.com/novotnyllc/railyard/releases">Railyard releases <span aria-hidden="true">↗</span></a><a href="https://github.com/novotnyllc/railyard/pulls">Railyard PRs <span aria-hidden="true">↗</span></a><a href="https://github.com/novotnyllc/roundhouse">Roundhouse on GitHub <span aria-hidden="true">↗</span></a><a href="https://github.com/novotnyllc/roundhouse/releases">Roundhouse releases <span aria-hidden="true">↗</span></a><a href="https://github.com/novotnyllc/roundhouse/pulls">Roundhouse PRs <span aria-hidden="true">↗</span></a><a href="https://github.com/novotnyllc/marketplace">Marketplace source <span aria-hidden="true">↗</span></a></nav>
-      <small>Built for work that arrives with evidence.</small>
+      <small><MarketplaceVersions /><br />Built for work that arrives with evidence.</small>
     </footer>
   </body>
 </html>

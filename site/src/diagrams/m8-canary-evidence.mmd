@@ -3,7 +3,7 @@ sequenceDiagram
     participant J as Journal (replicated)
     participant H as Non-canary host
     Can->>J: applied(item X, digest D) at t0
-    Note over J: wait >= 41h, no later held/reverted
+    Note over J: wait >= canary_wait_hours, 24h default/fallback, no later held/reverted
     Can->>J: any record or alive heartbeat after t0+wait
     H->>J: gate check for X@D
     alt evidence + liveness present

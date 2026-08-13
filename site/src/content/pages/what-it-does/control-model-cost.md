@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Control model cost
-parent: What it does
+parent: Practices
 nav_order: 10
 ---
 
@@ -16,6 +16,8 @@ A delivery contains a broad design seam, a mechanical edit across many call site
 ```
 
 `railyard:model-routing` supplies the classification before a carrier starts the work.
+
+Railyard itself is free and open source (MIT); you pay only your own Claude/Codex usage, billed exactly as any other session in that harness.
 
 ## What happens
 
