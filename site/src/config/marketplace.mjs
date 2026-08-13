@@ -18,13 +18,12 @@ function versionsFromCatalog(catalog) {
 
 async function loadCatalog() {
   const catalogPath = process.env.RAILYARD_MARKETPLACE_JSON_PATH;
-  if (catalogPath) return JSON.parse(await readFile(catalogPath, 'utf8'));
-
   try {
+    if (catalogPath) return JSON.parse(await readFile(catalogPath, 'utf8'));
     const response = await fetch(MARKETPLACE_URL, { signal: AbortSignal.timeout(1500) });
     if (response.ok) return response.json();
   } catch {
-    // The last verified catalog values keep an offline build deterministic.
+    // The last verified catalog values keep a broken local or network build deterministic.
   }
   return null;
 }

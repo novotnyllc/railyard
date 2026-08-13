@@ -23,7 +23,7 @@ The run validates configuration, collects per-machine evidence, compares desired
 
 ## Proof point
 
-The [fleet inventory reference](/skills/fleet-inventory/) records per-machine evidence and an `in_sync` result. The reference hosts are mac-mini, mac-studio, macbook-pro, and iris-wsl.
+The [fleet inventory reference](/skills/fleet-inventory/) records per-machine evidence and an `in_sync` result. The public guide uses anonymized labels for the four enrolled reference hosts.
 
 ## Next
 
