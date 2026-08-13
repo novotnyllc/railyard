@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 
 const MARKETPLACE_URL = 'https://raw.githubusercontent.com/novotnyllc/marketplace/main/.claude-plugin/marketplace.json';
-const FALLBACK_VERSIONS = Object.freeze({ railyard: '0.7.0', roundhouse: '0.7.3' });
+const FALLBACK_VERSIONS = Object.freeze({ railyard: '0.7.0', roundhouse: '0.7.4' });
 let versionsPromise;
 
 function versionsFromCatalog(catalog) {
