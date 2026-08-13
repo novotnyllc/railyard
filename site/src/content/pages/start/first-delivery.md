@@ -7,7 +7,7 @@ nav_order: 2
 
 # First delivery
 
-Prerequisite: [install railyard and roundhouse first →](/start/install/)
+Prerequisite: [install Railyard first →](/start/install/). Roundhouse is optional until fleet placement earns its place.
 
 Start with a real change and carry it to observable proof. One sentence on the machine you already use can produce a reviewed, merged result plus a post-merge receipt, giving you a complete delivery loop before you add fleet complexity.
 

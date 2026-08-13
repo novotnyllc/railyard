@@ -21,7 +21,7 @@ async function loadCatalog() {
   try {
     if (catalogPath) return JSON.parse(await readFile(catalogPath, 'utf8'));
     const response = await fetch(MARKETPLACE_URL, { signal: AbortSignal.timeout(1500) });
-    if (response.ok) return response.json();
+    if (response.ok) return await response.json();
   } catch {
     // The last verified catalog values keep a broken local or network build deterministic.
   }
