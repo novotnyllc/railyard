@@ -11,15 +11,18 @@ The scheduler keeps routine convergence moving; the operator reaches for explain
 
 ## Inspect and decide
 
-```text
-roundhouse fleet-explain [MACHINE] ITEM
-roundhouse fleet-pending
-roundhouse fleet-review ITEM pass|hold REASON
-roundhouse fleet-apply ITEM
-roundhouse fleet-hold ITEM REASON
-roundhouse fleet-finding SLUG SUMMARY
-roundhouse fleet-journal ENTRY.json|-
-roundhouse fleet-rollback ITEM [--now]
+Resolve `CLI` to the installed Roundhouse plugin's `scripts/roundhouse` before running these examples. The plugin does not assume a bare `roundhouse` executable on `PATH`; the owning skills use `CLI="$SKILL_DIR/../../scripts/roundhouse"`.
+
+```sh
+CLI="<roundhouse>/scripts/roundhouse"
+"$CLI" fleet-explain [MACHINE] ITEM
+"$CLI" fleet-pending
+"$CLI" fleet-review ITEM pass|hold REASON
+"$CLI" fleet-apply ITEM
+"$CLI" fleet-hold ITEM REASON
+"$CLI" fleet-finding SLUG SUMMARY
+"$CLI" fleet-journal ENTRY.json|-
+"$CLI" fleet-rollback ITEM [--now]
 ```
 
 A verdict binds to the item digest. Editing the item produces a fresh digest and a fresh review surface.
@@ -27,23 +30,23 @@ A verdict binds to the item digest. Editing the item produces a fresh digest and
 ## Membership
 
 ```text
-roundhouse fleet-add MACHINE [--ephemeral] [--job JOB] [--ttl HOURS]
-roundhouse fleet-join REMOTE
-roundhouse fleet-remove MACHINE [--burn]
-roundhouse fleet-renew NAME [HOURS]
-roundhouse fleet-reconstitute MACHINE
+"$CLI" fleet-add MACHINE [--ephemeral] [--job JOB] [--ttl HOURS]
+"$CLI" fleet-join REMOTE
+"$CLI" fleet-remove MACHINE [--burn]
+"$CLI" fleet-renew NAME [HOURS]
+"$CLI" fleet-reconstitute MACHINE
 ```
 
 ## Store lifecycle
 
 ```text
-roundhouse fleet-init
-roundhouse fleet-enroll
-roundhouse fleet-set-remote URL
-roundhouse fleet-verify-remote
-roundhouse fleet-seed
-roundhouse fleet-run --fast
-roundhouse fleet-run --full
+"$CLI" fleet-init
+"$CLI" fleet-enroll
+"$CLI" fleet-set-remote URL
+"$CLI" fleet-verify-remote
+"$CLI" fleet-seed
+"$CLI" fleet-run --fast
+"$CLI" fleet-run --full
 ```
 
 The fast run handles the poll floor, fetch, reconcile, review, apply, journal, publication, and peer nudge. The full run adds refresh, package maintenance, retention, and doctor.
@@ -54,7 +57,7 @@ Cadence, jitter, canary group, canary wait, removal caps, peer nudge, and eviden
 
 ## Doctor
 
-`roundhouse fleet-doctor` reports prerequisite, trust, store, convergence, and transport rows. It gives the operator a current table of observed state and the next action for each finding.
+`"$CLI" fleet-doctor` reports prerequisite, trust, store, convergence, and transport rows. It gives the operator a current table of observed state and the next action for each finding.
 
 ## Evidence
 

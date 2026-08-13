@@ -11,4 +11,4 @@ npm run check:assets
 npm run check:links
 ```
 
-`dist/` is build output and is not committed. The committed visual system is SVG-first: a hero rail diagram, ten scenario icons, favicon source, and a 1200×630 OG composition plus its PNG export. Later bespoke raster art would help most on the hero illustration and OG card, followed by any scenario that needs a richer editorial image.
+`dist/` is build output and is not committed. The committed visual system is SVG-first: a hero rail diagram, ten scenario icons, a favicon family derived from the existing `plugins/railyard/assets/icon.png` rail-switch mark, and a 1200×630 OG composition plus its PNG export. Later bespoke raster art would help most on the hero illustration and OG card, followed by any scenario that needs a richer editorial image.
