@@ -30,7 +30,7 @@ claude plugin install railyard@novotnyllc
 (Codex: `codex plugin marketplace add novotnyllc/marketplace` and
 `codex plugin add railyard --marketplace novotnyllc`.)
 
-**Read the [public documentation](https://novotnyllc.github.io/)** — what it
+**Read the [public documentation](https://novotnyllc.github.io/railyard/)** — what it
 can do, how it works, and what a delivery actually looks like.
 
 ## What's inside
@@ -75,9 +75,9 @@ claude plugin install ponytail@ponytail
 ## The family
 
 Machine and infrastructure administration lives in
-[`roundhouse`](https://novotnyllc.github.io/roundhouse/). The public product
+[public fleet docs](https://novotnyllc.github.io/railyard/fleet/). The public product
 story, scenarios, and guides live at
-[novotnyllc.github.io](https://novotnyllc.github.io/). Charter and boundaries:
+[novotnyllc.github.io/railyard](https://novotnyllc.github.io/railyard/). Charter and boundaries:
 [AGENTS.md](AGENTS.md).
 
 ## License

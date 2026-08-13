@@ -4,7 +4,7 @@ Railyard turns "go do X" into a verified, delivered result. The public
 documentation is canonical for installation, scenarios, delivery lifecycle,
 model routing, quality gates, integrations, and credits:
 
-[novotnyllc.github.io](https://novotnyllc.github.io/)
+[novotnyllc.github.io/railyard](https://novotnyllc.github.io/railyard/)
 
 This repository holds the agent-consumed source and local engineering record:
 
@@ -17,4 +17,4 @@ This repository holds the agent-consumed source and local engineering record:
 
 For machine and infrastructure administration, use the public fleet section:
 
-[novotnyllc.github.io/roundhouse](https://novotnyllc.github.io/roundhouse/)
+[novotnyllc.github.io/railyard/fleet](https://novotnyllc.github.io/railyard/fleet/)

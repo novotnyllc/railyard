@@ -27,7 +27,7 @@ Deciding and driving work —
 Keeping machines and infrastructure serviceable — readiness, inventory,
 parity, packages, dotfiles, auth, SSH transport and enrollment, privileged
 installs, network gear — lives in
-[`roundhouse`](https://novotnyllc.github.io/roundhouse/); the orchestrator
+the [public fleet docs](https://novotnyllc.github.io/railyard/fleet/); the orchestrator
 consults `roundhouse:fleet-readiness` before dispatch and never administers
 hosts itself.
 
