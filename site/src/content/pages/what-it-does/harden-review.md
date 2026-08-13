@@ -7,7 +7,7 @@ nav_order: 2
 
 # Harden review
 
-Land review evidence before merge so correctness, security, and maintainability have a visible place in the delivery receipt.
+An orchestrator change touches many mechanical call sites and one gnarly concurrency seam where a flush can race shutdown. Freeze the diff, review it through correctness and code-health lenses, settle every real finding, and carry that evidence to merge. The resulting receipt shows why the change deserves trust.
 
 ## Easy path
 
@@ -15,7 +15,7 @@ Land review evidence before merge so correctness, security, and maintainability 
 > Review this change deeply, settle findings, and merge it.
 ```
 
-The delivery route runs the Thermos pair against the same frozen diff and relevant source context.
+The delivery route uses the Thermos pair against the same frozen diff and relevant source context.
 
 ## What happens
 

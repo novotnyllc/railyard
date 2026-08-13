@@ -7,7 +7,7 @@ nav_order: 2
 
 # First delivery
 
-Get a reviewed, merged change with an observable post-merge receipt from one sentence on the machine you already use.
+Start with a real change and carry it to observable proof. One sentence on the machine you already use can produce a reviewed, merged result plus a post-merge receipt, giving you a complete delivery loop before you add fleet complexity.
 
 ## Easy path
 
@@ -15,7 +15,7 @@ Get a reviewed, merged change with an observable post-merge receipt from one sen
 > Fix the retry path in the webhook worker and get it merged.
 ```
 
-`railyard:deliver` is the front door for this outcome.
+This request names the outcome; `railyard:deliver` is the working front door that carries it.
 
 ## What happens
 
@@ -39,6 +39,6 @@ The [delivery lifecycle](/delivery/lifecycle/) documents the observable terminal
 
 ## Scope
 
-The first delivery is a one-machine path. Add fleet placement later through [run work on another machine](/what-it-does/run-work-on-another-machine/).
+The first delivery is a complete one-machine path. Add fleet placement when another host provides real leverage through [run work on another machine](/what-it-does/run-work-on-another-machine/).
 
 Next: [read the full lifecycle](/delivery/lifecycle/).

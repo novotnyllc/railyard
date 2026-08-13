@@ -7,15 +7,15 @@ nav_order: 3
 
 # Model routing
 
-Model routing gives each work unit a recorded model, effort, carrier, transport, and budget decision.
+Route every work unit deliberately before dispatch. Match the model and effort to the work shape, bind the choice to its carrier and budget, and preserve the receipt so quality, cost, and execution can be explained together.
 
 ## What it adds
 
-The router is the single decision surface for role, work shape, privacy, budget, and transport. Its response is a frozen route the caller uses for the actual dispatch.
+Model routing provides the single decision surface for role, work shape, privacy, budget, and transport. Its response is a frozen route the caller uses for the actual dispatch.
 
 ## How it works
 
-`resolve`, `admit`, dispatch claim, and receipt reconciliation form the route lifecycle. Work contracts bind objective, source of truth, scope, constraints, authorization, acceptance, and stop condition through semantic digests.
+The route lifecycle moves through `resolve`, `admit`, dispatch claim, and receipt reconciliation. Work contracts bind objective, source of truth, scope, constraints, authorization, acceptance, and stop condition through semantic digests.
 
 ```text
 > Resolve the implementation route, admit its forecast, and show the receipt binding.

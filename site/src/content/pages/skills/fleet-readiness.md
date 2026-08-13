@@ -7,11 +7,11 @@ nav_order: 11
 
 # Fleet readiness
 
-Fleet readiness gives placement a current readiness result from host, task, and transport evidence.
+Place work only after the host, task, and transport each present current evidence. Keeping those dimensions explicit gives dispatchers a dependable go/no-go result and makes the owning prerequisite clear whenever placement pauses.
 
 ## What it adds
 
-The skill checks configuration, projects, agent surface, inventory, authentication, and transport prerequisites for the selected machine and work unit.
+Fleet readiness synthesizes that placement decision. It checks configuration, projects, agent surface, inventory, authentication, and transport prerequisites for the selected machine and work unit.
 
 ## How it works
 

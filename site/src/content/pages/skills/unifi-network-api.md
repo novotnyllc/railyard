@@ -7,11 +7,11 @@ nav_order: 19
 
 # UniFi Network API
 
-UniFi Network API turns a live controller description into one bounded network operation with an exact request, header-based authentication, and post-change verification.
+Treat the live controller description as the authority for every network change. Select one exact operation, preserve the requested field boundary, and verify controller plus gateway state afterward so the change remains bounded and auditable.
 
 ## What it adds
 
-The skill refreshes the controller's current OpenAPI description, selects the exact operation and schema, preserves only the requested fields, and keeps the API key in a header. The request and the verification result stay tied to the same operation digest.
+UniFi Network API applies that practice with header-based authentication and post-change verification. It refreshes the controller's current OpenAPI description, selects the exact operation and schema, preserves only the requested fields, and keeps the API key in a header. The request and the verification result stay tied to the same operation digest.
 
 ## How it works
 
@@ -23,7 +23,7 @@ apply=awaiting-explicit-consent
 verify=controller+gateway state
 ```
 
-The skill uses the live description as the operation contract, so a stale path or field produces a new planning result rather than a guessed request.
+The live description serves as the operation contract, so a stale path or field produces a new planning result grounded in the current schema.
 
 ## Scope
 

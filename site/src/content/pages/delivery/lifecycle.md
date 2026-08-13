@@ -7,15 +7,15 @@ nav_order: 1
 
 # The delivery lifecycle
 
-A single request becomes a traceable sequence of intent, routing, implementation, review, merge, proof, and learning.
+Treat delivery as one continuous promise: translate intent into a change, challenge it, merge it, and prove that the result reached the base branch and its consumer. A traceable sequence of routing, implementation, review, proof, and learning makes that promise repeatable for humans and agents alike.
 
 ## 1. Intent intake
 
-`railyard:deliver` reads the requested outcome and selects the artifact boundary. A plan request produces a plan, a diagnosis request produces findings, and an implementation request carries through the full delivery route.
+Begin by naming the finish line. A plan request should produce a plan, a diagnosis request should produce findings, and an implementation request should carry through the full delivery route. `railyard:deliver` turns that declared outcome into the artifact boundary.
 
 ## 2. Model routing
 
-`railyard:model-routing` resolves the work class before a carrier starts. The decision records the selected model, effort, adapter, transport, privacy, and budget effect.
+Route by the economics of the work: use the right model for the job, spend where hardness lives, and treat budget as an engineering constraint. Before a carrier starts, `railyard:model-routing` records the selected model, effort, adapter, transport, privacy, and budget effect.
 
 ```text
 route=implementation model=gpt-5.6-luna effort=max
@@ -25,11 +25,11 @@ implementationEngine=prefer/codex budget=default_route_no_state
 
 ## 3. Plan and implement
 
-The implementation workflow creates a bounded working boundary, plans the change, writes the smallest useful implementation, and runs the relevant checks. Independent work can run in isolated worktrees and converge into one integration branch.
+Give the change a bounded working boundary, plan the behavior, write the smallest useful implementation, and run the checks that can prove it. Independent work can run in isolated worktrees and converge into one integration branch.
 
 ## 4. Thermos review
 
-The correctness/security lens and the maintainability lens review the same frozen packet. The synthesis gives the implementation lane one findings list, and the lane fixes real findings before the chunk moves forward.
+Challenge each coherent chunk while its context is fresh. The correctness/security lens and the maintainability lens review the same frozen packet; synthesis returns one findings list to the implementation lane, which fixes real findings before the chunk moves forward.
 
 ```text
 thermos correctness_findings=1 quality_findings=2
@@ -39,15 +39,15 @@ gate=fix-before-commit
 
 ## 5. Browser-visible quality
 
-For React, Next, JSX, TSX, or component work, the route runs the project-appropriate React Doctor command against the staged change. Docs-only work stays on its document checks.
+Match the quality gate to the surface users experience. For React, Next, JSX, TSX, or component work, the route runs the project-appropriate React Doctor command against the staged change. Docs-only work stays on its document checks.
 
 ## 6. Commit and publish
 
-The delivery owner creates the configured commit, pushes the working branch, and opens or updates the pull request when the repository workflow uses one. Checkpoint commits give another lane a resumable handoff.
+Publish a resumable state. The delivery owner creates the configured commit, pushes the working branch, and opens or updates the pull request when the repository workflow uses one. Checkpoint commits give another lane a precise handoff.
 
 ## 7. Review settlement
 
-The delivery tail settles CI, review threads, branch currency, and stack order. Merge authority follows the latest review evidence and the repository's configured merge strategy.
+Earn merge authority from current evidence. The delivery tail settles CI, review threads, branch currency, and stack order, then follows the repository's configured merge strategy.
 
 ```text
 head=4e1d... reviews=head-settled threads=0
@@ -56,7 +56,7 @@ settlement_window=passed merge_authority=allowed
 
 ## 8. Post-merge proof
 
-The terminal pair is observable:
+Prove the merged result with an observable terminal pair:
 
 ```sh
 git merge-base --is-ancestor <merge-commit> origin/<base>
@@ -74,11 +74,11 @@ exit=0
 
 ## 9. Durable learning
 
-A substantial run closes with a recap and retrospective. Reusable repo lessons can enter the compound workflow; cross-repo routing lessons stay in the routing learning surface.
+Close a substantial run by turning experience into operating leverage. A recap and retrospective capture the decision chain; reusable repo lessons can enter the compound workflow, while cross-repo routing lessons stay in the routing learning surface.
 
 ## One-line shape
 
-The lifecycle is an observable chain from intent through routing, implementation, paired review, settlement, merge, post-merge proof, and durable learning. The [delivery lifecycle diagram](#diagram) makes the handoff order easy to scan.
+Run the lifecycle as an observable chain from intent through routing, implementation, paired review, settlement, merge, post-merge proof, and durable learning. The [delivery lifecycle diagram](#diagram) makes the handoff order easy to scan.
 
 <span id="diagram"></span>
 
@@ -86,6 +86,6 @@ The lifecycle is an observable chain from intent through routing, implementation
 
 The diagram is also available as text above: findings return to implementation, and unresolved review threads return to the review gate.
 
-The [Railyard source repository](https://github.com/novotnyllc/railyard), [release record](https://github.com/novotnyllc/railyard/releases), and [review trail](https://github.com/novotnyllc/railyard/pulls) keep the delivery contract reviewable beside this guide.
+Railyard supplies the load-bearing evidence: its [source repository](https://github.com/novotnyllc/railyard), [release record](https://github.com/novotnyllc/railyard/releases), and [review trail](https://github.com/novotnyllc/railyard/pulls) keep the delivery contract reviewable beside this guide.
 
 Next: [see the gates](/delivery/gates/).

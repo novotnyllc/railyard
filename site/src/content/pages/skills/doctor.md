@@ -7,15 +7,15 @@ nav_order: 8
 
 # Doctor
 
-Doctor turns delivery-system drift into a read-only health table with an owner and a routed next action.
+Diagnose the delivery system as an ownership map: observe each surface, attach evidence, and route every finding to the workflow that can resolve it. Operators gain a clear next action while preserving the health check as a trustworthy baseline.
 
 ## What it adds
 
-The skill checks harness parity, plugin and skill state, marketplaces, routing policy, credential presence, fleet readiness, store state, and runtime health.
+Doctor expresses that practice as a read-only health table. It checks harness parity, plugin and skill state, marketplaces, routing policy, credential presence, fleet readiness, store state, and runtime health.
 
 ## How it works
 
-Each row names the observed condition, evidence source, and owning fix surface. A follow-up fix routes through the skill that owns the affected surface, then the row is checked again.
+Each row names the observed condition, evidence source, and owning fix surface. A follow-up fix travels through the skill that owns the affected surface, followed by a fresh check of the row.
 
 ```text
 > Run the read-only doctor pass and group each finding by its owning fix surface.
@@ -28,7 +28,7 @@ next=collect readiness evidence
 
 ## Scope
 
-Doctor diagnoses and reports. Mutation belongs to the approved owning workflow.
+Doctor diagnoses and reports. The approved owning workflow performs any mutation.
 
 ## Source
 

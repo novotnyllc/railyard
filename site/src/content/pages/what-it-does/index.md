@@ -7,7 +7,7 @@ has_children: true
 
 # What it does
 
-Ten outcomes show the system's value in the order a reader can use it: value first, an easy path, the mechanism, one proof point, and a next link.
+Start with the delivery outcome that carries real stakes: merge a change, harden a concurrency seam, align five machines, or place work on the host prepared to run it. Each story leads with the operating practice and payoff, then shows an easy path, the mechanism as evidence, one proof point, and a next link.
 
 1. [Ship a change](/what-it-does/ship-a-change/)
 2. [Harden review](/what-it-does/harden-review/)

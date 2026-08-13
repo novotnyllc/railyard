@@ -6,7 +6,7 @@ nav_order: 9
 
 # Credits and upstream sources
 
-This public surface brings together the delivery and fleet work, with attribution for the projects and tools that make it possible.
+Build on visible lineage and give upstream work its due. Clear attribution makes the operating practice easier to inspect, maintain, and carry forward. This public surface brings together the delivery and fleet work with the projects and tools that make it possible.
 
 ## Shipped and adapted
 
@@ -31,6 +31,6 @@ This public surface brings together the delivery and fleet work, with attributio
 
 ## Licensing
 
-License obligations and third-party notices remain with the source repositories. This page gives reader-facing attribution and links to the upstream projects.
+Carry licensing through the same evidence discipline. License obligations and third-party notices remain with the source repositories. This page gives reader-facing attribution and links to the upstream projects.
 
 Corrections are welcome through the [Railyard source repository](https://github.com/novotnyllc/railyard).

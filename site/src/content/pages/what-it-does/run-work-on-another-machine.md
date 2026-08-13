@@ -7,7 +7,7 @@ nav_order: 8
 
 # Run work on another machine
 
-Place work on a machine with current project, agent, and transport evidence that the dispatcher has actually consulted.
+A delivery needs Linux tooling while the current workstation is a Mac. Ask the candidate machine to prove project, agent, and transport readiness, then bind the selected destination to the delivery contract. Work starts where the prerequisites are current, and the same delivery gates travel with it.
 
 ## Easy path
 

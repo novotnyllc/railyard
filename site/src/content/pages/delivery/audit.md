@@ -7,15 +7,15 @@ nav_order: 4
 
 # Audit
 
-Audit turns a delivery run into a compact decision chain: route, dispatches, checks, review rounds, retries, and terminal evidence.
+Keep enough evidence to explain why the run deserved to finish. A compact audit turns routes, dispatches, checks, review rounds, retries, and terminal proof into an operating asset: the next delivery can reuse sound decisions and improve the expensive ones.
 
 ## The record
 
-The run log records metadata for the approach, route decisions, outcomes, and deviations. It keeps prompts, diffs, and provider output outside the metadata record while preserving why each action happened.
+Record the approach before the work starts, then append route decisions, outcomes, and deviations as metadata. The run log preserves why each action happened while prompts, diffs, and provider output stay outside the metadata record.
 
 ## The report
 
-An audit report sweeps the primary run record, then maps each planned item and workaround to captured evidence. It separates:
+Read the primary run record as a decision chain, then map each planned item and workaround to captured evidence. The audit report separates:
 
 - route selected and actual carrier
 - active lanes and dispatch count
@@ -26,7 +26,7 @@ An audit report sweeps the primary run record, then maps each planned item and w
 
 ## The retrospective
 
-A substantial run closes with questions graded against its opening approach: which check carried the proof, which work ran in parallel, which input stayed unchanged, and where the route changed. The answer becomes a reusable suggestion when the skill or process can improve.
+Grade a substantial run against its opening approach: which check carried the proof, which work ran in parallel, which input stayed unchanged, and where the route changed. The answers become reusable suggestions when the skill or process can improve.
 
 ## Useful commands
 
@@ -36,7 +36,7 @@ railyard:model-routing inspect-claim
 railyard:audit
 ```
 
-The [Audit skill](/skills/audit/) reads evidence and presents it as a decision chain.
+The [Audit skill](/skills/audit/) is the working mechanism that reads this evidence and presents it as a decision chain.
 
 ```text
 railyard:model-routing status

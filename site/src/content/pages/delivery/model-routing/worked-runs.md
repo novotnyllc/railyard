@@ -7,15 +7,15 @@ nav_order: 2
 
 # Two worked runs, with the ledger
 
-The routing ledger makes an intentional trade legible: mechanical volume can run on the implementation tier while a subtle seam or hard review receives a stronger route. Every number below is a representative relative cost unit on the contract's `relativeCostIndex` scale. Dollar rates remain catalog-owned, source-linked, rate-stamped, and meter-specific.
+Route by economic shape: give mechanical volume to the implementation tier, reserve stronger reasoning for subtle seams and hard review, and make the quality purchase legible in the ledger. The payoff is controlled spend with depth exactly where failure would hurt. Every number below is a representative relative cost unit on the contract's `relativeCostIndex` scale. Dollar rates remain catalog-owned, source-linked, rate-stamped, and meter-specific.
 
 ## Run 1 — Fleet-utility API migration
 
-The request is: “replace the deprecated log wrapper with structured logging across the repo; the async flush path is subtle.” Intake resolves `implementation` to `gpt-5.6-luna` at `max` with `implementationEngine: {"mode":"prefer","target":"codex"}` and admits a run-scope `hardAdmission` forecast.
+An operator owns a repository-wide logging migration with a production risk hiding in the async flush path. The request is: “replace the deprecated log wrapper with structured logging across the repo; the async flush path is subtle.” Intake resolves `implementation` to `gpt-5.6-luna` at `max` with `implementationEngine: {"mode":"prefer","target":"codex"}` and admits a run-scope `hardAdmission` forecast.
 
-The plan splits two lanes. Lane A covers about 40 mechanical call sites and their fixes on `codex-luna`; the dispatch gate confirms model and effort. Lane B owns the async flush seam and is a deliberate escalation to a Claude worker on Opus at high effort, the fleet default for dispatched workers. Thermos runs correctness/security and quality in parallel. It returns four findings: two missed call sites and a format-string regression in lane A, plus a flush-order race under cancellation in lane B. Each lane re-dispatches its fix on the tier that produced it.
+The operator splits the risk along its natural boundary. Lane A covers about 40 mechanical call sites and their fixes on `codex-luna`; the dispatch gate confirms model and effort. Lane B owns the async flush seam and is a deliberate escalation to a Claude worker on Opus at high effort, the fleet default for dispatched workers. Thermos runs correctness/security and quality in parallel. It returns four findings: two missed call sites and a format-string regression in lane A, plus a flush-order race under cancellation in lane B. Each lane re-dispatches its fix on the tier that produced it.
 
-The merge-settlement gate holds `gh pr merge` until every thread is resolved and the ten-minute settlement window passes. After merge, ancestry proof and the smallest routed verification run. The run log carries each route, claim, imported receipt, finding, and final outcome.
+The migration earns its finish through settled evidence. The merge-settlement gate holds `gh pr merge` until every thread is resolved and the ten-minute settlement window passes. After merge, ancestry proof and the smallest routed verification run. The run log carries each route, claim, imported receipt, finding, and final outcome.
 
 | Ledger (relative cost units) | Tier | Volume | Cost |
 | --- | --- | --- | ---: |
@@ -29,9 +29,9 @@ The saving comes from matching the 40 mechanical sites to the cheap tier while r
 
 ## Run 2 — Concurrency bug fix
 
-The request is a flaky-deadlock report on a shared cache. Intake routes to the debug stage; `resolve` returns `implementation` → Luna at `max`. Lane A builds the reproducer and instrumentation on the cheap tier. Lane B owns the lock-ordering fix and escalates to the top tier. Because the work is flagged high or critical, independent review resolves `gpt-5.6-sol` at `max`, the policy's only `max` review case.
+A team is chasing a flaky deadlock in a shared cache, where a fast-looking fix could simply move the failure. Intake routes the report to the debug stage; `resolve` returns `implementation` → Luna at `max`. Lane A builds the reproducer and instrumentation on the cheap tier. Lane B owns the lock-ordering fix and escalates to the top tier. Because the work is flagged high or critical, independent review resolves `gpt-5.6-sol` at `max`, the policy's only `max` review case.
 
-An admitted `oracle-browser` route adds a second-model review. The gates catch two findings: a missing memory fence in the reproducer assertion and an unhandled cancellation path in the fix. Settlement, merge, and post-merge proof complete; the reproducer runs green 500 times in CI, and the reconcile receipts retain the meter facts for every lane.
+An admitted `oracle-browser` route adds a second-model review. The gates catch two findings with direct stakes: a missing memory fence could invalidate the reproducer assertion, and an unhandled cancellation path could preserve the deadlock in the fix. Settlement, merge, and post-merge proof complete; the reproducer runs green 500 times in CI, and the reconcile receipts retain the meter facts for every lane.
 
 | Ledger (relative cost units) | Tier | Volume | Cost |
 | --- | --- | --- | ---: |

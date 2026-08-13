@@ -7,9 +7,9 @@ has_children: true
 
 # Machines that converge on their own
 
-Roundhouse gives an agent fleet a readable desired state, a signed store, a canary gate, and host-owned evidence. Declare what every machine should carry; each host pulls, reviews, applies through its owner, journals the result, and publishes the proof.
+Run an agent fleet from declared intent and durable proof. Give every machine a readable desired state, require signed changes to earn their way through a canary, and let each host publish its own evidence. The payoff is a fleet that can move unattended while operators can still explain exactly why any item applied or held.
 
-Roundhouse borrows the desired-state discipline of DSC-style tooling and narrows it to exactly what an agent toolchain needs — skills, plugins, and config as the managed unit, canary gating before wider convergence, and a lightweight signed trust ratchet in place of a certificate authority.
+Roundhouse is one working expression of that practice. It borrows the desired-state discipline of DSC-style tooling and narrows it to exactly what an agent toolchain needs: skills, plugins, and config as the managed unit, canary gating before wider convergence, and a lightweight signed trust ratchet in place of a certificate authority. Each host pulls, reviews, applies through its owner, journals the result, and publishes the proof.
 
 ## The product surface
 
@@ -22,6 +22,8 @@ Roundhouse borrows the desired-state discipline of DSC-style tooling and narrows
 The delivery system consumes one thin interface: fleet-readiness go/no-go. Roundhouse remains useful on its own for any agent fleet, whether the work runs through Claude, Codex, or another managed harness.
 
 ## A small receipt
+
+Picture an operator checking whether a review skill truly reached an anonymized host after a fleet change. This compact receipt carries the answer from the four-layer fold through review, apply, and publication:
 
 ```text
 roundhouse run item=skills.my-review

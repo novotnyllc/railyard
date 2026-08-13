@@ -7,15 +7,15 @@ nav_order: 1
 
 # Deliver
 
-Deliver turns an implementation request into a bounded workflow that reaches merge and post-merge proof.
+Run each software change as one bounded delivery: name the outcome, preserve the evidence chain, and stay with it through merge and a real post-merge check. The payoff is software that arrives with proof of what changed and where it landed.
 
 ## What it adds
 
-The skill selects the delivery route from the requested artifact, invokes model routing before work starts, and hands implementation to the workflow engine. It owns the requested terminal boundary and the delivery tail that settles review, branch currency, merge, and proof.
+Deliver carries that operating practice. It selects the route from the requested artifact, invokes model routing before work starts, and hands implementation to the workflow engine. It owns the requested terminal boundary and the delivery tail that settles review, branch currency, merge, and proof.
 
 ## How it works
 
-Route selection distinguishes plan, diagnosis, local implementation, and full delivery outcomes. The implementation path uses isolated work boundaries, focused checks, Thermos review, and a configured GitHub flow.
+Route selection distinguishes plan, diagnosis, local implementation, and full delivery outcomes. For implementation, isolated work boundaries, focused checks, Thermos review, and the configured GitHub flow create the evidence chain.
 
 ```text
 > Fix the retry path in the webhook worker and get it merged with post-merge proof.

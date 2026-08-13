@@ -7,15 +7,15 @@ nav_order: 5
 
 # Oracle
 
-Oracle adds an advisory second-model review with the selected files and real source context attached.
+Use a second frontier model as a bounded advisor: attach the exact files and source context, preserve the route claim, and verify every finding in the repository. The extra perspective strengthens judgment while implementation and merge authority remain with the owning workflow.
 
 ## What it adds
 
-The skill packages a prompt, file set, route claim, and budget context for a second frontier model, then returns a checkpointed advisory result for verification by the owning workflow.
+Oracle provides that advisory practice. It packages a prompt, file set, route claim, and budget context for a second frontier model, then returns a checkpointed result for verification by the owning workflow.
 
 ## How it works
 
-Availability is established through its selected carrier. Sessions can be reattached by claim, files are selected explicitly, and the result is checked against the repository and tests before it influences a change.
+The selected carrier establishes availability. Sessions can be reattached by claim, files are selected explicitly, and the result is checked against the repository and tests before it influences a change.
 
 ```text
 > Ask Oracle for a read-only review of the selected parser files and return findings tied to the claim.

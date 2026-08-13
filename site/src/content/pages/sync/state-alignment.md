@@ -7,7 +7,7 @@ nav_order: 1
 
 # What converges, per harness
 
-State alignment keeps the desired item and the installed agent surface speaking the same language on Claude and Codex. The result is a manager action with a stable SHA+version identity and a journal outcome that explains whether the host changed.
+Delegation stays dependable when Claude and Codex interpret the same declared agent surface on every machine. Align each desired item with its native manager verb, stable SHA+version identity, and journal outcome; the payoff is a host that can explain exactly what changed and why it is ready.
 
 ## Manager-verb table
 
@@ -20,11 +20,11 @@ State alignment keeps the desired item and the installed agent surface speaking 
 | `mcp_servers` | configured server entry | configured server entry | The allowlisted endpoint and settings digest match |
 | `config_files` | allowlisted key update | allowlisted key update | The selected key/value digest matches without touching unrelated keys |
 
-The category owns the verb. A source refresh does not masquerade as an applied item, and a version match with a changed marketplace SHA does not satisfy the identity.
+Let the category own the verb and the full identity own satisfaction. A source refresh does not masquerade as an applied item, and a version match with a changed marketplace SHA does not satisfy the identity.
 
 ## One item, end to end
 
-The `skills.my-review` item begins in `fleet.yaml`, gets folded with the platform, group, and host layers, and then resolves its logical definition. The receiving host selects the manager verb for its harness, installs or updates the exact payload, re-runs hook approval when the item is a plugin dependency, and journals the result. On the next pass, the same identity produces a no-op `satisfied` record.
+Follow one item from declaration to durable evidence. The `skills.my-review` item begins in `fleet.yaml`, gets folded with the platform, group, and host layers, and then resolves its logical definition. The receiving host selects the manager verb for its harness, installs or updates the exact payload, re-runs hook approval when the item is a plugin dependency, and journals the result. On the next pass, the same identity produces a no-op `satisfied` record.
 
 ```yaml
 items:
@@ -52,6 +52,6 @@ result: satisfied
 observed_at: 2026-08-13T09:41:16Z
 ```
 
-The receipt separates item identity from the current manager. A future re-tag changes the SHA and creates a new review, even when the version string remains `2.4.0`.
+The receipt separates item identity from the current manager, preserving a trustworthy decision across harnesses. A future re-tag changes the SHA and creates a new review, even when the version string remains `2.4.0`.
 
 Next: [read the sync hub](/sync/) or [inspect Fleet agents](/skills/fleet-agents/).

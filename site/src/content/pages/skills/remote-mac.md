@@ -7,15 +7,15 @@ nav_order: 18
 
 # Remote Mac
 
-Remote Mac gives one remote operation a named, reconnectable session with identity, shell, directory, command, and log evidence.
+Make remote work resumable from the first command. Verify the destination, run long work in a named session, and return enough identity, directory, command, and log evidence for another operator to reconnect with confidence.
 
 ## What it adds
 
-The skill checks the destination first, uses the configured login shell, starts long work inside a named tmux session, and returns the session and log handles for follow-up.
+Remote Mac provides that bounded operating lane. It checks the destination first, uses the configured login shell, starts long work inside a named tmux session, and returns the session and log handles for follow-up.
 
 ## How it works
 
-Read-only checks establish the target identity and transport. The operator can inspect the session, collect its result, and hand off the evidence to delivery or fleet operations.
+Read-only checks establish the target identity and transport. The operator can inspect the session, collect its result, and hand the evidence to delivery or fleet operations.
 
 ```text
 > Check host-a, start the long build in a named tmux session, and return the log handle.

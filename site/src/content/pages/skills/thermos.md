@@ -7,11 +7,11 @@ nav_order: 4
 
 # Thermos
 
-Thermos gives a change two focused review lenses and one synthesized findings packet before it moves to commit.
+Review a frozen change through two distinct practitioner lenses, then synthesize one actionable packet before commit. Correctness gets the same serious attention as code health, and the implementation lane receives a clear gate it can settle.
 
 ## What it adds
 
-The correctness lens covers breakage, security, developer experience, and feature-leak risk. The code-quality lens covers structure, duplication, complexity, and maintainability.
+Thermos carries this paired-review practice. Its correctness lens covers breakage, security, developer experience, and feature-leak risk. Its code-quality lens covers structure, duplication, complexity, and maintainability.
 
 ## How it works
 

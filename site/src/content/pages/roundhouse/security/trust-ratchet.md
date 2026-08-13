@@ -7,13 +7,17 @@ nav_order: 5
 
 # The roster advances only from trusted history
 
-A roster edit counts only when a key trusted by the roster at the commit's parent signs it. A merge checks every parent independently. This parent-position rule gives every receiving host the same answer about who could write at the exact history position being adopted.
+Every receiving host in an unattended fleet should derive authority from the same signed point in history before a change earns its canary gate, so membership remains deterministic across merges, offline returns, and revocation. That shared answer lets the fleet advance autonomously while preserving an exact account of who could write each path.
+
+Roundhouse makes a roster edit count only when a key trusted by the roster at the commit's parent signs it. A merge checks every parent independently. This parent-position rule gives every receiving host the same answer about who could write at the exact history position being adopted.
 
 ![Trust ratchet parent rule: every parent verifies a roster edit before the roster advances; unknown, removed, or class-refused signers are held and alerted.](/diagrams/m3-trust-ratchet.svg)
 
 The sequence reads left to right for the decision and top to bottom for the resulting host action: accepted history advances the roster, while a refusal keeps held items at their last reviewed value.
 
 ## Six checks per commit
+
+Before a commit can advance the roster, each receiving host proves six facts:
 
 1. The signature is cryptographically good.
 2. The signature identity equals the committer identity.
@@ -26,16 +30,20 @@ For a merge, an any-parent proof that admits a removed member is a held result. 
 
 ## Membership is the boundary
 
+Give each signer only the reach its job requires:
+
 | Class | Fleet-layer writes | Own host evidence | Sponsorship |
 | --- | --- | --- | --- |
 | `durable` | allowed | allowed | may sponsor durable and ephemeral members |
 | `ephemeral` | held | allowed for its own host-keyed paths | cannot sponsor; the graph stays one hop deep |
 
-Signing keys belong to the commit's author. If another host rewrites the commit, the signature is stripped rather than attributed to the rewriting host.
+Signing keys belong to the commit's author. If another host rewrites the commit, the rewrite strips the original signature and records only authorship it can prove.
 
 Revocation freezes a key's position in future history while preserving the validity of past commits. The KRL is the deliberate exception: it burns the key's history too. TTL is hygiene; membership class remains the authority boundary.
 
 ## Worked receipt
+
+An anonymized fleet accepts a durable enrollment and a skill update. When an unknown key later tries to rewrite the roster, every host needs the same held outcome and the same named principal for operator action:
 
 ```text
 commit=enroll-01 parent=genesis signer=durable-key result=accepted roster=host-a

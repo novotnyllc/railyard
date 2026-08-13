@@ -7,15 +7,15 @@ nav_order: 14
 
 # Fleet projects
 
-Fleet projects separates repository readiness, checkout ownership, and delivery handoff evidence for every configured project.
+Earn delivery placement one repository at a time. Verify source identity, protect the working tree, and expose handoff eligibility as explicit evidence so work starts on a checkout prepared to carry it.
 
 ## What it adds
 
-The skill checks source identity, checkout path, Git state, branch state, working tree, and handoff eligibility on the selected machine.
+Fleet projects applies that practice to every configured project. It checks source identity, checkout path, Git state, branch state, working tree, and handoff eligibility on the selected machine.
 
 ## How it works
 
-A project becomes delivery-ready through distinct rows for repository identity, path safety, checkout state, and the selected transport. The report carries the exact finding to the next owner.
+Distinct rows for repository identity, path safety, checkout state, and the selected transport establish delivery readiness. The report carries each exact finding to the next owner.
 
 ```text
 > Check the configured project before placing a delivery on host-a.
