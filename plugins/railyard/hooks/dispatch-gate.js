@@ -24,6 +24,7 @@ function shellTokens(command) {
   const tokens = [];
   let word = "";
   let quote = "";
+  let doubleQuoteSubstitution = null;
   let escaped = false;
   const flush = () => {
     if (word) tokens.push({ kind: "word", value: word });
@@ -37,10 +38,21 @@ function shellTokens(command) {
       escaped = false;
     } else if (char === "\\") {
       const next = source[index + 1];
-      if (next && /[\s'"\\;|&#]/.test(next)) escaped = true;
+      if (next && /[\s'"\\;|&#$`]/.test(next)) escaped = true;
       else word += char;
     } else if (quote) {
-      if (char === quote) quote = "";
+      if (quote === '"' && char === "$" && source[index + 1] === "(") {
+        flush();
+        tokens.push({ kind: "separator" });
+        doubleQuoteSubstitution = "paren";
+        quote = "";
+        index += 1;
+      } else if (quote === '"' && char === "`") {
+        flush();
+        tokens.push({ kind: "separator" });
+        doubleQuoteSubstitution = "backtick";
+        quote = "";
+      } else if (char === quote) quote = "";
       else word += char;
     } else if (char === "'" || char === '"') {
       quote = char;
@@ -51,6 +63,11 @@ function shellTokens(command) {
     } else if (/\s/.test(char)) {
       flush();
       if (char === "\n") tokens.push({ kind: "separator" });
+    } else if ((doubleQuoteSubstitution === "paren" && char === ")") || (doubleQuoteSubstitution === "backtick" && char === "`")) {
+      flush();
+      tokens.push({ kind: "separator" });
+      doubleQuoteSubstitution = null;
+      quote = '"';
     } else if (char === ";" || char === "|" || char === "&" || char === "(" || char === ")" || char === "`") {
       flush();
       tokens.push({ kind: "separator" });

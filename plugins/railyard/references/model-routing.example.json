@@ -100,7 +100,7 @@
       "carrierId": "codex-luna",
       "requestedModel": "gpt-5.6-luna",
       "efforts": ["max"],
-      "roles": ["implementation", "implementation.mechanical", "implementation.cross-harness"],
+      "roles": ["implementation", "implementation.medium", "implementation.long-running", "implementation.mechanical", "implementation.cross-harness"],
       "relativeCostIndex": 20
     },
     "glm": {
@@ -138,10 +138,10 @@
       "tiers": [["fable", "sol_max"]]
     },
     "implementation.medium": {
-      "tiers": [["sonnet", "terra"]]
+      "tiers": [["sonnet", "terra", "luna"]]
     },
     "implementation.long-running": {
-      "tiers": [["sonnet", "terra"]]
+      "tiers": [["sonnet", "terra", "luna"]]
     },
     "implementation.mechanical": {
       "tiers": [["haiku", "luna"]]

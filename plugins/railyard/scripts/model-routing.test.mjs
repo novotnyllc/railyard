@@ -394,6 +394,15 @@ test("the owner catalog selects Fable for hard Claude work and records an explic
   assert.equal(longRunning.response.reason, "resolved", JSON.stringify(longRunning.response));
   assert.equal(longRunning.response.decision.selected.modelAlias, "sonnet");
 
+  for (const role of ["implementation.medium", "implementation.long-running"]) {
+    const codex = handleRequest(request("resolve", {
+      role,
+      harness: "codex",
+    }), { catalog: policy, state: createEmptyState(), now: NOW, trustedRuntimeAttestor: lunaAvailableAttestor() });
+    assert.equal(codex.response.reason, "resolved", JSON.stringify(codex.response));
+    assert.equal(codex.response.decision.selected.modelAlias, "luna");
+  }
+
   const withoutReason = handleRequest(request("resolve", {
     role: "implementation",
     harness: "claude",
@@ -1632,8 +1641,9 @@ test("configured Terra selection requires the fixed runtime attestor", () => {
   assert.equal(missingCapability.response.rejectedAlternatives.find((item) => item.modelAlias === "terra")?.reason, "runtime_attestation_required");
 
   const untrusted = handleRequest(request("resolve", requestFields), { catalog: policy, state, now: NOW });
-  assert.equal(untrusted.response.reason, "no_eligible_route", JSON.stringify(untrusted.response));
-  assert.equal(untrusted.response.rejectedAlternatives.find((item) => item.modelAlias === "terra")?.reason, "runtime_attestation_required");
+  assert.equal(untrusted.response.reason, "resolved", JSON.stringify(untrusted.response));
+  assert.equal(untrusted.response.decision.selected.modelAlias, "luna");
+  assert.equal(untrusted.response.decision.rejectedAlternatives.find((item) => item.modelAlias === "terra")?.reason, "runtime_attestation_required");
 
   const trusted = handleRequest(request("resolve", requestFields), {
     catalog: policy,

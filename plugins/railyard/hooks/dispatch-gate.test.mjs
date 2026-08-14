@@ -343,7 +343,13 @@ test("codex exec parsing recognizes environment and command wrappers", () => {
 });
 
 test("codex exec parsing recognizes shell substitutions and groups", () => {
-  for (const command of ["result=$(codex exec 'no explicit flags')", "(codex exec 'no explicit flags')", "result=`codex exec 'no explicit flags'`"]) {
+  for (const command of [
+    "result=$(codex exec 'no explicit flags')",
+    "result=\"$(codex exec 'no explicit flags')\"",
+    "(codex exec 'no explicit flags')",
+    "result=`codex exec 'no explicit flags'`",
+    "result=\"`codex exec 'no explicit flags'`\"",
+  ]) {
     const refused = run({ tool_name: "Bash", tool_input: { command } });
     assert.equal(refused.code, 2, command);
     assert.match(refused.err, /model/, command);

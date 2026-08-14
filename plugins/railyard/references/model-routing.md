@@ -248,7 +248,7 @@ The owner policy is shipped as the documented
 [`model-routing.example.json`](model-routing.example.json). Its role/tier
 catalog is deliberately ordinary schema data: `implementation.hard` selects
 Fable in a Claude harness or the max-effort Sol alias in Codex, `implementation.medium` and
-`implementation.long-running` select Sonnet or attested Terra,
+`implementation.long-running` select Sonnet, attested Terra, or healthy Luna,
 `implementation.mechanical` selects Haiku or Luna, and plain
 `implementation` selects Luna. The `implementation.cross-harness`
 role orders Luna and GLM by the existing cost tiebreak when the caller has

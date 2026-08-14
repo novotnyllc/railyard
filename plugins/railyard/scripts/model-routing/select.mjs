@@ -275,6 +275,10 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         output.push({ ok: false, alias, tierIndex, position, reason: "execution_surface_mismatch" });
         continue;
       }
+      if (model.carrierId === "codex-luna" && runtime && ["unavailable", "unselectable"].includes(runtime.lunaAvailability)) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "runtime_attestation_required" });
+        continue;
+      }
       const effort = effortFor(request, model, carrier);
       if (!effort) {
         output.push({ ok: false, alias, tierIndex, position, reason: "effort_unsupported" });
