@@ -514,6 +514,15 @@ function shellWrapperTokens(tokens, depth = 0) {
   }
   if (cursor > 0 && cursor < tokens.length) return shellWrapperTokens(tokens.slice(cursor), depth);
   const launcher = basename(tokens[0]?.value || "").toLowerCase();
+  if (launcher === "eval") {
+    const end = tokens.findIndex((token, index) => index > 0 && token.kind === "separator");
+    const payload = tokens.slice(1, end === -1 ? tokens.length : end);
+    if (payload.length && payload.every((token) => token.kind === "word")) {
+      const nested = shellWrapperTokens(shellTokens(payload.map((token) => token.value).join(" ")), depth + 1);
+      const suffix = end === -1 ? [] : tokens.slice(end);
+      return suffix[0]?.kind === "separator" ? [...nested, { kind: "separator" }, ...suffix] : nested;
+    }
+  }
   if (!SHELL_LAUNCHERS.has(launcher)) return tokens;
   for (let index = 1; index < tokens.length - 1; index += 1) {
     if (tokens[index]?.kind !== "word") continue;

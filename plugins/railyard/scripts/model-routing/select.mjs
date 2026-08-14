@@ -215,7 +215,7 @@ export function claudeIdentitySatisfied(model, observed) {
 export function configuredCandidates(catalog, request, state, now, policyDigest, { trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers } = {}) {
   const roleRule = catalog.roles[request.role];
   if (!roleRule) return [{ ok: false, reason: "role_unconfigured", alias: null }];
-  const runtime = fixedRuntimeDecision(trustedRuntimeAttestor);
+  const runtimeDecisions = new Map();
   const output = [];
   for (let tierIndex = 0; tierIndex < roleRule.tiers.length; tierIndex += 1) {
     const tier = roleRule.tiers[tierIndex];
@@ -226,6 +226,14 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
       const model = catalog.models[alias];
       const provider = catalog.providers[model.provider];
       const carrier = CARRIER_DESCRIPTORS[model.carrierId];
+      let runtime = null;
+      if (["codex-luna", "codex-terra-runtime"].includes(model.carrierId)) {
+        const hostScope = effectiveHostScope(request);
+        const accountScope = effectiveAccountScope(request, provider);
+        const runtimeKey = `${hostScope}\u0000${accountScope}`;
+        if (!runtimeDecisions.has(runtimeKey)) runtimeDecisions.set(runtimeKey, fixedRuntimeDecision(trustedRuntimeAttestor, request, provider));
+        runtime = runtimeDecisions.get(runtimeKey);
+      }
       if (!carrier) {
         output.push({ ok: false, alias, tierIndex, position, reason: "unsupported_adapter" });
         continue;
@@ -420,20 +428,24 @@ export function candidateSort(left, right) {
   return left.position - right.position;
 }
 
-export function fixedRuntimeDecision(trustedRuntimeAttestor) {
+export function fixedRuntimeDecision(trustedRuntimeAttestor, request = {}, provider = {}) {
+  const hostScope = effectiveHostScope(request);
+  const accountScope = effectiveAccountScope(request, provider);
   // Luna's default identity is a fixed router-owned runtime fact.  The caller
   // cannot supply a runtime object; Terra is accepted only from the separate
   // fixed host-attestor path below.
   if (typeof trustedRuntimeAttestor !== "function") return {
     lunaAvailability: "available",
+    hostScope,
+    accountScope,
     provenance: "fixed_runtime_attestor",
     attestorId: RUNTIME_ATTESTOR,
-    attestationDigest: stableDigest({ runtime: "codex", lunaAvailability: "available", model: CARRIER_DESCRIPTORS["codex-luna"].requestedModel }),
+    attestationDigest: stableDigest({ runtime: "codex", hostScope, accountScope, lunaAvailability: "available", model: CARRIER_DESCRIPTORS["codex-luna"].requestedModel }),
   };
   let attestation;
-  try { attestation = trustedRuntimeAttestor(Object.freeze({ contractVersion: CONTRACT_VERSION, runtime: "codex" })); }
+  try { attestation = trustedRuntimeAttestor(Object.freeze({ contractVersion: CONTRACT_VERSION, runtime: "codex", hostScope, accountScope })); }
   catch { return null; }
-  if (!isObject(attestation) || !onlyFields(attestation, new Set(["attestorId", "attestationDigest", "lunaAvailability", "terra"])) || attestation.attestorId !== RUNTIME_ATTESTOR || !validDigest(attestation.attestationDigest) || !["available", "unavailable", "unselectable", "unknown"].includes(attestation.lunaAvailability)) return null;
+  if (!isObject(attestation) || !onlyFields(attestation, new Set(["attestorId", "attestationDigest", "lunaAvailability", "terra", "hostScope", "accountScope"])) || attestation.attestorId !== RUNTIME_ATTESTOR || !validDigest(attestation.attestationDigest) || attestation.hostScope !== hostScope || attestation.accountScope !== accountScope || !["available", "unavailable", "unselectable", "unknown"].includes(attestation.lunaAvailability)) return null;
   if (attestation.terra !== undefined && (!onlyFields(attestation.terra, new Set(["verified", "model", "effort"])) || attestation.terra.verified !== true || !validModel(attestation.terra.model) || attestation.terra.effort !== "max")) return null;
   return { ...attestation, provenance: "measured_fact" };
 }
@@ -444,7 +456,7 @@ export function defaultRoute(request, { trustedRuntimeAttestor, trustedTransport
   let carrierId = implementation ? "codex-luna" : "codex-sol";
   let effort = implementation ? "max" : complex ? "max" : "high";
   let substitute = null;
-  const runtime = fixedRuntimeDecision(trustedRuntimeAttestor);
+  const runtime = fixedRuntimeDecision(trustedRuntimeAttestor, request, { account: "codex-sub" });
   if (!runtime) return { ok: false, reason: "invalid_runtime_attestation" };
   if (implementation && ["unavailable", "unselectable"].includes(runtime.lunaAvailability) && !request.explicitModelRequirement) {
     const terra = runtime.terra;

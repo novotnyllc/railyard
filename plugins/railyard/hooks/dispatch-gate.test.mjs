@@ -357,6 +357,7 @@ test("codex exec parsing recognizes shell substitutions and groups", () => {
     "(codex exec 'no explicit flags')",
     "result=`codex exec 'no explicit flags'`",
     "result=\"`codex exec 'no explicit flags'`\"",
+    "eval \"codex exec 'no explicit flags'\"",
   ]) {
     const refused = run({ tool_name: "Bash", tool_input: { command } });
     assert.equal(refused.code, 2, command);

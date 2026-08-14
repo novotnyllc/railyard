@@ -481,6 +481,7 @@ test("the owner catalog keeps subscription meters separate and gates GLM on Code
     assert.equal(providerAvailabilityIssue(policy.providers.zai, { hostScope: "runner-2" }), null);
 
     const transportScopes = [];
+    const runtimeScopes = [];
     const remote = handleRequest(request("resolve", {
       role: "implementation.cross-harness",
       harness: "codex",
@@ -499,12 +500,17 @@ test("the owner catalog keeps subscription meters separate and gates GLM on Code
         transportScopes.push({ hostScope, accountScope });
         return { attestorId: "railyard-transport-attestor-v1", attestationDigest: DIGEST_A, compatibility: "native_compatible", bridgeAvailable: false };
       },
+      trustedRuntimeAttestor: ({ hostScope, accountScope }) => {
+        runtimeScopes.push({ hostScope, accountScope });
+        return { attestorId: "railyard-runtime-attestor-v1", attestationDigest: DIGEST_A, lunaAvailability: "available", hostScope, accountScope };
+      },
     });
     assert.equal(remote.response.reason, "resolved", JSON.stringify(remote.response));
     assert.equal(remote.response.decision.selected.modelAlias, "glm");
     assert.equal(remote.response.decision.binding.hostScope, "runner-2");
     assert.equal(remote.response.decision.binding.accountScope, "zai-credits");
     assert.deepEqual(transportScopes, [{ hostScope: "runner-2", accountScope: "zai-credits" }]);
+    assert.deepEqual(runtimeScopes, [{ hostScope: "runner-2", accountScope: "codex-sub" }]);
   } finally {
     if (previous === undefined) delete process.env.CODEX_HOME;
     else process.env.CODEX_HOME = previous;
@@ -831,6 +837,8 @@ test("R28 decision, fallback, and settlement disclosures use explicit provenance
       attestorId: "railyard-runtime-attestor-v1",
       attestationDigest: DIGEST_A,
       lunaAvailability: "unavailable",
+      hostScope: "local",
+      accountScope: "codex-sub",
       terra: { verified: true, model: "gpt-5.6-terra", effort: "max" },
     }),
   });
@@ -1648,6 +1656,8 @@ function terraAttestor(model = "gpt-5.6-terra") {
     attestorId: "railyard-runtime-attestor-v1",
     attestationDigest: DIGEST_A,
     lunaAvailability: "unavailable",
+    hostScope: "local",
+    accountScope: "codex-sub",
     terra: { verified: true, model, effort: "max" },
   });
 }
@@ -1657,6 +1667,8 @@ function lunaAvailableAttestor() {
     attestorId: "railyard-runtime-attestor-v1",
     attestationDigest: DIGEST_A,
     lunaAvailability: "available",
+    hostScope: "local",
+    accountScope: "codex-sub",
   });
 }
 
