@@ -153,66 +153,47 @@ function heredocSpecs(line) {
   return specs;
 }
 
-function maskHeredocExpansions(line) {
+function maskHeredocExpansions(line, state) {
   const masked = line.replace(/[^\r]/g, " ").split("");
-  const preserve = (start, end) => {
-    for (let index = start; index <= end; index += 1) masked[index] = line[index];
-  };
+  const preserve = (index) => { masked[index] = line[index]; };
   for (let index = 0; index < line.length; index += 1) {
-    if (line[index] === "$" && line[index + 1] === "(") {
-      let depth = 0;
-      let quote = "";
-      let escaped = false;
-      let end = -1;
-      for (let cursor = index + 1; cursor < line.length; cursor += 1) {
-        const char = line[cursor];
-        if (escaped) {
-          escaped = false;
-          continue;
-        }
-        if (char === "\\") {
-          escaped = true;
-          continue;
-        }
-        if (quote) {
-          if (char === quote) quote = "";
-          continue;
-        }
-        if (char === "'" || char === '"') {
-          quote = char;
-          continue;
-        }
-        if (char === "(") depth += 1;
-        if (char === ")" && --depth === 0) {
-          end = cursor;
-          break;
-        }
+    if (state.mode === "paren") {
+      preserve(index);
+      if (state.escaped) {
+        state.escaped = false;
+      } else if (line[index] === "\\") {
+        state.escaped = true;
+      } else if (state.quote) {
+        if (line[index] === state.quote) state.quote = "";
+      } else if (line[index] === "'" || line[index] === '"') {
+        state.quote = line[index];
+      } else if (line[index] === "(") {
+        state.depth += 1;
+      } else if (line[index] === ")") {
+        state.depth -= 1;
+        if (state.depth === 0) state.mode = null;
       }
-      if (end >= 0) {
-        preserve(index, end);
-        index = end;
+    } else if (state.mode === "backtick") {
+      preserve(index);
+      if (state.escaped) {
+        state.escaped = false;
+      } else if (line[index] === "\\") {
+        state.escaped = true;
+      } else if (line[index] === "`") {
+        state.mode = null;
       }
+    } else if (line[index] === "$" && line[index + 1] === "(") {
+      preserve(index);
+      preserve(index + 1);
+      state.mode = "paren";
+      state.depth = 1;
+      state.quote = "";
+      state.escaped = false;
+      index += 1;
     } else if (line[index] === "`") {
-      let end = -1;
-      let escaped = false;
-      for (let cursor = index + 1; cursor < line.length; cursor += 1) {
-        if (escaped) {
-          escaped = false;
-          continue;
-        }
-        if (line[cursor] === "\\") {
-          escaped = true;
-          continue;
-        }
-        if (line[cursor] === "`") {
-          end = cursor;
-          break;
-        }
-      }
-      if (end >= 0) {
-        preserve(index, end);
-        index = end;
-      }
+      preserve(index);
+      state.mode = "backtick";
+      state.escaped = false;
     }
   }
   return masked.join("");
@@ -227,7 +208,9 @@ function maskHeredocBodies(source) {
       const comparable = line.endsWith("\r") ? line.slice(0, -1) : line;
       const expected = pending[0];
       if (comparable === expected.delimiter || (expected.stripTabs && comparable.replace(/^\t+/, "") === expected.delimiter)) pending.shift();
-      lines[index] = expected.quoted ? line.replace(/[^\r]/g, " ") : maskHeredocExpansions(line);
+      lines[index] = expected.quoted
+        ? line.replace(/[^\r]/g, " ")
+        : maskHeredocExpansions(line, expected.expansionState ||= { mode: null, depth: 0, quote: "", escaped: false });
       continue;
     }
     pending.push(...heredocSpecs(line));
@@ -274,6 +257,10 @@ function commandPrefixAllows(tokens, index) {
         }
         if (value === "-u" || value === "--unset") {
           cursor += 2;
+          continue;
+        }
+        if (value.startsWith("--unset=") || (value.startsWith("-u") && value.length > 2)) {
+          cursor += 1;
           continue;
         }
         if (value === "-C" || value === "--chdir") {

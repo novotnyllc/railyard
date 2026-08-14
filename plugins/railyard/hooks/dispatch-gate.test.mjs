@@ -367,6 +367,8 @@ test("codex exec parsing recognizes standard process launchers", () => {
     "nice --adjustment=5 codex exec 'no explicit flags'",
     "env -C /tmp codex exec 'no explicit flags'",
     "env --chdir=/tmp codex exec 'no explicit flags'",
+    "env --unset=FOO codex exec 'no explicit flags'",
+    "env -uFOO codex exec 'no explicit flags'",
   ]) {
     const refused = run({ tool_name: "Bash", tool_input: { command } });
     assert.equal(refused.code, 2, command);
@@ -459,6 +461,15 @@ exec 'no explicit flags'` },
   assert.match(expandedUnquotedHeredoc.err, /model/);
   assert.match(expandedUnquotedHeredoc.err, /reasoning_effort/);
   assert.deepEqual(expandedUnquotedHeredoc.log, []);
+
+  const multilineExpandedHeredoc = run({
+    tool_name: "Bash",
+    tool_input: { command: "cat <<EOF\n$(\ncodex exec 'no explicit flags'\n)\nEOF" },
+  });
+  assert.equal(multilineExpandedHeredoc.code, 2);
+  assert.match(multilineExpandedHeredoc.err, /model/);
+  assert.match(multilineExpandedHeredoc.err, /reasoning_effort/);
+  assert.deepEqual(multilineExpandedHeredoc.log, []);
 });
 
 test("codex exec parsing recognizes brace groups and oversized payloads", () => {
