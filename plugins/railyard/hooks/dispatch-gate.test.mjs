@@ -404,6 +404,18 @@ test("codex exec parsing ignores uninvoked function bodies", () => {
   assert.match(invocation.err, /model/);
   assert.match(invocation.err, /reasoning_effort/);
   assert.deepEqual(invocation.log, []);
+
+  for (const command of [
+    "worker() { codex exec 'no explicit flags'; }; if worker; then true; fi",
+    "worker() { codex exec 'no explicit flags'; }; while worker; do break; done",
+    "worker() { codex exec 'no explicit flags'; }; ! worker",
+  ]) {
+    const controlInvocation = run({ tool_name: "Bash", tool_input: { command } });
+    assert.equal(controlInvocation.code, 2, command);
+    assert.match(controlInvocation.err, /model/, command);
+    assert.match(controlInvocation.err, /reasoning_effort/, command);
+    assert.deepEqual(controlInvocation.log, [], command);
+  }
 });
 
 test("codex exec parsing recognizes standard process launchers", () => {
@@ -511,6 +523,34 @@ test("codex exec parsing recognizes string shell wrappers", () => {
   const positional = run({ tool_name: "Bash", tool_input: { command: "bash -c 'echo ok' codex exec 'no explicit flags'" } });
   assert.equal(positional.code, 0);
   assert.deepEqual(positional.log, []);
+});
+
+test("codex exec parsing recognizes find exec actions", () => {
+  for (const command of [
+    String.raw`find . -maxdepth 0 -exec codex exec 'no explicit flags' \;`,
+    String.raw`find . -maxdepth 0 -execdir codex exec 'no explicit flags' +`,
+  ]) {
+    const refused = run({ tool_name: "Bash", tool_input: { command } });
+    assert.equal(refused.code, 2, command);
+    assert.match(refused.err, /model/, command);
+    assert.match(refused.err, /reasoning_effort/, command);
+    assert.deepEqual(refused.log, [], command);
+  }
+  const argv = run({
+    tool_name: "shell",
+    tool_input: { command: ["find", ".", "-exec", "codex", "exec", "no explicit flags", ";"] },
+  });
+  assert.equal(argv.code, 2);
+  assert.match(argv.err, /model/);
+  assert.match(argv.err, /reasoning_effort/);
+  assert.deepEqual(argv.log, []);
+
+  const decoy = run({
+    tool_name: "Bash",
+    tool_input: { command: String.raw`find . -exec echo codex exec 'no explicit flags' \;` },
+  });
+  assert.equal(decoy.code, 0);
+  assert.deepEqual(decoy.log, []);
 });
 
 test("codex exec parsing recognizes line continuations and ignores heredoc bodies", () => {

@@ -1716,6 +1716,8 @@ test("configured Terra selection requires the fixed runtime attestor", () => {
   });
   assert.equal(trusted.response.reason, "resolved", JSON.stringify(trusted.response));
   assert.equal(trusted.response.decision.selected.modelAlias, "terra");
+  assert.equal(trusted.response.decision.fallback.reason, "implementation_model_substitute");
+  assert.equal(trusted.response.decision.fallbackReceipt.reasonCode, "implementation_model_substitute");
 
   const admissionState = attestedCapability(policy, {
     carrierId: "codex-terra-runtime",

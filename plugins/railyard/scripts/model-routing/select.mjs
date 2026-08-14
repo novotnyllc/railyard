@@ -377,6 +377,13 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         output.push({ ok: false, alias, tierIndex, position, reason: transport.reason });
         continue;
       }
+      const implementationRole = request.role === "implementation" || request.role?.startsWith("implementation.");
+      const substitute = implementationRole
+        && model.carrierId === "codex-terra-runtime"
+        && runtime
+        && ["unavailable", "unselectable"].includes(runtime.lunaAvailability)
+        ? "implementation_model_substitute"
+        : null;
       output.push({
         ok: true,
         alias,
@@ -390,6 +397,8 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         adapterId: adapterResult.adapterId,
         effort,
         capability,
+        runtime,
+        substitute,
         transport,
         observedModel: observedModel || "unknown",
         exactRate: null,

@@ -183,7 +183,7 @@ function stripUninvokedFunctionDefinitions(tokens) {
   const uninvoked = definitions.filter(({ name }) => !tokens.some((token, index) => {
     if (insideDefinition(index) || token?.kind !== "word" || token.value !== name) return false;
     const previous = tokens[index - 1];
-    return !previous || previous.kind === "separator";
+    return !previous || previous.kind === "separator" || (previous.kind === "word" && SHELL_CONTROL_WORDS.has(previous.value));
   }));
   if (!uninvoked.length) return tokens;
   const result = [];
@@ -687,6 +687,28 @@ function commandPrefixAllows(tokens, index) {
     }
     if (launcher === "xargs") {
       cursor = skipXargsOptions(tokens, cursor, tokens.length);
+      continue;
+    }
+    if (launcher === "find") {
+      cursor += 1;
+      while (cursor < index) {
+        if (tokens[cursor]?.kind !== "word") {
+          cursor += 1;
+          continue;
+        }
+        if (tokens[cursor].value === "-exec" || tokens[cursor].value === "-execdir") {
+          cursor += 1;
+          const actionStart = cursor;
+          while (cursor < index && tokens[cursor]?.kind === "word" && ![";", "+"].includes(tokens[cursor].value)) cursor += 1;
+          if (cursor >= index) {
+            const actionPrefix = tokens.slice(actionStart, index);
+            return commandPrefixAllows([...actionPrefix, tokens[index]], index - actionStart);
+          }
+          if (cursor < index) cursor += 1;
+          continue;
+        }
+        cursor += 1;
+      }
       continue;
     }
     break;
