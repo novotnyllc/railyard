@@ -69,6 +69,18 @@ function shellTokens(command) {
       tokens.push({ kind: "separator" });
       doubleQuoteSubstitution = null;
       quote = '"';
+    } else if (char === "<" || char === ">") {
+      flush();
+      let operator = char;
+      if (source[index + 1] === char) {
+        operator += char;
+        index += 1;
+      }
+      if (source[index + 1] === "&") {
+        operator += "&";
+        index += 1;
+      }
+      tokens.push({ kind: "redirection", value: operator });
     } else if (char === ";" || char === "|" || char === "&" || char === "(" || char === ")" || char === "{" || char === "}" || char === "`") {
       flush();
       tokens.push({ kind: "separator" });
@@ -90,6 +102,8 @@ function basename(value) {
 }
 
 const SHELL_CONTROL_WORDS = new Set(["if", "then", "elif", "else", "while", "until", "do", "!"]);
+const SHELL_LAUNCHERS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish"]);
+const MAX_SHELL_WRAPPER_DEPTH = 4;
 
 function heredocSpecs(line) {
   const specs = [];
@@ -154,11 +168,24 @@ function maskHeredocBodies(source) {
   return lines.join("\n");
 }
 
+function skipRedirection(tokens, cursor, index) {
+  if (tokens[cursor]?.kind === "word" && /^\d+$/.test(tokens[cursor].value) && tokens[cursor + 1]?.kind === "redirection") cursor += 1;
+  if (tokens[cursor]?.kind !== "redirection") return null;
+  cursor += 1;
+  if (cursor < index && tokens[cursor]?.kind === "word") cursor += 1;
+  return cursor;
+}
+
 function commandPrefixAllows(tokens, index) {
   let start = index;
   while (start > 0 && tokens[start - 1].kind !== "separator") start -= 1;
   let cursor = start;
   while (cursor < index) {
+    const afterRedirection = skipRedirection(tokens, cursor, index);
+    if (afterRedirection !== null) {
+      cursor = afterRedirection;
+      continue;
+    }
     while (cursor < index && tokens[cursor].kind === "word" && isAssignment(tokens[cursor].value)) cursor += 1;
     if (cursor >= index || tokens[cursor].kind !== "word") break;
     if (SHELL_CONTROL_WORDS.has(tokens[cursor].value)) {
@@ -233,9 +260,23 @@ function commandPrefixAllows(tokens, index) {
   return cursor === index;
 }
 
+function shellWrapperTokens(tokens, depth = 0) {
+  if (depth >= MAX_SHELL_WRAPPER_DEPTH) return tokens;
+  const launcher = basename(tokens[0]?.value || "").toLowerCase();
+  if (!SHELL_LAUNCHERS.has(launcher)) return tokens;
+  for (let index = 1; index < tokens.length - 1; index += 1) {
+    if (tokens[index]?.kind !== "word") continue;
+    if (tokens[index].value !== "--" && tokens[index].value !== "--command" && !/^-[^-]*c$/.test(tokens[index].value)) continue;
+    const payload = tokens[index + 1];
+    if (payload?.kind !== "word") return tokens;
+    return shellWrapperTokens(shellTokens(payload.value), depth + 1);
+  }
+  return tokens;
+}
+
 function commandTokens(args) {
   const command = args.command ?? args.cmd ?? args.input;
-  if (typeof command === "string") return shellTokens(command);
+  if (typeof command === "string") return shellWrapperTokens(shellTokens(command));
   if (!Array.isArray(command)) return [];
   const values = command.filter((value) => typeof value === "string");
   let cursor = 0;
@@ -252,14 +293,7 @@ function commandTokens(args) {
     }
     break;
   }
-  const launcher = basename(values[cursor] || "").toLowerCase();
-  if (["bash", "sh", "zsh", "dash", "ksh", "fish"].includes(launcher)) {
-    for (let index = cursor + 1; index < values.length - 1; index += 1) {
-      if (values[index] === "--") return shellTokens(values[index + 1]);
-      if (values[index] === "--command" || /^-[^-]*c$/.test(values[index])) return shellTokens(values[index + 1]);
-    }
-  }
-  return values.map((value) => ({ kind: "word", value }));
+  return shellWrapperTokens(values.slice(cursor).map((value) => ({ kind: "word", value })));
 }
 
 function codexExecDispatches(args) {
@@ -272,7 +306,7 @@ function codexExecDispatches(args) {
     let model;
     let effort;
     let label;
-    for (let cursor = index + 2; cursor < tokens.length && tokens[cursor].kind !== "separator"; cursor += 1) {
+    for (let cursor = index + 2; cursor < tokens.length && !["separator", "redirection"].includes(tokens[cursor].kind); cursor += 1) {
       const value = tokens[cursor].value;
       const next = tokens[cursor + 1]?.value;
       if (value === "-m" || value === "--model") {

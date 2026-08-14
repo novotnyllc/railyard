@@ -33,6 +33,8 @@ import {
   completionStateFor,
   configuredCandidates,
   defaultRoute,
+  effectiveAccountScope,
+  effectiveHostScope,
 } from "./select.mjs";
 import {
   ceSeamAllows,
@@ -103,8 +105,8 @@ export function decisionFromCandidate(candidate, request, policy, now, rejected 
   const selectedModel = candidate.observedModel === "unknown"
     ? candidate.model.requestedModel
     : candidate.observedModel;
-  const hostScope = request.hostScope || request.destinationScope || request.priorRoute?.hostScope || candidate.capability?.hostScope || "local";
-  const accountScope = request.accountScope || request.priorRoute?.accountScope || candidate.capability?.accountScope || candidate.provider.account || "local";
+  const hostScope = effectiveHostScope(request, candidate.capability?.hostScope);
+  const accountScope = effectiveAccountScope(request, candidate.provider, candidate.capability?.accountScope);
   const readiness = request.r52 === undefined ? null : r52Binding(request.r52);
   const requestDigest = stableDigest({
     role: request.role,

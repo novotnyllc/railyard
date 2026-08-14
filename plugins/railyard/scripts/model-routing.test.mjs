@@ -480,11 +480,11 @@ test("the owner catalog keeps subscription meters separate and gates GLM on Code
     assert.equal(providerAvailabilityIssue(policy.providers.zai), null);
     assert.equal(providerAvailabilityIssue(policy.providers.zai, { hostScope: "runner-2" }), null);
 
+    const transportScopes = [];
     const remote = handleRequest(request("resolve", {
       role: "implementation.cross-harness",
       harness: "codex",
       destinationScope: "runner-2",
-      accountScope: "zai-credits",
       crossHarnessReason: "Use the remote Codex-family GLM destination for this bounded task.",
       adapterId: "configured-profile-task-create",
       dispatchKind: "task_create",
@@ -495,14 +495,37 @@ test("the owner catalog keeps subscription meters separate and gates GLM on Code
         accountScope: "zai-credits",
       }),
       now: NOW,
+      trustedTransportAttestor: ({ hostScope, accountScope }) => {
+        transportScopes.push({ hostScope, accountScope });
+        return { attestorId: "railyard-transport-attestor-v1", attestationDigest: DIGEST_A, compatibility: "native_compatible", bridgeAvailable: false };
+      },
     });
     assert.equal(remote.response.reason, "resolved", JSON.stringify(remote.response));
     assert.equal(remote.response.decision.selected.modelAlias, "glm");
     assert.equal(remote.response.decision.binding.hostScope, "runner-2");
+    assert.equal(remote.response.decision.binding.accountScope, "zai-credits");
+    assert.deepEqual(transportScopes, [{ hostScope: "runner-2", accountScope: "zai-credits" }]);
   } finally {
     if (previous === undefined) delete process.env.CODEX_HOME;
     else process.env.CODEX_HOME = previous;
     fs.rmSync(codexHome, { recursive: true, force: true });
+  }
+});
+
+test("configured runtime candidates fail closed when the trusted attestor is invalid", () => {
+  const policy = ownerPolicy();
+  for (const trustedRuntimeAttestor of [
+    () => { throw new Error("attestor unavailable"); },
+    () => ({}),
+  ]) {
+    const refused = handleRequest(request("resolve", { role: "implementation", harness: "codex" }), {
+      catalog: policy,
+      state: createEmptyState(),
+      now: NOW,
+      trustedRuntimeAttestor,
+    });
+    assert.equal(refused.response.reason, "no_eligible_route", JSON.stringify(refused.response));
+    assert.equal(refused.response.rejectedAlternatives.find((item) => item.modelAlias === "luna")?.reason, "invalid_runtime_attestation");
   }
 });
 

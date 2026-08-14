@@ -394,6 +394,20 @@ test("codex exec parsing recognizes argv shell payloads", () => {
   assert.equal(allowed.log[0].reasoning_effort, "max");
 });
 
+test("codex exec parsing recognizes string shell wrappers", () => {
+  for (const command of [
+    `bash -c "codex exec 'no explicit flags'"`,
+    `sh -lc "codex exec 'no explicit flags'"`,
+    `zsh --command "bash -c 'codex exec no-flags'"`,
+  ]) {
+    const refused = run({ tool_name: "Bash", tool_input: { command } });
+    assert.equal(refused.code, 2, command);
+    assert.match(refused.err, /model/, command);
+    assert.match(refused.err, /reasoning_effort/, command);
+    assert.deepEqual(refused.log, [], command);
+  }
+});
+
 test("codex exec parsing recognizes line continuations and ignores heredoc bodies", () => {
   const continued = run({
     tool_name: "Bash",
@@ -433,6 +447,20 @@ test("codex exec parsing recognizes shell control words", () => {
     "while codex exec 'no explicit flags'; do break; done",
     "until codex exec 'no explicit flags'; do break; done",
     "! codex exec 'no explicit flags'",
+  ]) {
+    const refused = run({ tool_name: "Bash", tool_input: { command } });
+    assert.equal(refused.code, 2, command);
+    assert.match(refused.err, /model/, command);
+    assert.match(refused.err, /reasoning_effort/, command);
+    assert.deepEqual(refused.log, [], command);
+  }
+});
+
+test("codex exec parsing recognizes leading redirections", () => {
+  for (const command of [
+    ">audit.log codex exec 'no explicit flags'",
+    "> audit.log codex exec 'no explicit flags'",
+    "2>errors codex exec 'no explicit flags'",
   ]) {
     const refused = run({ tool_name: "Bash", tool_input: { command } });
     assert.equal(refused.code, 2, command);

@@ -50,13 +50,17 @@ export function adapterFor(request, carrier) {
   return { ok: true, adapterId, adapter };
 }
 
-function effectiveHostScope(request = {}) {
-  return request.hostScope || request.destinationScope || "local";
+export function effectiveHostScope(request = {}, fallback) {
+  return request.hostScope || request.destinationScope || request.priorRoute?.hostScope || fallback || "local";
+}
+
+export function effectiveAccountScope(request = {}, provider = {}, fallback) {
+  return request.accountScope || request.priorRoute?.accountScope || fallback || provider?.account || "local";
 }
 
 export function capabilityFor(state, { carrierId, carrier, adapterId, provider, policyDigest, request, now, positive = true }) {
   const hostScope = effectiveHostScope(request);
-  const accountScope = request.accountScope || provider.account;
+  const accountScope = effectiveAccountScope(request, provider);
   for (const evidence of Object.values(state.capabilities || {})) {
     if (!isObject(evidence) || evidence.carrierId !== carrierId) continue;
     if (evidence.carrierVersion !== carrier.version || evidence.adapterId !== adapterId || evidence.adapterVersion !== ADAPTER_DESCRIPTORS[adapterId]?.version) continue;
@@ -76,7 +80,7 @@ export function completionStateFor(carrier, capability) {
   return capability?.state || "offline_implementation_ready";
 }
 
-export function transportDecision(request, adapter, trustedTransportAttestor) {
+export function transportDecision(request, adapter, trustedTransportAttestor, provider, capability) {
   if (typeof trustedTransportAttestor !== "function") {
     return { ok: true, path: "native", bridgePhase: null, provenance: "fixed_local_default", attestorId: "not_applicable" };
   }
@@ -87,8 +91,8 @@ export function transportDecision(request, adapter, trustedTransportAttestor) {
       callerKind: request.callerKind || "local",
       adapterId: adapter.id || request.adapterId,
       dispatchKind: request.dispatchKind || adapter.dispatchKinds[0],
-      hostScope: request.hostScope || "local",
-      accountScope: request.accountScope || "local",
+      hostScope: effectiveHostScope(request, capability?.hostScope),
+      accountScope: effectiveAccountScope(request, provider, capability?.accountScope),
     }));
   } catch {
     return { ok: false, reason: "trusted_transport_attestor_failed" };
@@ -226,6 +230,10 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         output.push({ ok: false, alias, tierIndex, position, reason: "unsupported_adapter" });
         continue;
       }
+      if (typeof trustedRuntimeAttestor === "function" && !runtime && ["codex-luna", "codex-terra-runtime"].includes(model.carrierId)) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "invalid_runtime_attestation" });
+        continue;
+      }
       if (request.harness !== undefined) {
         if (!provider.harness) {
           output.push({ ok: false, alias, tierIndex, position, reason: "harness_unattributed" });
@@ -351,7 +359,7 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         output.push({ ok: false, alias, tierIndex, position, reason: "minimum_generation_unmet" });
         continue;
       }
-      const transport = transportDecision(request, adapterResult.adapter, trustedTransportAttestor);
+      const transport = transportDecision(request, adapterResult.adapter, trustedTransportAttestor, provider, capability);
       if (!transport.ok) {
         output.push({ ok: false, alias, tierIndex, position, reason: transport.reason });
         continue;
