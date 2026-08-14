@@ -119,7 +119,7 @@ export function reservationFromDecision(request, decision, scopes, forecast, now
 }
 
 export function admitInternal(request, context) {
-  const { catalog, state, now, trustedTransportAttestor, fixedReceiptProducers, controllerRuntime, requireControllerRuntime } = context;
+  const { catalog, state, now, trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers, controllerRuntime, requireControllerRuntime } = context;
   if (!validId(request.requestId)) return error("request_id_required");
   const existing = Object.values(state.reservations).find((record) => record.requestId === request.requestId);
   const requestDigest = stableDigest({ ...request, command: undefined });
@@ -180,7 +180,7 @@ export function admitInternal(request, context) {
   const forecast = normalizeForecast(request.forecast || {});
   if (!forecast.ok) return error(forecast.reason);
   const policy = validateCatalog(catalog).policy;
-  const configured = configuredCandidates(catalog, request, state, now, policy.digest, { trustedTransportAttestor, fixedReceiptProducers }).filter((candidate) => candidate.ok).sort(candidateSort);
+  const configured = configuredCandidates(catalog, request, state, now, policy.digest, { trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers }).filter((candidate) => candidate.ok).sort(candidateSort);
   const rejectedByBudget = [];
   let decision = null;
   let budget = null;

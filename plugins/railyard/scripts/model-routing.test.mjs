@@ -1635,6 +1635,29 @@ test("configured Terra selection requires the fixed runtime attestor", () => {
   });
   assert.equal(trusted.response.reason, "resolved", JSON.stringify(trusted.response));
   assert.equal(trusted.response.decision.selected.modelAlias, "terra");
+
+  const admissionState = attestedCapability(policy, {
+    carrierId: "codex-terra-runtime",
+    adapterId: "native-subagent-create",
+    accountScope: "codex-sub",
+    observedModel: "unknown",
+  });
+  const admitted = handleRequest(request("admit", {
+    ...requestFields,
+    adapterId: "native-subagent-create",
+    dispatchKind: "subagent_create",
+    requestId: "terra-admission",
+    frozenInputDigest: DIGEST_A,
+    forecast: { marginalUsd: "1" },
+    scopes: { task: "terra-task", run: "terra-run", project: "terra-project" },
+  }), {
+    catalog: policy,
+    state: admissionState,
+    now: NOW,
+    trustedRuntimeAttestor: terraAttestor(),
+  });
+  assert.equal(admitted.response.reason, "admitted", JSON.stringify(admitted.response));
+  assert.equal(admitted.response.decision.selected.modelAlias, "terra");
 });
 
 test("implementationEngine follows the implementation role, not one carrier descriptor", () => {

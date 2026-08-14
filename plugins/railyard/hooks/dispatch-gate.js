@@ -10,7 +10,12 @@
 // half of railyard:audit. Recording is best-effort and never affects the
 // verdict: a missing or broken recorder leaves the gate exactly as it was.
 let record = () => {};
-let clip = () => undefined;
+let clip = (value, max = 120) => {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
+};
 try {
   ({ record, clip } = require("./run-log.js"));
 } catch {}
@@ -46,7 +51,7 @@ function shellTokens(command) {
     } else if (/\s/.test(char)) {
       flush();
       if (char === "\n") tokens.push({ kind: "separator" });
-    } else if (char === ";" || char === "|" || char === "&") {
+    } else if (char === ";" || char === "|" || char === "&" || char === "(" || char === ")" || char === "`") {
       flush();
       tokens.push({ kind: "separator" });
     } else {
