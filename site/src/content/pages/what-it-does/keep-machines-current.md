@@ -17,6 +17,10 @@ A four-host macOS/Linux reference fleet has accumulated one stale skill, two pac
 
 `roundhouse:fleet-inventory` reports the current surface; `roundhouse:fleet-update` plans and applies owned updates through the native manager for each platform.
 
+## The run
+
+The operator asks which parts of the enrolled fleet have drifted and who owns each correction. Roundhouse inventories every host, compares desired and observed item identities, and routes approved changes through the native manager that already owns them. The turn is item-level ownership: a stale skill, package, project, or harness remains a distinct decision instead of becoming one opaque “update.” The run closes when each machine reports `in_sync`, `ready`, `applied`, `satisfied`, or an actionable held result. [Read the historical five-host bring-up](/why-railyard/).
+
 ## What happens
 
 The run validates configuration, collects per-machine evidence, compares desired and observed values, and routes each change through its owner. Plugins, skills, packages, hooks, agents, MCP settings, and projects remain distinct items with their own evidence.

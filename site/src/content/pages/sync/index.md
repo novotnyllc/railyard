@@ -9,6 +9,10 @@ has_children: true
 
 Delegation works when every machine agrees what an agent is. Declare plugins, skills, MCP servers, hooks, and agent configuration once; converge every enrolled host on the resolved identity; retain evidence of each manager action. An agent can land on any ready machine and find the operating surface the task expects. Roundhouse makes that mechanism concrete, bringing a published skill to each host within one fast interval.
 
+## The run
+
+The operator asks for one reviewed skill to become the same usable identity on every enrolled host. Roundhouse publishes the desired item, carries its marketplace SHA and version through the signed store, folds host state, and invokes the native manager that owns the category. The turn is promotion through evidence: canary liveness and hook approval earn downstream apply, while a named hold preserves the prior identity. The run closes when every host journal reports the item as `applied`, `satisfied`, or held with the exact reason. [See the fleet bring-up that established the operating surface](/why-railyard/).
+
 ## The alignment loop
 
 Align the declared category with the native action that can prove it. Desired-state categories map one-to-one onto the manager verbs for Claude and Codex: `plugins`, `skills`, `agents`, `hooks`, `mcp_servers`, and `config_files`. Each item identity carries marketplace SHA plus version, so a re-tagged artifact produces a new decision. Codex hook approval runs again for every plugin install or update; the `hooks` category stays held until that trust gate clears.
@@ -40,3 +44,5 @@ Read the receipt as an operational state. `applied` means the manager changed th
 - [Roundhouse convergence](/roundhouse/convergence/) — the signed pull, gate, apply, and journal loop.
 
 Roundhouse is the existence proof. Its [source repository](https://github.com/novotnyllc/roundhouse), [releases](https://github.com/novotnyllc/roundhouse/releases), and [review trail](https://github.com/novotnyllc/roundhouse/pulls) carry the public implementation evidence.
+
+For the same operating system from two other angles, follow [one request through delivery](/delivery/) or [one host through convergence](/roundhouse/).

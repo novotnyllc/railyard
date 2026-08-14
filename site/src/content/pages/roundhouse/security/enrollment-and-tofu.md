@@ -13,6 +13,10 @@ TOFU means trust-on-first-use: the first contact receives a bounded policy windo
 
 Roundhouse enrolls new members through four flows. Each one records key possession, channel class, roster history, and the exact authority class that the new member receives.
 
+## Decision path
+
+**Action arrives:** genesis, a sponsor, or a newcomer proposes a new fleet member. **Authority check:** the flow records channel class, key generation on the target, possession proof, sponsor authority, and any required out-of-band verification. **Propagation gate:** the signed roster edit and class-scoped soak determine when shared-layer authority can spread. **Outcome:** the receipt says `ready-for-soak`, keeps a newcomer request `inert`, or leaves the roster unchanged with the exact recovery reason. **Residual:** genuine first-contact TOFU remains visible through its 72-hour soak and alert class; ephemeral leaves avoid that window by staying channel-bound and unable to sponsor.
+
 ## Four flows
 
 Choose the flow by the trust already available at the moment a machine joins:

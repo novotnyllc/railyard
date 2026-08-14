@@ -21,6 +21,10 @@ An app change is ready for native validation, and the developer needs the build 
 
 Delivery offers the runner when the work needs native Apple tooling. The app change, review, merge, and post-merge proof remain in the delivery lifecycle.
 
+## The run
+
+The operator asks for a native app change to receive clean Xcode and UI-test evidence while the host display stays available. Tart Xcode Runner owns the disposable macOS VM and test execution; Railyard keeps the app change, review, merge, and proof in one delivery. The turn is the execution-boundary decision: native validation moves off the workstation without moving delivery authority. The run closes when build and test receipts return from the VM to the settled change.
+
 ## What it adds
 
 Use the VM as a separate execution boundary for the native build and test workload. Your host screen remains available while the test run progresses in its own environment.

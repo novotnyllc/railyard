@@ -19,6 +19,10 @@ An operator preparing a remote delivery channel needs to know which configured a
 > Check the configured auth artifacts and show which ones need attention.
 ```
 
+## The run
+
+The operator asks which authentication artifacts are ready for a placed delivery while their values remain in custody. 1Password owns the secret references and reauthentication path; Roundhouse records portability, mode, verification command, and health for the receiving machine. The turn is the readiness decision made from presence and verification rather than exposed values. The run closes when the fleet-auth receipt reports each configured artifact as healthy or names the bounded attention it needs.
+
 ## What it adds
 
 Record exactly what the fleet needs to verify. The configuration surface can carry an `op://` reference, portability class, file mode, verification command, and reauthentication command. The fleet-auth flow reports presence and health while keeping secret values in the custody system.

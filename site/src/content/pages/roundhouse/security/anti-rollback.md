@@ -11,6 +11,10 @@ Every host in an unattended fleet needs a durable memory of the newest trusted p
 
 Roundhouse gives each privileged host two monotonic high-water marks: `generation` never decreases, and every adopted head descends from `reviewed-ref`. A fetched head that violates either mark is held and alerted before it can become desired state.
 
+## Decision path
+
+**Action arrives:** a host fetches a signed head that proposes the next desired-state position. **Authority check:** signed history must still connect to the host's reviewed reference. **Propagation gate:** ancestry and the monotonic generation mark advance together; a legitimate re-root also supplies the published archive that contains the prior reference. **Outcome:** the host records `result: adopted`, or preserves reviewed state with `result: held` and `alert: anti-rollback`. **Residual:** an operator still authorizes genuine history migration by publishing and retaining the archive evidence.
+
 ## Adoption decision
 
 ![Anti-rollback decision: ancestry and generation checks adopt and advance marks; a re-root requires a published archive and ordinary ratchet verification, otherwise the host holds and alerts.](/diagrams/m10-anti-rollback.svg)

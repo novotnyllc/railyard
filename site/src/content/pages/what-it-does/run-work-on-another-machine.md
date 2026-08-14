@@ -17,6 +17,10 @@ A delivery needs Linux tooling while the current workstation is a Mac. Ask the c
 
 `railyard:orchestrate` combines the delivery contract with `roundhouse:fleet-readiness` before placement.
 
+## The run
+
+The operator asks for a Linux-bound delivery to run where its project, agent surface, and transport are ready. Roundhouse produces host, task, and transport readiness evidence; Railyard binds the selected destination to the unchanged delivery contract. The turn is placement after proof: the remote lane starts only when the candidate can receive the work. The run closes when the placed lane returns the same review, settlement, merge, and post-merge receipts as a local delivery.
+
 ## What happens
 
 The destination produces host, task, and transport readiness evidence. The dispatcher binds the selected destination to the task, starts dependency-ready lanes, and keeps the same delivery gates inside the placed lane.

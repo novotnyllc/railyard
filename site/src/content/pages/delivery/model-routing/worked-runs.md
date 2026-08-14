@@ -1,15 +1,17 @@
 ---
 layout: default
-title: Two worked cost ledgers
+title: Forty mechanical sites, one hard seam
 parent: Delivery
 nav_order: 2
 ---
 
-# Two worked runs, with the ledger
+# Forty mechanical sites, one hard seam
 
-Route by economic shape: give mechanical volume to the implementation tier, reserve stronger reasoning for subtle seams and hard review, and make the quality purchase legible in the ledger. The ledger keeps spend controlled, with depth exactly where failure would hurt. Every number below is a representative relative cost unit on the contract's `relativeCostIndex` scale. Dollar rates remain catalog-owned, source-linked, rate-stamped, and meter-specific.
+When the logging migration arrived, forty call sites looked alike and one async flush path carried the production risk. The operator split the work by economic shape: let an efficient implementation tier absorb repetition, buy stronger reasoning at the hard seam, and require the same review and proof at the end. The point was not cheaper tokens. It was spending judgment where failure could deadlock delivery.
 
-## Run 1 — Fleet-utility API migration
+Every number below is a representative relative cost unit on the contract's `relativeCostIndex` scale. Dollar rates remain catalog-owned, source-linked, rate-stamped, and meter-specific.
+
+## The run
 
 An operator owns a repository-wide logging migration with a production risk hiding in the async flush path. The request is: “replace the deprecated log wrapper with structured logging across the repo; the async flush path is subtle.” Intake resolves `implementation` to `gpt-5.6-luna` at `max` with `implementationEngine: {"mode":"prefer","target":"codex"}` and admits a run-scope `hardAdmission` forecast.
 
@@ -27,7 +29,9 @@ The migration earns its finish through settled evidence. The merge-settlement ga
 
 The saving comes from matching the 40 mechanical sites to the cheap tier while reserving the top tier for the seam that could deadlock production. The ledger also shows the quality purchase: the subtle lane received a stronger implementation path and two independent review lenses.
 
-## Run 2 — Concurrency bug fix
+The turn is the seam escalation, not the model label. Mechanical volume keeps its bounded route; semantic risk earns deeper implementation and the same Thermos pair. The run closes when four findings are fixed, review threads and settlement timing are current, ancestry plus focused verification pass, and the terminal receipt says `outcome=proven`.
+
+## A second cost shape
 
 A team is chasing a flaky deadlock in a shared cache, where a fast-looking fix could simply move the failure. Intake routes the report to the debug stage; `resolve` returns `implementation` → Luna at `max`. Lane A builds the reproducer and instrumentation on the cheap tier. Lane B owns the lock-ordering fix and escalates to the top tier. Because the work is flagged high or critical, independent review resolves `gpt-5.6-sol` at `max`, the policy's only `max` review case.
 

@@ -17,6 +17,10 @@ Operate a remote Mac through a named, resumable channel with identity checks, bo
 
 Use `roundhouse:remote-mac` for the operation. `roundhouse:ssh-doctor` provides the transport-health diagnosis when the connection needs attention.
 
+## The run
+
+The operator asks for a long build on one remote Mac without losing the handle when the local session ends. Roundhouse verifies the target identity and reachability, starts the command in a named tmux session, and returns the working directory plus log path. The turn is the resumable handoff: the session name becomes the durable control point for observation and recovery. The run closes when the operator reconnects through the same verified channel and collects the command result from that evidence path.
+
 ## What happens
 
 Read-only identity and reachability checks establish the target. Long work runs in a named tmux session with a recorded working directory, command, and log path. The operator can reconnect, inspect progress, and collect the result through the same channel.

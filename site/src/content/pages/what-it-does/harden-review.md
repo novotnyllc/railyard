@@ -17,6 +17,10 @@ An orchestrator change touches many mechanical call sites and one gnarly concurr
 
 The delivery route uses the Thermos pair against the same frozen diff and relevant source context.
 
+## The run
+
+The operator asks whether a wide migration and its concurrency seam deserve merge authority. Railyard freezes one review packet, sends that same evidence through correctness and code-health lenses, and returns the synthesized findings to the owning implementation lane. The turn is the return loop: review creates work, the lane fixes it, and affected checks establish the new evidence floor. The run closes when every real finding is settled against the corrected head and the merge gate reports current authority.
+
 ## What happens
 
 - The correctness lens traces breakage, security, developer experience, and feature-leak risks.

@@ -17,6 +17,10 @@ An XCUITest suite needs a clean Mac and control of the screen while the develope
 
 The delivery route offers `tart-xcode-runner` for work that needs Xcode or UI tests.
 
+## The run
+
+The operator asks for an app change to receive credible Xcode and UI-test evidence without taking over the working screen. Railyard keeps the change inside its ordinary delivery lifecycle while Tart Xcode Runner supplies a clean, disposable macOS execution boundary. The turn is the native test route: the workload moves offscreen, but review, merge, and proof stay with the delivery. The run closes when build and test receipts return from the VM and the merged result passes its focused post-merge proof.
+
 ## What happens
 
 The optional runner supplies a clean Tart VM for the build and test commands. Delivery keeps the app change, review gates, and merge proof in the same lifecycle; the VM provides the execution boundary for the native test workload.

@@ -11,6 +11,10 @@ Add capability where an operational boundary is already clear. A focused integra
 
 These integrations share a clear operational boundary, and each one is optional; the core delivery and fleet systems remain fully operational on their own.
 
+## The run
+
+The operator asks for a focused capability at an existing delivery or fleet boundary. The integration owns one seam—configuration rendering, a disposable VM, secret custody, or transport—while Railyard and Roundhouse keep route, trust, readiness, and proof. The turn is ownership staying explicit across the handoff. The run closes when the integration's evidence returns to the lifecycle that requested it without becoming a second operating system.
+
 - [Chezmoi](/integrations/chezmoi/) — deliberate dotfile reconciliation.
 - [Tart Xcode Runner](/integrations/tart-xcode-runner/) — disposable macOS test VMs.
 - [1Password](/integrations/1password/) — auth-artifact custody and verification.

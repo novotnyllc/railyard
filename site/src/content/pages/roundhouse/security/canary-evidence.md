@@ -11,6 +11,12 @@ Let one host in an unattended fleet prove the exact signed digest under real ope
 
 For each item, a downstream host applies the exact digest only after the canary result has aged through the configured wait, stayed free of a later hold or revert, and remained live by publishing a later record.
 
+## Decision path
+
+**Action arrives:** a downstream host sees a desired item at an exact signed digest. **Authority check:** the item identity and signed store history establish what is being proposed. **Propagation gate:** the canary's `applied` or `satisfied` result must age through the configured 24-hour default wait, remain free of a later hold or revert, and gain a later liveness record. **Outcome:** the same digest applies, or the host records `result=held reason=canary-silent` and keeps its prior value. **Residual:** canary unavailability can pause rollout, making availability an explicit operator concern rather than an implicit authorization.
+
+[Follow the held marketplace change and its recovery evidence](/roundhouse/security/marketplace-trust/).
+
 ## The liveness term
 
 For item X at digest D, the downstream gate earns promotion through four checks:

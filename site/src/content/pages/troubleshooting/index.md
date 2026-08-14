@@ -6,7 +6,9 @@ nav_order: 4
 
 # Troubleshooting
 
-Use the failure's owning surface to recover. Keep the receipt, run log, and exact command that failed so the next check can distinguish a missing prerequisite from a held decision.
+Recover from the first broken proof, not the loudest symptom. Keep the receipt, run log, and exact failing command; identify the owner of that boundary; restore its prerequisite or evidence; then rerun only the check the fix invalidated.
+
+The practice is a short loop: observe the held or failed receipt, trace it to install, delivery, transport, trust, or fleet ownership, repair that boundary, and require a fresh receipt. The mechanisms below are evidence for that loop.
 
 ## Install failures
 

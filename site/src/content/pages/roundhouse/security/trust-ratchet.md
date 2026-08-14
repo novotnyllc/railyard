@@ -11,6 +11,10 @@ Every receiving host in an unattended fleet should derive authority from the sam
 
 Roundhouse makes a roster edit count only when a key trusted by the roster at the commit's parent signs it. A merge checks every parent independently. This parent-position rule gives every receiving host the same answer about who could write at the exact history position being adopted.
 
+## Decision path
+
+**Action arrives:** a signed commit proposes a roster or fleet-layer change. **Authority check:** each host verifies signature identity, the roster at every parent position, current membership, KRL status, and path class. **Propagation gate:** merges require every parent to admit the signer before the roster can advance. **Outcome:** trusted history advances; an unknown or class-refused signer produces `result=HELD reason=principal-not-in-parent-roster` and leaves the reviewed roster in place. **Residual:** instruction-chain compromise remains an operator-held risk, while the receipt keeps the technical authority decision exact.
+
 ![Trust ratchet parent rule: every parent verifies a roster edit before the roster advances; unknown, removed, or class-refused signers are held and alerted.](/diagrams/m3-trust-ratchet.svg)
 
 The sequence reads left to right for the decision and top to bottom for the resulting host action: accepted history advances the roster, while a refusal keeps held items at their last reviewed value.
