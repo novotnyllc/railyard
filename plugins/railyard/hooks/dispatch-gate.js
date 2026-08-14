@@ -395,32 +395,125 @@ function commandPrefixAllows(tokens, index) {
 
 function shellWrapperTokens(tokens, depth = 0) {
   if (depth >= MAX_SHELL_WRAPPER_DEPTH) return tokens;
-  let launcher = basename(tokens[0]?.value || "").toLowerCase();
-  if (launcher === "env") {
-    let cursor = 1;
-    while (cursor < tokens.length && tokens[cursor].kind === "word") {
-      const value = tokens[cursor].value;
-      if (value === "--") {
+  let cursor = 0;
+  while (cursor < tokens.length) {
+    const afterRedirection = skipRedirection(tokens, cursor, tokens.length);
+    if (afterRedirection !== null) {
+      cursor = afterRedirection;
+      continue;
+    }
+    if (tokens[cursor]?.kind !== "word") break;
+    const launcher = basename(tokens[cursor].value).toLowerCase();
+    if (isAssignment(tokens[cursor].value)) {
+      cursor += 1;
+      continue;
+    }
+    if (launcher === "env") {
+      cursor += 1;
+      while (cursor < tokens.length && tokens[cursor].kind === "word") {
+        const value = tokens[cursor].value;
+        if (value === "--") {
+          cursor += 1;
+          break;
+        }
+        if (value === "-i" || value === "--ignore-environment" || isAssignment(value)) {
+          cursor += 1;
+          continue;
+        }
+        if (value === "-u" || value === "--unset" || value === "-C" || value === "--chdir") {
+          cursor += 2;
+          continue;
+        }
+        if (value.startsWith("--unset=") || (value.startsWith("-u") && value.length > 2) || value.startsWith("--chdir=") || (value.startsWith("-C") && value.length > 2)) {
+          cursor += 1;
+          continue;
+        }
+        break;
+      }
+      continue;
+    }
+    if (launcher === "exec") {
+      cursor += 1;
+      while (cursor < tokens.length && tokens[cursor].kind === "word") {
+        const value = tokens[cursor].value;
+        if (value === "--") {
+          cursor += 1;
+          break;
+        }
+        if (value === "-a") {
+          cursor += 2;
+          continue;
+        }
+        if (value.startsWith("-")) {
+          cursor += 1;
+          continue;
+        }
+        break;
+      }
+      continue;
+    }
+    if (launcher === "command") {
+      cursor += 1;
+      while (cursor < tokens.length && tokens[cursor].kind === "word" && ["-p", "--"].includes(tokens[cursor].value)) cursor += 1;
+      continue;
+    }
+    if (launcher === "timeout") {
+      cursor += 1;
+      const optionsWithArguments = new Set(["-k", "--kill-after", "-s", "--signal"]);
+      while (cursor < tokens.length && tokens[cursor].kind === "word") {
+        const value = tokens[cursor].value;
+        if (value === "--") {
+          cursor += 1;
+          break;
+        }
+        if (value.startsWith("-")) {
+          cursor += 1;
+          if (optionsWithArguments.has(value)) cursor += 1;
+          continue;
+        }
         cursor += 1;
         break;
       }
-      if (value === "-i" || value === "--ignore-environment" || isAssignment(value)) {
-        cursor += 1;
-        continue;
-      }
-      if (value === "-u" || value === "--unset" || value === "-C" || value === "--chdir") {
-        cursor += 2;
-        continue;
-      }
-      if (value.startsWith("--unset=") || (value.startsWith("-u") && value.length > 2) || value.startsWith("--chdir=") || (value.startsWith("-C") && value.length > 2)) {
-        cursor += 1;
-        continue;
-      }
-      break;
+      continue;
     }
-    if (cursor > 1 && cursor < tokens.length) return shellWrapperTokens(tokens.slice(cursor), depth);
-    launcher = basename(tokens[cursor]?.value || "").toLowerCase();
+    if (launcher === "nohup") {
+      cursor += 1;
+      while (cursor < tokens.length && tokens[cursor].kind === "word" && (tokens[cursor].value === "--" || tokens[cursor].value.startsWith("-"))) cursor += 1;
+      continue;
+    }
+    if (launcher === "time") {
+      cursor += 1;
+      while (cursor < tokens.length && tokens[cursor].kind === "word" && tokens[cursor].value.startsWith("-")) {
+        const value = tokens[cursor].value;
+        cursor += 1;
+        if (["-f", "--format", "-o", "--output"].includes(value)) cursor += 1;
+      }
+      continue;
+    }
+    if (launcher === "nice") {
+      cursor += 1;
+      while (cursor < tokens.length && tokens[cursor].kind === "word") {
+        const value = tokens[cursor].value;
+        if (value === "--") {
+          cursor += 1;
+          break;
+        }
+        if (value === "-n" || value === "--adjustment") {
+          cursor += 2;
+          continue;
+        }
+        if (value.startsWith("-")) {
+          cursor += 1;
+          continue;
+        }
+        break;
+      }
+      continue;
+    }
+    break;
   }
+  if (cursor > 0 && cursor < tokens.length) return shellWrapperTokens(tokens.slice(cursor), depth);
+  const launcher = basename(tokens[0]?.value || "").toLowerCase();
   if (!SHELL_LAUNCHERS.has(launcher)) return tokens;
   for (let index = 1; index < tokens.length - 1; index += 1) {
     if (tokens[index]?.kind !== "word") continue;

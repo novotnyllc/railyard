@@ -428,6 +428,10 @@ test("codex exec parsing recognizes string shell wrappers", () => {
     `sh -lc "codex exec 'no explicit flags'"`,
     `zsh --command "bash -c 'codex exec no-flags'"`,
     `env -i RAILYARD_TEST=1 bash -c "codex exec 'no explicit flags'"`,
+    `nice -n 5 bash -c "codex exec 'no explicit flags'"`,
+    `timeout 60 bash -c "codex exec 'no explicit flags'"`,
+    `nohup bash -c "codex exec 'no explicit flags'"`,
+    `time bash -c "codex exec 'no explicit flags'"`,
   ]) {
     const refused = run({ tool_name: "Bash", tool_input: { command } });
     assert.equal(refused.code, 2, command);
