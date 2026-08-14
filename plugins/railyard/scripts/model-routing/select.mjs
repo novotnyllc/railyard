@@ -1,5 +1,9 @@
 /** Candidate enumeration, ordering, attestation, and the no-config default route. */
 
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import {
   isObject,
   onlyFields,
@@ -148,6 +152,22 @@ export function privacyAllows(provider, model, carrier, request, catalog) {
   return true;
 }
 
+export function providerAvailabilityIssue(provider, request = {}) {
+  const availability = provider?.availability;
+  if (availability === undefined) return null;
+  if (availability.kind !== "codex_config") return "provider_unavailable";
+  const hostScope = request.hostScope || request.destinationScope || "local";
+  if (hostScope !== "local") return "provider_unavailable";
+  try {
+    const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
+    const config = fs.readFileSync(path.join(codexHome, "config.toml"), "utf8");
+    const section = availability.section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`^[ \\t]*\\[${section}\\][ \\t]*\\r?$`, "m").test(config) ? null : "provider_unavailable";
+  } catch {
+    return "provider_unavailable";
+  }
+}
+
 export function effortFor(request, model, carrier) {
   const effort = request.effort || model.effort || model.efforts?.[0] || carrier.efforts[0];
   if (!validEffort(effort) || !carrier.efforts.includes(effort) || (model.efforts && !model.efforts.includes(effort))) return null;
@@ -199,6 +219,27 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
       const carrier = CARRIER_DESCRIPTORS[model.carrierId];
       if (!carrier) {
         output.push({ ok: false, alias, tierIndex, position, reason: "unsupported_adapter" });
+        continue;
+      }
+      if (request.harness !== undefined) {
+        if (!provider.harness) {
+          output.push({ ok: false, alias, tierIndex, position, reason: "harness_unattributed" });
+          continue;
+        }
+        const hasCrossHarnessReason = typeof request.crossHarnessReason === "string"
+          && request.crossHarnessReason.trim().length >= 8
+          && request.crossHarnessReason.trim().toLowerCase() !== "not_applicable";
+        if (provider.harness !== request.harness && !hasCrossHarnessReason) {
+          output.push({ ok: false, alias, tierIndex, position, reason: "cross_harness_reason_required" });
+          continue;
+        }
+      } else if (provider.harness !== undefined) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "harness_required" });
+        continue;
+      }
+      const availabilityIssue = providerAvailabilityIssue(provider, request);
+      if (availabilityIssue) {
+        output.push({ ok: false, alias, tierIndex, position, reason: availabilityIssue });
         continue;
       }
       const adapterResult = adapterFor(request, carrier);
@@ -273,11 +314,15 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         output.push({ ok: false, alias, tierIndex, position, reason: "required_capability_unattested" });
         continue;
       }
-      if (model.carrierId === "claude-ce-review" && !claudeIdentitySatisfied(model, observedModel || model.requestedModel)) {
+      if (carrier.modelFamily === "claude" && !claudeIdentitySatisfied(model, !observedModel || observedModel === "unknown" ? model.requestedModel : observedModel)) {
         output.push({ ok: false, alias, tierIndex, position, reason: "claude_identity_mismatch" });
         continue;
       }
-      if (model.carrierId !== "claude-ce-review" && !minimumGenerationSatisfied(model, observedModel || model.requestedModel)) {
+      if (carrier.runtimeVerifiedOnly && !capability) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "runtime_attestation_required" });
+        continue;
+      }
+      if (carrier.modelFamily !== "claude" && !minimumGenerationSatisfied(model, observedModel || model.requestedModel)) {
         output.push({ ok: false, alias, tierIndex, position, reason: "minimum_generation_unmet" });
         continue;
       }

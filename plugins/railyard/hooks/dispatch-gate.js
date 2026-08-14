@@ -15,10 +15,102 @@ try {
   ({ record, clip } = require("./run-log.js"));
 } catch {}
 
+function shellTokens(command) {
+  const tokens = [];
+  let word = "";
+  let quote = "";
+  let escaped = false;
+  const flush = () => {
+    if (word) tokens.push({ kind: "word", value: word });
+    word = "";
+  };
+  const source = String(command || "").slice(0, 32768);
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (escaped) {
+      word += char;
+      escaped = false;
+    } else if (char === "\\") {
+      escaped = true;
+    } else if (quote) {
+      if (char === quote) quote = "";
+      else word += char;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+    } else if (char === "#" && !word) {
+      // A comment starts only at a word boundary. Ignore it until the next
+      // line so commented-out examples cannot become audit records.
+      while (index + 1 < source.length && source[index + 1] !== "\n") index += 1;
+    } else if (/\s/.test(char)) {
+      flush();
+      if (char === "\n") tokens.push({ kind: "separator" });
+    } else if (char === ";" || char === "|" || char === "&") {
+      flush();
+      tokens.push({ kind: "separator" });
+    } else {
+      word += char;
+    }
+  }
+  if (escaped) word += "\\";
+  flush();
+  return tokens;
+}
+
+function codexExecDispatches(args) {
+  const command = args.command ?? args.cmd;
+  if (typeof command !== "string") return [];
+  const tokens = shellTokens(command);
+  const dispatches = [];
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    const token = tokens[index];
+    const previous = tokens[index - 1];
+    if (token.kind !== "word" || !/^(?:codex|codex\.exe)$/i.test(token.value.split(/[\\/]/).pop()) || tokens[index + 1]?.value !== "exec") continue;
+    if (index > 0 && previous?.kind !== "separator") continue;
+    let model;
+    let effort;
+    let label;
+    for (let cursor = index + 2; cursor < tokens.length && tokens[cursor].kind !== "separator"; cursor += 1) {
+      const value = tokens[cursor].value;
+      const next = tokens[cursor + 1]?.value;
+      if (value === "-m" || value === "--model") {
+        model = next;
+        cursor += 1;
+      } else if (value.startsWith("--model=")) {
+        model = value.slice("--model=".length);
+      } else if (value === "-c" || value === "--config") {
+        const match = (next || "").match(/^model_reasoning_effort\s*=\s*(.+)$/);
+        if (match) effort = match[1].replace(/^(['"])(.*)\1$/, "$2");
+        cursor += 1;
+      } else if (value.startsWith("--reasoning-effort=") || value.startsWith("--reasoning_effort=")) {
+        effort = value.slice(value.indexOf("=") + 1);
+      } else if (value === "--reasoning-effort" || value === "--reasoning_effort") {
+        effort = next;
+        cursor += 1;
+      } else if (value === "--label" || value === "--task-name") {
+        label = next;
+        cursor += 1;
+      } else if (value.startsWith("--label=") || value.startsWith("--task-name=")) {
+        label = value.slice(value.indexOf("=") + 1);
+      }
+    }
+    dispatches.push({
+      model: clip(model) || "unknown",
+      effort: clip(effort, 20) || "unknown",
+      label: clip(label),
+    });
+  }
+  return dispatches;
+}
+
 let raw = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (c) => (raw += c));
-process.stdin.on("end", () => {
+let inputHandled = false;
+let inputTimer;
+function handleInput() {
+  if (inputHandled) return;
+  inputHandled = true;
+  if (inputTimer) clearTimeout(inputTimer);
   let input;
   try {
     input = JSON.parse(raw);
@@ -153,5 +245,31 @@ process.stdin.on("end", () => {
     }
     return;
   }
+
+  if (["Bash", "shell", "local_shell", "exec_command", "unified_exec"].includes(tool)) {
+    try {
+      for (const dispatch of codexExecDispatches(args)) {
+        record({
+          event: "dispatch",
+          harness: "codex",
+          tool,
+          model: dispatch.model,
+          effort: dispatch.effort,
+          reasoning_effort: dispatch.effort,
+          label: dispatch.label,
+          session_id: clip(input.session_id),
+        });
+      }
+    } catch {}
+    return;
+  }
   // Any other tool: allow.
-});
+}
+process.stdin.on("end", handleInput);
+// Some hook runners keep stdin open after delivering the payload. Never let
+// that turn a fail-open hook into a shell deadlock; parse what arrived and
+// exit within the dispatch budget.
+inputTimer = setTimeout(() => {
+  handleInput();
+  process.exit(process.exitCode || 0);
+}, 50);

@@ -37,6 +37,7 @@ import {
   BUDGET_EFFECTS,
   CARRIER_DESCRIPTORS,
   CE_SEAMS,
+  HARNESS_KINDS,
   DEFAULT_NEGATIVE_TTL_MS,
   DEFAULT_RETRY_AFTER_MAX_SECONDS,
   DISCLOSURE_PROVENANCE,
@@ -107,8 +108,9 @@ export function validSelected(value) {
 }
 
 export function validBinding(value) {
-  const fields = new Set(["adapterId", "adapterVersion", "dispatchKind", "budgetEffect", "controls", "transportPath", "bridgePhase", "hostScope", "accountScope", "contextFork", "r52", "profile", "compositeReservations", "ceSeam"]);
+  const fields = new Set(["adapterId", "adapterVersion", "dispatchKind", "budgetEffect", "controls", "transportPath", "bridgePhase", "hostScope", "accountScope", "contextFork", "r52", "profile", "compositeReservations", "ceSeam", "harness", "crossHarnessReason"]);
   if (!onlyFields(value, fields) || !validId(value.adapterId) || !validId(value.adapterVersion) || !DISPATCH_KINDS.has(value.dispatchKind) || !BUDGET_EFFECTS.has(value.budgetEffect) || !isObject(value.controls) || (value.transportPath !== "native" && value.transportPath !== "visible_provider_task") || ![null, "activation", "bootstrap"].includes(value.bridgePhase) || !validId(value.hostScope) || !validId(value.accountScope)) return false;
+  if (Object.hasOwn(value, "harness") !== Object.hasOwn(value, "crossHarnessReason")) return false;
   const adapter = ADAPTER_DESCRIPTORS[value.adapterId];
   if (!adapter || adapter.version !== value.adapterVersion || !adapter.dispatchKinds.includes(value.dispatchKind)) return false;
   if (stableDigest(value.controls) !== stableDigest(adapter.controls)) return false;
@@ -116,6 +118,8 @@ export function validBinding(value) {
   if (value.compositeReservations !== undefined && (!Array.isArray(value.compositeReservations) || value.compositeReservations.some((item) => !validId(item)))) return false;
   if (value.contextFork !== undefined && !validContextFork(value.contextFork)) return false;
   if (value.r52 !== undefined && !validR52Binding(value.r52)) return false;
+  if (value.harness !== undefined && value.harness !== "unknown" && !HARNESS_KINDS.has(value.harness)) return false;
+  if (value.crossHarnessReason !== undefined && !(typeof value.crossHarnessReason === "string" && value.crossHarnessReason.trim().toLowerCase() === "not_applicable") && (typeof value.crossHarnessReason !== "string" || value.crossHarnessReason.trim().length < 8 || value.crossHarnessReason.length > 256)) return false;
   return value.ceSeam === undefined || validCeSeam(value.ceSeam);
 }
 

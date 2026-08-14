@@ -28,6 +28,7 @@ import {
   CATALOG_SCHEMA_VERSION,
   DEFAULT_POLICY,
   EXECUTION_SURFACES,
+  HARNESS_KINDS,
   INVARIANT_WORK_CONTRACT_SCHEMA,
   LOCALITY_RANK,
   PRESENTATION_OVERLAYS,
@@ -72,7 +73,7 @@ export function presentationOverlayFor({ carrierId, model, effort }) {
   if (["codex-luna", "codex-sol", "codex-terra-runtime"].includes(carrierId)) {
     if (carrier.requestedModel && model !== carrier.requestedModel) return null;
     family = "gpt_sol";
-  } else if (carrierId === "claude-ce-review") {
+  } else if (CARRIER_DESCRIPTORS[carrierId]?.modelFamily === "claude") {
     const parsed = parseClaudeFamily(model);
     if (!parsed) return null;
     family = parsed.family;
@@ -194,7 +195,9 @@ export function validateCatalog(catalog) {
   for (const field of ["providers", "models", "roles"]) if (!isObject(catalog[field])) return error("invalid_catalog", { field });
 
   for (const [alias, provider] of ownEntries(catalog.providers)) {
-    if (!validId(alias) || !onlyFields(provider, new Set(["carrierId", "executionSurface", "account", "locality", "retention", "capabilities"])) || !validId(provider.carrierId) || !EXECUTION_SURFACES.has(provider.executionSurface) || !validOpaque(provider.account)) return error("invalid_provider", { alias });
+    if (!validId(alias) || !onlyFields(provider, new Set(["carrierId", "executionSurface", "account", "locality", "retention", "capabilities", "harness", "availability"])) || !validId(provider.carrierId) || !EXECUTION_SURFACES.has(provider.executionSurface) || !validOpaque(provider.account)) return error("invalid_provider", { alias });
+    if (provider.harness !== undefined && !HARNESS_KINDS.has(provider.harness)) return error("invalid_provider", { alias });
+    if (provider.availability !== undefined && (!isObject(provider.availability) || !onlyFields(provider.availability, new Set(["kind", "section"])) || provider.availability.kind !== "codex_config" || typeof provider.availability.section !== "string" || !/^model_providers\.[a-z0-9_-]+$/.test(provider.availability.section))) return error("invalid_provider", { alias });
     if (provider.locality !== undefined && !Object.hasOwn(LOCALITY_RANK, provider.locality)) return error("invalid_provider", { alias });
     if (provider.retention !== undefined && !Object.hasOwn(RETENTION_RANK, provider.retention)) return error("invalid_provider", { alias });
     if (provider.capabilities !== undefined && (!Array.isArray(provider.capabilities) || provider.capabilities.some((item) => !validId(item)))) return error("invalid_provider", { alias });
@@ -218,7 +221,7 @@ export function validateCatalog(catalog) {
     const carrier = CARRIER_DESCRIPTORS[model.carrierId];
     if (catalog.providers[model.provider].carrierId !== model.carrierId) return error("provider_carrier_mismatch", { alias });
     if (carrier?.requestedModel && carrier.requestedModel !== model.requestedModel) return error("fixed_carrier_mismatch", { alias });
-    if (model.carrierId === "claude-ce-review" && !validClaudeFamily(model.requestedModel)) return error("invalid_claude_family", { alias });
+    if (carrier?.modelFamily === "claude" && !validClaudeFamily(model.requestedModel)) return error("invalid_claude_family", { alias });
     if (model.rates !== undefined && model.rates.some((rate) => rate.carrierId !== model.carrierId || rate.carrierVersion !== carrier?.version || !carrier?.efforts.includes(rate.effort) || (model.efforts !== undefined && !model.efforts.includes(rate.effort)) || (model.effort !== undefined && rate.effort !== model.effort) || (model.billingSurface !== undefined && rate.billingSurface !== model.billingSurface) || (model.billingSurface === undefined && rate.billingSurface !== catalog.providers[model.provider].executionSurface) || (model.identityMode !== "provider_latest_family" && rate.resolvedModelDigest !== stableDigest(model.requestedModel)))) return error("rate_binding_mismatch", { alias });
   }
   for (const [role, rule] of ownEntries(catalog.roles)) {

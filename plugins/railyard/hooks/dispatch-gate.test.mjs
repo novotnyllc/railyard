@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -40,6 +40,28 @@ function run(input, codexHome, logDir) {
   const log = readLog(logs);
   if (!logDir) rmSync(logs, { recursive: true, force: true });
   return { code: r.status, err: r.stderr, log };
+}
+
+function runWithOpenStdin(input) {
+  const home = fixtureCodexHome(null);
+  const logs = mkdtempSync(path.join(tmpdir(), "gate-open-log-"));
+  const child = spawn(process.execPath, [script], {
+    env: { ...process.env, CODEX_HOME: home, RAILYARD_RUN_LOG_DIR: logs },
+    stdio: ["pipe", "ignore", "pipe"],
+  });
+  let err = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk) => (err += chunk));
+  child.stdin.write(JSON.stringify(input));
+  return new Promise((resolve, reject) => {
+    child.on("error", reject);
+    child.on("close", (code) => {
+      const result = { code, err, log: readLog(logs) };
+      rmSync(home, { recursive: true, force: true });
+      rmSync(logs, { recursive: true, force: true });
+      resolve(result);
+    });
+  });
 }
 
 test("Agent with explicit model passes", () => {
@@ -225,6 +247,77 @@ test("refused dispatches are never recorded", () => {
 
 test("unrelated tools are not recorded", () => {
   assert.deepEqual(run({ tool_name: "Bash", tool_input: { command: "ls" } }).log, []);
+});
+
+test("Bash-launched codex exec records the actual model, reasoning effort, and label", () => {
+  const r = run({
+    tool_name: "Bash",
+    session_id: "sess-codex-exec",
+    tool_input: {
+      command: "codex exec -m gpt-5.6-luna -c model_reasoning_effort=max --label lane-railyard-cycle 'bounded work'",
+    },
+  });
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+  assert.deepEqual(
+    { ...r.log[0], ts: undefined },
+    {
+      ts: undefined,
+      event: "dispatch",
+      harness: "codex",
+      tool: "Bash",
+      model: "gpt-5.6-luna",
+      effort: "max",
+      reasoning_effort: "max",
+      label: "lane-railyard-cycle",
+      session_id: "sess-codex-exec",
+    },
+  );
+});
+
+test("codex exec parsing supports Codex shell aliases and fails open when flags are absent", () => {
+  const parsed = run({
+    tool_name: "exec_command",
+    tool_input: { cmd: "/usr/local/bin/codex exec --model=glm-5.2 --reasoning_effort=high" },
+  });
+  assert.equal(parsed.code, 0);
+  assert.equal(parsed.log[0].model, "glm-5.2");
+  assert.equal(parsed.log[0].reasoning_effort, "high");
+
+  const incomplete = run({ tool_name: "shell", tool_input: { command: "codex exec 'no explicit flags'" } });
+  assert.equal(incomplete.code, 0);
+  assert.equal(incomplete.log[0].model, "unknown");
+  assert.equal(incomplete.log[0].effort, "unknown");
+});
+
+test("codex exec parsing ignores comments, prose, and later shell commands", () => {
+  const noise = run({
+    tool_name: "Bash",
+    tool_input: { command: "echo codex exec -m stale\n# codex exec -m commented" },
+  });
+  assert.deepEqual(noise.log, []);
+
+  const parsed = run({
+    tool_name: "Bash",
+    tool_input: {
+      command: "codex exec -m gpt-5.6-sol -c 'model_reasoning_effort=\"high\"' && echo codex exec -m stale",
+    },
+  });
+  assert.equal(parsed.log.length, 1);
+  assert.equal(parsed.log[0].model, "gpt-5.6-sol");
+  assert.equal(parsed.log[0].reasoning_effort, "high");
+});
+
+test("the Bash hook exits when its runner leaves stdin open", async () => {
+  const r = await runWithOpenStdin({
+    tool_name: "exec_command",
+    session_id: "sess-open-stdin",
+    tool_input: { cmd: "codex exec -m gpt-5.6-luna -c model_reasoning_effort=max" },
+  });
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+  assert.equal(r.log[0].model, "gpt-5.6-luna");
+  assert.equal(r.log[0].reasoning_effort, "max");
 });
 
 test("an unwritable log dir never blocks or errors the dispatch", () => {

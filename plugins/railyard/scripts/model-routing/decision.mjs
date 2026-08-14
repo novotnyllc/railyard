@@ -119,6 +119,8 @@ export function decisionFromCandidate(candidate, request, policy, now, rejected 
     hostScope,
     accountScope,
     contextFork: request.contextFork || "not_applicable",
+    harness: request.harness || "not_applicable",
+    crossHarnessReason: request.crossHarnessReason || "not_applicable",
     r52Digest: readiness?.digest || "not_applicable",
   });
   const decision = {
@@ -174,6 +176,12 @@ export function decisionFromCandidate(candidate, request, policy, now, rejected 
     generatedAt: nowIso(now),
     workClassDigest: derivedWorkClassDigest(request),
   };
+  if (request.harness !== undefined || request.crossHarnessReason !== undefined || candidate.provider.harness !== undefined) {
+    decision.requested.harness = request.harness || "not_applicable";
+    decision.requested.crossHarnessReason = request.crossHarnessReason || "not_applicable";
+    decision.binding.harness = candidate.provider.harness || "unknown";
+    decision.binding.crossHarnessReason = request.crossHarnessReason || "not_applicable";
+  }
   if (request.contextFork !== undefined) decision.binding.contextFork = request.contextFork;
   if (readiness) decision.binding.r52 = readiness;
   decision.learning = candidate.learning || "not_applicable";
@@ -196,7 +204,7 @@ export function decisionFromCandidate(candidate, request, policy, now, rejected 
   // to Codex when its preflight proves it available, and falls back to a native
   // Claude implementation when it is not.
   if ((request.role === "implementation" || request.role?.startsWith("implementation."))
-    && candidate.provider.executionSurface === "codex") {
+    && (candidate.provider.executionSurface === "codex" || candidate.provider.harness === "codex")) {
     const codexProven = candidate.runtime ? candidate.runtime.provenance === "measured_fact" : true;
     decision.implementationEngine = { mode: codexProven ? "require" : "prefer", target: "codex", model: selectedModel, source: "deliver" };
   }

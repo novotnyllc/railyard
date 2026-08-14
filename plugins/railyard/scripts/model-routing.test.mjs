@@ -19,9 +19,11 @@ import {
   runCli,
   scopeAccountingId,
   stableDigest,
+  providerAvailabilityIssue,
   validateCatalog,
   validateState,
 } from "./model-routing.mjs";
+import { validBinding } from "./model-routing/state-schema.mjs";
 import { build as buildOracle, dispatch as dispatchOracle } from "../skills/oracle/scripts/oracle-route.mjs";
 
 const NOW = Date.parse("2026-08-04T12:00:00.000Z");
@@ -119,6 +121,10 @@ function policyDigest(policy) {
   const validated = validateCatalog(policy);
   assert.equal(validated.ok, true, JSON.stringify(validated));
   return validated.policy.digest;
+}
+
+function ownerPolicy() {
+  return JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../references/model-routing.example.json"), "utf8"));
 }
 
 function dispatchIdentity(adapterId, { hostScope = "local", accountScope = "local", sessionId = "session-one" } = {}) {
@@ -361,6 +367,87 @@ test("the built-in route stays Luna Max, and no-config task messages fail closed
   assert.equal(Object.hasOwn(outcome, "routeEffectBucket"), false);
   assert.equal(Object.values(state.learningAggregates).filter((entry) => entry.kind === "routeEffect").length, 0);
   assert.equal(validateState(state).ok, true);
+});
+
+test("the owner catalog selects Fable for hard Claude work and records an explicit Luna handoff reason", () => {
+  const policy = ownerPolicy();
+  assert.equal(validateCatalog(policy).ok, true);
+  const state = createEmptyState();
+  const fable = handleRequest(request("resolve", {
+    role: "implementation.hard",
+    harness: "claude",
+    adapterId: "claude-session-create",
+    dispatchKind: "subagent_create",
+  }), { catalog: policy, state, now: NOW });
+  assert.equal(fable.response.reason, "resolved", JSON.stringify(fable.response));
+  assert.equal(fable.response.decision.selected.modelAlias, "fable");
+  assert.equal(fable.response.decision.selected.model, "fable");
+  assert.equal(fable.response.decision.binding.harness, "claude");
+
+  const withoutReason = handleRequest(request("resolve", {
+    role: "implementation",
+    harness: "claude",
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(withoutReason.response.reason, "no_eligible_route");
+  assert.equal(withoutReason.response.rejectedAlternatives[0].reason, "cross_harness_reason_required");
+
+  const withoutHarness = handleRequest(request("resolve", {
+    role: "implementation.hard",
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(withoutHarness.response.reason, "no_eligible_route");
+  assert.equal(withoutHarness.response.rejectedAlternatives[0].reason, "harness_required");
+
+  const sentinelReason = handleRequest(request("resolve", {
+    role: "implementation",
+    harness: "codex",
+    crossHarnessReason: "not_applicable",
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(sentinelReason.response.reason, "invalid_cross_harness_reason");
+
+  const crossHarnessReason = "Use Codex subscription headroom for this bounded implementation.";
+  const luna = handleRequest(request("resolve", {
+    role: "implementation",
+    harness: "claude",
+    crossHarnessReason,
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(luna.response.reason, "resolved", JSON.stringify(luna.response));
+  assert.equal(luna.response.decision.selected.modelAlias, "luna");
+  assert.equal(luna.response.decision.requested.crossHarnessReason, crossHarnessReason);
+  assert.equal(luna.response.decision.binding.crossHarnessReason, crossHarnessReason);
+
+  const review = handleRequest(request("resolve", { role: "review.code", harness: "codex" }), {
+    catalog: policy,
+    state: createEmptyState(),
+    now: NOW,
+  });
+  assert.equal(review.response.reason, "resolved", JSON.stringify(review.response));
+  assert.equal(review.response.decision.selected.modelAlias, "sol");
+  assert.equal(review.response.decision.selected.effort, "high");
+  assert.equal(validBinding(review.response.decision.binding), true);
+  const missingHarness = { ...review.response.decision.binding };
+  delete missingHarness.harness;
+  assert.equal(validBinding(missingHarness), false);
+  const missingReason = { ...review.response.decision.binding };
+  delete missingReason.crossHarnessReason;
+  assert.equal(validBinding(missingReason), false);
+});
+
+test("the owner catalog keeps subscription meters separate and gates GLM on Codex config", () => {
+  const policy = ownerPolicy();
+  assert.deepEqual(Object.keys(policy.budgets.task).sort(), ["claude_subscription", "codex_subscription", "zai_credits"]);
+  const previous = process.env.CODEX_HOME;
+  const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), "railyard-codex-policy-"));
+  try {
+    process.env.CODEX_HOME = codexHome;
+    assert.equal(providerAvailabilityIssue(policy.providers.zai), "provider_unavailable");
+    fs.writeFileSync(path.join(codexHome, "config.toml"), "[model_providers.zai_litellm]\n");
+    assert.equal(providerAvailabilityIssue(policy.providers.zai), null);
+    assert.equal(providerAvailabilityIssue(policy.providers.zai, { hostScope: "runner-2" }), "provider_unavailable");
+  } finally {
+    if (previous === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = previous;
+    fs.rmSync(codexHome, { recursive: true, force: true });
+  }
 });
 
 test("catalogs, privacy, and closed CE seams cannot widen routing authority", () => {
