@@ -17,7 +17,7 @@ An operator owns a repository-wide logging migration with a production risk hidi
 
 The operator splits the risk along its natural boundary. Lane A covers about 40 mechanical call sites and their fixes on `codex-luna`; the dispatch gate confirms model and effort. Lane B owns the async flush seam and is a deliberate escalation to a Claude worker on Opus at high effort, the fleet default for dispatched workers. Thermos runs correctness/security and quality in parallel. It returns four findings: two missed call sites and a format-string regression in lane A, plus a flush-order race under cancellation in lane B. Each lane re-dispatches its fix on the tier that produced it.
 
-The migration earns its finish through settled evidence. The merge-settlement gate holds `gh pr merge` until every thread is resolved and the ten-minute settlement window passes. After merge, ancestry proof and the smallest routed verification run. The run log carries each route, claim, imported receipt, finding, and final outcome.
+The migration earns its finish through settled evidence. The merge-settlement gate holds `gh pr merge` until every thread is resolved and the current head has a review; when no review arrives, the ten-minute settlement window is the fallback. After merge, ancestry proof and the smallest routed verification run. The run log carries each route, claim, imported receipt, finding, and final outcome.
 
 | Ledger (relative cost units) | Tier | Volume | Cost |
 | --- | --- | --- | ---: |
@@ -29,7 +29,7 @@ The migration earns its finish through settled evidence. The merge-settlement ga
 
 The saving comes from matching the 40 mechanical sites to the cheap tier while reserving the top tier for the seam that could deadlock production. The ledger also shows the quality purchase: the subtle lane received a stronger implementation path and two independent review lenses.
 
-The turn is the seam escalation, not the model label. Mechanical volume keeps its bounded route; semantic risk earns deeper implementation and the same Thermos pair. The run closes when four findings are fixed, review threads and settlement timing are current, ancestry plus focused verification pass, and the terminal receipt says `outcome=proven`.
+The turn is the seam escalation, not the model label. Mechanical volume keeps its bounded route; semantic risk earns deeper implementation and the same Thermos pair. The run closes when four findings are fixed, review threads and the active settlement condition are current, ancestry plus focused verification pass, and the terminal receipt says `outcome=proven`.
 
 ## A second cost shape
 

@@ -71,12 +71,19 @@ function declaration(ruleSet, selector, property, scheme) {
   return result;
 }
 
-function primaryButtonForeground(ruleSet, scheme) {
-  try {
-    return declaration(ruleSet, '.button-primary:hover', 'color', scheme);
-  } catch {
-    return declaration(ruleSet, '.button-primary', 'color', scheme);
+function firstDeclaration(ruleSet, selectors, property, scheme, fallback) {
+  for (const selector of selectors) {
+    try {
+      return declaration(ruleSet, selector, property, scheme);
+    } catch {
+      // Try the next selector in computed-style precedence order.
+    }
   }
+  return fallback;
+}
+
+function primaryButtonForeground(ruleSet, scheme) {
+  return firstDeclaration(ruleSet, ['.button-primary:hover', '.button-primary'], 'color', scheme);
 }
 
 const overrideFixture = parseRules(`${css}\n.text-link:hover { color: #777; }`);
@@ -105,9 +112,15 @@ function luminance(value) {
   return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
 }
 
-function contrast(foreground, background) {
-  const values = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+function contrast(foreground, background, surface) {
+  const renderedBackground = rgb(background).alpha < 1 ? composite(background, surface) : background;
+  const renderedForeground = rgb(foreground).alpha < 1 ? composite(foreground, renderedBackground) : foreground;
+  const values = [luminance(renderedForeground), luminance(renderedBackground)].sort((a, b) => b - a);
   return (values[0] + 0.05) / (values[1] + 0.05);
+}
+
+if (contrast('#00000080', '#fffdf9', '#fffdf9') >= 4.5) {
+  throw new Error('Alpha self-check failed to composite a translucent foreground');
 }
 
 const primaryButtonOverrideFixture = parseRules(`${css}\n.button-primary:hover { color: #777; }`);
@@ -117,6 +130,7 @@ if (primaryButtonForeground(primaryButtonOverrideFixture, 'light') !== '#777') {
 const primaryButtonOverrideRatio = contrast(
   color(light, primaryButtonForeground(primaryButtonOverrideFixture, 'light')),
   color(light, declaration(primaryButtonOverrideFixture, '.button-primary:hover', 'background', 'light')),
+  light['--ground'],
 );
 if (primaryButtonOverrideRatio >= 4.5) {
   throw new Error('Cascade self-check failed to make a low-contrast primary-button hover foreground fail');
@@ -141,35 +155,46 @@ function outline(schemeName, scheme, selector) {
 }
 
 const pairs = [
-  ['hover: global navigation', (name, scheme) => color(scheme, declaration(rules, '.global-nav a:hover', 'color', name)), (name, scheme) => scheme['--ground']],
-  ['hover: header call to action', (name, scheme) => color(scheme, declaration(rules, '.header-cta:hover', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.header-cta:hover', 'background', name))],
-  ['hover: primary button', (name, scheme) => color(scheme, primaryButtonForeground(rules, name)), (name, scheme) => color(scheme, declaration(rules, '.button-primary:hover', 'background', name))],
-  ['hover: text link', (name, scheme) => color(scheme, declaration(rules, '.text-link:hover', 'color', name)), (name, scheme) => scheme['--ground']],
-  ['hover: card heading', (name, scheme) => scheme['--ink'], (name, scheme) => color(scheme, declaration(rules, '.promise-card:hover', 'background', name))],
-  ['hover: card body', (name, scheme) => color(scheme, declaration(rules, '.promise-card p', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.promise-card:hover', 'background', name))],
-  ['hover: card accent', (name, scheme) => color(scheme, declaration(rules, '.card-number', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.scenario-card:hover', 'background', name))],
-  ['hover: start callout button', (name, scheme) => color(scheme, declaration(rules, '.start-callout .button:hover', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.start-callout .button:hover', 'background', name))],
-  ['hover: previous/next heading', (name, scheme) => color(scheme, declaration(rules, '.prev-next a', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.prev-next a:hover', 'background', name))],
-  ['hover: previous/next label', (name, scheme) => color(scheme, declaration(rules, '.prev-next span', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.prev-next a:hover', 'background', name))],
-  ['focus: global outline', (name, scheme) => outline(name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--ground']],
-  ['focus: card outline', (name, scheme) => outline(name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--paper']],
-  ['focus: filled button outline', (name, scheme) => outline(name, scheme, 'button:focus-visible'), (name, scheme) => scheme['--ground']],
-  ['focus: skip link text', (name, scheme) => color(scheme, declaration(rules, '.skip-link', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.skip-link', 'background', name))],
-  ['focus: start callout outline', (name, scheme) => outline(name, scheme, '.start-callout a:focus-visible'), (name, scheme) => color(scheme, declaration(rules, '.start-callout', 'background', name))],
+  ['hover: global navigation', (name, scheme) => color(scheme, declaration(rules, '.global-nav a:hover', 'color', name)), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
+  ['hover: header call to action', (name, scheme) => color(scheme, declaration(rules, '.header-cta:hover', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.header-cta:hover', 'background', name)), (name, scheme) => scheme['--ground']],
+  ['hover: primary button', (name, scheme) => color(scheme, primaryButtonForeground(rules, name)), (name, scheme) => color(scheme, declaration(rules, '.button-primary:hover', 'background', name)), (name, scheme) => scheme['--ground']],
+  ['hover: text link', (name, scheme) => color(scheme, declaration(rules, '.text-link:hover', 'color', name)), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
+  ['hover: promise heading', (name, scheme) => color(scheme, firstDeclaration(rules, ['.promise-card h3', '.promise-card:hover', '.promise-card'], 'color', name, 'var(--ink)')), (name, scheme) => color(scheme, declaration(rules, '.promise-card:hover', 'background', name)), (name, scheme) => scheme['--paper']],
+  ['hover: promise body', (name, scheme) => color(scheme, declaration(rules, '.promise-card p', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.promise-card:hover', 'background', name)), (name, scheme) => scheme['--paper']],
+  ['hover: scenario heading', (name, scheme) => color(scheme, firstDeclaration(rules, ['.scenario-card h3', '.scenario-card:hover', '.scenario-card'], 'color', name, 'var(--ink)')), (name, scheme) => color(scheme, declaration(rules, '.scenario-card:hover', 'background', name)), (name, scheme) => scheme['--paper']],
+  ['hover: scenario body', (name, scheme) => color(scheme, declaration(rules, '.scenario-card p', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.scenario-card:hover', 'background', name)), (name, scheme) => scheme['--paper']],
+  ['hover: scenario accent', (name, scheme) => color(scheme, declaration(rules, '.scenario-number', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.scenario-card:hover', 'background', name)), (name, scheme) => scheme['--paper']],
+  ['hover: start callout button', (name, scheme) => color(scheme, declaration(rules, '.start-callout .button:hover', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.start-callout .button:hover', 'background', name)), (name, scheme) => color(scheme, declaration(rules, '.start-callout', 'background', name))],
+  ['hover: previous/next heading', (name, scheme) => color(scheme, firstDeclaration(rules, ['.prev-next a:hover', '.prev-next a'], 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.prev-next a:hover', 'background', name)), (name, scheme) => scheme['--ground']],
+  ['hover: previous/next label', (name, scheme) => color(scheme, declaration(rules, '.prev-next span', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.prev-next a:hover', 'background', name)), (name, scheme) => scheme['--ground']],
+  ['focus: global outline', (name, scheme) => outline(name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
+  ['focus: card outline', (name, scheme) => outline(name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--paper'], (name, scheme) => scheme['--paper']],
+  ['focus: filled button outline', (name, scheme) => outline(name, scheme, 'button:focus-visible'), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
+  ['focus: skip link text', (name, scheme) => color(scheme, declaration(rules, '.skip-link', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.skip-link', 'background', name)), (name, scheme) => scheme['--ground']],
+  ['focus: start callout outline', (name, scheme) => outline(name, scheme, '.start-callout a:focus-visible'), (name, scheme) => color(scheme, declaration(rules, '.start-callout', 'background', name)), (name, scheme) => color(scheme, declaration(rules, '.start-callout', 'background', name))],
 ];
+
+const scenarioOverrideFixture = parseRules(`${css}\n.scenario-card p { color: #777; }`);
+if (contrast(
+  color(dark, declaration(scenarioOverrideFixture, '.scenario-card p', 'color', 'dark')),
+  color(dark, declaration(scenarioOverrideFixture, '.scenario-card:hover', 'background', 'dark')),
+  dark['--paper'],
+) >= 4.5) {
+  throw new Error('Scenario self-check failed to make a low-contrast body override fail');
+}
 
 const results = [];
 for (const [schemeName, scheme] of [['light', light], ['dark', dark]]) {
-  for (const [label, foregroundValue, backgroundValue] of pairs) {
+  for (const [label, foregroundValue, backgroundValue, surfaceValue] of pairs) {
     const foreground = foregroundValue(schemeName, scheme);
     const background = backgroundValue(schemeName, scheme);
-    results.push({ scheme: schemeName, state: label, ratio: contrast(foreground, background) });
+    const surface = surfaceValue(schemeName, scheme);
+    results.push({ scheme: schemeName, state: label, ratio: contrast(foreground, background, surface) });
   }
 
   const navColor = color(scheme, declaration(rules, '.nav-group a:hover', 'color', schemeName));
   const authoredNavBackground = color(scheme, declaration(rules, '.nav-group a:hover', 'background', schemeName));
-  const navBackground = rgb(authoredNavBackground).alpha < 1 ? composite(authoredNavBackground, scheme['--ground']) : authoredNavBackground;
-  results.push({ scheme: schemeName, state: 'hover: sidebar link', ratio: contrast(navColor, navBackground) });
+  results.push({ scheme: schemeName, state: 'hover: sidebar link', ratio: contrast(navColor, authoredNavBackground, scheme['--ground']) });
 }
 
 console.log('scheme\tstate\tratio');
