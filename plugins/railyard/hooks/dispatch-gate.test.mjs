@@ -363,6 +363,10 @@ test("codex exec parsing recognizes standard process launchers", () => {
     "timeout 60 codex exec 'no explicit flags'",
     "nohup codex exec 'no explicit flags'",
     "time codex exec 'no explicit flags'",
+    "nice -n 5 codex exec 'no explicit flags'",
+    "nice --adjustment=5 codex exec 'no explicit flags'",
+    "env -C /tmp codex exec 'no explicit flags'",
+    "env --chdir=/tmp codex exec 'no explicit flags'",
   ]) {
     const refused = run({ tool_name: "Bash", tool_input: { command } });
     assert.equal(refused.code, 2, command);

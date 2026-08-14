@@ -276,6 +276,14 @@ function commandPrefixAllows(tokens, index) {
           cursor += 2;
           continue;
         }
+        if (value === "-C" || value === "--chdir") {
+          cursor += 2;
+          continue;
+        }
+        if (value.startsWith("--chdir=") || (value.startsWith("-C") && value.length > 2)) {
+          cursor += 1;
+          continue;
+        }
         if (isAssignment(value)) {
           cursor += 1;
           continue;
@@ -342,6 +350,26 @@ function commandPrefixAllows(tokens, index) {
       }
       continue;
     }
+    if (launcher === "nice") {
+      cursor += 1;
+      while (cursor < index && tokens[cursor].kind === "word") {
+        const value = tokens[cursor].value;
+        if (value === "--") {
+          cursor += 1;
+          break;
+        }
+        if (value === "-n" || value === "--adjustment") {
+          cursor += 2;
+          continue;
+        }
+        if (value.startsWith("-")) {
+          cursor += 1;
+          continue;
+        }
+        break;
+      }
+      continue;
+    }
     break;
   }
   return cursor === index;
@@ -371,7 +399,22 @@ function commandTokens(args) {
     const launcher = basename(values[cursor]).toLowerCase();
     if (launcher === "env") {
       cursor += 1;
-      while (cursor < values.length && (values[cursor] === "--" || values[cursor].startsWith("-") || isAssignment(values[cursor]))) cursor += 1;
+      while (cursor < values.length) {
+        const value = values[cursor];
+        if (value === "--") {
+          cursor += 1;
+          break;
+        }
+        if (value === "-u" || value === "--unset" || value === "-C" || value === "--chdir") {
+          cursor += 2;
+          continue;
+        }
+        if (value.startsWith("--chdir=") || (value.startsWith("-C") && value.length > 2) || value.startsWith("-") || isAssignment(value)) {
+          cursor += 1;
+          continue;
+        }
+        break;
+      }
       continue;
     }
     if (launcher === "command") {
