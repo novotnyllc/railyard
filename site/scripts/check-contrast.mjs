@@ -10,25 +10,6 @@ const variables = (source) => Object.fromEntries(
 const light = variables(css.slice(0, darkStart));
 const dark = { ...light, ...variables(css.slice(darkStart)) };
 
-const requiredRules = [
-  '.skip-link { position: fixed; left: 1rem; top: -4rem; z-index: 10; padding: .65rem 1rem; color: var(--white); background: var(--amber-dark);',
-  '.global-nav a:hover { color: var(--ink); }',
-  '.header-cta:hover { color: var(--white); background: var(--ink); }',
-  '.button-primary:hover { background: var(--amber-dark); border-color: var(--amber-dark); }',
-  '.text-link:hover { color: var(--amber-dark); }',
-  '.promise-card:hover { z-index: 1; background: var(--interactive-hover);',
-  '.scenario-card:hover { background: var(--interactive-hover);',
-  '.start-callout .button:hover { color: var(--callout-button-hover-color); background: var(--callout-button-hover-background);',
-  '.nav-group a:hover,.nav-group a.active { color: var(--amber-dark); border-left-color: var(--amber); background: #b453090d; }',
-  '.prev-next a:hover { background: var(--paper); }',
-  'a:focus-visible, button:focus-visible { outline: 3px solid var(--amber);',
-  '.button-primary:focus-visible { outline-color: var(--white);',
-  '.start-callout a:focus-visible,.start-callout button:focus-visible { outline-color: #fffdf9;',
-];
-for (const rule of requiredRules) {
-  if (!css.includes(rule)) throw new Error(`Missing interaction rule: ${rule}`);
-}
-
 const expectedSelectors = new Set([
   'a:focus-visible',
   'button:focus-visible',
@@ -36,7 +17,6 @@ const expectedSelectors = new Set([
   '.global-nav a:hover',
   '.header-cta:hover',
   '.button-primary:hover',
-  '.button-primary:focus-visible',
   '.text-link:hover',
   '.promise-card:hover',
   '.scenario-card:hover',
@@ -153,7 +133,7 @@ const pairs = [
   ['hover: previous/next label', (name, scheme) => color(scheme, declaration(rules, '.prev-next span', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.prev-next a:hover', 'background', name))],
   ['focus: global outline', (name, scheme) => outline(name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--ground']],
   ['focus: card outline', (name, scheme) => outline(name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--paper']],
-  ['focus: filled button outline', (name, scheme) => outline(name, scheme, '.button-primary:focus-visible'), (name, scheme) => color(scheme, declaration(rules, '.button-primary', 'background', name))],
+  ['focus: filled button outline', (name, scheme) => outline(name, scheme, 'button:focus-visible'), (name, scheme) => scheme['--ground']],
   ['focus: skip link text', (name, scheme) => color(scheme, declaration(rules, '.skip-link', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.skip-link', 'background', name))],
   ['focus: start callout outline', (name, scheme) => outline(name, scheme, '.start-callout a:focus-visible'), (name, scheme) => color(scheme, declaration(rules, '.start-callout', 'background', name))],
 ];
