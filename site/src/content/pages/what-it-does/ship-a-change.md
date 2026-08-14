@@ -17,6 +17,10 @@ A webhook worker drops retries under load, and the fix matters only when it reac
 
 `railyard:deliver` provides the front door for this outcome.
 
+## The run
+
+The operator asks for webhook retries to survive load and land on the base branch. Railyard binds that outcome to one delivery lane, carries the change through implementation and paired review, and settles the pull request against current evidence. The turn comes when findings or stale settlement evidence send the work back instead of letting an old green state pass. The run closes when merge ancestry and the focused post-merge check are visible in the receipt.
+
 ## What happens
 
 The request enters intent routing, receives an explicit model and effort, moves through plan and implementation, passes the paired review gate, and reaches the delivery tail. The tail settles the pull request, proves the merge commit is reachable from the base branch, and runs the smallest applicable check.

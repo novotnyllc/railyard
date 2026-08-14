@@ -11,6 +11,12 @@ Security becomes operational when every hostile path through an unattended fleet
 
 Roundhouse describes security through those outcomes. The operator can see which path an attack takes, which gate stops it, and which residual remains outside the technical model.
 
+## Decision path
+
+**Action arrives:** a stolen key, replayed head, first-contact identity, or hub credential attempts to change fleet state. **Authority check:** parent-position membership, reviewed-reference ancestry, channel class, and path scope identify what that actor can actually authorize. **Propagation gate:** review, soak, canary evidence, removal caps, and owner-manager apply bound how far accepted evidence can travel. **Outcome:** the host contains the action, detects it, refuses it, or journals a named hold. **Residual:** the page keeps instruction intent, TOFU exposure, offline persistence, privilege ownership, and availability separate from the contained technical outcome.
+
+Trace the underlying decisions through the [trust ratchet](/roundhouse/security/trust-ratchet/), [canary evidence](/roundhouse/security/canary-evidence/), [anti-rollback](/roundhouse/security/anti-rollback/), and [enrollment](/roundhouse/security/enrollment-and-tofu/) walkthroughs. The [held marketplace change](/roundhouse/security/marketplace-trust/) shows the same path as one worked run.
+
 ![Trust boundaries: owner instruction reaches a signing key, signed history crosses the store boundary, and every other host verifies before applying after canary evidence or holding with an alert.](/diagrams/m4-trust-boundaries.svg)
 
 The boundary map keeps store custody and instruction integrity visible as the two authority facts; the repository transports history but does not authorize it.

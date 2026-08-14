@@ -14,6 +14,10 @@ Roundhouse reduces fleet authority to two operator-held facts: custody of the pr
 
 Its signed trust ratchet gives every adopted host a pull-based answer to “is this genuinely what it claims to be,” carrying provenance from reviewed enrollment through fleet-wide convergence while keeping genuine first contact inside its documented TOFU soak and alert boundary.
 
+## The run
+
+The operator asks whether a signed fleet action has enough authority and evidence to propagate. Roundhouse checks store custody and instruction-chain integrity, verifies the signer at the parent position, applies the path-class and canary gates, and leaves the owner manager in control of the final action. The turn is the named decision: `applied` advances the reviewed value, while `held` or `refused` preserves it and identifies the missing evidence. The run closes when the host journal separates that outcome from the residual risk the operator still owns.
+
 ## Security map
 
 - [Trust ratchet](/roundhouse/security/trust-ratchet/) — parent-position signatures, membership classes, and revocation.

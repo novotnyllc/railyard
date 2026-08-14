@@ -11,6 +11,10 @@ Fleet evidence must remain safe to replicate across unattended hosts and canary 
 
 Roundhouse's redaction floor scans every commit before it can publish. It combines named secret classes, an entropy check, and a 400-byte cap, then sweeps findings, alerts, commit descriptions, and trailers for that commit. A match refuses the push while the sensitive value is still local.
 
+## Decision path
+
+**Action arrives:** a signed commit is ready to cross the publication boundary. **Authority check:** the commit and its metadata remain bound to the author and exact history position being proposed. **Propagation gate:** named secret classes, entropy, the 400-byte candidate cap, and all supported metadata surfaces scan that single commit before push. **Outcome:** a clean scan permits publication, while a match records `result=refused`, keeps the bytes local, and names the class and surface for rewrite. **Residual:** pattern and entropy checks reduce publication risk without claiming universal secret detection, so operators still own source review and custody.
+
 ## Per-commit boundary
 
 Attach the scan to the exact publication decision. It follows the new commit, not a range diff, and includes metadata surfaces that often carry copied command output. The remedy happens before publication; a later un-publish cannot retract bytes already sent.

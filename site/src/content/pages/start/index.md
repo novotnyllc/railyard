@@ -11,6 +11,10 @@ Begin with one outcome you can prove. Install the smallest useful surface, make 
 
 If a command or gate stops, use the [troubleshooting guide](/troubleshooting/) before changing the delivery path.
 
+## The run
+
+The operator asks for one verified result, not a tour of every feature. Railyard carries the first change through route, review, merge, and post-merge proof; Roundhouse adds a machine only when readiness or convergence earns its place. The turn is the first terminal receipt: a merged result for delivery or a readiness result for the machine. The run closes when that evidence is visible and the operator can choose the next loop from experience.
+
 - [Install](/start/install/) — add the delivery and fleet plugins to Claude Code, Codex, or both.
 - [First delivery](/start/first-delivery/) — go from one sentence to a verified merge on one machine.
 - [First machine](/start/first-machine/) — establish a readable fleet baseline and a readiness proof.

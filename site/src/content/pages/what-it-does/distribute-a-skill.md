@@ -17,6 +17,10 @@ A review skill proves useful on one machine and now belongs on every enrolled de
 
 Declare the skill as a desired item, then run the fleet convergence path.
 
+## The run
+
+The operator asks for one reviewed skill to reach every enrolled development host as the same item. Roundhouse folds its declaration through the desired-state layers, binds the marketplace SHA and version to the item identity, and lets the canary earn downstream propagation. The turn is the canary decision: aged liveness advances the exact digest, while incomplete evidence preserves the prior value. The run closes when every host journal shows that digest as `applied`, `satisfied`, or held with a named reason.
+
 ## What happens
 
 The store folds the skill's desired value through fleet, platform, group, and machine layers. Each receiving machine checks the signed change, ownership, review decision, canary evidence, and apply result. For later inspection, the journal records the item digest and outcome.

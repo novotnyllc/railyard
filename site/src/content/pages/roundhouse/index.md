@@ -11,6 +11,10 @@ Run an agent fleet from declared intent and durable proof. Give every machine a 
 
 Roundhouse is one working expression of the desired-state model. It borrows the discipline of DSC-style tooling and narrows it to exactly what an agent toolchain needs: skills, plugins, and config as the managed unit, canary gating before wider convergence, and a lightweight signed trust ratchet in place of a certificate authority. Each host pulls, reviews, applies through its owner, journals the result, and publishes the proof.
 
+## The run
+
+The operator asks for one machine to adopt the declared agent surface without surrendering the ability to explain each item. Roundhouse pulls signed history, folds readable desired state, checks local authority and canary evidence, then applies through the owning manager. The turn is the host's go-or-hold decision: complete evidence advances the exact digest, while a named hold keeps the last reviewed value. The run closes when the local journal and published proof show `applied`, `satisfied`, or the residual decision that still needs operator attention. [Read the five-host bring-up](/why-railyard/).
+
 ## The product surface
 
 - [Store](/roundhouse/store/) — four readable layers, closed categories, definitions, and fold receipts.
@@ -20,6 +24,8 @@ Roundhouse is one working expression of the desired-state model. It borrows the 
 - [Scaling guide](/desired-state/scaling/) — evidence retention and the 30/50/75/100-machine breakpoints.
 
 The delivery system consumes one thin interface: fleet-readiness go/no-go. Roundhouse remains useful on its own for any agent fleet, whether the work runs through Claude, Codex, or another managed harness.
+
+Follow the same operating system through [one work request](/delivery/) or [one agent item reaching every machine](/sync/).
 
 ## A small receipt
 
