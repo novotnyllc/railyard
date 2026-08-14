@@ -416,6 +416,21 @@ function commandPrefixAllows(tokens, index) {
       }
       continue;
     }
+    if (launcher === "xargs") {
+      cursor += 1;
+      const optionsWithArguments = new Set(["-a", "--arg-file", "-d", "--delimiter", "-E", "--eof", "-I", "--replace", "-L", "--max-lines", "-n", "--max-args", "-P", "--max-procs", "-s", "--max-chars"]);
+      while (cursor < tokens.length && tokens[cursor].kind === "word") {
+        const value = tokens[cursor].value;
+        if (value === "--") {
+          cursor += 1;
+          break;
+        }
+        if (!value.startsWith("-")) break;
+        cursor += 1;
+        if (optionsWithArguments.has(value)) cursor += 1;
+      }
+      continue;
+    }
     break;
   }
   return cursor === index;
