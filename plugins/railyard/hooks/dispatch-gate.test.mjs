@@ -376,6 +376,7 @@ test("codex exec parsing recognizes shell substitutions and groups", () => {
     "echo \"$(echo $(echo x); codex exec 'no explicit flags')\"",
     "echo \"$( (echo x); codex exec 'no explicit flags' )\"",
     String.raw`echo "$(echo \); codex exec 'no explicit flags')"`,
+    String.raw`echo "$(case x in x) codex exec 'no explicit flags';; esac)"`,
     "eval \"codex exec 'no explicit flags'\"",
     "''#notcomment; codex exec 'no explicit flags'",
   ]) {
@@ -436,6 +437,7 @@ test("codex exec parsing recognizes argv shell payloads", () => {
     { tool_name: "shell", tool_input: { command: ["env", "--debug", "codex", "exec", "no explicit flags"] } },
     { tool_name: "shell", tool_input: { command: ["stdbuf", "-oL", "codex", "exec", "no explicit flags"] } },
     { tool_name: "shell", tool_input: { command: ["setsid", "-c", "-f", "-w", "codex", "exec", "no explicit flags"] } },
+    { tool_name: "shell", tool_input: { command: ["xargs", "--eof", "codex", "exec", "no explicit flags"] } },
   ]) {
     const refused = run(input);
     assert.equal(refused.code, 2, JSON.stringify(input));
@@ -470,6 +472,7 @@ test("codex exec parsing recognizes string shell wrappers", () => {
     "setsid -c -f -w codex exec 'no explicit flags'",
     `true && bash -c "codex exec 'no explicit flags'"`,
     `printf work | xargs codex exec 'no explicit flags'`,
+    `printf work | xargs --eof codex exec 'no explicit flags'`,
   ]) {
     const refused = run({ tool_name: "Bash", tool_input: { command } });
     assert.equal(refused.code, 2, command);

@@ -27,8 +27,25 @@ function shellTokens(command) {
   let quote = "";
   let doubleQuoteSubstitution = null;
   let doubleQuoteSubstitutionDepth = 0;
+  let caseDepth = 0;
+  let caseAwaitingIn = false;
+  let casePattern = false;
   let escaped = false;
   const flush = () => {
+    if (word && doubleQuoteSubstitution === "paren") {
+      if (word === "case") {
+        caseDepth += 1;
+        caseAwaitingIn = true;
+        casePattern = false;
+      } else if (caseDepth > 0 && caseAwaitingIn && word === "in") {
+        caseAwaitingIn = false;
+        casePattern = true;
+      } else if (caseDepth > 0 && word === "esac") {
+        caseDepth -= 1;
+        caseAwaitingIn = false;
+        casePattern = false;
+      }
+    }
     if (word) tokens.push({ kind: "word", value: word });
     word = "";
     wordStarted = false;
@@ -86,10 +103,17 @@ function shellTokens(command) {
     } else if (doubleQuoteSubstitution === "paren" && char === ")") {
       flush();
       tokens.push({ kind: "separator" });
-      doubleQuoteSubstitutionDepth -= 1;
-      if (doubleQuoteSubstitutionDepth === 0) {
-        doubleQuoteSubstitution = null;
-        quote = '"';
+      if (doubleQuoteSubstitutionDepth === 1 && caseDepth > 0 && casePattern) {
+        casePattern = false;
+      } else {
+        doubleQuoteSubstitutionDepth -= 1;
+        if (doubleQuoteSubstitutionDepth === 0) {
+          doubleQuoteSubstitution = null;
+          caseDepth = 0;
+          caseAwaitingIn = false;
+          casePattern = false;
+          quote = '"';
+        }
       }
     } else if (doubleQuoteSubstitution === "backtick" && char === "`") {
       flush();
@@ -111,6 +135,7 @@ function shellTokens(command) {
     } else if (char === ";" || char === "|" || char === "&" || char === "(" || char === ")" || char === "{" || char === "}" || char === "`") {
       flush();
       tokens.push({ kind: "separator" });
+      if (doubleQuoteSubstitution === "paren" && doubleQuoteSubstitutionDepth === 1 && caseDepth > 0 && char === ";" && source[index + 1] === ";") casePattern = true;
     } else {
       wordStarted = true;
       word += char;
@@ -514,7 +539,7 @@ function commandPrefixAllows(tokens, index) {
     }
     if (launcher === "xargs") {
       cursor += 1;
-      const optionsWithArguments = new Set(["-a", "--arg-file", "-d", "--delimiter", "-E", "--eof", "-I", "--replace", "-L", "--max-lines", "-n", "--max-args", "-P", "--max-procs", "-s", "--max-chars"]);
+      const optionsWithArguments = new Set(["-a", "--arg-file", "-d", "--delimiter", "-E", "-I", "--replace", "-L", "--max-lines", "-n", "--max-args", "-P", "--max-procs", "-s", "--max-chars"]);
       while (cursor < tokens.length && tokens[cursor].kind === "word") {
         const value = tokens[cursor].value;
         if (value === "--") {
