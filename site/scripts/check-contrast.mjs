@@ -57,6 +57,38 @@ function parseRules(source) {
 }
 
 const rules = parseRules(css);
+const interactionSubjects = [
+  '.global-nav a', '.header-cta', '.button-primary', '.text-link', '.promise-card', '.scenario-card',
+  '.card-number', '.scenario-number', '.start-callout', '.nav-group a', '.prev-next a', '.prev-next span',
+  '.skip-link', '.terminal a',
+];
+const modeledPaintSelectors = new Set([
+  '.skip-link', '.global-nav a:hover', '.header-cta:hover', '.button-primary', '.button-primary:hover',
+  '.text-link', '.text-link:hover', '.promise-card', '.promise-card:hover', '.promise-card p', '.card-number',
+  '.scenario-card', '.scenario-card:hover', '.scenario-card p', '.scenario-number', '.start-callout',
+  '.start-callout h2 em', '.start-callout p', '.start-callout .button', '.start-callout .button:hover',
+  '.start-callout a:focus-visible', '.start-callout button:focus-visible', '.nav-group a', '.nav-group a:hover',
+  '.nav-group a.active', '.prev-next a', '.prev-next a:hover', '.prev-next span', '.terminal a',
+  '.terminal a:focus-visible',
+]);
+function assertNoCompetingPaint(ruleSet) {
+  for (const rule of ruleSet) {
+    const paintDeclarations = rule.declarationList.filter(([property]) => ['color', 'background', 'background-color', 'outline', 'outline-color', 'opacity'].includes(property));
+    const hasPaint = paintDeclarations.length > 0;
+    if (!hasPaint) continue;
+    for (const selector of rule.selectors) {
+      if (!interactionSubjects.some((subject) => selector.includes(subject))) continue;
+      if (paintDeclarations.some(([, propertyValue]) => propertyValue.includes('!important'))) {
+        throw new Error(`Interaction paint does not support !important: ${selector}`);
+      }
+      if (!modeledPaintSelectors.has(selector)) {
+        throw new Error(`Unmodeled competing interaction paint: ${selector}`);
+      }
+    }
+  }
+}
+assertNoCompetingPaint(rules);
+
 let activeViewportWidth = Number.POSITIVE_INFINITY;
 function mediaMatches(query, scheme) {
   const features = [...query.matchAll(/\(([^)]+)\)/g)].map((match) => match[1].trim());
@@ -393,6 +425,14 @@ if (contrast(
 activeViewportWidth = 620;
 if (schemeVariables(variableMediaFixture, 'light')['--interactive-hover'] !== 'var(--paper)') {
   throw new Error('Variable self-check failed to apply the narrow custom property override');
+}
+
+const competingSelectorFixture = parseRules(`${css}\n.hero-actions .text-link { color: #777; }`);
+try {
+  assertNoCompetingPaint(competingSelectorFixture);
+  throw new Error('Competing-selector self-check failed to reject contextual interaction paint');
+} catch (error) {
+  if (!error.message.startsWith('Unmodeled competing interaction paint')) throw error;
 }
 
 const results = [];
