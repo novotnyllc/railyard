@@ -71,6 +71,14 @@ function declaration(ruleSet, selector, property, scheme) {
   return result;
 }
 
+function primaryButtonForeground(ruleSet, scheme) {
+  try {
+    return declaration(ruleSet, '.button-primary:hover', 'color', scheme);
+  } catch {
+    return declaration(ruleSet, '.button-primary', 'color', scheme);
+  }
+}
+
 const overrideFixture = parseRules(`${css}\n.text-link:hover { color: #777; }`);
 if (declaration(overrideFixture, '.text-link:hover', 'color', 'light') !== '#777') {
   throw new Error('Cascade self-check failed to detect a later interaction override');
@@ -102,6 +110,18 @@ function contrast(foreground, background) {
   return (values[0] + 0.05) / (values[1] + 0.05);
 }
 
+const primaryButtonOverrideFixture = parseRules(`${css}\n.button-primary:hover { color: #777; }`);
+if (primaryButtonForeground(primaryButtonOverrideFixture, 'light') !== '#777') {
+  throw new Error('Cascade self-check failed to select a later primary-button hover foreground');
+}
+const primaryButtonOverrideRatio = contrast(
+  color(light, primaryButtonForeground(primaryButtonOverrideFixture, 'light')),
+  color(light, declaration(primaryButtonOverrideFixture, '.button-primary:hover', 'background', 'light')),
+);
+if (primaryButtonOverrideRatio >= 4.5) {
+  throw new Error('Cascade self-check failed to make a low-contrast primary-button hover foreground fail');
+}
+
 function color(scheme, expression) {
   const variable = expression.match(/^var\((--[\w-]+)\)$/)?.[1];
   const result = variable ? scheme[variable] : expression;
@@ -123,7 +143,7 @@ function outline(schemeName, scheme, selector) {
 const pairs = [
   ['hover: global navigation', (name, scheme) => color(scheme, declaration(rules, '.global-nav a:hover', 'color', name)), (name, scheme) => scheme['--ground']],
   ['hover: header call to action', (name, scheme) => color(scheme, declaration(rules, '.header-cta:hover', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.header-cta:hover', 'background', name))],
-  ['hover: primary button', (name, scheme) => color(scheme, declaration(rules, '.button-primary', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.button-primary:hover', 'background', name))],
+  ['hover: primary button', (name, scheme) => color(scheme, primaryButtonForeground(rules, name)), (name, scheme) => color(scheme, declaration(rules, '.button-primary:hover', 'background', name))],
   ['hover: text link', (name, scheme) => color(scheme, declaration(rules, '.text-link:hover', 'color', name)), (name, scheme) => scheme['--ground']],
   ['hover: card heading', (name, scheme) => scheme['--ink'], (name, scheme) => color(scheme, declaration(rules, '.promise-card:hover', 'background', name))],
   ['hover: card body', (name, scheme) => color(scheme, declaration(rules, '.promise-card p', 'color', name)), (name, scheme) => color(scheme, declaration(rules, '.promise-card:hover', 'background', name))],
