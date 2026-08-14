@@ -204,9 +204,10 @@ export function claudeIdentitySatisfied(model, observed) {
   return minimumGenerationSatisfied(model, observed);
 }
 
-export function configuredCandidates(catalog, request, state, now, policyDigest, { trustedTransportAttestor, fixedReceiptProducers } = {}) {
+export function configuredCandidates(catalog, request, state, now, policyDigest, { trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers } = {}) {
   const roleRule = catalog.roles[request.role];
   if (!roleRule) return [{ ok: false, reason: "role_unconfigured", alias: null }];
+  const runtime = fixedRuntimeDecision(trustedRuntimeAttestor);
   const output = [];
   for (let tierIndex = 0; tierIndex < roleRule.tiers.length; tierIndex += 1) {
     const tier = roleRule.tiers[tierIndex];
@@ -321,9 +322,18 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         output.push({ ok: false, alias, tierIndex, position, reason: "claude_identity_mismatch" });
         continue;
       }
-      if (carrier.runtimeVerifiedOnly && !capability) {
-        output.push({ ok: false, alias, tierIndex, position, reason: "runtime_attestation_required" });
-        continue;
+      if (carrier.runtimeVerifiedOnly) {
+        const terra = runtime?.terra;
+        const runtimeVerified = runtime
+          && ["unavailable", "unselectable"].includes(runtime.lunaAvailability)
+          && terra?.verified === true
+          && terra.model === model.requestedModel
+          && terra.effort === effort
+          && (!capability.observedModel || capability.observedModel === "unknown" || capability.observedModel === terra.model);
+        if (!capability || !runtimeVerified) {
+          output.push({ ok: false, alias, tierIndex, position, reason: "runtime_attestation_required" });
+          continue;
+        }
       }
       if (carrier.modelFamily !== "claude" && !minimumGenerationSatisfied(model, observedModel || model.requestedModel)) {
         output.push({ ok: false, alias, tierIndex, position, reason: "minimum_generation_unmet" });

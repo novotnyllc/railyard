@@ -290,7 +290,7 @@ export function resolveInternal(request, { catalog = null, state = createEmptySt
     candidate = defaultRoute(request, { trustedRuntimeAttestor, trustedTransportAttestor });
     if (!candidate.ok) return error(candidate.reason, { policy: clone(DEFAULT_POLICY) });
   } else {
-    const candidates = configuredCandidates(catalog, request, state, now, catalogValidation.policy.digest, { trustedTransportAttestor, fixedReceiptProducers });
+    const candidates = configuredCandidates(catalog, request, state, now, catalogValidation.policy.digest, { trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers });
     const eligible = candidates.filter((item) => item.ok).sort(candidateSort);
     rejected = candidates.filter((item) => !item.ok).map((item) => ({ modelAlias: item.alias, reason: item.reason }));
     if (eligible.length === 0) {

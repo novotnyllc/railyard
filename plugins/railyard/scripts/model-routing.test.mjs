@@ -1559,6 +1559,34 @@ function lunaAvailableAttestor() {
   });
 }
 
+test("configured Terra selection requires the fixed runtime attestor", () => {
+  const policy = ownerPolicy();
+  const requestFields = {
+    role: "implementation.medium",
+    harness: "codex",
+    adapterId: "codex-task-create",
+    dispatchKind: "task_create",
+  };
+  const state = attestedCapability(policy, {
+    carrierId: "codex-terra-runtime",
+    adapterId: "codex-task-create",
+    accountScope: "codex-sub",
+    observedModel: "unknown",
+  });
+  const untrusted = handleRequest(request("resolve", requestFields), { catalog: policy, state, now: NOW });
+  assert.equal(untrusted.response.reason, "no_eligible_route", JSON.stringify(untrusted.response));
+  assert.equal(untrusted.response.rejectedAlternatives.find((item) => item.modelAlias === "terra")?.reason, "runtime_attestation_required");
+
+  const trusted = handleRequest(request("resolve", requestFields), {
+    catalog: policy,
+    state,
+    now: NOW,
+    trustedRuntimeAttestor: terraAttestor(),
+  });
+  assert.equal(trusted.response.reason, "resolved", JSON.stringify(trusted.response));
+  assert.equal(trusted.response.decision.selected.modelAlias, "terra");
+});
+
 test("implementationEngine follows the implementation role, not one carrier descriptor", () => {
   // No-config default (the public model-routing.mjs CLI supplies no runtime
   // attestor): Codex availability is assumed, not proven, so delivery must be

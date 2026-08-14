@@ -137,10 +137,13 @@ function codexExecDispatches(args) {
         label = value.slice(value.indexOf("=") + 1);
       }
     }
+    const clippedModel = clip(model);
+    const clippedEffort = clip(effort, 20);
     dispatches.push({
-      model: clip(model) || "unknown",
-      effort: clip(effort, 20) || "unknown",
+      model: clippedModel,
+      effort: clippedEffort,
       label: clip(label),
+      missing: [!clippedModel && "model", !clippedEffort && "reasoning_effort"].filter(Boolean),
     });
   }
   return dispatches;
@@ -154,23 +157,24 @@ function armInputTimer() {
   if (inputTimer) clearTimeout(inputTimer);
   inputTimer = setTimeout(() => {
     handleInput();
-    process.exit(process.exitCode || 0);
+    if (inputHandled) process.exit(process.exitCode || 0);
   }, 50);
 }
 process.stdin.on("data", (c) => {
   raw += c;
   armInputTimer();
 });
-function handleInput() {
+function handleInput({ final = false } = {}) {
   if (inputHandled) return;
-  inputHandled = true;
   if (inputTimer) clearTimeout(inputTimer);
   let input;
   try {
     input = JSON.parse(raw);
   } catch {
+    if (final) inputHandled = true;
     return; // malformed input: allow
   }
+  inputHandled = true;
   const tool = String(input.tool_name || "");
   const args = input.tool_input && typeof input.tool_input === "object"
     ? input.tool_input
@@ -303,6 +307,15 @@ function handleInput() {
   if (["Bash", "shell", "local_shell", "exec_command", "unified_exec"].includes(tool)) {
     try {
       for (const dispatch of codexExecDispatches(args)) {
+        if (dispatch.missing.length) {
+          block(
+            "[railyard] Dispatch refused: codex exec must set explicit " +
+              dispatch.missing.join(" and ") +
+              " (no silent inheritance of the session tier). Retry with " +
+              "--model and model_reasoning_effort set.",
+          );
+          return;
+        }
         record({
           event: "dispatch",
           harness: "codex",
@@ -319,8 +332,8 @@ function handleInput() {
   }
   // Any other tool: allow.
 }
-process.stdin.on("end", handleInput);
+process.stdin.on("end", () => handleInput({ final: true }));
 // Some hook runners keep stdin open after delivering the payload. Never let
-// that turn a fail-open hook into a shell deadlock; parse what arrived and
-// exit within the dispatch budget. The timer is re-armed after every chunk so
-// a slow JSON write cannot be parsed as a partial request.
+// that turn a fail-open hook into a shell deadlock; a complete payload is
+// parsed and exits within the dispatch budget. Incomplete JSON stays open
+// until the next chunk or stdin end, so a gap cannot bypass the gate.

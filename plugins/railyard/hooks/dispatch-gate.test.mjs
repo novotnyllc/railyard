@@ -64,7 +64,7 @@ function runWithOpenStdin(input) {
   });
 }
 
-function runWithChunkedOpenStdin(input) {
+function runWithChunkedOpenStdin(input, delayMs = 10) {
   const home = fixtureCodexHome(null);
   const logs = mkdtempSync(path.join(tmpdir(), "gate-chunked-log-"));
   const child = spawn(process.execPath, [script], {
@@ -77,7 +77,7 @@ function runWithChunkedOpenStdin(input) {
   const raw = JSON.stringify(input);
   const midpoint = Math.ceil(raw.length / 2);
   child.stdin.write(raw.slice(0, midpoint));
-  const secondChunk = setTimeout(() => child.stdin.write(raw.slice(midpoint)), 10);
+  const secondChunk = setTimeout(() => child.stdin.write(raw.slice(midpoint)), delayMs);
   return new Promise((resolve, reject) => {
     child.on("error", reject);
     child.on("close", (code) => {
@@ -301,7 +301,7 @@ test("Bash-launched codex exec records the actual model, reasoning effort, and l
   );
 });
 
-test("codex exec parsing supports Codex shell aliases and fails open when flags are absent", () => {
+test("codex exec parsing requires explicit model and effort", () => {
   const parsed = run({
     tool_name: "exec_command",
     tool_input: { cmd: "/usr/local/bin/codex exec --model=glm-5.2 --reasoning_effort=high" },
@@ -311,9 +311,10 @@ test("codex exec parsing supports Codex shell aliases and fails open when flags 
   assert.equal(parsed.log[0].reasoning_effort, "high");
 
   const incomplete = run({ tool_name: "shell", tool_input: { command: "codex exec 'no explicit flags'" } });
-  assert.equal(incomplete.code, 0);
-  assert.equal(incomplete.log[0].model, "unknown");
-  assert.equal(incomplete.log[0].effort, "unknown");
+  assert.equal(incomplete.code, 2);
+  assert.match(incomplete.err, /model/);
+  assert.match(incomplete.err, /reasoning_effort/);
+  assert.deepEqual(incomplete.log, []);
 });
 
 test("codex exec parsing recognizes environment and command wrappers", () => {
@@ -377,6 +378,18 @@ test("the Bash hook waits for a chunked JSON payload before parsing", async () =
     session_id: "sess-chunked-stdin",
     tool_input: { cmd: "codex exec -m gpt-5.6-luna -c model_reasoning_effort=max" },
   });
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+  assert.equal(r.log[0].model, "gpt-5.6-luna");
+  assert.equal(r.log[0].reasoning_effort, "max");
+});
+
+test("the Bash hook does not finalize an incomplete payload after a timer gap", async () => {
+  const r = await runWithChunkedOpenStdin({
+    tool_name: "exec_command",
+    session_id: "sess-gapped-chunked-stdin",
+    tool_input: { cmd: "codex exec -m gpt-5.6-luna -c model_reasoning_effort=max" },
+  }, 80);
   assert.equal(r.code, 0);
   assert.equal(r.err, "");
   assert.equal(r.log[0].model, "gpt-5.6-luna");
