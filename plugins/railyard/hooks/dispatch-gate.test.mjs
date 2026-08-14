@@ -372,6 +372,28 @@ test("codex exec parsing recognizes standard process launchers", () => {
   }
 });
 
+test("codex exec parsing recognizes argv shell payloads", () => {
+  for (const input of [
+    { tool_name: "shell", tool_input: { command: ["bash", "-lc", "codex exec 'no explicit flags'"] } },
+    { tool_name: "local_shell", tool_input: { command: ["bash", "-lc", "result=\"$(codex exec 'no explicit flags')\""] } },
+    { tool_name: "unified_exec", tool_input: { input: ["bash", "-lc", "codex exec 'no explicit flags'"] } },
+  ]) {
+    const refused = run(input);
+    assert.equal(refused.code, 2, JSON.stringify(input));
+    assert.match(refused.err, /model/, JSON.stringify(input));
+    assert.match(refused.err, /reasoning_effort/, JSON.stringify(input));
+    assert.deepEqual(refused.log, [], JSON.stringify(input));
+  }
+
+  const allowed = run({
+    tool_name: "shell",
+    tool_input: { command: ["codex", "exec", "--model=gpt-5.6-luna", "--reasoning-effort=max"] },
+  });
+  assert.equal(allowed.code, 0);
+  assert.equal(allowed.log[0].model, "gpt-5.6-luna");
+  assert.equal(allowed.log[0].reasoning_effort, "max");
+});
+
 test("codex exec parsing ignores comments, prose, and later shell commands", () => {
   const noise = run({
     tool_name: "Bash",

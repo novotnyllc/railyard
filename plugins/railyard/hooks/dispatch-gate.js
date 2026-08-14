@@ -163,10 +163,37 @@ function commandPrefixAllows(tokens, index) {
   return cursor === index;
 }
 
+function commandTokens(args) {
+  const command = args.command ?? args.cmd ?? args.input;
+  if (typeof command === "string") return shellTokens(command);
+  if (!Array.isArray(command)) return [];
+  const values = command.filter((value) => typeof value === "string");
+  let cursor = 0;
+  while (cursor < values.length) {
+    const launcher = basename(values[cursor]).toLowerCase();
+    if (launcher === "env") {
+      cursor += 1;
+      while (cursor < values.length && (values[cursor] === "--" || values[cursor].startsWith("-") || isAssignment(values[cursor]))) cursor += 1;
+      continue;
+    }
+    if (launcher === "command") {
+      cursor += 1;
+      continue;
+    }
+    break;
+  }
+  const launcher = basename(values[cursor] || "").toLowerCase();
+  if (["bash", "sh", "zsh", "dash", "ksh", "fish"].includes(launcher)) {
+    for (let index = cursor + 1; index < values.length - 1; index += 1) {
+      if (values[index] === "--") return shellTokens(values[index + 1]);
+      if (values[index] === "--command" || /^-[^-]*c$/.test(values[index])) return shellTokens(values[index + 1]);
+    }
+  }
+  return values.map((value) => ({ kind: "word", value }));
+}
+
 function codexExecDispatches(args) {
-  const command = args.command ?? args.cmd;
-  if (typeof command !== "string") return [];
-  const tokens = shellTokens(command);
+  const tokens = commandTokens(args);
   const dispatches = [];
   for (let index = 0; index < tokens.length - 1; index += 1) {
     const token = tokens[index];
