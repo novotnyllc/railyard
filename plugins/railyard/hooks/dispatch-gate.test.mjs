@@ -375,6 +375,7 @@ test("codex exec parsing recognizes shell substitutions and groups", () => {
     "result=\"`codex exec 'no explicit flags'`\"",
     "echo \"$(echo $(echo x); codex exec 'no explicit flags')\"",
     "echo \"$( (echo x); codex exec 'no explicit flags' )\"",
+    String.raw`echo "$(echo \); codex exec 'no explicit flags')"`,
     "eval \"codex exec 'no explicit flags'\"",
     "''#notcomment; codex exec 'no explicit flags'",
   ]) {
@@ -457,6 +458,7 @@ test("codex exec parsing recognizes string shell wrappers", () => {
     `timeout 60 bash -c "codex exec 'no explicit flags'"`,
     `nohup bash -c "codex exec 'no explicit flags'"`,
     `time bash -c "codex exec 'no explicit flags'"`,
+    "builtin command codex exec 'no explicit flags'",
     `true && bash -c "codex exec 'no explicit flags'"`,
     `printf work | xargs codex exec 'no explicit flags'`,
   ]) {

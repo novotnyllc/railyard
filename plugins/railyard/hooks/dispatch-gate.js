@@ -44,7 +44,7 @@ function shellTokens(command) {
     } else if (char === "\\") {
       wordStarted = true;
       const next = source[index + 1];
-      if (next && /[\s'"\\;|&#$`{}]/.test(next)) escaped = true;
+      if (next && /[\s'"\\;|&#$`(){}]/.test(next)) escaped = true;
       else word += char;
     } else if (quote) {
       if (quote === '"' && char === "$" && source[index + 1] === "(") {
@@ -563,6 +563,11 @@ function shellWrapperTokens(tokens, depth = 0) {
     if (launcher === "command") {
       cursor += 1;
       while (cursor < tokens.length && tokens[cursor].kind === "word" && ["-p", "--"].includes(tokens[cursor].value)) cursor += 1;
+      continue;
+    }
+    if (launcher === "builtin") {
+      if (tokens[cursor + 1]?.kind !== "word" || tokens[cursor + 1].value !== "command") break;
+      cursor += 1;
       continue;
     }
     if (launcher === "timeout") {
