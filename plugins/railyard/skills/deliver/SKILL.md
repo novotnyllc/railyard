@@ -281,9 +281,11 @@ Apply the charter's process reflex here, don't relearn it per run:
   tree, and never pause a worker to edit the shared tree — a paused worker
   rebases onto advanced main. This lane owns one integration branch that
   assembles the workers' branches into a single PR; stacked PRs are the
-  exception (`gh-stack`). Before taking ownership of a worktree or lane,
+  exception (`gh-stack`). Before taking ownership of a worktree,
   preflight-detect a live prior worker (exact-PID verified, never
-  pattern-matched) holding it; a conflict is a report, not a race.
+  pattern-matched) holding it; a conflict is a report, not a race. A thread-
+  or session-owned lane with no local PID uses that harness's own owner
+  record instead — never a pattern match.
 - **Verify, don't trust a reported green.** A green verdict requires the exact
   command, its *unmasked* process exit (`set -o pipefail` / `${PIPESTATUS}`,
   never a piped tool's exit), and that the test was *run* — a worker that

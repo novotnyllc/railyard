@@ -235,8 +235,10 @@ independent worker runs in its own worktree (`Agent isolation:"worktree"`, a
 task-owned checkout, or `EnterWorktree`) so no two lanes and the orchestrator
 share one tree — never serialize independent work on a shared tree, and never
 pause a worker so the orchestrator can edit it. Before taking ownership of a
-worktree or lane, preflight-detect a live prior worker (exact-PID verified,
-never pattern-matched) holding it; a conflict is a report, not a race.
+worktree, preflight-detect a live prior worker (exact-PID verified, never
+pattern-matched) holding it; a conflict is a report, not a race. A thread- or
+session-owned lane with no local PID uses that harness's own owner record
+instead — never a pattern match.
 Converge the workers' branches onto **one integration branch → one PR** as
 the usual end state; stacked PRs
 (`gh-stack`) are the exception where separate branches survive to review. When
