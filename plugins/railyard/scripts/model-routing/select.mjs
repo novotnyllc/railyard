@@ -50,8 +50,12 @@ export function adapterFor(request, carrier) {
   return { ok: true, adapterId, adapter };
 }
 
+function effectiveHostScope(request = {}) {
+  return request.hostScope || request.destinationScope || "local";
+}
+
 export function capabilityFor(state, { carrierId, carrier, adapterId, provider, policyDigest, request, now, positive = true }) {
-  const hostScope = request.hostScope || "local";
+  const hostScope = effectiveHostScope(request);
   const accountScope = request.accountScope || provider.account;
   for (const evidence of Object.values(state.capabilities || {})) {
     if (!isObject(evidence) || evidence.carrierId !== carrierId) continue;
@@ -156,7 +160,7 @@ export function providerAvailabilityIssue(provider, request = {}) {
   const availability = provider?.availability;
   if (availability === undefined) return null;
   if (availability.kind !== "codex_config") return "provider_unavailable";
-  const hostScope = request.hostScope || request.destinationScope || "local";
+  const hostScope = effectiveHostScope(request);
   if (hostScope !== "local") return null;
   try {
     const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");

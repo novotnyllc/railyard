@@ -89,6 +89,8 @@ function basename(value) {
   return value.split(/[\\/]/).pop();
 }
 
+const SHELL_CONTROL_WORDS = new Set(["if", "then", "elif", "else", "while", "until", "do", "!"]);
+
 function heredocSpecs(line) {
   const specs = [];
   let quote = "";
@@ -159,6 +161,10 @@ function commandPrefixAllows(tokens, index) {
   while (cursor < index) {
     while (cursor < index && tokens[cursor].kind === "word" && isAssignment(tokens[cursor].value)) cursor += 1;
     if (cursor >= index || tokens[cursor].kind !== "word") break;
+    if (SHELL_CONTROL_WORDS.has(tokens[cursor].value)) {
+      cursor += 1;
+      continue;
+    }
     const launcher = basename(tokens[cursor].value);
     if (launcher === "env") {
       cursor += 1;

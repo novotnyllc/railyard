@@ -483,7 +483,7 @@ test("the owner catalog keeps subscription meters separate and gates GLM on Code
     const remote = handleRequest(request("resolve", {
       role: "implementation.cross-harness",
       harness: "codex",
-      hostScope: "runner-2",
+      destinationScope: "runner-2",
       accountScope: "zai-credits",
       crossHarnessReason: "Use the remote Codex-family GLM destination for this bounded task.",
       adapterId: "configured-profile-task-create",
@@ -498,6 +498,7 @@ test("the owner catalog keeps subscription meters separate and gates GLM on Code
     });
     assert.equal(remote.response.reason, "resolved", JSON.stringify(remote.response));
     assert.equal(remote.response.decision.selected.modelAlias, "glm");
+    assert.equal(remote.response.decision.binding.hostScope, "runner-2");
   } finally {
     if (previous === undefined) delete process.env.CODEX_HOME;
     else process.env.CODEX_HOME = previous;

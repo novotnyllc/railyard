@@ -426,6 +426,22 @@ test("codex exec parsing recognizes brace groups and oversized payloads", () => 
   }
 });
 
+test("codex exec parsing recognizes shell control words", () => {
+  for (const command of [
+    "if codex exec 'no explicit flags'; then true; fi",
+    "if true; then codex exec 'no explicit flags'; fi",
+    "while codex exec 'no explicit flags'; do break; done",
+    "until codex exec 'no explicit flags'; do break; done",
+    "! codex exec 'no explicit flags'",
+  ]) {
+    const refused = run({ tool_name: "Bash", tool_input: { command } });
+    assert.equal(refused.code, 2, command);
+    assert.match(refused.err, /model/, command);
+    assert.match(refused.err, /reasoning_effort/, command);
+    assert.deepEqual(refused.log, [], command);
+  }
+});
+
 test("codex exec parsing ignores comments, prose, and later shell commands", () => {
   const noise = run({
     tool_name: "Bash",
