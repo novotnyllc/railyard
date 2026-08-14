@@ -110,6 +110,15 @@ for (const selector of ['a:focus-visible', 'button:focus-visible']) {
   }
 }
 
+for (const selector of expectedSelectors) {
+  try {
+    declaration(rules, selector, 'opacity', 'light');
+    throw new Error(`Interaction opacity requires an explicit compositing model: ${selector}`);
+  } catch (error) {
+    if (error.message.startsWith('Interaction opacity')) throw error;
+  }
+}
+
 const overrideFixture = parseRules(`${css}\n.text-link:hover { color: #777; }`);
 if (declaration(overrideFixture, '.text-link:hover', 'color', 'light') !== '#777') {
   throw new Error('Cascade self-check failed to detect a later interaction override');
@@ -179,10 +188,10 @@ function outline(schemeName, scheme, selector) {
 }
 
 const pairs = [
-  ['hover: global navigation', (name, scheme) => color(scheme, declaration(rules, '.global-nav a:hover', 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.global-nav a:hover'], name, 'var(--ground)')), (name, scheme) => scheme['--ground']],
+  ['hover: global navigation', (name, scheme) => color(scheme, declaration(rules, '.global-nav a:hover', 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.global-nav a:hover', '.global-nav a'], name, 'var(--ground)')), (name, scheme) => scheme['--ground']],
   ['hover: header call to action', (name, scheme) => color(scheme, declaration(rules, '.header-cta:hover', 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.header-cta:hover'], name)), (name, scheme) => scheme['--ground']],
   ['hover: primary button', (name, scheme) => color(scheme, primaryButtonForeground(rules, name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.button-primary:hover'], name)), (name, scheme) => scheme['--ground']],
-  ['hover: text link', (name, scheme) => color(scheme, declaration(rules, '.text-link:hover', 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.text-link:hover'], name, 'var(--ground)')), (name, scheme) => scheme['--ground']],
+  ['hover: text link', (name, scheme) => color(scheme, declaration(rules, '.text-link:hover', 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.text-link:hover', '.text-link'], name, 'var(--ground)')), (name, scheme) => scheme['--ground']],
   ['hover: promise heading', (name, scheme) => color(scheme, firstDeclaration(rules, ['.promise-card h3', '.promise-card:hover', '.promise-card'], 'color', name, 'var(--ink)')), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.promise-card:hover'], name)), (name, scheme) => scheme['--paper']],
   ['hover: promise body', (name, scheme) => color(scheme, declaration(rules, '.promise-card p', 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.promise-card:hover'], name)), (name, scheme) => scheme['--paper']],
   ['hover: promise accent', (name, scheme) => color(scheme, declaration(rules, '.card-number', 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.promise-card:hover'], name)), (name, scheme) => scheme['--paper']],
@@ -194,7 +203,7 @@ const pairs = [
   ['hover: previous/next label', (name, scheme) => color(scheme, declaration(rules, '.prev-next span', 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.prev-next a:hover'], name)), (name, scheme) => scheme['--ground']],
   ['focus: global outline', (name, scheme) => outline(name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
   ['focus: card outline', (name, scheme) => outline(name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--paper'], (name, scheme) => scheme['--paper']],
-  ['focus: filled button outline', (name, scheme) => outline(name, scheme, 'button:focus-visible'), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
+  ['focus: filled button outline', (name, scheme) => outline(name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
   ['focus: skip link text', (name, scheme) => color(scheme, firstDeclaration(rules, ['.skip-link:focus', '.skip-link'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.skip-link:focus', '.skip-link'], name)), (name, scheme) => scheme['--ground']],
   ['focus: start callout link text', (name, scheme) => color(scheme, firstDeclaration(rules, ['.start-callout a:focus-visible', '.start-callout .button'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout a:focus-visible', '.start-callout .button'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
   ['focus: start callout button text', (name, scheme) => color(scheme, firstDeclaration(rules, ['.start-callout button:focus-visible', '.start-callout .button'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout button:focus-visible', '.start-callout .button'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
@@ -213,7 +222,7 @@ if (contrast(
 const navOverrideFixture = parseRules(`${css}\n.global-nav a:hover { color: var(--ink); background: var(--ink); }`);
 if (contrast(
   color(light, declaration(navOverrideFixture, '.global-nav a:hover', 'color', 'light')),
-  color(light, firstDeclaration(navOverrideFixture, ['.global-nav a:hover'], 'background', 'light', 'var(--ground)')),
+  color(light, backgroundDeclaration(navOverrideFixture, ['.global-nav a:hover', '.global-nav a'], 'light', 'var(--ground)')),
   light['--ground'],
 ) >= 4.5) {
   throw new Error('Navigation self-check failed to make equal hover colors fail');
@@ -222,7 +231,7 @@ if (contrast(
 const skipOverrideFixture = parseRules(`${css}\n.skip-link:focus { color: var(--ink); background: var(--ink); }`);
 if (contrast(
   color(light, firstDeclaration(skipOverrideFixture, ['.skip-link:focus', '.skip-link'], 'color', 'light')),
-  color(light, firstDeclaration(skipOverrideFixture, ['.skip-link:focus', '.skip-link'], 'background', 'light')),
+  color(light, backgroundDeclaration(skipOverrideFixture, ['.skip-link:focus', '.skip-link'], 'light')),
   light['--ground'],
 ) >= 4.5) {
   throw new Error('Skip-link self-check failed to make equal focus colors fail');
@@ -238,7 +247,7 @@ for (const [schemeName, scheme] of [['light', light], ['dark', dark]]) {
   }
 
   const navColor = color(scheme, declaration(rules, '.nav-group a:hover', 'color', schemeName));
-  const authoredNavBackground = color(scheme, declaration(rules, '.nav-group a:hover', 'background', schemeName));
+  const authoredNavBackground = color(scheme, backgroundDeclaration(rules, ['.nav-group a:hover'], schemeName));
   results.push({ scheme: schemeName, state: 'hover: sidebar link', ratio: contrast(navColor, authoredNavBackground, scheme['--ground']) });
 }
 
