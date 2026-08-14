@@ -89,6 +89,8 @@ function schemeVariables(ruleSet, scheme) {
 
 let light = schemeVariables(rules, 'light');
 let dark = schemeVariables(rules, 'dark');
+const breakpoints = [...css.matchAll(/\((?:min|max)-width:\s*(\d+)px\)/g)].map((match) => Number(match[1]));
+const viewportWidths = [...new Set([320, 1440, ...breakpoints.flatMap((width) => [width - 1, width, width + 1])])].filter((width) => width > 0).sort((a, b) => a - b);
 
 function declaration(ruleSet, selector, property, scheme) {
   let result;
@@ -142,26 +144,35 @@ function terminalForeground(ruleSet, scheme) {
 }
 
 for (const selector of ['a:focus-visible', 'button:focus-visible']) {
-  for (const property of ['color', 'background', 'background-color']) {
-    try {
-      declaration(rules, selector, property, 'light');
-      throw new Error(`Global focus paint must be modeled per surface: ${selector} ${property}`);
-    } catch (error) {
-      if (error.message.startsWith('Global focus paint')) throw error;
+  for (const scheme of ['light', 'dark']) {
+    for (const viewportWidth of viewportWidths) {
+      activeViewportWidth = viewportWidth;
+      for (const property of ['color', 'background', 'background-color']) {
+        try {
+          declaration(rules, selector, property, scheme);
+          throw new Error(`Global focus paint must be modeled per surface: ${selector} ${property} (${scheme}, ${viewportWidth}px)`);
+        } catch (error) {
+          if (error.message.startsWith('Global focus paint')) throw error;
+        }
+      }
     }
   }
 }
 
 for (const selector of expectedSelectors) {
   for (const scheme of ['light', 'dark']) {
-    try {
-      declaration(rules, selector, 'opacity', scheme);
-      throw new Error(`Interaction opacity requires an explicit compositing model: ${selector} (${scheme})`);
-    } catch (error) {
-      if (error.message.startsWith('Interaction opacity')) throw error;
+    for (const viewportWidth of viewportWidths) {
+      activeViewportWidth = viewportWidth;
+      try {
+        declaration(rules, selector, 'opacity', scheme);
+        throw new Error(`Interaction opacity requires an explicit compositing model: ${selector} (${scheme}, ${viewportWidth}px)`);
+      } catch (error) {
+        if (error.message.startsWith('Interaction opacity')) throw error;
+      }
     }
   }
 }
+activeViewportWidth = Number.POSITIVE_INFINITY;
 
 const overrideFixture = parseRules(`${css}\n.text-link:hover { color: #777; }`);
 if (declaration(overrideFixture, '.text-link:hover', 'color', 'light') !== '#777') {
@@ -358,8 +369,6 @@ if (schemeVariables(variableMediaFixture, 'light')['--interactive-hover'] !== 'v
 }
 
 const results = [];
-const breakpoints = [...css.matchAll(/\((?:min|max)-width:\s*(\d+)px\)/g)].map((match) => Number(match[1]));
-const viewportWidths = [...new Set([320, 1440, ...breakpoints.flatMap((width) => [width - 1, width, width + 1])])].filter((width) => width > 0).sort((a, b) => a - b);
 for (const schemeName of ['light', 'dark']) {
   const viewportResults = [];
   for (const viewportWidth of viewportWidths) {
