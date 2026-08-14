@@ -49,24 +49,44 @@ function matchingBrace(source, open) {
 }
 
 function parseRules(source) {
-  const darkOpen = source.indexOf('{', source.indexOf('@media (prefers-color-scheme: dark)'));
-  const darkEnd = matchingBrace(source, darkOpen);
+  const mediaBlocks = [...source.matchAll(/@media\s*([^{}]+)\{/g)].map((match) => {
+    const open = source.indexOf('{', match.index);
+    return { query: match[1].trim(), open, end: matchingBrace(source, open) };
+  });
   return [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((match) => {
     const declarationList = match[2].split(';').map((entry) => entry.split(/:(.*)/s).slice(0, 2).map((part) => part.trim())).filter(([property, propertyValue]) => property && propertyValue);
     return {
       selectors: match[1].split(',').map((selector) => selector.trim()),
       declarationList,
       declarations: Object.fromEntries(declarationList),
-      dark: match.index > darkOpen && match.index < darkEnd,
+      media: mediaBlocks.filter(({ open, end }) => match.index > open && match.index < end).map(({ query }) => query),
     };
   });
 }
 
 const rules = parseRules(css);
+let activeViewportWidth = Number.POSITIVE_INFINITY;
+function mediaMatches(query, scheme) {
+  const features = [...query.matchAll(/\(([^)]+)\)/g)].map((match) => match[1].trim());
+  const residue = query.replace(/\([^)]+\)/g, '').replace(/\band\b/gi, '').replace(/\bscreen\b/gi, '').trim();
+  if (residue) throw new Error(`Unsupported media condition: ${query}`);
+  return features.every((feature) => {
+    if (feature === 'prefers-color-scheme: dark') return scheme === 'dark';
+    if (feature === 'prefers-color-scheme: light') return scheme === 'light';
+    const width = feature.match(/^(min|max)-width:\s*(\d+)px$/);
+    if (width) return width[1] === 'min' ? activeViewportWidth >= Number(width[2]) : activeViewportWidth <= Number(width[2]);
+    throw new Error(`Unsupported media feature: ${feature}`);
+  });
+}
+
+function ruleApplies(rule, scheme) {
+  return rule.media.every((query) => mediaMatches(query, scheme));
+}
+
 function declaration(ruleSet, selector, property, scheme) {
   let result;
   for (const rule of ruleSet) {
-    if ((scheme === 'dark' || !rule.dark) && rule.selectors.includes(selector) && rule.declarations[property]) {
+    if (rule.selectors.includes(selector) && ruleApplies(rule, scheme) && rule.declarations[property]) {
       result = rule.declarations[property];
     }
   }
@@ -88,7 +108,7 @@ function firstDeclaration(ruleSet, selectors, property, scheme, fallback) {
 function lastPropertyDeclaration(ruleSet, selector, properties, scheme) {
   let result;
   for (const rule of ruleSet) {
-    if ((scheme === 'dark' || !rule.dark) && rule.selectors.includes(selector)) {
+    if (rule.selectors.includes(selector) && ruleApplies(rule, scheme)) {
       for (const [property, propertyValue] of rule.declarationList) {
         if (properties.includes(property)) result = { property, value: propertyValue };
       }
@@ -274,22 +294,52 @@ if (contrast(
   throw new Error('Terminal focus self-check failed to make equal text and background colors fail');
 }
 
-const results = [];
-for (const [schemeName, scheme] of [['light', light], ['dark', dark]]) {
-  for (const [label, foregroundValue, backgroundValue, surfaceValue] of pairs) {
-    const foreground = foregroundValue(schemeName, scheme);
-    const background = backgroundValue(schemeName, scheme);
-    const surface = surfaceValue(schemeName, scheme);
-    results.push({ scheme: schemeName, state: label, ratio: contrast(foreground, background, surface) });
-  }
-
-  const navColor = color(scheme, declaration(rules, '.nav-group a:hover', 'color', schemeName));
-  const authoredNavBackground = color(scheme, backgroundDeclaration(rules, ['.nav-group a:hover'], schemeName));
-  results.push({ scheme: schemeName, state: 'hover: sidebar link', ratio: contrast(navColor, authoredNavBackground, scheme['--ground']) });
+const mediaFixture = parseRules(`${css}\n.text-link:hover { color: #777; }\n@media (max-width: 620px) { .text-link:hover { color: var(--amber-dark); } }`);
+activeViewportWidth = 1280;
+if (declaration(mediaFixture, '.text-link:hover', 'color', 'light') !== '#777') {
+  throw new Error('Media self-check failed to preserve the desktop interaction state');
+}
+activeViewportWidth = 620;
+if (declaration(mediaFixture, '.text-link:hover', 'color', 'light') !== 'var(--amber-dark)') {
+  throw new Error('Media self-check failed to apply the narrow interaction override');
+}
+const mediaFixtureWorstRatio = [620, 1280].map((viewportWidth) => {
+  activeViewportWidth = viewportWidth;
+  return contrast(
+    color(light, declaration(mediaFixture, '.text-link:hover', 'color', 'light')),
+    color(light, backgroundDeclaration(mediaFixture, ['.text-link:hover', '.text-link'], 'light', 'var(--ground)')),
+    light['--ground'],
+  );
+}).sort((a, b) => a - b)[0];
+if (mediaFixtureWorstRatio >= 4.5) {
+  throw new Error('Media self-check failed to retain a low-contrast desktop state');
 }
 
-console.log('scheme\tstate\tratio');
-for (const result of results) console.log(`${result.scheme}\t${result.state}\t${result.ratio.toFixed(2)}:1`);
+const results = [];
+const breakpoints = [...css.matchAll(/\((?:min|max)-width:\s*(\d+)px\)/g)].map((match) => Number(match[1]));
+const viewportWidths = [...new Set([320, 1440, ...breakpoints.flatMap((width) => [width - 1, width, width + 1])])].filter((width) => width > 0).sort((a, b) => a - b);
+for (const [schemeName, scheme] of [['light', light], ['dark', dark]]) {
+  const viewportResults = [];
+  for (const viewportWidth of viewportWidths) {
+    activeViewportWidth = viewportWidth;
+    for (const [label, foregroundValue, backgroundValue, surfaceValue] of pairs) {
+      const foreground = foregroundValue(schemeName, scheme);
+      const background = backgroundValue(schemeName, scheme);
+      const surface = surfaceValue(schemeName, scheme);
+      viewportResults.push({ scheme: schemeName, state: label, ratio: contrast(foreground, background, surface), viewportWidth });
+    }
+
+    const navColor = color(scheme, declaration(rules, '.nav-group a:hover', 'color', schemeName));
+    const authoredNavBackground = color(scheme, backgroundDeclaration(rules, ['.nav-group a:hover'], schemeName));
+    viewportResults.push({ scheme: schemeName, state: 'hover: sidebar link', ratio: contrast(navColor, authoredNavBackground, scheme['--ground']), viewportWidth });
+  }
+  for (const state of new Set(viewportResults.map((result) => result.state))) {
+    results.push(viewportResults.filter((result) => result.state === state).sort((a, b) => a.ratio - b.ratio)[0]);
+  }
+}
+
+console.log('scheme\tstate\tworst viewport\tratio');
+for (const result of results) console.log(`${result.scheme}\t${result.state}\t${result.viewportWidth}px\t${result.ratio.toFixed(2)}:1`);
 
 const failures = results.filter(({ ratio }) => ratio < 4.5);
 if (failures.length) {
