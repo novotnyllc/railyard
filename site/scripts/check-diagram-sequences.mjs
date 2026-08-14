@@ -1,5 +1,4 @@
 import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 
 const root = new URL('..', import.meta.url);
 const read = (relative) => readFile(new URL(relative, root), 'utf8');
