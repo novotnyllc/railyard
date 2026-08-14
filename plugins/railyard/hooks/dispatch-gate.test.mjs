@@ -358,6 +358,7 @@ test("codex exec parsing recognizes shell substitutions and groups", () => {
     "result=`codex exec 'no explicit flags'`",
     "result=\"`codex exec 'no explicit flags'`\"",
     "echo \"$(echo $(echo x); codex exec 'no explicit flags')\"",
+    "echo \"$( (echo x); codex exec 'no explicit flags' )\"",
     "eval \"codex exec 'no explicit flags'\"",
     "''#notcomment; codex exec 'no explicit flags'",
   ]) {

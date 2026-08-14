@@ -532,6 +532,7 @@ test("configured runtime candidates fail closed when the trusted attestor is inv
   for (const trustedRuntimeAttestor of [
     () => { throw new Error("attestor unavailable"); },
     () => ({}),
+    () => ({ attestorId: "railyard-runtime-attestor-v1", attestationDigest: DIGEST_A, lunaAvailability: "unknown", hostScope: "local", accountScope: "codex-sub" }),
   ]) {
     const refused = handleRequest(request("resolve", { role: "implementation", harness: "codex" }), {
       catalog: policy,
@@ -1763,6 +1764,23 @@ test("implementationEngine follows the implementation role, not one carrier desc
   assert.deepEqual(provenLuna.response.decision.implementationEngine, {
     mode: "require", target: "codex", model: "gpt-5.6-luna", source: "deliver",
   });
+
+  const runtimeScopes = [];
+  const transportScopes = [];
+  const scopedDefault = handleRequest(request("resolve"), {
+    state: createEmptyState(), now: NOW,
+    trustedRuntimeAttestor: (scope) => {
+      runtimeScopes.push({ hostScope: scope.hostScope, accountScope: scope.accountScope });
+      return { attestorId: "railyard-runtime-attestor-v1", attestationDigest: DIGEST_A, lunaAvailability: "available", hostScope: scope.hostScope, accountScope: scope.accountScope };
+    },
+    trustedTransportAttestor: (scope) => {
+      transportScopes.push({ hostScope: scope.hostScope, accountScope: scope.accountScope });
+      return { attestorId: "railyard-transport-attestor-v1", attestationDigest: DIGEST_A, compatibility: "native_compatible", bridgeAvailable: false };
+    },
+  });
+  assert.equal(scopedDefault.response.decision.binding.accountScope, "codex-sub");
+  assert.deepEqual(runtimeScopes, [{ hostScope: "local", accountScope: "codex-sub" }]);
+  assert.deepEqual(transportScopes, [{ hostScope: "local", accountScope: "codex-sub" }]);
 
   // Sourcing the field from codex-luna alone dropped the "must go to Codex"
   // signal exactly when Luna degraded to the Terra substitute. Terra rides a

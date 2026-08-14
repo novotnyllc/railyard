@@ -449,7 +449,7 @@ export function fixedRuntimeDecision(trustedRuntimeAttestor, request = {}, provi
   let attestation;
   try { attestation = trustedRuntimeAttestor(Object.freeze({ contractVersion: CONTRACT_VERSION, runtime: "codex", hostScope, accountScope })); }
   catch { return null; }
-  if (!isObject(attestation) || !onlyFields(attestation, new Set(["attestorId", "attestationDigest", "lunaAvailability", "terra", "hostScope", "accountScope"])) || attestation.attestorId !== RUNTIME_ATTESTOR || !validDigest(attestation.attestationDigest) || attestation.hostScope !== hostScope || attestation.accountScope !== accountScope || !["available", "unavailable", "unselectable", "unknown"].includes(attestation.lunaAvailability)) return null;
+  if (!isObject(attestation) || !onlyFields(attestation, new Set(["attestorId", "attestationDigest", "lunaAvailability", "terra", "hostScope", "accountScope"])) || attestation.attestorId !== RUNTIME_ATTESTOR || !validDigest(attestation.attestationDigest) || attestation.hostScope !== hostScope || attestation.accountScope !== accountScope || !["available", "unavailable", "unselectable"].includes(attestation.lunaAvailability)) return null;
   if (attestation.terra !== undefined && (!onlyFields(attestation.terra, new Set(["verified", "model", "effort"])) || attestation.terra.verified !== true || !validModel(attestation.terra.model) || attestation.terra.effort !== "max")) return null;
   return { ...attestation, provenance: "measured_fact" };
 }
@@ -474,14 +474,15 @@ export function defaultRoute(request, { trustedRuntimeAttestor, trustedTransport
   const carrier = CARRIER_DESCRIPTORS[carrierId];
   const adapterResult = adapterFor(request, carrier);
   if (!adapterResult.ok) return { ok: false, reason: adapterResult.reason };
-  const transport = transportDecision(request, adapterResult.adapter, trustedTransportAttestor);
+  const provider = { executionSurface: "codex", carrierId, account: "codex-sub" };
+  const transport = transportDecision(request, adapterResult.adapter, trustedTransportAttestor, provider);
   if (!transport.ok) return { ok: false, reason: transport.reason };
   const model = carrierId === "codex-terra-runtime" ? runtime.terra.model : carrier.requestedModel;
   return {
     ok: true,
     alias: carrierId,
     model: { carrierId, requestedModel: model, relativeCostIndex: undefined },
-    provider: { executionSurface: "codex", carrierId },
+    provider,
     carrier,
     adapterId: adapterResult.adapterId,
     adapter: adapterResult.adapter,

@@ -79,6 +79,10 @@ function shellTokens(command) {
       tokens.push({ kind: "separator" });
       doubleQuoteSubstitutionDepth += 1;
       index += 1;
+    } else if (doubleQuoteSubstitution === "paren" && char === "(") {
+      flush();
+      tokens.push({ kind: "separator" });
+      doubleQuoteSubstitutionDepth += 1;
     } else if (doubleQuoteSubstitution === "paren" && char === ")") {
       flush();
       tokens.push({ kind: "separator" });
