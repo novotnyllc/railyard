@@ -11,6 +11,10 @@ Privilege in an unattended fleet should enter only after signed evidence and can
 
 Roundhouse enforces this boundary with two root-owned components. `roundhouse-trustd` materializes roster, reviewed reference, generation, and KRL state by re-deriving the roster from signed history. The privilege broker executes only a fixed catalog of sealed semantic actions.
 
+## Decision path
+
+**Action arrives:** a resolved item requests one cataloged privileged operation. **Authority check:** `roundhouse-trustd` derives roster, reviewed reference, generation, and KRL state from signed history rather than caller data. **Propagation gate:** catalog flag, per-binding grant, provenance anchors, version floor, canary evidence, and payload attestation must agree. **Outcome:** the broker executes the sealed action and records `result=allowed`, or refuses the binding without opening an arbitrary root shell. **Residual:** a host without a genuinely root-owned lane retains a same-user trust boundary, which the operator must treat as a different security class.
+
 Invoking the trust daemon cannot inject a caller-supplied hostile roster: the daemon computes the materialized state from the signed store. The broker receives an action name and bounded data, not an arbitrary root shell.
 
 ## Shared hardening pattern

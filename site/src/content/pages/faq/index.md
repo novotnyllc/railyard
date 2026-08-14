@@ -6,23 +6,23 @@ nav_order: 5
 
 # FAQ
 
-The short answers below point to the pages that carry the full operating contract.
+Choose the smallest operating boundary that can produce a real receipt, then add capability only when the work earns it. The answers below begin with that practice and use Railyard or Roundhouse mechanisms as evidence.
 
 ## Railyard vs Roundhouse: do I need both?
 
-Railyard is the delivery system for routing, review, merge, and proof. Roundhouse is the fleet convergence layer for inventory, readiness, and remote administration. A delivery-only path works with Railyard alone; add Roundhouse when placement or fleet state earns its place. See the [Start decision matrix](/start/).
+Start with the outcome you need to prove. Railyard carries routing, review, merge, and post-merge proof; Roundhouse adds inventory, readiness, convergence, and remote administration when machines become part of that outcome. See the [Start decision matrix](/start/).
 
 ## Claude Code vs Codex: which harnesses are supported?
 
-Both are supported. Same-harness execution is the default. Cross-harness dispatch is an opt-in seam and requires the destination Codex CLI to be set up separately. The [cross-harness practice](/what-it-does/work-across-harnesses/) shows where the handoff is recorded.
+Keep one owning delivery even when execution surfaces change. Claude Code and Codex are both supported; same-harness execution is the default. Cross-harness dispatch is opt-in, requires the destination Codex CLI to be set up separately, and records model, effort, carrier, and transport. The [cross-harness practice](/what-it-does/work-across-harnesses/) shows that receipt.
 
 ## Does this work on Windows and WSL?
 
-Yes. The documented support surface includes macOS, Linux, Windows, and WSL. Windows work keeps native Windows evidence distinct from WSL evidence; the [installation compatibility notes](/start/install/#compatibility-and-cost) state the CLI and tooling assumptions.
+Treat every operating-system boundary as its own proof surface. The documented support includes macOS, Linux, Windows, and WSL, with native Windows evidence kept distinct from WSL. The [installation compatibility notes](/start/install/#compatibility-and-cost) state the CLI and tooling assumptions.
 
 ## Is a GitHub remote required? What if there is no test suite?
 
-A GitHub remote is required for a published pull request, but a local delivery can still run its checks and report the missing publish step. When no test suite exists, the route uses the smallest applicable verification command and records that no focused check was available.
+Match the receipt to the available delivery surface. A GitHub remote enables a published pull request; a local delivery can still run its checks and name the unavailable publish step. When no suite exists, the route chooses the smallest applicable command and records the verification boundary honestly.
 
 ## What does it cost?
 

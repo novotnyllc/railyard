@@ -19,6 +19,10 @@ An operator sees the same selected dotfile drifting across several machines and 
 > Compare the selected dotfiles on every machine and prepare the right reconciliation plan.
 ```
 
+## The run
+
+The operator asks for selected dotfiles to converge without losing maintained-source intent or host-specific rendering. Chezmoi owns source and rendering; Roundhouse contributes host evidence and keeps the target list bounded. The turn is the semantic reconciliation decision: history, rendered content, and per-path intent determine direction before any apply. The run closes when immediate preconditions and postconditions agree for every selected path and the verification result returns to the fleet record.
+
 ## What it adds
 
 Build the decision from native evidence. The integration gathers status and diff evidence, maps rendered files to source paths, compares semantic content and history, and produces a scoped plan. Approved applies use sealed arguments, immediate preconditions, and postconditions for the selected paths.

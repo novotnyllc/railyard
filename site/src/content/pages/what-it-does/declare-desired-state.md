@@ -22,6 +22,10 @@ machines/<machine>.yaml
 > Apply the approved desired state and show the item-level journal.
 ```
 
+## The run
+
+The operator asks for a group default and one machine exception to resolve without hiding either intent. Roundhouse folds fleet, platform, group, and machine maps into one effective item value, then gives the receiving host the resolved digest to review. The turn is the fold: a more specific value replaces or removes only the addressed item while the readable source remains intact. The run closes when the host journal shows the effective digest and its `applied`, `satisfied`, or held outcome.
+
 ## What happens
 
 The four-layer fold resolves one value per item. Maps merge by key, scalar values replace as a unit, and an explicit `absent` value removes an item from the effective set. Before applying it, each host reviews the resolved digest.

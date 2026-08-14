@@ -10,6 +10,10 @@ has_children: true
 
 Use the right model for the job, spend where the hardness lives, and treat budget as an engineering constraint. That is the economic foundation of agentic delivery: routine volume earns an efficient route, difficult seams earn deeper reasoning, and every choice arrives with a receipt. Railyard resolves model, effort, transport, and budget into one decision before the carrier starts.
 
+## The run
+
+The operator asks for one delivery whose work ranges from repetitive edits to a subtle async seam. Railyard resolves model, effort, carrier, transport, privacy, and budget before each bounded dispatch, then binds the result to the owning delivery. The turn is admission: a suitable priced route starts work, while a route that cannot satisfy policy stops before the carrier spends. The run closes when route disclosures, imported receipts, review findings, and the proven delivery outcome reconcile in one ledger.
+
 ## Four verbs, one accountable path
 
 Make the spending decision once, then carry it through four verbs. `resolve` reads the immutable policy snapshot and selects an eligible role, tier, carrier, effort, and transport. `admit` checks the forecast against task, run, and project meters. `claim-dispatch` makes the selected action a one-way claim immediately before the carrier runs. `reconcile` accepts the imported fixed-adapter receipt and settles the route.
@@ -66,7 +70,7 @@ This receipt is the mechanism behind the practice. `prefer` records the no-confi
 
 - [Roles, tiers, and carriers](/delivery/model-routing/tiers/)
 - [Budgets, admission, and receipts](/delivery/model-routing/budgets/)
-- [Two worked cost ledgers](/delivery/model-routing/worked-runs/)
+- [Forty mechanical sites, one hard seam](/delivery/model-routing/worked-runs/)
 - [Model routing skill](/skills/model-routing/)
 
 The [Railyard source repository](https://github.com/novotnyllc/railyard), [releases](https://github.com/novotnyllc/railyard/releases), and [pull-request proof trail](https://github.com/novotnyllc/railyard/pulls) are public companions to this contract.

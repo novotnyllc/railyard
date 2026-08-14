@@ -9,6 +9,10 @@ nav_order: 1
 
 Treat delivery as one continuous promise: translate intent into a change, challenge it, merge it, and prove that the result reached the base branch and its consumer. A traceable sequence of routing, implementation, review, proof, and learning makes that promise repeatable for humans and agents alike.
 
+## The run
+
+The operator asks for a finished change, not an open-ended agent session. Railyard names the artifact boundary, binds the route, carries one coherent implementation through Thermos and settlement, then verifies the merged result. The turn is the gate that returns weak or stale evidence to the stage that owns it. The run closes when ancestry, a focused post-merge check, and the run record agree on the terminal outcome.
+
 ## 1. Intent intake
 
 Begin by naming the finish line. A plan request should produce a plan, a diagnosis request should produce findings, and an implementation request should carry through the full delivery route. `railyard:deliver` turns that declared outcome into the artifact boundary.
