@@ -395,6 +395,13 @@ function commandPrefixAllows(tokens, index) {
 
 function shellWrapperTokens(tokens, depth = 0) {
   if (depth >= MAX_SHELL_WRAPPER_DEPTH) return tokens;
+  const separatorIndex = tokens.findIndex((token) => token.kind === "separator");
+  if (separatorIndex >= 0) {
+    const head = tokens.slice(0, separatorIndex);
+    const separator = tokens[separatorIndex];
+    const tail = tokens.slice(separatorIndex + 1);
+    return [...shellWrapperTokens(head, depth), separator, ...shellWrapperTokens(tail, depth)];
+  }
   let cursor = 0;
   while (cursor < tokens.length) {
     const afterRedirection = skipRedirection(tokens, cursor, tokens.length);

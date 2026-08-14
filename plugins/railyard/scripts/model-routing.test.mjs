@@ -434,6 +434,15 @@ test("the owner catalog selects Fable for hard Claude work and records an explic
   assert.equal(luna.response.decision.requested.crossHarnessReason, crossHarnessReason);
   assert.equal(luna.response.decision.binding.crossHarnessReason, crossHarnessReason);
 
+  const unsupportedClaudeHandoff = handleRequest(request("resolve", {
+    role: "implementation.hard",
+    harness: "codex",
+    crossHarnessReason,
+    adapterId: "claude-session-create",
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(unsupportedClaudeHandoff.response.reason, "no_eligible_route", JSON.stringify(unsupportedClaudeHandoff.response));
+  assert.equal(unsupportedClaudeHandoff.response.rejectedAlternatives.find((item) => item.modelAlias === "fable")?.reason, "cross_harness_adapter_required");
+
   const crossHarnessWithoutReason = handleRequest(request("resolve", {
     role: "implementation.cross-harness",
     harness: "codex",

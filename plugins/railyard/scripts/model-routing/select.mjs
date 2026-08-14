@@ -268,6 +268,10 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         output.push({ ok: false, alias, tierIndex, position, reason: adapterResult.reason });
         continue;
       }
+      if (request.harness === "codex" && provider.harness === "claude" && !["claude-cli-via-task", "claude-cli-via-worker"].includes(adapterResult.adapterId)) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "cross_harness_adapter_required" });
+        continue;
+      }
       if (model.roles && !model.roles.includes(request.role)) {
         output.push({ ok: false, alias, tierIndex, position, reason: "role_ineligible" });
         continue;
