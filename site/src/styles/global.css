@@ -80,6 +80,7 @@ h1,h2,h3 { margin-top: 0; letter-spacing: -.055em; line-height: 1.03; } h1,h2 { 
 .terminal .speaker { margin-bottom: -.25rem; color: #d9ab73; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .terminal .terminal-note { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #45423b; color: #aea99e; font-size: .74rem; line-height: 1.5; }
 .terminal a { color: inherit; }
+.terminal a:focus-visible { outline-color: #f5c88f; }
 .proof-caption { margin: 0; padding: 0 24px 1rem; color: #b9b5ac; text-align: center; font-size: .78rem; }
 .not-found { padding-block: 7rem 9rem; }
 .not-found h1 { max-width: 680px; font-size: clamp(2.8rem, 7vw, 5.4rem); }

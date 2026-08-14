@@ -25,6 +25,7 @@ const expectedSelectors = new Set([
   '.prev-next a:hover',
   '.start-callout a:focus-visible',
   '.start-callout button:focus-visible',
+  '.terminal a:focus-visible',
 ]);
 const actualSelectors = new Set(
   [...css.matchAll(/([^{}]+)\{[^{}]*\}/g)]
@@ -50,13 +51,15 @@ function matchingBrace(source, open) {
 function parseRules(source) {
   const darkOpen = source.indexOf('{', source.indexOf('@media (prefers-color-scheme: dark)'));
   const darkEnd = matchingBrace(source, darkOpen);
-  return [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((match) => ({
-    selectors: match[1].split(',').map((selector) => selector.trim()),
-    declarations: Object.fromEntries(
-      match[2].split(';').map((entry) => entry.split(/:(.*)/s).slice(0, 2).map((part) => part.trim())).filter(([property, propertyValue]) => property && propertyValue),
-    ),
-    dark: match.index > darkOpen && match.index < darkEnd,
-  }));
+  return [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((match) => {
+    const declarationList = match[2].split(';').map((entry) => entry.split(/:(.*)/s).slice(0, 2).map((part) => part.trim())).filter(([property, propertyValue]) => property && propertyValue);
+    return {
+      selectors: match[1].split(',').map((selector) => selector.trim()),
+      declarationList,
+      declarations: Object.fromEntries(declarationList),
+      dark: match.index > darkOpen && match.index < darkEnd,
+    };
+  });
 }
 
 const rules = parseRules(css);
@@ -82,15 +85,22 @@ function firstDeclaration(ruleSet, selectors, property, scheme, fallback) {
   return fallback;
 }
 
-function backgroundDeclaration(ruleSet, selectors, scheme, fallback) {
-  for (const selector of selectors) {
-    for (const property of ['background-color', 'background']) {
-      try {
-        return declaration(ruleSet, selector, property, scheme);
-      } catch {
-        // Try the next background property or selector.
+function lastPropertyDeclaration(ruleSet, selector, properties, scheme) {
+  let result;
+  for (const rule of ruleSet) {
+    if ((scheme === 'dark' || !rule.dark) && rule.selectors.includes(selector)) {
+      for (const [property, propertyValue] of rule.declarationList) {
+        if (properties.includes(property)) result = { property, value: propertyValue };
       }
     }
+  }
+  return result;
+}
+
+function backgroundDeclaration(ruleSet, selectors, scheme, fallback) {
+  for (const selector of selectors) {
+    const result = lastPropertyDeclaration(ruleSet, selector, ['background', 'background-color'], scheme);
+    if (result) return result.value;
   }
   return fallback;
 }
@@ -111,11 +121,13 @@ for (const selector of ['a:focus-visible', 'button:focus-visible']) {
 }
 
 for (const selector of expectedSelectors) {
-  try {
-    declaration(rules, selector, 'opacity', 'light');
-    throw new Error(`Interaction opacity requires an explicit compositing model: ${selector}`);
-  } catch (error) {
-    if (error.message.startsWith('Interaction opacity')) throw error;
+  for (const scheme of ['light', 'dark']) {
+    try {
+      declaration(rules, selector, 'opacity', scheme);
+      throw new Error(`Interaction opacity requires an explicit compositing model: ${selector} (${scheme})`);
+    } catch (error) {
+      if (error.message.startsWith('Interaction opacity')) throw error;
+    }
   }
 }
 
@@ -177,13 +189,11 @@ function color(scheme, expression) {
 }
 
 function outline(schemeName, scheme, selector) {
-  let expression;
-  try {
-    expression = declaration(rules, selector, 'outline-color', schemeName);
-  } catch {
-    const shorthand = declaration(rules, selector, 'outline', schemeName);
-    expression = shorthand.match(/var\(--[\w-]+\)|#[\da-f]{3,8}/i)?.[0];
-  }
+  const result = lastPropertyDeclaration(rules, selector, ['outline', 'outline-color'], schemeName);
+  if (!result) throw new Error(`Unresolved ${schemeName} outline: ${selector}`);
+  const expression = result.property === 'outline'
+    ? result.value.match(/var\(--[\w-]+\)|#[\da-f]{3,8}/i)?.[0]
+    : result.value;
   return color(scheme, expression);
 }
 
@@ -208,6 +218,7 @@ const pairs = [
   ['focus: start callout link text', (name, scheme) => color(scheme, firstDeclaration(rules, ['.start-callout a:focus-visible', '.start-callout .button'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout a:focus-visible', '.start-callout .button'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
   ['focus: start callout button text', (name, scheme) => color(scheme, firstDeclaration(rules, ['.start-callout button:focus-visible', '.start-callout .button'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout button:focus-visible', '.start-callout .button'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
   ['focus: start callout outline', (name, scheme) => outline(name, scheme, '.start-callout a:focus-visible'), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
+  ['focus: terminal outline', (name, scheme) => outline(name, scheme, '.terminal a:focus-visible'), (name, scheme) => scheme['--night'], (name, scheme) => scheme['--night']],
 ];
 
 const scenarioOverrideFixture = parseRules(`${css}\n.scenario-card p { color: #777; }`);
@@ -235,6 +246,17 @@ if (contrast(
   light['--ground'],
 ) >= 4.5) {
   throw new Error('Skip-link self-check failed to make equal focus colors fail');
+}
+
+const backgroundOrderFixture = parseRules(`${css}\n.text-link:hover { background-color: var(--ground); background: var(--amber-dark); }`);
+if (backgroundDeclaration(backgroundOrderFixture, ['.text-link:hover'], 'light') !== 'var(--amber-dark)') {
+  throw new Error('Cascade self-check failed to preserve background declaration order');
+}
+
+const outlineOrderFixture = parseRules(`${css}\na:focus-visible { outline-color: var(--amber-dark); outline: 3px solid var(--ink); }`);
+const outlineOrderResult = lastPropertyDeclaration(outlineOrderFixture, 'a:focus-visible', ['outline', 'outline-color'], 'light');
+if (outlineOrderResult.property !== 'outline' || outlineOrderResult.value !== '3px solid var(--ink)') {
+  throw new Error('Cascade self-check failed to preserve outline declaration order');
 }
 
 const results = [];
