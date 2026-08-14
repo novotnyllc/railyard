@@ -413,6 +413,19 @@ exec 'no explicit flags'` },
   assert.deepEqual(heredoc.log, []);
 });
 
+test("codex exec parsing recognizes brace groups and oversized payloads", () => {
+  for (const command of [
+    "{ codex exec 'no explicit flags'; }",
+    `${"x".repeat(32769)}; codex exec 'no explicit flags'`,
+  ]) {
+    const refused = run({ tool_name: "Bash", tool_input: { command } });
+    assert.equal(refused.code, 2, command.slice(-80));
+    assert.match(refused.err, /model/, command.slice(-80));
+    assert.match(refused.err, /reasoning_effort/, command.slice(-80));
+    assert.deepEqual(refused.log, [], command.slice(-80));
+  }
+});
+
 test("codex exec parsing ignores comments, prose, and later shell commands", () => {
   const noise = run({
     tool_name: "Bash",

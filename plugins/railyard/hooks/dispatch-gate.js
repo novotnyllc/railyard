@@ -30,7 +30,7 @@ function shellTokens(command) {
     if (word) tokens.push({ kind: "word", value: word });
     word = "";
   };
-  const source = maskHeredocBodies(String(command || "").slice(0, 32768));
+  const source = maskHeredocBodies(String(command || ""));
   for (let index = 0; index < source.length; index += 1) {
     const char = source[index];
     if (escaped) {
@@ -39,7 +39,7 @@ function shellTokens(command) {
       escaped = false;
     } else if (char === "\\") {
       const next = source[index + 1];
-      if (next && /[\s'"\\;|&#$`]/.test(next)) escaped = true;
+      if (next && /[\s'"\\;|&#$`{}]/.test(next)) escaped = true;
       else word += char;
     } else if (quote) {
       if (quote === '"' && char === "$" && source[index + 1] === "(") {
@@ -69,7 +69,7 @@ function shellTokens(command) {
       tokens.push({ kind: "separator" });
       doubleQuoteSubstitution = null;
       quote = '"';
-    } else if (char === ";" || char === "|" || char === "&" || char === "(" || char === ")" || char === "`") {
+    } else if (char === ";" || char === "|" || char === "&" || char === "(" || char === ")" || char === "{" || char === "}" || char === "`") {
       flush();
       tokens.push({ kind: "separator" });
     } else {
