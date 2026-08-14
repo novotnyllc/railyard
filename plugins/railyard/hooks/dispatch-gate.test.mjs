@@ -394,6 +394,25 @@ test("codex exec parsing recognizes argv shell payloads", () => {
   assert.equal(allowed.log[0].reasoning_effort, "max");
 });
 
+test("codex exec parsing recognizes line continuations and ignores heredoc bodies", () => {
+  const continued = run({
+    tool_name: "Bash",
+    tool_input: { command: String.raw`codex \
+exec 'no explicit flags'` },
+  });
+  assert.equal(continued.code, 2);
+  assert.match(continued.err, /model/);
+  assert.match(continued.err, /reasoning_effort/);
+  assert.deepEqual(continued.log, []);
+
+  const heredoc = run({
+    tool_name: "Bash",
+    tool_input: { command: "cat <<'EOF'\ncodex exec 'no explicit flags'\nEOF" },
+  });
+  assert.equal(heredoc.code, 0);
+  assert.deepEqual(heredoc.log, []);
+});
+
 test("codex exec parsing ignores comments, prose, and later shell commands", () => {
   const noise = run({
     tool_name: "Bash",

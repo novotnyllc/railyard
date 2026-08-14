@@ -175,14 +175,14 @@ function refreshAttestor({ observedModel, capabilities = [], authState = "authen
   };
 }
 
-function attestedCapability(policy, { carrierId = "glm-5-2-engineer", adapterId = "configured-profile-task-create", accountScope = "plan", observedModel = "glm-5.2", capabilities = [] } = {}) {
+function attestedCapability(policy, { carrierId = "glm-5-2-engineer", adapterId = "configured-profile-task-create", hostScope = "local", accountScope = "plan", observedModel = "glm-5.2", capabilities = [] } = {}) {
   const state = createEmptyState();
   const record = {
     carrierId,
     carrierVersion: CARRIER_DESCRIPTORS[carrierId].version,
     adapterId,
     adapterVersion: ADAPTER_DESCRIPTORS[adapterId].version,
-    hostScope: "local",
+    hostScope,
     accountScope,
     policyDigest: policyDigest(policy),
     state: "host_capability_attested",
@@ -478,7 +478,26 @@ test("the owner catalog keeps subscription meters separate and gates GLM on Code
     assert.equal(providerAvailabilityIssue(policy.providers.zai), null);
     fs.writeFileSync(path.join(codexHome, "config.toml"), "[model_providers.zai_litellm] # enabled\n");
     assert.equal(providerAvailabilityIssue(policy.providers.zai), null);
-    assert.equal(providerAvailabilityIssue(policy.providers.zai, { hostScope: "runner-2" }), "provider_unavailable");
+    assert.equal(providerAvailabilityIssue(policy.providers.zai, { hostScope: "runner-2" }), null);
+
+    const remote = handleRequest(request("resolve", {
+      role: "implementation.cross-harness",
+      harness: "codex",
+      hostScope: "runner-2",
+      accountScope: "zai-credits",
+      crossHarnessReason: "Use the remote Codex-family GLM destination for this bounded task.",
+      adapterId: "configured-profile-task-create",
+      dispatchKind: "task_create",
+    }), {
+      catalog: policy,
+      state: attestedCapability(policy, {
+        hostScope: "runner-2",
+        accountScope: "zai-credits",
+      }),
+      now: NOW,
+    });
+    assert.equal(remote.response.reason, "resolved", JSON.stringify(remote.response));
+    assert.equal(remote.response.decision.selected.modelAlias, "glm");
   } finally {
     if (previous === undefined) delete process.env.CODEX_HOME;
     else process.env.CODEX_HOME = previous;

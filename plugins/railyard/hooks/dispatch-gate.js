@@ -30,11 +30,12 @@ function shellTokens(command) {
     if (word) tokens.push({ kind: "word", value: word });
     word = "";
   };
-  const source = String(command || "").slice(0, 32768);
+  const source = maskHeredocBodies(String(command || "").slice(0, 32768));
   for (let index = 0; index < source.length; index += 1) {
     const char = source[index];
     if (escaped) {
-      word += char;
+      if (char !== "\n" && !(char === "\r" && source[index + 1] === "\n")) word += char;
+      if (char === "\r" && source[index + 1] === "\n") index += 1;
       escaped = false;
     } else if (char === "\\") {
       const next = source[index + 1];
@@ -86,6 +87,69 @@ function isAssignment(value) {
 
 function basename(value) {
   return value.split(/[\\/]/).pop();
+}
+
+function heredocSpecs(line) {
+  const specs = [];
+  let quote = "";
+  let escaped = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) quote = "";
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      continue;
+    }
+    if (char === "#" && (index === 0 || /\s/.test(line[index - 1]))) break;
+    if (char !== "<" || line[index + 1] !== "<" || line[index + 2] === "<") continue;
+    let cursor = index + 2;
+    const stripTabs = line[cursor] === "-";
+    if (stripTabs) cursor += 1;
+    while (/\s/.test(line[cursor] || "")) cursor += 1;
+    let delimiter = "";
+    if (line[cursor] === "'" || line[cursor] === '"') {
+      const delimiterQuote = line[cursor++];
+      const end = line.indexOf(delimiterQuote, cursor);
+      if (end < 0) continue;
+      delimiter = line.slice(cursor, end);
+      cursor = end + 1;
+    } else {
+      const start = cursor;
+      while (cursor < line.length && !/[\s;|&<>()[\]{}]/.test(line[cursor])) cursor += 1;
+      delimiter = line.slice(start, cursor);
+    }
+    if (delimiter) specs.push({ delimiter, stripTabs });
+    index = Math.max(index, cursor - 1);
+  }
+  return specs;
+}
+
+function maskHeredocBodies(source) {
+  const lines = source.split("\n");
+  const pending = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (pending.length) {
+      const comparable = line.endsWith("\r") ? line.slice(0, -1) : line;
+      const expected = pending[0];
+      if (comparable === expected.delimiter || (expected.stripTabs && comparable.replace(/^\t+/, "") === expected.delimiter)) pending.shift();
+      lines[index] = line.replace(/[^\r]/g, " ");
+      continue;
+    }
+    pending.push(...heredocSpecs(line));
+  }
+  return lines.join("\n");
 }
 
 function commandPrefixAllows(tokens, index) {

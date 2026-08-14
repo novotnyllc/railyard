@@ -157,7 +157,7 @@ export function providerAvailabilityIssue(provider, request = {}) {
   if (availability === undefined) return null;
   if (availability.kind !== "codex_config") return "provider_unavailable";
   const hostScope = request.hostScope || request.destinationScope || "local";
-  if (hostScope !== "local") return "provider_unavailable";
+  if (hostScope !== "local") return null;
   try {
     const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
     const config = fs.readFileSync(path.join(codexHome, "config.toml"), "utf8");
