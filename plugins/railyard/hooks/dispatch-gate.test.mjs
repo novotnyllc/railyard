@@ -372,6 +372,20 @@ test("codex exec parsing recognizes standard process launchers", () => {
   }
 });
 
+test("codex exec parsing recognizes the exec launcher", () => {
+  for (const command of [
+    "exec codex exec 'no explicit flags'",
+    "exec -cl codex exec 'no explicit flags'",
+    "exec -a child-process codex exec 'no explicit flags'",
+  ]) {
+    const refused = run({ tool_name: "Bash", tool_input: { command } });
+    assert.equal(refused.code, 2, command);
+    assert.match(refused.err, /model/, command);
+    assert.match(refused.err, /reasoning_effort/, command);
+    assert.deepEqual(refused.log, [], command);
+  }
+});
+
 test("codex exec parsing recognizes argv shell payloads", () => {
   for (const input of [
     { tool_name: "shell", tool_input: { command: ["bash", "-lc", "codex exec 'no explicit flags'"] } },
@@ -425,6 +439,22 @@ exec 'no explicit flags'` },
   });
   assert.equal(heredoc.code, 0);
   assert.deepEqual(heredoc.log, []);
+
+  const literalUnquotedHeredoc = run({
+    tool_name: "Bash",
+    tool_input: { command: "cat <<EOF\ncodex exec 'no explicit flags'\nEOF" },
+  });
+  assert.equal(literalUnquotedHeredoc.code, 0);
+  assert.deepEqual(literalUnquotedHeredoc.log, []);
+
+  const expandedUnquotedHeredoc = run({
+    tool_name: "Bash",
+    tool_input: { command: "cat <<EOF\n$(codex exec 'no explicit flags')\nEOF" },
+  });
+  assert.equal(expandedUnquotedHeredoc.code, 2);
+  assert.match(expandedUnquotedHeredoc.err, /model/);
+  assert.match(expandedUnquotedHeredoc.err, /reasoning_effort/);
+  assert.deepEqual(expandedUnquotedHeredoc.log, []);
 });
 
 test("codex exec parsing recognizes brace groups and oversized payloads", () => {

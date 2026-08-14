@@ -134,21 +134,88 @@ function heredocSpecs(line) {
     if (stripTabs) cursor += 1;
     while (/\s/.test(line[cursor] || "")) cursor += 1;
     let delimiter = "";
+    let quoted = false;
     if (line[cursor] === "'" || line[cursor] === '"') {
       const delimiterQuote = line[cursor++];
       const end = line.indexOf(delimiterQuote, cursor);
       if (end < 0) continue;
       delimiter = line.slice(cursor, end);
+      quoted = true;
       cursor = end + 1;
     } else {
       const start = cursor;
       while (cursor < line.length && !/[\s;|&<>()[\]{}]/.test(line[cursor])) cursor += 1;
       delimiter = line.slice(start, cursor);
     }
-    if (delimiter) specs.push({ delimiter, stripTabs });
+    if (delimiter) specs.push({ delimiter, stripTabs, quoted });
     index = Math.max(index, cursor - 1);
   }
   return specs;
+}
+
+function maskHeredocExpansions(line) {
+  const masked = line.replace(/[^\r]/g, " ").split("");
+  const preserve = (start, end) => {
+    for (let index = start; index <= end; index += 1) masked[index] = line[index];
+  };
+  for (let index = 0; index < line.length; index += 1) {
+    if (line[index] === "$" && line[index + 1] === "(") {
+      let depth = 0;
+      let quote = "";
+      let escaped = false;
+      let end = -1;
+      for (let cursor = index + 1; cursor < line.length; cursor += 1) {
+        const char = line[cursor];
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (char === "\\") {
+          escaped = true;
+          continue;
+        }
+        if (quote) {
+          if (char === quote) quote = "";
+          continue;
+        }
+        if (char === "'" || char === '"') {
+          quote = char;
+          continue;
+        }
+        if (char === "(") depth += 1;
+        if (char === ")" && --depth === 0) {
+          end = cursor;
+          break;
+        }
+      }
+      if (end >= 0) {
+        preserve(index, end);
+        index = end;
+      }
+    } else if (line[index] === "`") {
+      let end = -1;
+      let escaped = false;
+      for (let cursor = index + 1; cursor < line.length; cursor += 1) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (line[cursor] === "\\") {
+          escaped = true;
+          continue;
+        }
+        if (line[cursor] === "`") {
+          end = cursor;
+          break;
+        }
+      }
+      if (end >= 0) {
+        preserve(index, end);
+        index = end;
+      }
+    }
+  }
+  return masked.join("");
 }
 
 function maskHeredocBodies(source) {
@@ -160,7 +227,7 @@ function maskHeredocBodies(source) {
       const comparable = line.endsWith("\r") ? line.slice(0, -1) : line;
       const expected = pending[0];
       if (comparable === expected.delimiter || (expected.stripTabs && comparable.replace(/^\t+/, "") === expected.delimiter)) pending.shift();
-      lines[index] = line.replace(/[^\r]/g, " ");
+      lines[index] = expected.quoted ? line.replace(/[^\r]/g, " ") : maskHeredocExpansions(line);
       continue;
     }
     pending.push(...heredocSpecs(line));
@@ -210,6 +277,26 @@ function commandPrefixAllows(tokens, index) {
           continue;
         }
         if (isAssignment(value)) {
+          cursor += 1;
+          continue;
+        }
+        break;
+      }
+      continue;
+    }
+    if (launcher === "exec") {
+      cursor += 1;
+      while (cursor < index && tokens[cursor].kind === "word") {
+        const value = tokens[cursor].value;
+        if (value === "--") {
+          cursor += 1;
+          break;
+        }
+        if (value === "-a") {
+          cursor += 2;
+          continue;
+        }
+        if (value.startsWith("-")) {
           cursor += 1;
           continue;
         }
