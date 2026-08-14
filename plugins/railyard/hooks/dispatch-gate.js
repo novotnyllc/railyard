@@ -225,7 +225,7 @@ function maskHeredocBodies(source) {
   const lines = source.split("\n");
   const pending = [];
   for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
+    let line = lines[index];
     if (pending.length) {
       const comparable = line.endsWith("\r") ? line.slice(0, -1) : line;
       const expected = pending[0];
@@ -234,6 +234,15 @@ function maskHeredocBodies(source) {
         ? line.replace(/[^\r]/g, " ")
         : maskHeredocExpansions(line, expected.expansionState ||= { mode: null, depth: 0, quote: "", escaped: false });
       continue;
+    }
+    let slashCount = 0;
+    const end = line.endsWith("\r") ? line.length - 2 : line.length - 1;
+    while (end - slashCount >= 0 && line[end - slashCount] === "\\") slashCount += 1;
+    while (slashCount % 2 === 1 && index + 1 < lines.length) {
+      line = line.replace(/\\\r?$/, "") + lines[++index];
+      slashCount = 0;
+      const nextEnd = line.endsWith("\r") ? line.length - 2 : line.length - 1;
+      while (nextEnd - slashCount >= 0 && line[nextEnd - slashCount] === "\\") slashCount += 1;
     }
     pending.push(...heredocSpecs(line));
   }
@@ -386,7 +395,32 @@ function commandPrefixAllows(tokens, index) {
 
 function shellWrapperTokens(tokens, depth = 0) {
   if (depth >= MAX_SHELL_WRAPPER_DEPTH) return tokens;
-  const launcher = basename(tokens[0]?.value || "").toLowerCase();
+  let launcher = basename(tokens[0]?.value || "").toLowerCase();
+  if (launcher === "env") {
+    let cursor = 1;
+    while (cursor < tokens.length && tokens[cursor].kind === "word") {
+      const value = tokens[cursor].value;
+      if (value === "--") {
+        cursor += 1;
+        break;
+      }
+      if (value === "-i" || value === "--ignore-environment" || isAssignment(value)) {
+        cursor += 1;
+        continue;
+      }
+      if (value === "-u" || value === "--unset" || value === "-C" || value === "--chdir") {
+        cursor += 2;
+        continue;
+      }
+      if (value.startsWith("--unset=") || (value.startsWith("-u") && value.length > 2) || value.startsWith("--chdir=") || (value.startsWith("-C") && value.length > 2)) {
+        cursor += 1;
+        continue;
+      }
+      break;
+    }
+    if (cursor > 1 && cursor < tokens.length) return shellWrapperTokens(tokens.slice(cursor), depth);
+    launcher = basename(tokens[cursor]?.value || "").toLowerCase();
+  }
   if (!SHELL_LAUNCHERS.has(launcher)) return tokens;
   for (let index = 1; index < tokens.length - 1; index += 1) {
     if (tokens[index]?.kind !== "word") continue;

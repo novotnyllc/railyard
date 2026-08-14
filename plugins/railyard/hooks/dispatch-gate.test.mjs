@@ -427,6 +427,7 @@ test("codex exec parsing recognizes string shell wrappers", () => {
     `bash -c "codex exec 'no explicit flags'"`,
     `sh -lc "codex exec 'no explicit flags'"`,
     `zsh --command "bash -c 'codex exec no-flags'"`,
+    `env -i RAILYARD_TEST=1 bash -c "codex exec 'no explicit flags'"`,
   ]) {
     const refused = run({ tool_name: "Bash", tool_input: { command } });
     assert.equal(refused.code, 2, command);
@@ -499,6 +500,19 @@ codex exec 'no explicit flags'` },
   assert.match(escapedDelimiter.err, /model/);
   assert.match(escapedDelimiter.err, /reasoning_effort/);
   assert.deepEqual(escapedDelimiter.log, []);
+
+  const continuedDelimiter = run({
+    tool_name: "Bash",
+    tool_input: { command: String.raw`cat <<EO\
+F
+codex exec 'no explicit flags'
+EOF
+codex exec 'no explicit flags'` },
+  });
+  assert.equal(continuedDelimiter.code, 2);
+  assert.match(continuedDelimiter.err, /model/);
+  assert.match(continuedDelimiter.err, /reasoning_effort/);
+  assert.deepEqual(continuedDelimiter.log, []);
 });
 
 test("codex exec parsing recognizes brace groups and oversized payloads", () => {
