@@ -439,6 +439,10 @@ test("codex exec parsing recognizes string shell wrappers", () => {
   assert.match(suffix.err, /model/);
   assert.match(suffix.err, /reasoning_effort/);
   assert.deepEqual(suffix.log, []);
+
+  const positional = run({ tool_name: "Bash", tool_input: { command: "bash -c 'echo ok' codex exec 'no explicit flags'" } });
+  assert.equal(positional.code, 0);
+  assert.deepEqual(positional.log, []);
 });
 
 test("codex exec parsing recognizes line continuations and ignores heredoc bodies", () => {
@@ -483,6 +487,18 @@ exec 'no explicit flags'` },
   assert.match(multilineExpandedHeredoc.err, /model/);
   assert.match(multilineExpandedHeredoc.err, /reasoning_effort/);
   assert.deepEqual(multilineExpandedHeredoc.log, []);
+
+  const escapedDelimiter = run({
+    tool_name: "Bash",
+    tool_input: { command: String.raw`cat <<\EOF
+codex exec 'no explicit flags'
+EOF
+codex exec 'no explicit flags'` },
+  });
+  assert.equal(escapedDelimiter.code, 2);
+  assert.match(escapedDelimiter.err, /model/);
+  assert.match(escapedDelimiter.err, /reasoning_effort/);
+  assert.deepEqual(escapedDelimiter.log, []);
 });
 
 test("codex exec parsing recognizes brace groups and oversized payloads", () => {

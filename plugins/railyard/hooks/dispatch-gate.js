@@ -135,17 +135,39 @@ function heredocSpecs(line) {
     while (/\s/.test(line[cursor] || "")) cursor += 1;
     let delimiter = "";
     let quoted = false;
-    if (line[cursor] === "'" || line[cursor] === '"') {
-      const delimiterQuote = line[cursor++];
-      const end = line.indexOf(delimiterQuote, cursor);
-      if (end < 0) continue;
-      delimiter = line.slice(cursor, end);
-      quoted = true;
-      cursor = end + 1;
-    } else {
-      const start = cursor;
-      while (cursor < line.length && !/[\s;|&<>()[\]{}]/.test(line[cursor])) cursor += 1;
-      delimiter = line.slice(start, cursor);
+    let delimiterQuote = "";
+    let delimiterEscaped = false;
+    while (cursor < line.length) {
+      const char = line[cursor];
+      if (delimiterEscaped) {
+        delimiter += char;
+        delimiterEscaped = false;
+        quoted = true;
+        cursor += 1;
+        continue;
+      }
+      if (delimiterQuote) {
+        if (char === delimiterQuote) delimiterQuote = "";
+        else delimiter += char;
+        quoted = true;
+        cursor += 1;
+        continue;
+      }
+      if (char === "\\") {
+        delimiterEscaped = true;
+        quoted = true;
+        cursor += 1;
+        continue;
+      }
+      if (char === "'" || char === '"') {
+        delimiterQuote = char;
+        quoted = true;
+        cursor += 1;
+        continue;
+      }
+      if (/[\s;|&<>()[\]{}]/.test(char)) break;
+      delimiter += char;
+      cursor += 1;
     }
     if (delimiter) specs.push({ delimiter, stripTabs, quoted });
     index = Math.max(index, cursor - 1);
@@ -373,7 +395,7 @@ function shellWrapperTokens(tokens, depth = 0) {
     if (payload?.kind !== "word") return tokens;
     const nested = shellWrapperTokens(shellTokens(payload.value), depth + 1);
     const suffix = tokens.slice(index + 2);
-    return suffix.length ? [...nested, { kind: "separator" }, ...suffix] : nested;
+    return suffix[0]?.kind === "separator" ? [...nested, { kind: "separator" }, ...suffix] : nested;
   }
   return tokens;
 }
