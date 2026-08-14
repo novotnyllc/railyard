@@ -30,6 +30,14 @@ The last condition closes the silenced-canary case. A canary that stops publishi
 
 ![Canary evidence sequence: a canary applies a digest, waits for the configured canary_wait_hours with a 24-hour default and fallback, publishes liveness, and either authorizes application or causes a hold.](/diagrams/m8-canary-evidence.svg)
 
+### Sequence
+
+1. **Apply.** The canary records the exact item digest at `t0`.
+2. **Wait.** The digest ages through the configured `canary_wait_hours`, with the 24-hour default/fallback.
+3. **Liveness.** The canary publishes a later record or heartbeat after the wait.
+4. **Gate.** A downstream host checks the digest, age, later holds/reverts, and liveness.
+5. **Outcome.** Evidence and liveness authorize the same digest; silence or reversion records `held reason=canary-silent`.
+
 The sequence keeps silence explicit: evidence without a later record or alive heartbeat is a hold, never a pass.
 
 The wait plus the per-run removal cap bounds blast radius. An operator sees a named hold before another host applies the affected item.

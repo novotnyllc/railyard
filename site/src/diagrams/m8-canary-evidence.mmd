@@ -1,13 +1,15 @@
 sequenceDiagram
+    accTitle: M8 canary evidence sequence
+    accDescr: A canary applies an exact digest, waits through the configured window, publishes liveness, and lets a downstream host apply or hold the same digest. Silence or a revert is never a pass.
     participant Can as Canary host
-    participant J as Journal (replicated)
-    participant H as Non-canary host
-    Can->>J: applied(item X, digest D) at t0
-    Note over J: wait >= canary_wait_hours, 24h default/fallback, no later held/reverted
-    Can->>J: any record or alive heartbeat after t0+wait
-    H->>J: gate check for X@D
-    alt evidence + liveness present
-        H->>H: apply X
-    else canary silent or reverted
-        H->>H: hold X (silence is never a pass)
+    participant J as Replicated journal
+    participant H as Downstream host
+    Can->>J: 1 · Apply X at digest D, t0
+    Note over J: 2 · Wait canary_wait_hours (24h default/fallback)
+    Can->>J: 3 · Liveness publish later record or heartbeat
+    H->>J: 4 · Gate check X@D
+    alt 5 · Outcome
+        H->>H: Evidence + liveness → apply X
+    else Canary silent or reverted
+        H->>H: Hold X, reason canary-silent
     end

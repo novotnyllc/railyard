@@ -1,12 +1,14 @@
 flowchart LR
-    A[Intent intake] --> B[Model routing]
-    B --> C[Plan / implement]
-    C --> D[Thermos review]
-    D --> E[Browser-visible quality]
-    E --> F[Commit / publish]
-    F --> G[Review settlement]
-    G --> H[Merge]
-    H --> I[Post-merge proof]
-    I --> J[Durable learning]
-    D -->|findings| C
-    G -->|unresolved threads| D
+    accTitle: M2 delivery lifecycle sequence
+    accDescr: A single request moves through ask, route, build, review, quality, publish, settlement, merge, proof, and learning. Findings return to build and unresolved threads return to review.
+    A["1 · Ask<br/>Intent intake"] --> B["2 · Route<br/>Model + effort"]
+    B --> C["3 · Build<br/>Plan / implement"]
+    C --> D["4 · Review<br/>Thermos"]
+    D --> E["5 · Quality<br/>Browser-visible check"]
+    E --> F["6 · Publish<br/>Commit / publish"]
+    F --> G["7 · Settle<br/>Review settlement"]
+    G --> H["8 · Merge<br/>Base branch"]
+    H --> I["9 · Prove<br/>Post-merge check"]
+    I --> J["10 · Learn<br/>Durable receipt"]
+    D -->|findings return| C
+    G -->|unresolved threads return| D

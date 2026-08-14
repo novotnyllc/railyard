@@ -23,6 +23,18 @@ Operate a personal fleet's agent toolchain with package-manager discipline: pull
 
 ![Skill-sync convergence loop from one host's publication through the signed store, fast pass, fold, manager verb, hook approval, journal, and the same skill on every machine.](/diagrams/m7-skill-sync.svg)
 
+### Sequence
+
+1. **Publish.** One host declares the reviewed skill identity.
+2. **Store.** Signed history carries the exact item digest to the fleet.
+3. **Fast pass.** Every host checks the short path before deeper work.
+4. **Fold.** The host resolves the effective `skills.name` item.
+5. **Lookup.** The definition identifies the native manager and expected identity.
+6. **Manager.** Claude and Codex receive the verb owned by their manager.
+7. **Hooks.** Hook approval runs again on install or update.
+8. **Journal.** The host records `applied`, `satisfied`, or a named hold.
+9. **Arrive.** Every host can report the same reviewed skill identity.
+
 The loop's text fallback is the receipt below: each host records `applied` or `satisfied`, and a hook-approval hold preserves the prior applied state.
 
 ## Worked receipt

@@ -1,11 +1,14 @@
 flowchart TD
-    A[Work request] --> B[resolve: role -> tier ladder]
-    B --> C{Tier 0 eligible?}
-    C -->|yes| D[Route: model + effort + transport]
-    C -->|hard constraint fails| E[Next tier / disclosed substitute]
-    D --> F[admit: budget forecast vs meters]
-    F -->|blocked| G[Refuse before spend]
-    F -->|admitted| H[claim-dispatch: one-way claim]
-    H --> I[Carrier runs work]
-    I --> J[reconcile: imported receipt only]
-    J --> K[Run log: route + tier + cost + outcome]
+    accTitle: M5 model routing sequence
+    accDescr: A work request is resolved, selected, admitted against budget, claimed once, executed by its carrier, reconciled from an imported receipt, and recorded. A hard constraint discloses a substitute; a blocked admission stops before carrier work.
+    A["1 · Request<br/>Work arrives"] --> B["2 · Resolve<br/>Role → tier ladder"]
+    B --> C{3 · Select<br/>Tier eligible?}
+    C -->|yes| D["4 · Route<br/>Model + effort + transport"]
+    C -->|hard constraint| E["Disclose next tier / substitute"]
+    E --> D
+    D --> F["5 · Admit<br/>Forecast vs meters"]
+    F -->|blocked| G["HOLD<br/>Blocked before carrier work"]
+    F -->|admitted| H["6 · Claim<br/>One-way dispatch"]
+    H --> I["7 · Carrier<br/>Work executes"]
+    I --> J["8 · Reconcile<br/>Imported receipt only"]
+    J --> K["9 · Receipt<br/>Route + tier + outcome"]

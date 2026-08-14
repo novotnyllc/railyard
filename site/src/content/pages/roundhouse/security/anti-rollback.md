@@ -19,6 +19,15 @@ Roundhouse gives each privileged host two monotonic high-water marks: `generatio
 
 ![Anti-rollback decision: ancestry and generation checks adopt and advance marks; a re-root requires a published archive and ordinary ratchet verification, otherwise the host holds and alerts.](/diagrams/m10-anti-rollback.svg)
 
+### Sequence
+
+1. **Fetch.** The host receives a signed head that proposes the next state.
+2. **Ancestry.** It checks whether the head descends from the reviewed reference.
+3. **Generation.** A descendant must meet the monotonic high-water mark.
+4. **Archive.** A re-root must name a published archive reference containing the prior reviewed reference.
+5. **Verify.** The host checks that archived reference with the ordinary trust ratchet.
+6. **Decide.** A valid path adopts and advances marks; a failed or missing proof holds and alerts with `anti-rollback`.
+
 Read the diagram as the operator's recovery decision: a missing archive is itself a hold plus alert, which is the rollback protection.
 
 The checkpoint re-root protocol keeps a legitimate history migration byte-for-byte indistinguishable from a rollback attack except for one mandatory published archive ref. A host that was offline across the re-root verifies its own reviewed reference inside that archive using the ordinary trust ratchet. An absent archive produces hold plus alert; that refusal is the protection.

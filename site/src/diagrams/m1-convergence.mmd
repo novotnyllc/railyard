@@ -1,13 +1,14 @@
 flowchart TD
-    A[Poll floor: head check] -->|new work| B[Fetch]
-    A -->|nothing to pull/push, clean @| Z[Exit early]
-    B --> C[Crash-resume check]
-    C --> D[Promote gate]
-    D --> E[Fold layers at reconcile point R]
-    E --> F[Hold set: unknown categories, class refusals]
-    F --> G[Review]
-    G --> H{Verdict}
-    H -->|pass + canary evidence| I[Apply]
-    H -->|blocked| J[Hold + alert by name]
-    I --> K[Journal: applied / satisfied]
-    K --> L[Publish + peer nudge]
+    accTitle: M1 host convergence sequence
+    accDescr: A receiving host polls, fetches, resumes safely, promotes and folds state, reviews the hold set, applies passing work, journals the outcome, and publishes a peer nudge. A clean floor exits early and a blocked verdict is held by name.
+    A["1 · Poll<br/>Head check"] -->|new work| B["2 · Fetch<br/>Signed history"]
+    A -->|clean floor| Z["Exit early<br/>Nothing to pull or push"]
+    B --> C["3 · Resume<br/>Crash-resume check"]
+    C --> D["4 · Promote<br/>Gate"]
+    D --> E["5 · Fold<br/>Layers at reconcile point R"]
+    E --> F["6 · Review<br/>Hold set"]
+    F --> G["7 · Verdict<br/>Pass, hold, or refusal"]
+    G -->|pass + canary evidence| I["8 · Apply<br/>Exact item"]
+    G -->|blocked| J["Hold + alert<br/>Named reason"]
+    I --> K["9 · Journal<br/>Applied / satisfied"]
+    K --> L["10 · Publish<br/>Peer nudge"]

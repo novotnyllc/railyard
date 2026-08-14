@@ -20,6 +20,17 @@ The synthesis deduplicates findings into one actionable list. Real findings are 
 
 ![Review gate sequence from a ready diff through parallel Thermos review, synthesis, merge settlement, independent review, merge, post-merge proof, and focused quality gates.](/diagrams/m6-review-gates.svg)
 
+### Sequence
+
+1. **Ready.** Freeze the diff and run the focused quality preflight.
+2. **Gates.** Keep only evidence for the current implementation head in the packet.
+3. **Thermos.** Run parallel correctness/security and code-quality reviews against that packet.
+4. **Return.** Synthesize real findings and send fixes back to the owning implementation lane.
+5. **Settle.** Require resolved threads and current review authority, using the bounded settlement window when applicable.
+6. **Review.** Run the independent review that confirms the settled packet.
+7. **Merge.** Merge only after the current gates authorize the branch.
+8. **Prove.** Verify merge ancestry and the focused post-merge result.
+
 Findings return to the implementation lane, so the diagram describes a loop whose success path stays short.
 
 The dispatch gate keeps the worker identity explicit. A Codex child missing both fields returns:

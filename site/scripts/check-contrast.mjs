@@ -457,8 +457,115 @@ for (const schemeName of ['light', 'dark']) {
   }
 }
 
+const diagramIds = [
+  'm2-delivery-lifecycle', 'm6-review-gates', 'm5-model-routing', 'm1-convergence',
+  'm7-skill-sync', 'm8-canary-evidence', 'm3-trust-ratchet', 'm10-anti-rollback',
+  'm9-enrollment', 'm4-trust-boundaries',
+];
+
+function svgMediaRanges(svg) {
+  return [...svg.matchAll(/@media\s*\(prefers-color-scheme:dark\)\s*\{/g)].map((match) => {
+    const open = svg.indexOf('{', match.index);
+    let depth = 0;
+    for (let index = open; index < svg.length; index += 1) {
+      if (svg[index] === '{') depth += 1;
+      if (svg[index] === '}' && --depth === 0) return { start: match.index, end: index + 1, body: svg.slice(open + 1, index) };
+    }
+    throw new Error('Unclosed SVG dark-mode block');
+  });
+}
+
+function svgMediaBlocks(svg) {
+  return svgMediaRanges(svg).map(({ body }) => body);
+}
+
+function svgLightSource(svg) {
+  let source = '';
+  let cursor = 0;
+  for (const { start, end } of svgMediaRanges(svg)) {
+    source += svg.slice(cursor, start);
+    cursor = end;
+  }
+  return source + svg.slice(cursor);
+}
+
+function svgHasClass(svg, className) {
+  return new RegExp(`<[^>]+\\bclass="[^"]*\\b${className}\\b[^"]*"`).test(svg);
+}
+
+function svgClassFill(svg, className, schemeName) {
+  if (!svgHasClass(svg, className)) throw new Error(`SVG class absent from markup: .${className}`);
+  const pattern = new RegExp(`\\.${className}\\s*\\{[^}]*?\\bfill\\s*:\\s*([^;}]+)`);
+  const light = svgLightSource(svg).match(pattern)?.[1];
+  const dark = svgMediaBlocks(svg).map((block) => block.match(pattern)?.[1]).find(Boolean);
+  if (!light) throw new Error(`Unresolved SVG light fill: .${className}`);
+  if (!dark) throw new Error(`Unresolved SVG dark fill: .${className}`);
+  return (schemeName === 'dark' ? dark : light).trim();
+}
+
+function svgSurfacePairs(svg, schemeName) {
+  const surface = svgClassFill(svg, 'bg', schemeName);
+  const backgrounds = [
+    ['background', surface, surface],
+    ['node', svgClassFill(svg, 'node', schemeName), surface],
+  ];
+  for (const optional of ['decision', 'actor', 'zone', 'attack-gate']) {
+    if (svgHasClass(svg, optional)) backgrounds.push([optional, svgClassFill(svg, optional, schemeName), surface]);
+  }
+  return backgrounds;
+}
+
+for (const schemeName of ['light', 'dark']) {
+  for (const id of diagramIds) {
+    const svg = await readFile(new URL(`../public/diagrams/${id}.svg`, import.meta.url), 'utf8');
+    const backgrounds = svgSurfacePairs(svg, schemeName);
+    const textPairs = [
+      ['label text', 'label', ['background', 'node', 'decision', 'actor', 'zone']],
+      ['small text', 'small', ['background', 'node', 'zone']],
+      ['step number', 'step-number', ['step-badge']],
+      ['attack label', 'attack-label', ['attack-node']],
+      ['attack gate text', 'attack-gate-label', ['attack-gate']],
+    ];
+    for (const [label, textClass, backgroundNames] of textPairs) {
+      if (!svgHasClass(svg, textClass)) continue;
+      const foreground = svgClassFill(svg, textClass, schemeName);
+      const candidates = backgroundNames.flatMap((name) => backgrounds.filter(([surfaceName]) => surfaceName === name));
+      if (textClass === 'step-number') candidates.push(['step-badge', svgClassFill(svg, 'step-badge', schemeName), svgClassFill(svg, 'bg', schemeName)]);
+      if (textClass === 'attack-label') candidates.push(['attack-node', svgClassFill(svg, 'attack-node', schemeName), svgClassFill(svg, 'bg', schemeName)]);
+      const worst = candidates.map(([surfaceName, background, base]) => ({
+        scheme: schemeName,
+        state: `diagram: ${id} ${label} on ${surfaceName}`,
+        ratio: contrast(foreground, background, base),
+        viewportWidth: 'SVG',
+      })).sort((left, right) => left.ratio - right.ratio)[0];
+      if (worst) results.push(worst);
+    }
+  }
+}
+
+function expectContrastFailure(label, operation) {
+  try {
+    operation();
+  } catch {
+    return;
+  }
+  throw new Error(`Contrast parser negative check did not fail: ${label}`);
+}
+
+expectContrastFailure('light lookup ignores dark-only rules', () => svgClassFill(
+  '<svg><style>@media(prefers-color-scheme:dark){.only-dark{fill:#fff}}</style><rect class="only-dark"/></svg>',
+  'only-dark',
+  'light',
+));
+expectContrastFailure('dark lookup rejects a missing dark rule', () => svgClassFill(
+  '<svg><style>.only-light{fill:#fff}</style><rect class="only-light"/></svg>',
+  'only-light',
+  'dark',
+));
+console.log('contrast parser negative checks=ok');
+
 console.log('scheme\tstate\tworst viewport\tratio');
-for (const result of results) console.log(`${result.scheme}\t${result.state}\t${result.viewportWidth}px\t${result.ratio.toFixed(2)}:1`);
+for (const result of results) console.log(`${result.scheme}\t${result.state}\t${result.viewportWidth === 'SVG' ? 'SVG' : `${result.viewportWidth}px`}\t${result.ratio.toFixed(2)}:1`);
 
 const failures = results.filter(({ ratio }) => ratio < 4.5);
 if (failures.length) {

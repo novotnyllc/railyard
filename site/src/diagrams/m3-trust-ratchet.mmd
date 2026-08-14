@@ -1,12 +1,14 @@
 sequenceDiagram
-    participant P as Roster at parent commit
-    participant C as New commit (roster edit)
+    accTitle: M3 trust ratchet sequence
+    accDescr: A new roster edit asks the parent-position roster who signed it, every merge parent verifies independently, and hosts accept trusted history or hold a named refusal.
+    participant P as Parent roster
+    participant C as New commit
     participant H as Every host
-    C->>P: Who signed me?
-    P-->>C: Key trusted at parent? class permits paths?
-    Note over C: Merge: EVERY parent must verify independently
-    alt trusted at parent
-        H->>H: Accept; roster advances
-    else unknown / removed / class refusal
-        H->>H: HOLD held items + alert by name
+    C->>P: 1 · Ask who signed me
+    P-->>C: 2 · Answer trusted at parent and class permits paths
+    Note over C: 3 · Verify every merge parent independently
+    alt trusted history
+        H->>H: 4 · Accept; roster advances
+    else unknown, removed, or class refusal
+        H->>H: 5 · Hold items and alert by name
     end

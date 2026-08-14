@@ -13,6 +13,19 @@ Roundhouse runs that loop through one repeatable host-owned cycle.
 
 ![Fleet convergence pipeline: poll, fetch, resume, promote, fold, review, apply, journal, and publish, with clean exits and named holds.](/diagrams/m1-convergence.svg)
 
+### Sequence
+
+1. **Poll.** The receiving host checks its head and the clean floor.
+2. **Fetch.** New signed history enters the local run.
+3. **Resume.** Crash recovery confirms the run can continue from an evidenced point.
+4. **Promote.** The host passes the promotion gate before changing effective state.
+5. **Fold.** Fleet, platform, group, and host layers resolve at the reconcile point.
+6. **Review.** Unknown categories and class refusals remain visible in the hold set.
+7. **Verdict.** Passing evidence can advance; a blocked result keeps the last value and names the reason.
+8. **Apply.** The owning manager applies the exact reviewed item after canary evidence.
+9. **Journal.** The host records `applied` or `satisfied` with item identity and digest.
+10. **Publish.** The host publishes its evidence and nudges peers; an empty floor exits early.
+
 The diagram is the short path: a clean floor exits early; a passing verdict applies and journals; a blocked verdict holds and alerts by name.
 
 ## Run order

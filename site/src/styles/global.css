@@ -73,10 +73,13 @@ h1,h2,h3 { margin-top: 0; letter-spacing: -.055em; line-height: 1.03; } h1,h2 { 
 .prose .diagram-frame img { max-width: none; height: 220px; }
 .prose > p:has(> img[src*="/diagrams/"]) { overflow-x: auto; }
 .prose > p:has(> img[src*="/diagrams/"]) img { max-width: none; height: 220px; }
+.prose > p:has(> img[src*="m4-trust-boundaries.svg"]) img { height: 520px; }
 .prose img { border: 1px solid var(--line); border-radius: 6px; }
 .hub-page .prose > ul,.hub-page .prose > ol { display: grid; gap: 1px; margin: 2rem 0; padding: 0; border: 1px solid var(--line); background: var(--line); list-style: none; }
 .hub-page .prose > ul > li,.hub-page .prose > ol > li { margin: 0; padding: 1rem 1.1rem; background: var(--paper); }
 .hub-page .prose > ul > li a,.hub-page .prose > ol > li a { display: block; }
+.hub-page .prose > h3 + ol { padding-left: 2.6rem; list-style: decimal; }
+.hub-page .prose > h3 + ol > li { padding-left: .25rem; }
 .terminal .speaker { margin-bottom: -.25rem; color: #d9ab73; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .terminal .terminal-note { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #45423b; color: #aea99e; font-size: .74rem; line-height: 1.5; }
 .terminal a { color: inherit; }
