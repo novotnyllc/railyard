@@ -236,9 +236,14 @@ function color(scheme, expression, seen = new Set()) {
   return result;
 }
 
-function outline(ruleSet, schemeName, scheme, selector) {
-  const result = lastPropertyDeclaration(ruleSet, selector, ['outline', 'outline-color'], schemeName);
-  if (!result) throw new Error(`Unresolved ${schemeName} outline: ${selector}`);
+function outline(ruleSet, schemeName, scheme, selectors) {
+  const candidates = Array.isArray(selectors) ? selectors : [selectors];
+  let result;
+  for (const selector of candidates) {
+    result = lastPropertyDeclaration(ruleSet, selector, ['outline', 'outline-color'], schemeName);
+    if (result) break;
+  }
+  if (!result) throw new Error(`Unresolved ${schemeName} outline: ${candidates.join(', ')}`);
   const expression = result.property === 'outline'
     ? result.value.match(/var\(--[\w-]+\)|#[\da-f]{3,8}/i)?.[0]
     : result.value;
@@ -264,9 +269,11 @@ const pairs = [
   ['focus: card outline', (name, scheme) => outline(rules, name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--paper'], (name, scheme) => scheme['--paper']],
   ['focus: filled button outline', (name, scheme) => outline(rules, name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
   ['focus: skip link text', (name, scheme) => color(scheme, firstDeclaration(rules, ['.skip-link:focus', '.skip-link'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.skip-link:focus', '.skip-link'], name)), (name, scheme) => scheme['--ground']],
+  ['focus: skip link outline', (name, scheme) => outline(rules, name, scheme, ['.skip-link:focus', 'a:focus-visible']), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
   ['focus: start callout link text', (name, scheme) => color(scheme, firstDeclaration(rules, ['.start-callout a:focus-visible', '.start-callout .button'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout a:focus-visible', '.start-callout .button'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
   ['focus: start callout button text', (name, scheme) => color(scheme, firstDeclaration(rules, ['.start-callout button:focus-visible', '.start-callout .button'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout button:focus-visible', '.start-callout .button'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
-  ['focus: start callout outline', (name, scheme) => outline(rules, name, scheme, '.start-callout a:focus-visible'), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
+  ['focus: start callout link outline', (name, scheme) => outline(rules, name, scheme, ['.start-callout a:focus-visible', 'a:focus-visible']), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
+  ['focus: start callout button outline', (name, scheme) => outline(rules, name, scheme, ['.start-callout button:focus-visible', 'button:focus-visible']), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
   ['focus: terminal link text', (name, scheme) => color(scheme, terminalForeground(rules, name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.terminal a:focus-visible', '.terminal a', '.terminal'], name)), (name, scheme) => scheme['--ground']],
   ['focus: terminal outline', (name, scheme) => outline(rules, name, scheme, '.terminal a:focus-visible'), (name, scheme) => scheme['--night'], (name, scheme) => scheme['--night']],
 ];
@@ -326,6 +333,26 @@ if (contrast(
   buttonFocusScheme['--ground'],
 ) >= 4.5) {
   throw new Error('Button focus self-check failed to make a surface-colored outline fail');
+}
+
+const skipFocusFixture = parseRules(`${css}\n.skip-link:focus { outline-color: var(--ground); }`);
+const skipFocusScheme = schemeVariables(skipFocusFixture, 'light');
+if (contrast(
+  outline(skipFocusFixture, 'light', skipFocusScheme, ['.skip-link:focus', 'a:focus-visible']),
+  skipFocusScheme['--ground'],
+  skipFocusScheme['--ground'],
+) >= 4.5) {
+  throw new Error('Skip-link focus self-check failed to make a surface-colored outline fail');
+}
+
+const startButtonFocusFixture = parseRules(`${css}\n.start-callout button:focus-visible { outline-color: var(--ink); }`);
+const startButtonFocusScheme = schemeVariables(startButtonFocusFixture, 'light');
+if (contrast(
+  outline(startButtonFocusFixture, 'light', startButtonFocusScheme, ['.start-callout button:focus-visible', 'button:focus-visible']),
+  color(startButtonFocusScheme, backgroundDeclaration(startButtonFocusFixture, ['.start-callout'], 'light')),
+  color(startButtonFocusScheme, backgroundDeclaration(startButtonFocusFixture, ['.start-callout'], 'light')),
+) >= 4.5) {
+  throw new Error('Start-callout button focus self-check failed to make a callout-colored outline fail');
 }
 
 const mediaFixture = parseRules(`${css}\n.text-link:hover { color: #777; }\n@media (max-width: 620px) { .text-link:hover { color: var(--amber-dark); } }`);
