@@ -234,8 +234,13 @@ a fallback after a failed spawn.
 independent worker runs in its own worktree (`Agent isolation:"worktree"`, a
 task-owned checkout, or `EnterWorktree`) so no two lanes and the orchestrator
 share one tree — never serialize independent work on a shared tree, and never
-pause a worker so the orchestrator can edit it. Converge the workers' branches
-onto **one integration branch → one PR** as the usual end state; stacked PRs
+pause a worker so the orchestrator can edit it. Before taking ownership of a
+worktree, preflight-detect a live prior worker (exact-PID verified, never
+pattern-matched) holding it; a conflict is a report, not a race. A thread- or
+session-owned lane with no local PID uses that harness's own owner record
+instead — never a pattern match.
+Converge the workers' branches onto **one integration branch → one PR** as
+the usual end state; stacked PRs
 (`gh-stack`) are the exception where separate branches survive to review. When
 a suite outlives a tool timeout and background waiters die, the worker reasons
 and edits while the orchestrator owns the harness-tracked long run — the
@@ -340,7 +345,7 @@ Objective: <single owned result>
 Scope: <owned project/repository, files, system, PR, or decision>
 Constraints: <safety, compatibility, exclusions, time/budget>
 Dependencies: <required inputs and owners>
-Execution: Delegate separable work only to bounded, fresh minimal-context subagents given objective, scope, constraints, and required evidence. Keep one canonical writer per scope.
+Execution: Delegate separable work only to bounded, fresh minimal-context subagents given objective, scope, constraints, and required evidence. Keep one canonical writer per scope. When waiting on external settlement (CI, bot reviews, remote state), poll in bounded loops inside the turn; never end a turn to wait — a stopped background child gets no wake-up.
 Acceptance:
 - <observable result>
 - <required checks and evidence>
