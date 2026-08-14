@@ -371,7 +371,9 @@ function shellWrapperTokens(tokens, depth = 0) {
     if (tokens[index].value !== "--" && tokens[index].value !== "--command" && !/^-[^-]*c$/.test(tokens[index].value)) continue;
     const payload = tokens[index + 1];
     if (payload?.kind !== "word") return tokens;
-    return shellWrapperTokens(shellTokens(payload.value), depth + 1);
+    const nested = shellWrapperTokens(shellTokens(payload.value), depth + 1);
+    const suffix = tokens.slice(index + 2);
+    return suffix.length ? [...nested, { kind: "separator" }, ...suffix] : nested;
   }
   return tokens;
 }
@@ -423,7 +425,14 @@ function codexExecDispatches(args) {
     let model;
     let effort;
     let label;
-    for (let cursor = index + 2; cursor < tokens.length && !["separator", "redirection"].includes(tokens[cursor].kind); cursor += 1) {
+    let cursor = index + 2;
+    while (cursor < tokens.length && tokens[cursor].kind !== "separator") {
+      if (tokens[cursor].kind === "redirection") {
+        const afterRedirection = skipRedirection(tokens, cursor, tokens.length);
+        if (afterRedirection === null) break;
+        cursor = afterRedirection;
+        continue;
+      }
       const value = tokens[cursor].value;
       const next = tokens[cursor + 1]?.value;
       if (value === "-m" || value === "--model") {
@@ -446,6 +455,7 @@ function codexExecDispatches(args) {
       } else if (value.startsWith("--label=") || value.startsWith("--task-name=")) {
         label = value.slice(value.indexOf("=") + 1);
       }
+      cursor += 1;
     }
     const clippedModel = clip(model);
     const clippedEffort = clip(effort, 20);

@@ -315,6 +315,14 @@ test("codex exec parsing requires explicit model and effort", () => {
   assert.match(incomplete.err, /model/);
   assert.match(incomplete.err, /reasoning_effort/);
   assert.deepEqual(incomplete.log, []);
+
+  const redirected = run({
+    tool_name: "Bash",
+    tool_input: { command: "codex exec >worker.log -m gpt-5.6-luna -c model_reasoning_effort=max" },
+  });
+  assert.equal(redirected.code, 0);
+  assert.equal(redirected.log[0].model, "gpt-5.6-luna");
+  assert.equal(redirected.log[0].reasoning_effort, "max");
 });
 
 test("codex exec parsing recognizes environment and command wrappers", () => {
@@ -426,6 +434,11 @@ test("codex exec parsing recognizes string shell wrappers", () => {
     assert.match(refused.err, /reasoning_effort/, command);
     assert.deepEqual(refused.log, [], command);
   }
+  const suffix = run({ tool_name: "Bash", tool_input: { command: "bash -c 'echo ok'; codex exec 'no explicit flags'" } });
+  assert.equal(suffix.code, 2);
+  assert.match(suffix.err, /model/);
+  assert.match(suffix.err, /reasoning_effort/);
+  assert.deepEqual(suffix.log, []);
 });
 
 test("codex exec parsing recognizes line continuations and ignores heredoc bodies", () => {
