@@ -163,6 +163,10 @@ first line before proceeding, non-blocking, plus a `▸ route change:` line
 whenever a continuation changes model or effort. Format and per-harness
 fields: `../../references/harness-model-invocation.md`.
 
+Background children poll in bounded loops inside their turn and never end a
+turn to wait on external settlement (CI, bot reviews, remote state) — a
+stopped child gets no wake-up and stalls the lane until noticed.
+
 Consume the resolver's immutable snapshot (policy digest, model/effort,
 carrier/adapter, transport, budget lease, fallback, disclosure). With no
 catalog it preserves the shipped Sol orchestration/review and Luna
@@ -277,7 +281,9 @@ Apply the charter's process reflex here, don't relearn it per run:
   tree, and never pause a worker to edit the shared tree — a paused worker
   rebases onto advanced main. This lane owns one integration branch that
   assembles the workers' branches into a single PR; stacked PRs are the
-  exception (`gh-stack`).
+  exception (`gh-stack`). Before taking ownership of a worktree or lane,
+  preflight-detect a live prior worker (exact-PID verified, never
+  pattern-matched) holding it; a conflict is a report, not a race.
 - **Verify, don't trust a reported green.** A green verdict requires the exact
   command, its *unmasked* process exit (`set -o pipefail` / `${PIPESTATUS}`,
   never a piped tool's exit), and that the test was *run* — a worker that
