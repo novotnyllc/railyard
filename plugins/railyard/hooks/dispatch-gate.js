@@ -23,21 +23,26 @@ try {
 function shellTokens(command) {
   const tokens = [];
   let word = "";
+  let wordStarted = false;
   let quote = "";
   let doubleQuoteSubstitution = null;
+  let doubleQuoteSubstitutionDepth = 0;
   let escaped = false;
   const flush = () => {
     if (word) tokens.push({ kind: "word", value: word });
     word = "";
+    wordStarted = false;
   };
   const source = maskHeredocBodies(String(command || ""));
   for (let index = 0; index < source.length; index += 1) {
     const char = source[index];
     if (escaped) {
+      wordStarted = true;
       if (char !== "\n" && !(char === "\r" && source[index + 1] === "\n")) word += char;
       if (char === "\r" && source[index + 1] === "\n") index += 1;
       escaped = false;
     } else if (char === "\\") {
+      wordStarted = true;
       const next = source[index + 1];
       if (next && /[\s'"\\;|&#$`{}]/.test(next)) escaped = true;
       else word += char;
@@ -46,6 +51,7 @@ function shellTokens(command) {
         flush();
         tokens.push({ kind: "separator" });
         doubleQuoteSubstitution = "paren";
+        doubleQuoteSubstitutionDepth = 1;
         quote = "";
         index += 1;
       } else if (quote === '"' && char === "`") {
@@ -54,17 +60,34 @@ function shellTokens(command) {
         doubleQuoteSubstitution = "backtick";
         quote = "";
       } else if (char === quote) quote = "";
-      else word += char;
+      else {
+        wordStarted = true;
+        word += char;
+      }
     } else if (char === "'" || char === '"') {
+      wordStarted = true;
       quote = char;
-    } else if (char === "#" && !word) {
+    } else if (char === "#" && !word && !wordStarted) {
       // A comment starts only at a word boundary. Ignore it until the next
       // line so commented-out examples cannot become audit records.
       while (index + 1 < source.length && source[index + 1] !== "\n") index += 1;
     } else if (/\s/.test(char)) {
       flush();
       if (char === "\n") tokens.push({ kind: "separator" });
-    } else if ((doubleQuoteSubstitution === "paren" && char === ")") || (doubleQuoteSubstitution === "backtick" && char === "`")) {
+    } else if (doubleQuoteSubstitution === "paren" && char === "$" && source[index + 1] === "(") {
+      flush();
+      tokens.push({ kind: "separator" });
+      doubleQuoteSubstitutionDepth += 1;
+      index += 1;
+    } else if (doubleQuoteSubstitution === "paren" && char === ")") {
+      flush();
+      tokens.push({ kind: "separator" });
+      doubleQuoteSubstitutionDepth -= 1;
+      if (doubleQuoteSubstitutionDepth === 0) {
+        doubleQuoteSubstitution = null;
+        quote = '"';
+      }
+    } else if (doubleQuoteSubstitution === "backtick" && char === "`") {
       flush();
       tokens.push({ kind: "separator" });
       doubleQuoteSubstitution = null;
@@ -85,6 +108,7 @@ function shellTokens(command) {
       flush();
       tokens.push({ kind: "separator" });
     } else {
+      wordStarted = true;
       word += char;
     }
   }
