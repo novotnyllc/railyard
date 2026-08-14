@@ -388,6 +388,24 @@ test("codex exec parsing recognizes shell substitutions and groups", () => {
   }
 });
 
+test("codex exec parsing ignores uninvoked function bodies", () => {
+  const definition = run({
+    tool_name: "Bash",
+    tool_input: { command: "worker() { codex exec 'no explicit flags'; }; echo defined" },
+  });
+  assert.equal(definition.code, 0);
+  assert.deepEqual(definition.log, []);
+
+  const invocation = run({
+    tool_name: "Bash",
+    tool_input: { command: "worker() { codex exec 'no explicit flags'; }; worker" },
+  });
+  assert.equal(invocation.code, 2);
+  assert.match(invocation.err, /model/);
+  assert.match(invocation.err, /reasoning_effort/);
+  assert.deepEqual(invocation.log, []);
+});
+
 test("codex exec parsing recognizes standard process launchers", () => {
   for (const command of [
     "timeout 60 codex exec 'no explicit flags'",
@@ -438,6 +456,8 @@ test("codex exec parsing recognizes argv shell payloads", () => {
     { tool_name: "shell", tool_input: { command: ["stdbuf", "-oL", "codex", "exec", "no explicit flags"] } },
     { tool_name: "shell", tool_input: { command: ["setsid", "-c", "-f", "-w", "codex", "exec", "no explicit flags"] } },
     { tool_name: "shell", tool_input: { command: ["xargs", "--eof", "codex", "exec", "no explicit flags"] } },
+    { tool_name: "shell", tool_input: { command: ["xargs", "bash", "-c", "codex exec 'no explicit flags'"] } },
+    { tool_name: "shell", tool_input: { command: ["builtin", "exec", "codex", "exec", "no explicit flags"] } },
   ]) {
     const refused = run(input);
     assert.equal(refused.code, 2, JSON.stringify(input));
@@ -467,12 +487,14 @@ test("codex exec parsing recognizes string shell wrappers", () => {
     `nohup bash -c "codex exec 'no explicit flags'"`,
     `time bash -c "codex exec 'no explicit flags'"`,
     "builtin command codex exec 'no explicit flags'",
+    "builtin exec codex exec 'no explicit flags'",
     "stdbuf -oL codex exec 'no explicit flags'",
     "stdbuf --output=L codex exec 'no explicit flags'",
     "setsid -c -f -w codex exec 'no explicit flags'",
     `true && bash -c "codex exec 'no explicit flags'"`,
     `printf work | xargs codex exec 'no explicit flags'`,
     `printf work | xargs --eof codex exec 'no explicit flags'`,
+    `printf work | xargs bash -c "codex exec 'no explicit flags'"`,
   ]) {
     const refused = run({ tool_name: "Bash", tool_input: { command } });
     assert.equal(refused.code, 2, command);

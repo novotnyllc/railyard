@@ -66,14 +66,14 @@ function shellTokens(command) {
     } else if (quote) {
       if (quote === '"' && char === "$" && source[index + 1] === "(") {
         flush();
-        tokens.push({ kind: "separator" });
+        tokens.push({ kind: "separator", value: "$(" });
         doubleQuoteSubstitution = "paren";
         doubleQuoteSubstitutionDepth = 1;
         quote = "";
         index += 1;
       } else if (quote === '"' && char === "`") {
         flush();
-        tokens.push({ kind: "separator" });
+        tokens.push({ kind: "separator", value: "`" });
         doubleQuoteSubstitution = "backtick";
         quote = "";
       } else if (char === quote) quote = "";
@@ -90,19 +90,19 @@ function shellTokens(command) {
       while (index + 1 < source.length && source[index + 1] !== "\n") index += 1;
     } else if (/\s/.test(char)) {
       flush();
-      if (char === "\n") tokens.push({ kind: "separator" });
+      if (char === "\n") tokens.push({ kind: "separator", value: "\n" });
     } else if (doubleQuoteSubstitution === "paren" && char === "$" && source[index + 1] === "(") {
       flush();
-      tokens.push({ kind: "separator" });
+      tokens.push({ kind: "separator", value: "$(" });
       doubleQuoteSubstitutionDepth += 1;
       index += 1;
     } else if (doubleQuoteSubstitution === "paren" && char === "(") {
       flush();
-      tokens.push({ kind: "separator" });
+      tokens.push({ kind: "separator", value: "(" });
       doubleQuoteSubstitutionDepth += 1;
     } else if (doubleQuoteSubstitution === "paren" && char === ")") {
       flush();
-      tokens.push({ kind: "separator" });
+      tokens.push({ kind: "separator", value: ")" });
       if (doubleQuoteSubstitutionDepth === 1 && caseDepth > 0 && casePattern) {
         casePattern = false;
       } else {
@@ -117,7 +117,7 @@ function shellTokens(command) {
       }
     } else if (doubleQuoteSubstitution === "backtick" && char === "`") {
       flush();
-      tokens.push({ kind: "separator" });
+      tokens.push({ kind: "separator", value: "`" });
       doubleQuoteSubstitution = null;
       quote = '"';
     } else if (char === "<" || char === ">") {
@@ -134,7 +134,7 @@ function shellTokens(command) {
       tokens.push({ kind: "redirection", value: operator });
     } else if (char === ";" || char === "|" || char === "&" || char === "(" || char === ")" || char === "{" || char === "}" || char === "`") {
       flush();
-      tokens.push({ kind: "separator" });
+      tokens.push({ kind: "separator", value: char });
       if (doubleQuoteSubstitution === "paren" && doubleQuoteSubstitutionDepth === 1 && caseDepth > 0 && char === ";" && source[index + 1] === ";") casePattern = true;
     } else {
       wordStarted = true;
@@ -143,7 +143,60 @@ function shellTokens(command) {
   }
   if (escaped) word += "\\";
   flush();
-  return tokens;
+  return stripUninvokedFunctionDefinitions(tokens);
+}
+
+function isSeparator(token, value) {
+  return token?.kind === "separator" && token.value === value;
+}
+
+function functionDefinitionEnd(tokens, openIndex) {
+  let depth = 0;
+  for (let index = openIndex; index < tokens.length; index += 1) {
+    if (isSeparator(tokens[index], "{")) depth += 1;
+    else if (isSeparator(tokens[index], "}")) {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+function stripUninvokedFunctionDefinitions(tokens) {
+  const definitions = [];
+  for (let index = 0; index < tokens.length - 3; index += 1) {
+    const token = tokens[index];
+    if (token?.kind !== "word") continue;
+    if (isSeparator(tokens[index + 1], "(") && isSeparator(tokens[index + 2], ")") && isSeparator(tokens[index + 3], "{")) {
+      const end = functionDefinitionEnd(tokens, index + 3);
+      if (end >= 0) definitions.push({ name: token.value, start: index, end });
+      continue;
+    }
+    if (token.value !== "function" || tokens[index + 1]?.kind !== "word") continue;
+    const open = tokens.findIndex((candidate, candidateIndex) => candidateIndex > index + 1 && isSeparator(candidate, "{"));
+    if (open < 0) continue;
+    const end = functionDefinitionEnd(tokens, open);
+    if (end >= 0) definitions.push({ name: tokens[index + 1].value, start: index, end });
+  }
+  if (!definitions.length) return tokens;
+  const insideDefinition = (index) => definitions.some(({ start, end }) => index >= start && index <= end);
+  const uninvoked = definitions.filter(({ name }) => !tokens.some((token, index) => {
+    if (insideDefinition(index) || token?.kind !== "word" || token.value !== name) return false;
+    const previous = tokens[index - 1];
+    return !previous || previous.kind === "separator";
+  }));
+  if (!uninvoked.length) return tokens;
+  const result = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const definition = uninvoked.find(({ start }) => start === index);
+    if (!definition) {
+      result.push(tokens[index]);
+      continue;
+    }
+    if (result.length && result.at(-1).kind !== "separator" && tokens[definition.end + 1]?.kind !== "separator") result.push({ kind: "separator", value: ";" });
+    index = definition.end;
+  }
+  return result;
 }
 
 function isAssignment(value) {
@@ -439,6 +492,21 @@ function skipSetsidOptions(values, cursor, end) {
   return cursor;
 }
 
+function skipXargsOptions(values, cursor, end) {
+  cursor += 1;
+  const optionsWithArguments = new Set(["-a", "--arg-file", "-d", "--delimiter", "-E", "-I", "--replace", "-L", "--max-lines", "-n", "--max-args", "-P", "--max-procs", "-s", "--max-chars"]);
+  while (cursor < end) {
+    const token = values[cursor];
+    const value = typeof token === "string" ? token : token?.kind === "word" ? token.value : undefined;
+    if (value === undefined) break;
+    if (value === "--") return cursor + 1;
+    if (!value.startsWith("-")) break;
+    cursor += 1;
+    if (optionsWithArguments.has(value)) cursor += 1;
+  }
+  return cursor;
+}
+
 const CODEX_GLOBAL_VALUE_OPTIONS = new Set([
   "-c", "--config", "--enable", "--disable", "--remote", "--remote-auth-token-env",
   "-i", "--image", "-m", "--model", "--local-provider", "-p", "--profile",
@@ -618,18 +686,7 @@ function commandPrefixAllows(tokens, index) {
       continue;
     }
     if (launcher === "xargs") {
-      cursor += 1;
-      const optionsWithArguments = new Set(["-a", "--arg-file", "-d", "--delimiter", "-E", "-I", "--replace", "-L", "--max-lines", "-n", "--max-args", "-P", "--max-procs", "-s", "--max-chars"]);
-      while (cursor < tokens.length && tokens[cursor].kind === "word") {
-        const value = tokens[cursor].value;
-        if (value === "--") {
-          cursor += 1;
-          break;
-        }
-        if (!value.startsWith("-")) break;
-        cursor += 1;
-        if (optionsWithArguments.has(value)) cursor += 1;
-      }
+      cursor = skipXargsOptions(tokens, cursor, tokens.length);
       continue;
     }
     break;
@@ -716,7 +773,7 @@ function shellWrapperTokens(tokens, depth = 0) {
       continue;
     }
     if (launcher === "builtin") {
-      if (tokens[cursor + 1]?.kind !== "word" || tokens[cursor + 1].value !== "command") break;
+      if (tokens[cursor + 1]?.kind !== "word" || !["command", "exec"].includes(tokens[cursor + 1].value)) break;
       cursor += 1;
       continue;
     }
@@ -780,6 +837,11 @@ function shellWrapperTokens(tokens, depth = 0) {
     if (launcher === "setsid") {
       cursor = skipSetsidOptions(tokens, cursor, tokens.length);
       continue;
+    }
+    if (launcher === "xargs") {
+      const commandStart = skipXargsOptions(tokens, cursor, tokens.length);
+      if (commandStart >= tokens.length) return tokens;
+      return shellWrapperTokens(tokens.slice(commandStart), depth + 1);
     }
     break;
   }
