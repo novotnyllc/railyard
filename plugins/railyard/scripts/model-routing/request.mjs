@@ -30,6 +30,7 @@ import {
   CALLER_KINDS,
   CONTRACT_VERSION,
   DISPATCH_KINDS,
+  HARNESS_KINDS,
   LOCALITY_RANK,
   MAX_LEASE_SLOTS,
   RETENTION_RANK,
@@ -92,10 +93,16 @@ export function validateRequest(input, command) {
   if (bounded) return error(bounded);
   const commands = new Set(["validate", "resolve", "admit", "claim-dispatch", "reconcile", "status", "inspect-claim", "refresh", "mint-task-authority", "issue-lease", "accept-lease", "claim-slot", "release-lease", "seal-epoch", "build-work-contract", "learning.inspect", "learning.clear", "learning.disable", "learning.enable"]);
   if (!commands.has(command)) return error("unknown_command");
-  const allowed = new Set(["contractVersion", "command", "operation", "callerKind", "role", "adapterId", "dispatchKind", "budgetEffect", "effort", "workShape", "workClassDigest", "priorWorkClassDigest", "contextFork", "r52", "requestId", "actionId", "privacy", "runtime", "risk", "contextClass", "complex", "explicitModelRequirement", "transport", "scope", "scopes", "forecast", "activeReservationId", "bridgeLifecycleId", "taskAuthorityId", "objectiveEpoch", "objectiveDigest", "instructionDigest", "senderOwner", "hostScope", "accountScope", "dispatchIdentity", "destinationScope", "destinationClass", "currentTurn", "postLifecycleRequirementId", "frozenInputDigest", "reservationId", "claimId", "receipt", "remoteProbe", "capability", "ceSeam", "priorRoute", "authority", "lease", "epochId", "workContract"]);
+  const allowed = new Set(["contractVersion", "command", "operation", "callerKind", "role", "adapterId", "dispatchKind", "budgetEffect", "effort", "workShape", "workClassDigest", "priorWorkClassDigest", "contextFork", "r52", "requestId", "actionId", "privacy", "runtime", "risk", "contextClass", "complex", "explicitModelRequirement", "transport", "scope", "scopes", "forecast", "activeReservationId", "bridgeLifecycleId", "taskAuthorityId", "objectiveEpoch", "objectiveDigest", "instructionDigest", "senderOwner", "hostScope", "accountScope", "dispatchIdentity", "destinationScope", "destinationClass", "currentTurn", "postLifecycleRequirementId", "frozenInputDigest", "reservationId", "claimId", "receipt", "remoteProbe", "capability", "ceSeam", "priorRoute", "authority", "lease", "epochId", "workContract", "harness", "crossHarnessReason"]);
   if (!onlyFields(input, allowed)) return error("unknown_request_field");
   if (input.role !== undefined && !validRole(input.role)) return error("invalid_role");
   if (input.callerKind !== undefined && !CALLER_KINDS.has(input.callerKind)) return error("invalid_caller_kind");
+  // Harness is the caller's current invocation classification, not a claim
+  // about provider availability or runtime capability; those remain fixed
+  // router-owned evidence paths below.
+  if (input.harness !== undefined && !HARNESS_KINDS.has(input.harness)) return error("invalid_harness");
+  if (input.crossHarnessReason !== undefined && (typeof input.crossHarnessReason !== "string" || input.crossHarnessReason.trim().length < 8 || input.crossHarnessReason.length > 256 || input.crossHarnessReason.trim().toLowerCase() === "not_applicable")) return error("invalid_cross_harness_reason");
+  if (input.crossHarnessReason !== undefined && input.harness === undefined) return error("harness_required_for_cross_harness_reason");
   if (input.adapterId !== undefined && !validId(input.adapterId)) return error("invalid_adapter");
   if (input.dispatchKind !== undefined && !DISPATCH_KINDS.has(input.dispatchKind)) return error("invalid_dispatch_kind");
   if (input.budgetEffect !== undefined && !BUDGET_EFFECTS.has(input.budgetEffect)) return error("invalid_budget_effect");

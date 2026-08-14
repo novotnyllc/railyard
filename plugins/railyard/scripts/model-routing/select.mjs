@@ -1,5 +1,9 @@
 /** Candidate enumeration, ordering, attestation, and the no-config default route. */
 
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import {
   isObject,
   onlyFields,
@@ -46,9 +50,17 @@ export function adapterFor(request, carrier) {
   return { ok: true, adapterId, adapter };
 }
 
+export function effectiveHostScope(request = {}, fallback) {
+  return request.hostScope || request.destinationScope || request.priorRoute?.hostScope || fallback || "local";
+}
+
+export function effectiveAccountScope(request = {}, provider = {}, fallback) {
+  return request.accountScope || request.priorRoute?.accountScope || fallback || provider?.account || "local";
+}
+
 export function capabilityFor(state, { carrierId, carrier, adapterId, provider, policyDigest, request, now, positive = true }) {
-  const hostScope = request.hostScope || "local";
-  const accountScope = request.accountScope || provider.account;
+  const hostScope = effectiveHostScope(request);
+  const accountScope = effectiveAccountScope(request, provider);
   for (const evidence of Object.values(state.capabilities || {})) {
     if (!isObject(evidence) || evidence.carrierId !== carrierId) continue;
     if (evidence.carrierVersion !== carrier.version || evidence.adapterId !== adapterId || evidence.adapterVersion !== ADAPTER_DESCRIPTORS[adapterId]?.version) continue;
@@ -68,7 +80,7 @@ export function completionStateFor(carrier, capability) {
   return capability?.state || "offline_implementation_ready";
 }
 
-export function transportDecision(request, adapter, trustedTransportAttestor) {
+export function transportDecision(request, adapter, trustedTransportAttestor, provider, capability) {
   if (typeof trustedTransportAttestor !== "function") {
     return { ok: true, path: "native", bridgePhase: null, provenance: "fixed_local_default", attestorId: "not_applicable" };
   }
@@ -79,8 +91,8 @@ export function transportDecision(request, adapter, trustedTransportAttestor) {
       callerKind: request.callerKind || "local",
       adapterId: adapter.id || request.adapterId,
       dispatchKind: request.dispatchKind || adapter.dispatchKinds[0],
-      hostScope: request.hostScope || "local",
-      accountScope: request.accountScope || "local",
+      hostScope: effectiveHostScope(request, capability?.hostScope),
+      accountScope: effectiveAccountScope(request, provider, capability?.accountScope),
     }));
   } catch {
     return { ok: false, reason: "trusted_transport_attestor_failed" };
@@ -148,6 +160,22 @@ export function privacyAllows(provider, model, carrier, request, catalog) {
   return true;
 }
 
+export function providerAvailabilityIssue(provider, request = {}) {
+  const availability = provider?.availability;
+  if (availability === undefined) return null;
+  if (availability.kind !== "codex_config") return "provider_unavailable";
+  const hostScope = effectiveHostScope(request);
+  if (hostScope !== "local") return null;
+  try {
+    const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
+    const config = fs.readFileSync(path.join(codexHome, "config.toml"), "utf8");
+    const section = availability.section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`^[ \\t]*\\[${section}\\][ \\t]*(?:#.*)?\\r?$`, "m").test(config) ? null : "provider_unavailable";
+  } catch {
+    return "provider_unavailable";
+  }
+}
+
 export function effortFor(request, model, carrier) {
   const effort = request.effort || model.effort || model.efforts?.[0] || carrier.efforts[0];
   if (!validEffort(effort) || !carrier.efforts.includes(effort) || (model.efforts && !model.efforts.includes(effort))) return null;
@@ -184,9 +212,10 @@ export function claudeIdentitySatisfied(model, observed) {
   return minimumGenerationSatisfied(model, observed);
 }
 
-export function configuredCandidates(catalog, request, state, now, policyDigest, { trustedTransportAttestor, fixedReceiptProducers } = {}) {
+export function configuredCandidates(catalog, request, state, now, policyDigest, { trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers } = {}) {
   const roleRule = catalog.roles[request.role];
   if (!roleRule) return [{ ok: false, reason: "role_unconfigured", alias: null }];
+  const runtimeDecisions = new Map();
   const output = [];
   for (let tierIndex = 0; tierIndex < roleRule.tiers.length; tierIndex += 1) {
     const tier = roleRule.tiers[tierIndex];
@@ -197,13 +226,51 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
       const model = catalog.models[alias];
       const provider = catalog.providers[model.provider];
       const carrier = CARRIER_DESCRIPTORS[model.carrierId];
+      let runtime = null;
+      if (["codex-luna", "codex-terra-runtime"].includes(model.carrierId)) {
+        const hostScope = effectiveHostScope(request);
+        const accountScope = effectiveAccountScope(request, provider);
+        const runtimeKey = `${hostScope}\u0000${accountScope}`;
+        if (!runtimeDecisions.has(runtimeKey)) runtimeDecisions.set(runtimeKey, fixedRuntimeDecision(trustedRuntimeAttestor, request, provider));
+        runtime = runtimeDecisions.get(runtimeKey);
+      }
       if (!carrier) {
         output.push({ ok: false, alias, tierIndex, position, reason: "unsupported_adapter" });
+        continue;
+      }
+      if (typeof trustedRuntimeAttestor === "function" && !runtime && ["codex-luna", "codex-terra-runtime"].includes(model.carrierId)) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "invalid_runtime_attestation" });
+        continue;
+      }
+      if (request.harness !== undefined) {
+        if (!provider.harness) {
+          output.push({ ok: false, alias, tierIndex, position, reason: "harness_unattributed" });
+          continue;
+        }
+        const hasCrossHarnessReason = typeof request.crossHarnessReason === "string"
+          && request.crossHarnessReason.trim().length >= 8
+          && request.crossHarnessReason.trim().toLowerCase() !== "not_applicable";
+        if ((request.role === "implementation.cross-harness" || provider.harness !== request.harness) && !hasCrossHarnessReason) {
+          output.push({ ok: false, alias, tierIndex, position, reason: "cross_harness_reason_required" });
+          continue;
+        }
+      } else if (provider.harness !== undefined) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "harness_required" });
+        continue;
+      }
+      const availabilityIssue = providerAvailabilityIssue(provider, request);
+      if (availabilityIssue) {
+        output.push({ ok: false, alias, tierIndex, position, reason: availabilityIssue });
         continue;
       }
       const adapterResult = adapterFor(request, carrier);
       if (!adapterResult.ok) {
         output.push({ ok: false, alias, tierIndex, position, reason: adapterResult.reason });
+        continue;
+      }
+      if ((request.harness === "codex" && provider.harness === "claude" && !["claude-cli-via-task", "claude-cli-via-worker"].includes(adapterResult.adapterId))
+        || (request.harness === "claude" && provider.harness === "codex")) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "cross_harness_adapter_required" });
         continue;
       }
       if (model.roles && !model.roles.includes(request.role)) {
@@ -231,6 +298,10 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
       }
       if (carrier.executionSurface && provider.executionSurface !== carrier.executionSurface) {
         output.push({ ok: false, alias, tierIndex, position, reason: "execution_surface_mismatch" });
+        continue;
+      }
+      if (model.carrierId === "codex-luna" && runtime && ["unavailable", "unselectable"].includes(runtime.lunaAvailability)) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "runtime_attestation_required" });
         continue;
       }
       const effort = effortFor(request, model, carrier);
@@ -273,19 +344,46 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         output.push({ ok: false, alias, tierIndex, position, reason: "required_capability_unattested" });
         continue;
       }
-      if (model.carrierId === "claude-ce-review" && !claudeIdentitySatisfied(model, observedModel || model.requestedModel)) {
+      const claudeIdentity = carrier.modelFamily === "claude" && model.carrierId === "claude-session" && (!observedModel || observedModel === "unknown")
+        ? model.requestedModel
+        : observedModel;
+      if (carrier.modelFamily === "claude" && model.carrierId === "claude-ce-review" && parseClaudeFamily(claudeIdentity)?.family !== undefined && !["fable", "opus"].includes(parseClaudeFamily(claudeIdentity).family)) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "ce_model_restricted" });
+        continue;
+      }
+      if (carrier.modelFamily === "claude" && !claudeIdentitySatisfied(model, claudeIdentity)) {
         output.push({ ok: false, alias, tierIndex, position, reason: "claude_identity_mismatch" });
         continue;
       }
-      if (model.carrierId !== "claude-ce-review" && !minimumGenerationSatisfied(model, observedModel || model.requestedModel)) {
+      if (carrier.runtimeVerifiedOnly) {
+        const terra = runtime?.terra;
+        const runtimeVerified = runtime
+          && ["unavailable", "unselectable"].includes(runtime.lunaAvailability)
+          && terra?.verified === true
+          && terra.model === model.requestedModel
+          && terra.effort === effort
+          && (!capability?.observedModel || capability.observedModel === "unknown" || capability.observedModel === terra.model);
+        if (!capability || !runtimeVerified) {
+          output.push({ ok: false, alias, tierIndex, position, reason: "runtime_attestation_required" });
+          continue;
+        }
+      }
+      if (carrier.modelFamily !== "claude" && !minimumGenerationSatisfied(model, observedModel || model.requestedModel)) {
         output.push({ ok: false, alias, tierIndex, position, reason: "minimum_generation_unmet" });
         continue;
       }
-      const transport = transportDecision(request, adapterResult.adapter, trustedTransportAttestor);
+      const transport = transportDecision(request, adapterResult.adapter, trustedTransportAttestor, provider, capability);
       if (!transport.ok) {
         output.push({ ok: false, alias, tierIndex, position, reason: transport.reason });
         continue;
       }
+      const implementationRole = request.role === "implementation" || request.role?.startsWith("implementation.");
+      const substitute = implementationRole
+        && model.carrierId === "codex-terra-runtime"
+        && runtime
+        && ["unavailable", "unselectable"].includes(runtime.lunaAvailability)
+        ? "implementation_model_substitute"
+        : null;
       output.push({
         ok: true,
         alias,
@@ -299,6 +397,8 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         adapterId: adapterResult.adapterId,
         effort,
         capability,
+        runtime,
+        substitute,
         transport,
         observedModel: observedModel || "unknown",
         exactRate: null,
@@ -342,20 +442,24 @@ export function candidateSort(left, right) {
   return left.position - right.position;
 }
 
-export function fixedRuntimeDecision(trustedRuntimeAttestor) {
+export function fixedRuntimeDecision(trustedRuntimeAttestor, request = {}, provider = {}) {
+  const hostScope = effectiveHostScope(request);
+  const accountScope = effectiveAccountScope(request, provider);
   // Luna's default identity is a fixed router-owned runtime fact.  The caller
   // cannot supply a runtime object; Terra is accepted only from the separate
   // fixed host-attestor path below.
   if (typeof trustedRuntimeAttestor !== "function") return {
     lunaAvailability: "available",
+    hostScope,
+    accountScope,
     provenance: "fixed_runtime_attestor",
     attestorId: RUNTIME_ATTESTOR,
-    attestationDigest: stableDigest({ runtime: "codex", lunaAvailability: "available", model: CARRIER_DESCRIPTORS["codex-luna"].requestedModel }),
+    attestationDigest: stableDigest({ runtime: "codex", hostScope, accountScope, lunaAvailability: "available", model: CARRIER_DESCRIPTORS["codex-luna"].requestedModel }),
   };
   let attestation;
-  try { attestation = trustedRuntimeAttestor(Object.freeze({ contractVersion: CONTRACT_VERSION, runtime: "codex" })); }
+  try { attestation = trustedRuntimeAttestor(Object.freeze({ contractVersion: CONTRACT_VERSION, runtime: "codex", hostScope, accountScope })); }
   catch { return null; }
-  if (!isObject(attestation) || !onlyFields(attestation, new Set(["attestorId", "attestationDigest", "lunaAvailability", "terra"])) || attestation.attestorId !== RUNTIME_ATTESTOR || !validDigest(attestation.attestationDigest) || !["available", "unavailable", "unselectable", "unknown"].includes(attestation.lunaAvailability)) return null;
+  if (!isObject(attestation) || !onlyFields(attestation, new Set(["attestorId", "attestationDigest", "lunaAvailability", "terra", "hostScope", "accountScope"])) || attestation.attestorId !== RUNTIME_ATTESTOR || !validDigest(attestation.attestationDigest) || attestation.hostScope !== hostScope || attestation.accountScope !== accountScope || !["available", "unavailable", "unselectable"].includes(attestation.lunaAvailability)) return null;
   if (attestation.terra !== undefined && (!onlyFields(attestation.terra, new Set(["verified", "model", "effort"])) || attestation.terra.verified !== true || !validModel(attestation.terra.model) || attestation.terra.effort !== "max")) return null;
   return { ...attestation, provenance: "measured_fact" };
 }
@@ -366,7 +470,7 @@ export function defaultRoute(request, { trustedRuntimeAttestor, trustedTransport
   let carrierId = implementation ? "codex-luna" : "codex-sol";
   let effort = implementation ? "max" : complex ? "max" : "high";
   let substitute = null;
-  const runtime = fixedRuntimeDecision(trustedRuntimeAttestor);
+  const runtime = fixedRuntimeDecision(trustedRuntimeAttestor, request, { account: "codex-sub" });
   if (!runtime) return { ok: false, reason: "invalid_runtime_attestation" };
   if (implementation && ["unavailable", "unselectable"].includes(runtime.lunaAvailability) && !request.explicitModelRequirement) {
     const terra = runtime.terra;
@@ -380,14 +484,15 @@ export function defaultRoute(request, { trustedRuntimeAttestor, trustedTransport
   const carrier = CARRIER_DESCRIPTORS[carrierId];
   const adapterResult = adapterFor(request, carrier);
   if (!adapterResult.ok) return { ok: false, reason: adapterResult.reason };
-  const transport = transportDecision(request, adapterResult.adapter, trustedTransportAttestor);
+  const provider = { executionSurface: "codex", carrierId, account: "codex-sub" };
+  const transport = transportDecision(request, adapterResult.adapter, trustedTransportAttestor, provider);
   if (!transport.ok) return { ok: false, reason: transport.reason };
   const model = carrierId === "codex-terra-runtime" ? runtime.terra.model : carrier.requestedModel;
   return {
     ok: true,
     alias: carrierId,
     model: { carrierId, requestedModel: model, relativeCostIndex: undefined },
-    provider: { executionSurface: "codex", carrierId },
+    provider,
     carrier,
     adapterId: adapterResult.adapterId,
     adapter: adapterResult.adapter,

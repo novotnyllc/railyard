@@ -92,6 +92,8 @@ export const DIGEST_RE = /^[a-f0-9]{64}$/;
 
 export const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 
+export const HARNESS_KINDS = new Set(["claude", "codex"]);
+
 export const SOFT_PRIORITIES = new Set(["cost", "latency", "quality", "reliability", "learnedEstimate"]);
 
 export const LOCALITY_RANK = freeze({ local_only: 0, same_region: 1, external: 2 });
@@ -297,6 +299,14 @@ export const ADAPTER_DESCRIPTORS = freeze({
     controls: freeze({ workerModel: "model", workerEffort: "reasoning_effort", claudeBinding: "ce-slot" }),
     receiptProducer: "ce-claude-review",
   }),
+  "claude-session-create": freeze({
+    version: "v1",
+    dispatchKinds: ["subagent_create"],
+    budgetEffect: "start",
+    startsWork: true,
+    controls: freeze({ model: "model", effort: "banner-only" }),
+    receiptProducer: "native-subagent",
+  }),
   "oracle-browser": freeze({
     version: "v1",
     dispatchKinds: ["subagent_create"],
@@ -323,7 +333,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     requestedModel: "gpt-5.6-luna",
     efforts: ["max"],
     adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
-    roles: ["implementation", "implementation.fix", "implementation.mechanical"],
+    roles: ["implementation", "implementation.fix", "implementation.mechanical", "implementation.medium", "implementation.long-running", "implementation.cross-harness"],
   }),
   "codex-sol": freeze({
     version: "v1",
@@ -331,7 +341,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     requestedModel: "gpt-5.6-sol",
     efforts: ["high", "max"],
     adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
-    roles: ["orchestration", "review", "review.code", "review.plan", "review.primary"],
+    roles: ["orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family", "implementation.hard"],
   }),
   "codex-terra-runtime": freeze({
     version: "v1",
@@ -339,7 +349,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     requestedModel: null,
     efforts: ["max"],
     adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
-    roles: ["implementation", "implementation.fix", "implementation.mechanical"],
+    roles: ["implementation", "implementation.fix", "implementation.mechanical", "implementation.medium", "implementation.long-running"],
     runtimeVerifiedOnly: true,
   }),
   "glm-5-2-scout": freeze({
@@ -360,7 +370,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     requestedModel: "glm-5.2",
     efforts: ["xhigh"],
     adapters: ["configured-profile-task-create"],
-    roles: ["implementation.mechanical", "implementation.bounded_fix"],
+    roles: ["implementation.mechanical", "implementation.bounded_fix", "implementation.cross-harness"],
     fixedProfile: "glm-5-2-engineer",
     contextLimit: 200000,
     requiresCallableAttestation: true,
@@ -375,6 +385,16 @@ export const CARRIER_DESCRIPTORS = freeze({
     roles: ["review.cross_family", "review.code", "review.plan"],
     requiresCallableAttestation: true,
     externalEgress: true,
+    modelFamily: "claude",
+  }),
+  "claude-session": freeze({
+    version: "v1",
+    transport: "selector-native",
+    requestedModel: null,
+    efforts: ["low", "medium", "high", "max"],
+    adapters: ["claude-session-create"],
+    roles: ["implementation", "implementation.hard", "implementation.medium", "implementation.long-running", "implementation.mechanical"],
+    modelFamily: "claude",
   }),
   "oracle-browser": freeze({
     version: "v1",
@@ -414,6 +434,12 @@ export const PRESENTATION_OVERLAYS = freeze({
   ]) }),
   fable: freeze({ id: "fable", format: "autonomous_long_run_brief", instructions: freeze([
     "State autonomy and pause boundaries, require evidence-grounded progress, and preserve compact long-run memory through the stop condition.",
+  ]) }),
+  sonnet: freeze({ id: "sonnet", format: "balanced_implementation_brief", instructions: freeze([
+    "State the bounded objective, relevant context, verification evidence, and stop condition with proportional detail.",
+  ]) }),
+  haiku: freeze({ id: "haiku", format: "mechanical_task_brief", instructions: freeze([
+    "State the exact mechanical change, its smallest verification check, and the stop condition.",
   ]) }),
   glm: freeze({ id: "glm", format: "repository_engineering_brief", instructions: freeze([
     "State repository standards and boundaries, the plan, expected impact and risks, verification evidence, and the stop condition.",

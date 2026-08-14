@@ -214,8 +214,13 @@ top-level keys only: `providers`, `models`, `roles`, `privacy`, `budgets`,
 
 - `providers` maps opaque aliases to a fixed `carrierId`, opaque account alias,
   typed execution surface (including `local_host`), locality, retention class,
-  and declared capability names. Declarations are eligibility policy, not
-  callable evidence.
+  declared capability names, and (for this owner policy) a `harness` of
+  `claude` or `codex`. A provider may also declare
+  `availability:{"kind":"codex_config","section":"model_providers.<id>"}`;
+  that source-owned local check is only a configuration-presence gate and is
+  not callable evidence. The check applies only to the local destination;
+  remote-scoped requests fail closed until their destination supplies
+  host-scoped capability evidence.
 - `models` maps opaque aliases to a provider alias, fixed `carrierId`, bounded
   requested model/family, effort(s), roles, optional `provider_latest_family`
   or `exact_pin` identity mode, optional numeric minimum generation,
@@ -238,6 +243,40 @@ top-level keys only: `providers`, `models`, `roles`, `privacy`, `budgets`,
   and retention class; they never claim universal non-retention.
 - `budgets` has task/run/project meter limits. A meter rule may contain
   `soft`, `hardAdmission`, or `strict` canonical amounts.
+
+The owner policy is shipped as the documented
+[`model-routing.example.json`](model-routing.example.json). Its role/tier
+catalog is deliberately ordinary schema data: `implementation.hard` selects
+Fable in a Claude harness or the max-effort Sol alias in Codex, `implementation.medium` and
+`implementation.long-running` select Sonnet, attested Terra, or healthy Luna,
+`implementation.mechanical` selects Haiku or Luna, and plain
+`implementation` selects Luna. The `implementation.cross-harness`
+role orders Luna and GLM by the existing cost tiebreak when the caller has
+explicitly named a cross-harness reason. GLM is still Codex-family even though
+its execution surface is the Z.ai subscription; its candidate is eligible only
+when the configured `[model_providers.zai_litellm]` section exists in the
+Codex `config.toml` and the normal callable attestation is present.
+
+The small schema extension is the provider `harness`/`availability` metadata
+and request `harness`/`crossHarnessReason` fields. `harness` classifies the
+current invocation destination; it is not runtime availability or entitlement
+evidence. A candidate whose provider
+harness differs from the request is rejected as
+`cross_harness_reason_required` unless the non-empty reason is copied into the
+decision's `requested` and `binding` facets. This keeps the reason in the
+resolver's existing dispatch decision rather than adding a second policy
+mechanism. The existing arbitrary budget-meter map is sufficient for
+`claude_subscription`, `codex_subscription`, and `zai_credits`; no parallel
+meter table is added.
+
+Install the example at the normal platform user-config path (the delivery
+installs this same file on the current machine):
+
+```bash
+install -d -m 700 "${XDG_CONFIG_HOME:-$HOME/.config}/railyard"
+install -m 600 plugins/railyard/references/model-routing.example.json \
+  "${XDG_CONFIG_HOME:-$HOME/.config}/railyard/model-routing.json"
+```
 
 Catalog data is declarative, credential-free, and cannot define a profile,
 provider command, flag, executable, endpoint, path, prompt, source, host, or
@@ -279,6 +318,7 @@ Catalog fields may reference them; they cannot extend them.
 | --- | --- | --- | --- |
 | `codex-task-create` / `codex-task-message` | visible Codex task | `model`, `thinking` | task create needs one-use task authority |
 | `native-subagent-create` | native subagent | `model`, `reasoning_effort` | `contextFork` is `"none"` or `"1"`-`"999"` only |
+| `claude-session-create` | Claude Code `Agent` session | `model`, effort stated in the dispatch banner only | the Agent tool has no per-dispatch effort parameter |
 | `native-subagent-message` | existing subagent message | none | `none` or `adjust_active`, never a fake spawn claim |
 | `native-subagent-followup` | work-starting follow-up | none today | fresh resolved route/inheritance only |
 | `configured-profile-task-create` | separately callable profile task | carrier-owned fixed profile | GLM only after host attestation |
@@ -306,9 +346,12 @@ The public stdin CLI has a closed receipt bridge only for `oracle-browser` and
 `oracle-homebrew-lifecycle`. It accepts a `receiptId` reference matching a
 private artifact below the canonical user state root. It does not accept
 Codex/native receipt JSON, app-tool evidence, a callback, module path,
-executable, command, or adapter hook. Publicly configured visible-task and
-native routes therefore return `transport_unsupported`; a trusted in-process
-embedding may supply the closed authority attestor and receipt importer.
+executable, command, or adapter hook. The read-only `resolve` command still
+evaluates the installed policy catalog and returns its selected route; that is
+a planning result, not callable evidence. Public admission and settlement of
+configured visible-task and native routes therefore return
+`transport_unsupported`; a trusted in-process embedding may supply the closed
+authority attestor and receipt importer.
 
 The fixed local Oracle probe can attest only that the private receipt-bridge source is
 available, with observed model and authentication explicitly `unknown`; it
@@ -410,7 +453,7 @@ second top-up.
 objective, source of truth, scope, constraints, authorization, acceptance, and
 stop condition. It returns a carrier-neutral invariant object/digest plus a
 separate source-owned presentation overlay. The only presentation families are
-`gpt_sol`, `opus`, `fable`, `glm`, and `oracle`. Their closed instructions use,
+`gpt_sol`, `opus`, `fable`, `sonnet`, `haiku`, `glm`, and `oracle`. Their closed instructions use,
 respectively, a lean bounded brief; the complete specification with explicit
 scope/delegation/progress limits; autonomy, pause, evidence, and long-run-memory
 boundaries; repository standards plus plan/impact/risk/verification; or a
@@ -503,7 +546,7 @@ node --test plugins/railyard/scripts/model-routing.test.mjs
 
 It exercises catalog and state validation, reason-class negative caches,
 learning limits, R28 decision/settlement/replay disclosure, authority and
-bridge identity binding, work-class/action-receipt invariants, all five
+bridge identity binding, work-class/action-receipt invariants, all seven
 metadata presentation overlays, terminal/epoch transitions, protected
 inspection, and separate-process public-CLI fixtures. The fixtures prove only
 the local fixed bridge contracts: Oracle private-artifact import, public-CLI

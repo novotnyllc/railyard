@@ -19,9 +19,11 @@ import {
   runCli,
   scopeAccountingId,
   stableDigest,
+  providerAvailabilityIssue,
   validateCatalog,
   validateState,
 } from "./model-routing.mjs";
+import { validBinding } from "./model-routing/state-schema.mjs";
 import { build as buildOracle, dispatch as dispatchOracle } from "../skills/oracle/scripts/oracle-route.mjs";
 
 const NOW = Date.parse("2026-08-04T12:00:00.000Z");
@@ -121,6 +123,10 @@ function policyDigest(policy) {
   return validated.policy.digest;
 }
 
+function ownerPolicy() {
+  return JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../references/model-routing.example.json"), "utf8"));
+}
+
 function dispatchIdentity(adapterId, { hostScope = "local", accountScope = "local", sessionId = "session-one" } = {}) {
   const adapter = ADAPTER_DESCRIPTORS[adapterId];
   return {
@@ -169,14 +175,14 @@ function refreshAttestor({ observedModel, capabilities = [], authState = "authen
   };
 }
 
-function attestedCapability(policy, { carrierId = "glm-5-2-engineer", adapterId = "configured-profile-task-create", accountScope = "plan", observedModel = "glm-5.2", capabilities = [] } = {}) {
+function attestedCapability(policy, { carrierId = "glm-5-2-engineer", adapterId = "configured-profile-task-create", hostScope = "local", accountScope = "plan", observedModel = "glm-5.2", capabilities = [] } = {}) {
   const state = createEmptyState();
   const record = {
     carrierId,
     carrierVersion: CARRIER_DESCRIPTORS[carrierId].version,
     adapterId,
     adapterVersion: ADAPTER_DESCRIPTORS[adapterId].version,
-    hostScope: "local",
+    hostScope,
     accountScope,
     policyDigest: policyDigest(policy),
     state: "host_capability_attested",
@@ -361,6 +367,249 @@ test("the built-in route stays Luna Max, and no-config task messages fail closed
   assert.equal(Object.hasOwn(outcome, "routeEffectBucket"), false);
   assert.equal(Object.values(state.learningAggregates).filter((entry) => entry.kind === "routeEffect").length, 0);
   assert.equal(validateState(state).ok, true);
+});
+
+test("the owner catalog selects Fable for hard Claude work and records an explicit Luna handoff reason", () => {
+  const policy = ownerPolicy();
+  assert.equal(validateCatalog(policy).ok, true);
+  const state = createEmptyState();
+  const fable = handleRequest(request("resolve", {
+    role: "implementation.hard",
+    harness: "claude",
+    adapterId: "claude-session-create",
+    dispatchKind: "subagent_create",
+  }), { catalog: policy, state, now: NOW });
+  assert.equal(fable.response.reason, "resolved", JSON.stringify(fable.response));
+  assert.equal(fable.response.decision.selected.modelAlias, "fable");
+  assert.equal(fable.response.decision.selected.model, "fable");
+  assert.equal(fable.response.decision.binding.harness, "claude");
+  assert.deepEqual(fable.response.decision.binding.controls, { model: "model", effort: "banner-only" });
+
+  const longRunning = handleRequest(request("resolve", {
+    role: "implementation.long-running",
+    harness: "claude",
+    adapterId: "claude-session-create",
+    dispatchKind: "subagent_create",
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(longRunning.response.reason, "resolved", JSON.stringify(longRunning.response));
+  assert.equal(longRunning.response.decision.selected.modelAlias, "sonnet");
+
+  for (const role of ["implementation.medium", "implementation.long-running"]) {
+    const codex = handleRequest(request("resolve", {
+      role,
+      harness: "codex",
+    }), { catalog: policy, state: createEmptyState(), now: NOW, trustedRuntimeAttestor: lunaAvailableAttestor() });
+    assert.equal(codex.response.reason, "resolved", JSON.stringify(codex.response));
+    assert.equal(codex.response.decision.selected.modelAlias, "luna");
+  }
+
+  const withoutReason = handleRequest(request("resolve", {
+    role: "implementation",
+    harness: "claude",
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(withoutReason.response.reason, "no_eligible_route");
+  assert.equal(withoutReason.response.rejectedAlternatives[0].reason, "cross_harness_reason_required");
+
+  const withoutHarness = handleRequest(request("resolve", {
+    role: "implementation.hard",
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(withoutHarness.response.reason, "no_eligible_route");
+  assert.equal(withoutHarness.response.rejectedAlternatives[0].reason, "harness_required");
+
+  const sentinelReason = handleRequest(request("resolve", {
+    role: "implementation",
+    harness: "codex",
+    crossHarnessReason: "not_applicable",
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(sentinelReason.response.reason, "invalid_cross_harness_reason");
+
+  const crossHarnessReason = "Use Codex subscription headroom for this bounded implementation.";
+  const luna = handleRequest(request("resolve", {
+    role: "implementation",
+    harness: "claude",
+    crossHarnessReason,
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(luna.response.reason, "no_eligible_route", JSON.stringify(luna.response));
+  assert.equal(luna.response.rejectedAlternatives.find((item) => item.modelAlias === "luna")?.reason, "cross_harness_adapter_required");
+
+  const unsupportedClaudeHandoff = handleRequest(request("resolve", {
+    role: "implementation.hard",
+    harness: "codex",
+    crossHarnessReason,
+    adapterId: "claude-session-create",
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(unsupportedClaudeHandoff.response.reason, "no_eligible_route", JSON.stringify(unsupportedClaudeHandoff.response));
+  assert.equal(unsupportedClaudeHandoff.response.rejectedAlternatives.find((item) => item.modelAlias === "fable")?.reason, "cross_harness_adapter_required");
+
+  const crossHarnessWithoutReason = handleRequest(request("resolve", {
+    role: "implementation.cross-harness",
+    harness: "codex",
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(crossHarnessWithoutReason.response.reason, "no_eligible_route", JSON.stringify(crossHarnessWithoutReason.response));
+  assert.equal(crossHarnessWithoutReason.response.rejectedAlternatives.length > 0, true);
+  assert.equal(crossHarnessWithoutReason.response.rejectedAlternatives.every((item) => item.reason === "cross_harness_reason_required"), true);
+
+  const review = handleRequest(request("resolve", { role: "review.code", harness: "codex" }), {
+    catalog: policy,
+    state: createEmptyState(),
+    now: NOW,
+  });
+  assert.equal(review.response.reason, "resolved", JSON.stringify(review.response));
+  assert.equal(review.response.decision.selected.modelAlias, "sol");
+  assert.equal(review.response.decision.selected.effort, "high");
+  assert.equal(validBinding(review.response.decision.binding), true);
+  const crossFamily = handleRequest(request("resolve", { role: "review.cross_family", harness: "codex" }), {
+    catalog: policy,
+    state: createEmptyState(),
+    now: NOW,
+  });
+  assert.equal(crossFamily.response.reason, "resolved", JSON.stringify(crossFamily.response));
+  assert.equal(crossFamily.response.decision.selected.modelAlias, "sol");
+  const missingHarness = { ...review.response.decision.binding };
+  delete missingHarness.harness;
+  assert.equal(validBinding(missingHarness), false);
+  const missingReason = { ...review.response.decision.binding };
+  delete missingReason.crossHarnessReason;
+  assert.equal(validBinding(missingReason), false);
+});
+
+test("the owner catalog keeps subscription meters separate and gates GLM on Codex config", () => {
+  const policy = ownerPolicy();
+  assert.deepEqual(Object.keys(policy.budgets.task).sort(), ["claude_subscription", "codex_subscription", "zai_credits"]);
+  const previous = process.env.CODEX_HOME;
+  const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), "railyard-codex-policy-"));
+  try {
+    process.env.CODEX_HOME = codexHome;
+    assert.equal(providerAvailabilityIssue(policy.providers.zai), "provider_unavailable");
+    fs.writeFileSync(path.join(codexHome, "config.toml"), "[model_providers.zai_litellm]\n");
+    assert.equal(providerAvailabilityIssue(policy.providers.zai), null);
+    fs.writeFileSync(path.join(codexHome, "config.toml"), "[model_providers.zai_litellm] # enabled\n");
+    assert.equal(providerAvailabilityIssue(policy.providers.zai), null);
+    assert.equal(providerAvailabilityIssue(policy.providers.zai, { hostScope: "runner-2" }), null);
+
+    const transportScopes = [];
+    const runtimeScopes = [];
+    const remote = handleRequest(request("resolve", {
+      role: "implementation.cross-harness",
+      harness: "codex",
+      destinationScope: "runner-2",
+      crossHarnessReason: "Use the remote Codex-family GLM destination for this bounded task.",
+      adapterId: "configured-profile-task-create",
+      dispatchKind: "task_create",
+    }), {
+      catalog: policy,
+      state: attestedCapability(policy, {
+        hostScope: "runner-2",
+        accountScope: "zai-credits",
+      }),
+      now: NOW,
+      trustedTransportAttestor: ({ hostScope, accountScope }) => {
+        transportScopes.push({ hostScope, accountScope });
+        return { attestorId: "railyard-transport-attestor-v1", attestationDigest: DIGEST_A, compatibility: "native_compatible", bridgeAvailable: false };
+      },
+      trustedRuntimeAttestor: ({ hostScope, accountScope }) => {
+        runtimeScopes.push({ hostScope, accountScope });
+        return { attestorId: "railyard-runtime-attestor-v1", attestationDigest: DIGEST_A, lunaAvailability: "available", hostScope, accountScope };
+      },
+    });
+    assert.equal(remote.response.reason, "resolved", JSON.stringify(remote.response));
+    assert.equal(remote.response.decision.selected.modelAlias, "glm");
+    assert.equal(remote.response.decision.binding.hostScope, "runner-2");
+    assert.equal(remote.response.decision.binding.accountScope, "zai-credits");
+    assert.deepEqual(transportScopes, [{ hostScope: "runner-2", accountScope: "zai-credits" }]);
+    assert.deepEqual(runtimeScopes, [{ hostScope: "runner-2", accountScope: "codex-sub" }]);
+  } finally {
+    if (previous === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = previous;
+    fs.rmSync(codexHome, { recursive: true, force: true });
+  }
+});
+
+test("configured runtime candidates fail closed when the trusted attestor is invalid", () => {
+  const policy = ownerPolicy();
+  for (const trustedRuntimeAttestor of [
+    () => { throw new Error("attestor unavailable"); },
+    () => ({}),
+    () => ({ attestorId: "railyard-runtime-attestor-v1", attestationDigest: DIGEST_A, lunaAvailability: "unknown", hostScope: "local", accountScope: "codex-sub" }),
+  ]) {
+    const refused = handleRequest(request("resolve", { role: "implementation", harness: "codex" }), {
+      catalog: policy,
+      state: createEmptyState(),
+      now: NOW,
+      trustedRuntimeAttestor,
+    });
+    assert.equal(refused.response.reason, "no_eligible_route", JSON.stringify(refused.response));
+    assert.equal(refused.response.rejectedAlternatives.find((item) => item.modelAlias === "luna")?.reason, "invalid_runtime_attestation");
+  }
+});
+
+test("the owner catalog gives hard Codex implementation the max-effort Sol route", () => {
+  const policy = ownerPolicy();
+  const hardCodex = handleRequest(request("resolve", {
+    role: "implementation.hard",
+    harness: "codex",
+    adapterId: "codex-task-create",
+    dispatchKind: "task_create",
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(hardCodex.response.reason, "resolved", JSON.stringify(hardCodex.response));
+  assert.equal(hardCodex.response.decision.selected.modelAlias, "sol_max");
+  assert.equal(hardCodex.response.decision.selected.effort, "max");
+});
+
+test("attested Claude review routes do not treat unknown model identity as verified", () => {
+  const policy = catalog({
+    extraProviders: {
+      claude: { carrierId: "claude-ce-review", executionSurface: "provider_subscription", account: "claude", locality: "external", retention: "provider_default", harness: "claude" },
+    },
+    extraModels: {
+      opus: { provider: "claude", carrierId: "claude-ce-review", requestedModel: "opus-current", efforts: ["high"], roles: ["review.code"] },
+    },
+    extraRoles: { "review.code": { tiers: [["opus"]] } },
+  });
+  const state = attestedCapability(policy, {
+    carrierId: "claude-ce-review",
+    adapterId: "claude-cli-via-task",
+    accountScope: "claude",
+    observedModel: "unknown",
+  });
+  const resolved = handleRequest(request("resolve", {
+    callerKind: "compound-engineering",
+    role: "review.code",
+    harness: "claude",
+    adapterId: "claude-cli-via-task",
+    dispatchKind: "task_create",
+    ceSeam: { id: "ce-code-review.execution", skill: "ce-code-review", artifact: { schema: "railyard/ce-code-review-findings/v1", digest: DIGEST_A } },
+  }), { catalog: policy, state, now: NOW });
+  assert.equal(resolved.response.reason, "no_eligible_route");
+  assert.equal(resolved.response.rejectedAlternatives[0].reason, "claude_identity_mismatch");
+});
+
+test("CE review routes remain restricted to Fable and Opus", () => {
+  const policy = catalog({
+    extraProviders: {
+      claude: { carrierId: "claude-ce-review", executionSurface: "provider_subscription", account: "claude", locality: "external", retention: "provider_default", harness: "claude" },
+    },
+    extraModels: {
+      "sonnet-review": { provider: "claude", carrierId: "claude-ce-review", requestedModel: "sonnet", efforts: ["high"], roles: ["review.code"] },
+    },
+    extraRoles: { "review.code": { tiers: [["sonnet-review"]] } },
+  });
+  const state = attestedCapability(policy, {
+    carrierId: "claude-ce-review",
+    adapterId: "claude-cli-via-task",
+    accountScope: "claude",
+    observedModel: "sonnet",
+  });
+  const resolved = handleRequest(request("resolve", {
+    callerKind: "compound-engineering",
+    role: "review.code",
+    harness: "claude",
+    adapterId: "claude-cli-via-task",
+    dispatchKind: "task_create",
+    ceSeam: { id: "ce-code-review.execution", skill: "ce-code-review", artifact: { schema: "railyard/ce-code-review-findings/v1", digest: DIGEST_A } },
+  }), { catalog: policy, state, now: NOW });
+  assert.equal(resolved.response.reason, "no_eligible_route");
+  assert.equal(resolved.response.rejectedAlternatives[0].reason, "ce_model_restricted");
 });
 
 test("catalogs, privacy, and closed CE seams cannot widen routing authority", () => {
@@ -596,6 +845,8 @@ test("R28 decision, fallback, and settlement disclosures use explicit provenance
       attestorId: "railyard-runtime-attestor-v1",
       attestationDigest: DIGEST_A,
       lunaAvailability: "unavailable",
+      hostScope: "local",
+      accountScope: "codex-sub",
       terra: { verified: true, model: "gpt-5.6-terra", effort: "max" },
     }),
   });
@@ -999,7 +1250,7 @@ test("native and Oracle claims cannot cross their admitted host or account ident
   assert.equal(oracleClaim("local", "standard").reason, "dispatch_claimed");
 });
 
-test("carrier-neutral invariant work contracts keep five closed presentation overlays", () => {
+test("carrier-neutral invariant work contracts keep seven closed presentation overlays", () => {
   const invariantInput = {
     objectiveDigest: DIGEST_A,
     sourceOfTruthDigest: DIGEST_B,
@@ -1013,6 +1264,8 @@ test("carrier-neutral invariant work contracts keep five closed presentation ove
     ["gpt_sol", "codex-sol", "gpt-5.6-sol", "high", "lean, explicit, bounded brief"],
     ["opus", "claude-ce-review", "opus-current", "high", "complete task specification"],
     ["fable", "claude-ce-review", "fable-current", "high", "autonomy and pause boundaries"],
+    ["sonnet", "claude-session", "sonnet", "medium", "bounded objective, relevant context"],
+    ["haiku", "claude-session", "haiku", "low", "exact mechanical change"],
     ["glm", "glm-5-2-engineer", "glm-5.2", "xhigh", "repository standards and boundaries"],
     ["oracle", "oracle-browser", "chatgpt_current_pro", "high", "complete selected file context"],
   ];
@@ -1220,6 +1473,17 @@ test("public CLI environment and JSON cannot mint visible-task authority or sett
     fs.writeFileSync(configPath, JSON.stringify(policy));
     fs.chmodSync(configPath, 0o600);
 
+    fs.writeFileSync(configPath, JSON.stringify(ownerPolicy()));
+    const publicFable = publicCli(request("resolve", {
+      role: "implementation.hard",
+      harness: "claude",
+      adapterId: "claude-session-create",
+      dispatchKind: "subagent_create",
+    }), home);
+    assert.equal(publicFable.reason, "resolved", JSON.stringify(publicFable));
+    assert.equal(publicFable.decision.selected.modelAlias, "fable");
+    fs.writeFileSync(configPath, JSON.stringify(policy));
+
     const callerControlledEnv = {
       CODEX_THREAD_ID: "thread-native-e2e",
       CODEX_PERMISSION_PROFILE: "disabled",
@@ -1338,11 +1602,15 @@ test("public CLI environment and JSON cannot mint visible-task authority or sett
     fs.chmodSync(configPath, 0o600);
     const unsupported = publicCli({
       contractVersion: CONTRACT_VERSION,
-      command: "resolve",
+      command: "admit",
       callerKind: "fleet",
       role: "implementation.mechanical",
       adapterId: "configured-profile-task-create",
       dispatchKind: "task_create",
+      requestId: "glm-public-admit",
+      frozenInputDigest: DIGEST_A,
+      forecast: {},
+      scopes: { task: "glm-public-task" },
       hostScope: "local",
       accountScope: "plan",
       r52: r52Readiness(),
@@ -1396,6 +1664,8 @@ function terraAttestor(model = "gpt-5.6-terra") {
     attestorId: "railyard-runtime-attestor-v1",
     attestationDigest: DIGEST_A,
     lunaAvailability: "unavailable",
+    hostScope: "local",
+    accountScope: "codex-sub",
     terra: { verified: true, model, effort: "max" },
   });
 }
@@ -1405,8 +1675,73 @@ function lunaAvailableAttestor() {
     attestorId: "railyard-runtime-attestor-v1",
     attestationDigest: DIGEST_A,
     lunaAvailability: "available",
+    hostScope: "local",
+    accountScope: "codex-sub",
   });
 }
+
+test("configured Terra selection requires the fixed runtime attestor", () => {
+  const policy = ownerPolicy();
+  const requestFields = {
+    role: "implementation.medium",
+    harness: "codex",
+    adapterId: "codex-task-create",
+    dispatchKind: "task_create",
+  };
+  const state = attestedCapability(policy, {
+    carrierId: "codex-terra-runtime",
+    adapterId: "codex-task-create",
+    accountScope: "codex-sub",
+    observedModel: "unknown",
+  });
+  const missingCapability = handleRequest(request("resolve", requestFields), {
+    catalog: policy,
+    state: createEmptyState(),
+    now: NOW,
+    trustedRuntimeAttestor: terraAttestor(),
+  });
+  assert.equal(missingCapability.response.reason, "no_eligible_route", JSON.stringify(missingCapability.response));
+  assert.equal(missingCapability.response.rejectedAlternatives.find((item) => item.modelAlias === "terra")?.reason, "runtime_attestation_required");
+
+  const untrusted = handleRequest(request("resolve", requestFields), { catalog: policy, state, now: NOW });
+  assert.equal(untrusted.response.reason, "resolved", JSON.stringify(untrusted.response));
+  assert.equal(untrusted.response.decision.selected.modelAlias, "luna");
+  assert.equal(untrusted.response.decision.rejectedAlternatives.find((item) => item.modelAlias === "terra")?.reason, "runtime_attestation_required");
+
+  const trusted = handleRequest(request("resolve", requestFields), {
+    catalog: policy,
+    state,
+    now: NOW,
+    trustedRuntimeAttestor: terraAttestor(),
+  });
+  assert.equal(trusted.response.reason, "resolved", JSON.stringify(trusted.response));
+  assert.equal(trusted.response.decision.selected.modelAlias, "terra");
+  assert.equal(trusted.response.decision.fallback.reason, "implementation_model_substitute");
+  assert.equal(trusted.response.decision.fallbackReceipt.reasonCode, "implementation_model_substitute");
+
+  const admissionState = attestedCapability(policy, {
+    carrierId: "codex-terra-runtime",
+    adapterId: "native-subagent-create",
+    accountScope: "codex-sub",
+    observedModel: "unknown",
+  });
+  const admitted = handleRequest(request("admit", {
+    ...requestFields,
+    adapterId: "native-subagent-create",
+    dispatchKind: "subagent_create",
+    requestId: "terra-admission",
+    frozenInputDigest: DIGEST_A,
+    forecast: { marginalUsd: "1" },
+    scopes: { task: "terra-task", run: "terra-run", project: "terra-project" },
+  }), {
+    catalog: policy,
+    state: admissionState,
+    now: NOW,
+    trustedRuntimeAttestor: terraAttestor(),
+  });
+  assert.equal(admitted.response.reason, "admitted", JSON.stringify(admitted.response));
+  assert.equal(admitted.response.decision.selected.modelAlias, "terra");
+});
 
 test("implementationEngine follows the implementation role, not one carrier descriptor", () => {
   // No-config default (the public model-routing.mjs CLI supplies no runtime
@@ -1429,6 +1764,23 @@ test("implementationEngine follows the implementation role, not one carrier desc
   assert.deepEqual(provenLuna.response.decision.implementationEngine, {
     mode: "require", target: "codex", model: "gpt-5.6-luna", source: "deliver",
   });
+
+  const runtimeScopes = [];
+  const transportScopes = [];
+  const scopedDefault = handleRequest(request("resolve"), {
+    state: createEmptyState(), now: NOW,
+    trustedRuntimeAttestor: (scope) => {
+      runtimeScopes.push({ hostScope: scope.hostScope, accountScope: scope.accountScope });
+      return { attestorId: "railyard-runtime-attestor-v1", attestationDigest: DIGEST_A, lunaAvailability: "available", hostScope: scope.hostScope, accountScope: scope.accountScope };
+    },
+    trustedTransportAttestor: (scope) => {
+      transportScopes.push({ hostScope: scope.hostScope, accountScope: scope.accountScope });
+      return { attestorId: "railyard-transport-attestor-v1", attestationDigest: DIGEST_A, compatibility: "native_compatible", bridgeAvailable: false };
+    },
+  });
+  assert.equal(scopedDefault.response.decision.binding.accountScope, "codex-sub");
+  assert.deepEqual(runtimeScopes, [{ hostScope: "local", accountScope: "codex-sub" }]);
+  assert.deepEqual(transportScopes, [{ hostScope: "local", accountScope: "codex-sub" }]);
 
   // Sourcing the field from codex-luna alone dropped the "must go to Codex"
   // signal exactly when Luna degraded to the Terra substitute. Terra rides a

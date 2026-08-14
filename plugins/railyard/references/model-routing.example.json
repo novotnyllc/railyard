@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "providers": {
+    "claude": {
+      "carrierId": "claude-session",
+      "executionSurface": "provider_subscription",
+      "account": "claude-sub",
+      "locality": "external",
+      "retention": "provider_default",
+      "harness": "claude"
+    },
+    "codex_luna": {
+      "carrierId": "codex-luna",
+      "executionSurface": "codex",
+      "account": "codex-sub",
+      "locality": "external",
+      "retention": "provider_default",
+      "harness": "codex"
+    },
+    "codex_sol": {
+      "carrierId": "codex-sol",
+      "executionSurface": "codex",
+      "account": "codex-sub",
+      "locality": "external",
+      "retention": "provider_default",
+      "harness": "codex"
+    },
+    "codex_terra": {
+      "carrierId": "codex-terra-runtime",
+      "executionSurface": "codex",
+      "account": "codex-sub",
+      "locality": "external",
+      "retention": "provider_default",
+      "harness": "codex"
+    },
+    "zai": {
+      "carrierId": "glm-5-2-engineer",
+      "executionSurface": "provider_subscription",
+      "account": "zai-credits",
+      "locality": "same_region",
+      "retention": "ephemeral",
+      "harness": "codex",
+      "availability": {
+        "kind": "codex_config",
+        "section": "model_providers.zai_litellm"
+      }
+    }
+  },
+  "models": {
+    "fable": {
+      "provider": "claude",
+      "carrierId": "claude-session",
+      "requestedModel": "fable",
+      "efforts": ["high", "max"],
+      "roles": ["implementation.hard"],
+      "relativeCostIndex": 100
+    },
+    "sonnet": {
+      "provider": "claude",
+      "carrierId": "claude-session",
+      "requestedModel": "sonnet",
+      "efforts": ["medium"],
+      "roles": ["implementation.medium", "implementation.long-running"],
+      "relativeCostIndex": 30
+    },
+    "haiku": {
+      "provider": "claude",
+      "carrierId": "claude-session",
+      "requestedModel": "haiku",
+      "efforts": ["low"],
+      "roles": ["implementation.mechanical"],
+      "relativeCostIndex": 10
+    },
+    "sol": {
+      "provider": "codex_sol",
+      "carrierId": "codex-sol",
+      "requestedModel": "gpt-5.6-sol",
+      "efforts": ["high", "max"],
+      "roles": ["implementation.hard", "orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family"],
+      "relativeCostIndex": 80
+    },
+    "sol_max": {
+      "provider": "codex_sol",
+      "carrierId": "codex-sol",
+      "requestedModel": "gpt-5.6-sol",
+      "efforts": ["max"],
+      "roles": ["implementation.hard"],
+      "relativeCostIndex": 80
+    },
+    "terra": {
+      "provider": "codex_terra",
+      "carrierId": "codex-terra-runtime",
+      "requestedModel": "gpt-5.6-terra",
+      "efforts": ["max"],
+      "roles": ["implementation.medium", "implementation.long-running"],
+      "relativeCostIndex": 60
+    },
+    "luna": {
+      "provider": "codex_luna",
+      "carrierId": "codex-luna",
+      "requestedModel": "gpt-5.6-luna",
+      "efforts": ["max"],
+      "roles": ["implementation", "implementation.medium", "implementation.long-running", "implementation.mechanical", "implementation.cross-harness"],
+      "relativeCostIndex": 20
+    },
+    "glm": {
+      "provider": "zai",
+      "carrierId": "glm-5-2-engineer",
+      "requestedModel": "glm-5.2",
+      "efforts": ["xhigh"],
+      "roles": ["implementation.cross-harness"],
+      "relativeCostIndex": 1
+    }
+  },
+  "roles": {
+    "orchestration": {
+      "tiers": [["sol"]]
+    },
+    "review": {
+      "tiers": [["sol"]]
+    },
+    "review.code": {
+      "tiers": [["sol"]]
+    },
+    "review.plan": {
+      "tiers": [["sol"]]
+    },
+    "review.primary": {
+      "tiers": [["sol"]]
+    },
+    "review.cross_family": {
+      "tiers": [["sol"]]
+    },
+    "implementation": {
+      "tiers": [["luna"]]
+    },
+    "implementation.hard": {
+      "tiers": [["fable", "sol_max"]]
+    },
+    "implementation.medium": {
+      "tiers": [["sonnet", "terra", "luna"]]
+    },
+    "implementation.long-running": {
+      "tiers": [["sonnet", "terra", "luna"]]
+    },
+    "implementation.mechanical": {
+      "tiers": [["haiku", "luna"]]
+    },
+    "implementation.cross-harness": {
+      "tiers": [
+        {
+          "models": ["luna", "glm"],
+          "softPriorities": ["cost"]
+        }
+      ]
+    }
+  },
+  "budgets": {
+    "task": {
+      "claude_subscription": {"soft": "100"},
+      "codex_subscription": {"soft": "100"},
+      "zai_credits": {"soft": "100"}
+    },
+    "run": {
+      "claude_subscription": {"soft": "1000"},
+      "codex_subscription": {"soft": "1000"},
+      "zai_credits": {"soft": "1000"}
+    },
+    "project": {
+      "claude_subscription": {"soft": "10000"},
+      "codex_subscription": {"soft": "10000"},
+      "zai_credits": {"soft": "10000"}
+    }
+  },
+  "learning": {
+    "enabled": true
+  }
+}

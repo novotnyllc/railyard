@@ -40,8 +40,11 @@ tokens, endpoints, or command text.
 2. **`resolve`** reads one immutable policy snapshot. No-config defaults: Sol
    `high`/`max` for orchestration and review, Luna at `max` for
    implementation, Terra at `max` only as the router-attested Luna substitute.
-   A catalog, request, or environment variable cannot nominate Terra or mark
-   Luna unavailable.
+   When the selected policy attributes providers to a harness, include
+   `harness:"claude"` or `harness:"codex"` in the request. A mismatched
+   provider needs a specific `crossHarnessReason`; the resolver copies it into
+   the decision. A catalog, request, or environment variable cannot nominate
+   Terra or mark Luna unavailable.
 3. For configured work-starting actions, **`admit`** with a stable
    caller-generated `requestId`, a frozen artifact digest, and every
    applicable scope; then **`claim-dispatch`** immediately before the one
@@ -84,15 +87,11 @@ The full adapter/carrier tables are in the reference. Operative rules:
 
 ## Harness defaults and GLM
 
-The router's frozen no-config route is harness-independent. Session defaults
-are a separate layer with per-harness values; effort is part of the default,
-and the two harness columns map row for row by tier (routine steering Sol
-`medium`/Opus `medium`; mechanical work Luna `max`/Sonnet `medium`;
-implementation Terra `max`/Opus `high`; difficult review Sol `high`/Fable
-`high`; critical Sol `max`/Fable `max`; Terra `max` under Sol for long-running
-implementation). `medium` is the steering workhorse; Codex implementation
-runs at `max` because Luna and Terra are priced for it, while Opus `high` is
-the agentic-coding sweet spot with `xhigh` reserved for genuinely hard units.
+The router's frozen no-config route is harness-independent. The owner catalog
+uses per-harness role tiers: hard implementation is Sol `max`/Fable
+`high`/`max`, medium or long-running implementation is Terra `max`/Sonnet
+`medium`, mechanical implementation is Luna `max`/Haiku `low`, and plain
+Codex implementation defaults to Luna `max`. Effort is part of every route.
 Escalate deliberately. The
 harness-model-invocation reference has the table, the current rate data, and
 why sticker rates settle almost nothing (meters differ, operating points

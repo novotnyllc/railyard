@@ -255,7 +255,7 @@ export function validSourceUrl(value) {
 
 export function parseClaudeFamily(value) {
   if (typeof value !== "string") return null;
-  const match = value.match(/^(?:claude-)?(fable|opus)(?:[-:](current|\d+(?:\.\d+){0,3}))?$/i);
+  const match = value.match(/^(?:claude-)?(fable|opus|sonnet|haiku)(?:[-:](current|\d+(?:\.\d+){0,3}))?$/i);
   if (!match) return null;
   return { family: match[1].toLowerCase(), selector: (match[2] || "current").toLowerCase() };
 }

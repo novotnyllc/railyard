@@ -14,6 +14,17 @@
         ]
       },
       {
+        "matcher": "Bash|shell|local_shell|exec_command|unified_exec",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-gate.js\"",
+            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\dispatch-gate.js\" }",
+            "timeout": 5
+          }
+        ]
+      },
+      {
         "matcher": "shell|local_shell|exec_command|unified_exec",
         "hooks": [
           {

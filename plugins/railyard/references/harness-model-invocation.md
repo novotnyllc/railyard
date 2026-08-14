@@ -23,14 +23,12 @@ session that delegates implementation still receives the Luna route.
 A model name without an effort is an incomplete route. Same work rows on both
 sides, same escalation ladder, so the columns are directly comparable:
 
-| Work | Codex / ChatGPT | Claude Code |
+| Work tier | Codex harness | Claude harness |
 | --- | --- | --- |
-| Routine orchestration, steering, status | Sol `medium` | Opus `medium` |
-| Bounded mechanical implementation | Luna `max` | Sonnet `medium` |
-| General implementation and agentic coding | Terra `max` | Opus `high` |
-| Difficult review, cross-cutting planning | Sol `high` | Fable `high` |
-| Highest-stakes reasoning, critical risk | Sol `max` | Fable `max` |
-| Long-running implementation under separate orchestration | Terra `max` driven by Sol | Opus `high` driven by Fable |
+| Hard implementation | Sol `max` | Fable `high`/`max` |
+| Medium or long-running implementation | Terra `max` | Sonnet `medium` |
+| Mechanical implementation | Luna `max` | Haiku `low` |
+| Implementation default | Luna `max` | the role-specific tier above |
 
 `medium` is the workhorse for steering, not `high`: most steering turns are
 not reasoning-bound, and paying `high` on all of them spends budget the hard
