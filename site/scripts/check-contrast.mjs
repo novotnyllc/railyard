@@ -109,6 +109,11 @@ function primaryButtonForeground(ruleSet, scheme) {
   return firstDeclaration(ruleSet, ['.button-primary:hover', '.button-primary'], 'color', scheme);
 }
 
+function terminalForeground(ruleSet, scheme) {
+  const expression = firstDeclaration(ruleSet, ['.terminal a:focus-visible', '.terminal a'], 'color', scheme);
+  return expression === 'inherit' ? declaration(ruleSet, '.terminal', 'color', scheme) : expression;
+}
+
 for (const selector of ['a:focus-visible', 'button:focus-visible']) {
   for (const property of ['color', 'background', 'background-color']) {
     try {
@@ -218,6 +223,7 @@ const pairs = [
   ['focus: start callout link text', (name, scheme) => color(scheme, firstDeclaration(rules, ['.start-callout a:focus-visible', '.start-callout .button'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout a:focus-visible', '.start-callout .button'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
   ['focus: start callout button text', (name, scheme) => color(scheme, firstDeclaration(rules, ['.start-callout button:focus-visible', '.start-callout .button'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout button:focus-visible', '.start-callout .button'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
   ['focus: start callout outline', (name, scheme) => outline(name, scheme, '.start-callout a:focus-visible'), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
+  ['focus: terminal link text', (name, scheme) => color(scheme, terminalForeground(rules, name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.terminal a:focus-visible', '.terminal a', '.terminal'], name)), (name, scheme) => scheme['--ground']],
   ['focus: terminal outline', (name, scheme) => outline(name, scheme, '.terminal a:focus-visible'), (name, scheme) => scheme['--night'], (name, scheme) => scheme['--night']],
 ];
 
@@ -257,6 +263,15 @@ const outlineOrderFixture = parseRules(`${css}\na:focus-visible { outline-color:
 const outlineOrderResult = lastPropertyDeclaration(outlineOrderFixture, 'a:focus-visible', ['outline', 'outline-color'], 'light');
 if (outlineOrderResult.property !== 'outline' || outlineOrderResult.value !== '3px solid var(--ink)') {
   throw new Error('Cascade self-check failed to preserve outline declaration order');
+}
+
+const terminalFocusFixture = parseRules(`${css}\n.terminal a:focus-visible { color: var(--night); background: var(--night); }`);
+if (contrast(
+  color(light, terminalForeground(terminalFocusFixture, 'light')),
+  color(light, backgroundDeclaration(terminalFocusFixture, ['.terminal a:focus-visible', '.terminal a', '.terminal'], 'light')),
+  light['--ground'],
+) >= 4.5) {
+  throw new Error('Terminal focus self-check failed to make equal text and background colors fail');
 }
 
 const results = [];
