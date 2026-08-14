@@ -291,10 +291,31 @@ function envOptionAdvance(value) {
   if (value === "-u" || value === "--unset" || value === "-C" || value === "--chdir") return 2;
   if (value.startsWith("--unset=") || (value.startsWith("-u") && value.length > 2)) return 1;
   if (value.startsWith("--chdir=") || (value.startsWith("-C") && value.length > 2)) return 1;
-  if (value === "-i" || value === "--ignore-environment" || value === "--list-signal-handling") return 1;
+  if (value === "-i" || value === "--ignore-environment" || value === "--list-signal-handling" || value === "-v" || value === "--debug") return 1;
   if (["--block-signal", "--default-signal", "--ignore-signal"].includes(value)) return 1;
   if (["--block-signal=", "--default-signal=", "--ignore-signal="].some((prefix) => value.startsWith(prefix))) return 1;
   return 0;
+}
+
+function skipStdbufOptions(values, cursor, end) {
+  cursor += 1;
+  const optionsWithArguments = new Set(["-i", "--input", "-o", "--output", "-e", "--error"]);
+  while (cursor < end) {
+    const token = values[cursor];
+    const value = typeof token === "string" ? token : token?.kind === "word" ? token.value : undefined;
+    if (value === undefined) break;
+    if (value === "--") return cursor + 1;
+    if (optionsWithArguments.has(value)) {
+      cursor += 2;
+      continue;
+    }
+    if (/^(?:--input|--output|--error)=/.test(value) || /^-[ioe].+/.test(value) || value.startsWith("-")) {
+      cursor += 1;
+      continue;
+    }
+    break;
+  }
+  return cursor;
 }
 
 const CODEX_GLOBAL_VALUE_OPTIONS = new Set([
@@ -467,6 +488,10 @@ function commandPrefixAllows(tokens, index) {
       }
       continue;
     }
+    if (launcher === "stdbuf") {
+      cursor = skipStdbufOptions(tokens, cursor, index);
+      continue;
+    }
     if (launcher === "xargs") {
       cursor += 1;
       const optionsWithArguments = new Set(["-a", "--arg-file", "-d", "--delimiter", "-E", "--eof", "-I", "--replace", "-L", "--max-lines", "-n", "--max-args", "-P", "--max-procs", "-s", "--max-chars"]);
@@ -623,6 +648,10 @@ function shellWrapperTokens(tokens, depth = 0) {
       }
       continue;
     }
+    if (launcher === "stdbuf") {
+      cursor = skipStdbufOptions(tokens, cursor, tokens.length);
+      continue;
+    }
     break;
   }
   if (cursor > 0 && cursor < tokens.length) return shellWrapperTokens(tokens.slice(cursor), depth);
@@ -684,6 +713,10 @@ function commandTokens(args) {
         }
         break;
       }
+      continue;
+    }
+    if (launcher === "stdbuf") {
+      cursor = skipStdbufOptions(values, cursor, values.length);
       continue;
     }
     if (launcher === "command") {

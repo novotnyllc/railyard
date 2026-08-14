@@ -400,6 +400,8 @@ test("codex exec parsing recognizes standard process launchers", () => {
     "env --unset=FOO codex exec 'no explicit flags'",
     "env -uFOO codex exec 'no explicit flags'",
     "env --block-signal=PIPE codex exec 'no explicit flags'",
+    "env -v codex exec 'no explicit flags'",
+    "env --debug codex exec 'no explicit flags'",
   ]) {
     const refused = run({ tool_name: "Bash", tool_input: { command } });
     assert.equal(refused.code, 2, command);
@@ -430,6 +432,8 @@ test("codex exec parsing recognizes argv shell payloads", () => {
     { tool_name: "unified_exec", tool_input: { input: ["bash", "-lc", "codex exec 'no explicit flags'"] } },
     { tool_name: "shell", tool_input: { command: ["env", "-S", "codex exec 'no explicit flags'"] } },
     { tool_name: "shell", tool_input: { command: ["env", "--block-signal=PIPE", "codex", "exec", "no explicit flags"] } },
+    { tool_name: "shell", tool_input: { command: ["env", "--debug", "codex", "exec", "no explicit flags"] } },
+    { tool_name: "shell", tool_input: { command: ["stdbuf", "-oL", "codex", "exec", "no explicit flags"] } },
   ]) {
     const refused = run(input);
     assert.equal(refused.code, 2, JSON.stringify(input));
@@ -459,6 +463,8 @@ test("codex exec parsing recognizes string shell wrappers", () => {
     `nohup bash -c "codex exec 'no explicit flags'"`,
     `time bash -c "codex exec 'no explicit flags'"`,
     "builtin command codex exec 'no explicit flags'",
+    "stdbuf -oL codex exec 'no explicit flags'",
+    "stdbuf --output=L codex exec 'no explicit flags'",
     `true && bash -c "codex exec 'no explicit flags'"`,
     `printf work | xargs codex exec 'no explicit flags'`,
   ]) {
