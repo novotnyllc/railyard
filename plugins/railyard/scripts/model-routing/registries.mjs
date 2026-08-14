@@ -304,7 +304,7 @@ export const ADAPTER_DESCRIPTORS = freeze({
     dispatchKinds: ["subagent_create"],
     budgetEffect: "start",
     startsWork: true,
-    controls: freeze({ model: "model", effort: "reasoning_effort" }),
+    controls: freeze({ model: "model", effort: "banner-only" }),
     receiptProducer: "native-subagent",
   }),
   "oracle-browser": freeze({
@@ -341,7 +341,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     requestedModel: "gpt-5.6-sol",
     efforts: ["high", "max"],
     adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
-    roles: ["orchestration", "review", "review.code", "review.plan", "review.primary", "implementation.hard"],
+    roles: ["orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family", "implementation.hard"],
   }),
   "codex-terra-runtime": freeze({
     version: "v1",
@@ -393,7 +393,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     requestedModel: null,
     efforts: ["low", "medium", "high", "max"],
     adapters: ["claude-session-create"],
-    roles: ["implementation", "implementation.hard", "implementation.medium", "implementation.mechanical"],
+    roles: ["implementation", "implementation.hard", "implementation.medium", "implementation.long-running", "implementation.mechanical"],
     modelFamily: "claude",
   }),
   "oracle-browser": freeze({
@@ -434,6 +434,12 @@ export const PRESENTATION_OVERLAYS = freeze({
   ]) }),
   fable: freeze({ id: "fable", format: "autonomous_long_run_brief", instructions: freeze([
     "State autonomy and pause boundaries, require evidence-grounded progress, and preserve compact long-run memory through the stop condition.",
+  ]) }),
+  sonnet: freeze({ id: "sonnet", format: "balanced_implementation_brief", instructions: freeze([
+    "State the bounded objective, relevant context, verification evidence, and stop condition with proportional detail.",
+  ]) }),
+  haiku: freeze({ id: "haiku", format: "mechanical_task_brief", instructions: freeze([
+    "State the exact mechanical change, its smallest verification check, and the stop condition.",
   ]) }),
   glm: freeze({ id: "glm", format: "repository_engineering_brief", instructions: freeze([
     "State repository standards and boundaries, the plan, expected impact and risks, verification evidence, and the stop condition.",

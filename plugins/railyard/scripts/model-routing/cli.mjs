@@ -192,6 +192,11 @@ export function runCli(input, options = {}) {
       requireControllerRuntime: options.requireControllerRuntime === true,
     }
     : fixedCliBridge(cliHome);
+  // Public resolution is a read-only policy result. Admission and settlement
+  // still require the closed fixed receipt bridge, but a resolver must be able
+  // to show the owner catalog's selected route before a trusted executor is
+  // available.
+  const publicResolve = options.trustedEmbedding !== true && command === "resolve";
   const catalogLoaded = loadCatalogForCli(paths);
   if (!catalogLoaded.ok) return catalogLoaded;
   const handleOptions = (state) => ({
@@ -200,6 +205,7 @@ export function runCli(input, options = {}) {
     now: options.now ?? Date.now(),
     platform: options.platform || process.platform,
     ...bridge,
+    fixedReceiptProducers: publicResolve ? undefined : bridge.fixedReceiptProducers,
   });
   const platform = options.platform || process.platform;
   const mutatesState = MUTATING_COMMANDS.has(command) && !(command === "admit" && catalogLoaded.catalog === null);
@@ -267,4 +273,3 @@ export function main() {
   process.stdout.write(`${JSON.stringify(output)}\n`);
   process.exitCode = output.ok ? 0 : 1;
 }
-

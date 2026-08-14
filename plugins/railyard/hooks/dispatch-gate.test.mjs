@@ -64,6 +64,32 @@ function runWithOpenStdin(input) {
   });
 }
 
+function runWithChunkedOpenStdin(input) {
+  const home = fixtureCodexHome(null);
+  const logs = mkdtempSync(path.join(tmpdir(), "gate-chunked-log-"));
+  const child = spawn(process.execPath, [script], {
+    env: { ...process.env, CODEX_HOME: home, RAILYARD_RUN_LOG_DIR: logs },
+    stdio: ["pipe", "ignore", "pipe"],
+  });
+  let err = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk) => (err += chunk));
+  const raw = JSON.stringify(input);
+  const midpoint = Math.ceil(raw.length / 2);
+  child.stdin.write(raw.slice(0, midpoint));
+  const secondChunk = setTimeout(() => child.stdin.write(raw.slice(midpoint)), 10);
+  return new Promise((resolve, reject) => {
+    child.on("error", reject);
+    child.on("close", (code) => {
+      clearTimeout(secondChunk);
+      const result = { code, err, log: readLog(logs) };
+      rmSync(home, { recursive: true, force: true });
+      rmSync(logs, { recursive: true, force: true });
+      resolve(result);
+    });
+  });
+}
+
 test("Agent with explicit model passes", () => {
   const r = run({ tool_name: "Agent", tool_input: { model: "opus", prompt: "x" } });
   assert.equal(r.code, 0);
@@ -290,6 +316,31 @@ test("codex exec parsing supports Codex shell aliases and fails open when flags 
   assert.equal(incomplete.log[0].effort, "unknown");
 });
 
+test("codex exec parsing recognizes environment and command wrappers", () => {
+  const prefixed = run({
+    tool_name: "Bash",
+    tool_input: { command: "CODEX_HOME=/tmp env -i CODEX_HOME=/tmp codex exec -m gpt-5.6-luna -c model_reasoning_effort=max" },
+  });
+  assert.equal(prefixed.code, 0);
+  assert.equal(prefixed.log[0].model, "gpt-5.6-luna");
+  assert.equal(prefixed.log[0].reasoning_effort, "max");
+
+  const commandWrapper = run({
+    tool_name: "Bash",
+    tool_input: { command: "command codex exec --model=gpt-5.6-sol --reasoning-effort=high" },
+  });
+  assert.equal(commandWrapper.code, 0);
+  assert.equal(commandWrapper.log[0].model, "gpt-5.6-sol");
+  assert.equal(commandWrapper.log[0].reasoning_effort, "high");
+
+  const windowsPath = run({
+    tool_name: "Bash",
+    tool_input: { command: "C:\\Tools\\codex.exe exec -m gpt-5.6-luna -c model_reasoning_effort=max" },
+  });
+  assert.equal(windowsPath.code, 0);
+  assert.equal(windowsPath.log[0].model, "gpt-5.6-luna");
+});
+
 test("codex exec parsing ignores comments, prose, and later shell commands", () => {
   const noise = run({
     tool_name: "Bash",
@@ -312,6 +363,18 @@ test("the Bash hook exits when its runner leaves stdin open", async () => {
   const r = await runWithOpenStdin({
     tool_name: "exec_command",
     session_id: "sess-open-stdin",
+    tool_input: { cmd: "codex exec -m gpt-5.6-luna -c model_reasoning_effort=max" },
+  });
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+  assert.equal(r.log[0].model, "gpt-5.6-luna");
+  assert.equal(r.log[0].reasoning_effort, "max");
+});
+
+test("the Bash hook waits for a chunked JSON payload before parsing", async () => {
+  const r = await runWithChunkedOpenStdin({
+    tool_name: "exec_command",
+    session_id: "sess-chunked-stdin",
     tool_input: { cmd: "codex exec -m gpt-5.6-luna -c model_reasoning_effort=max" },
   });
   assert.equal(r.code, 0);

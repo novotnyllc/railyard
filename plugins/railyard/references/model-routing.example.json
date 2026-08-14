@@ -60,7 +60,7 @@
       "carrierId": "claude-session",
       "requestedModel": "sonnet",
       "efforts": ["medium"],
-      "roles": ["implementation.medium"],
+      "roles": ["implementation.medium", "implementation.long-running"],
       "relativeCostIndex": 30
     },
     "haiku": {
@@ -133,7 +133,7 @@
       "tiers": [["sonnet", "terra"]]
     },
     "implementation.long-running": {
-      "tiers": [["terra"]]
+      "tiers": [["sonnet", "terra"]]
     },
     "implementation.mechanical": {
       "tiers": [["haiku", "luna"]]

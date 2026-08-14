@@ -383,6 +383,16 @@ test("the owner catalog selects Fable for hard Claude work and records an explic
   assert.equal(fable.response.decision.selected.modelAlias, "fable");
   assert.equal(fable.response.decision.selected.model, "fable");
   assert.equal(fable.response.decision.binding.harness, "claude");
+  assert.deepEqual(fable.response.decision.binding.controls, { model: "model", effort: "banner-only" });
+
+  const longRunning = handleRequest(request("resolve", {
+    role: "implementation.long-running",
+    harness: "claude",
+    adapterId: "claude-session-create",
+    dispatchKind: "subagent_create",
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(longRunning.response.reason, "resolved", JSON.stringify(longRunning.response));
+  assert.equal(longRunning.response.decision.selected.modelAlias, "sonnet");
 
   const withoutReason = handleRequest(request("resolve", {
     role: "implementation",
@@ -424,6 +434,13 @@ test("the owner catalog selects Fable for hard Claude work and records an explic
   assert.equal(review.response.decision.selected.modelAlias, "sol");
   assert.equal(review.response.decision.selected.effort, "high");
   assert.equal(validBinding(review.response.decision.binding), true);
+  const crossFamily = handleRequest(request("resolve", { role: "review.cross_family", harness: "codex" }), {
+    catalog: policy,
+    state: createEmptyState(),
+    now: NOW,
+  });
+  assert.equal(crossFamily.response.reason, "resolved", JSON.stringify(crossFamily.response));
+  assert.equal(crossFamily.response.decision.selected.modelAlias, "sol");
   const missingHarness = { ...review.response.decision.binding };
   delete missingHarness.harness;
   assert.equal(validBinding(missingHarness), false);
@@ -442,12 +459,42 @@ test("the owner catalog keeps subscription meters separate and gates GLM on Code
     assert.equal(providerAvailabilityIssue(policy.providers.zai), "provider_unavailable");
     fs.writeFileSync(path.join(codexHome, "config.toml"), "[model_providers.zai_litellm]\n");
     assert.equal(providerAvailabilityIssue(policy.providers.zai), null);
+    fs.writeFileSync(path.join(codexHome, "config.toml"), "[model_providers.zai_litellm] # enabled\n");
+    assert.equal(providerAvailabilityIssue(policy.providers.zai), null);
     assert.equal(providerAvailabilityIssue(policy.providers.zai, { hostScope: "runner-2" }), "provider_unavailable");
   } finally {
     if (previous === undefined) delete process.env.CODEX_HOME;
     else process.env.CODEX_HOME = previous;
     fs.rmSync(codexHome, { recursive: true, force: true });
   }
+});
+
+test("attested Claude review routes do not treat unknown model identity as verified", () => {
+  const policy = catalog({
+    extraProviders: {
+      claude: { carrierId: "claude-ce-review", executionSurface: "provider_subscription", account: "claude", locality: "external", retention: "provider_default", harness: "claude" },
+    },
+    extraModels: {
+      opus: { provider: "claude", carrierId: "claude-ce-review", requestedModel: "opus-current", efforts: ["high"], roles: ["review.code"] },
+    },
+    extraRoles: { "review.code": { tiers: [["opus"]] } },
+  });
+  const state = attestedCapability(policy, {
+    carrierId: "claude-ce-review",
+    adapterId: "claude-cli-via-task",
+    accountScope: "claude",
+    observedModel: "unknown",
+  });
+  const resolved = handleRequest(request("resolve", {
+    callerKind: "compound-engineering",
+    role: "review.code",
+    harness: "claude",
+    adapterId: "claude-cli-via-task",
+    dispatchKind: "task_create",
+    ceSeam: { id: "ce-code-review.execution", skill: "ce-code-review", artifact: { schema: "railyard/ce-code-review-findings/v1", digest: DIGEST_A } },
+  }), { catalog: policy, state, now: NOW });
+  assert.equal(resolved.response.reason, "no_eligible_route");
+  assert.equal(resolved.response.rejectedAlternatives[0].reason, "claude_identity_mismatch");
 });
 
 test("catalogs, privacy, and closed CE seams cannot widen routing authority", () => {
@@ -1086,7 +1133,7 @@ test("native and Oracle claims cannot cross their admitted host or account ident
   assert.equal(oracleClaim("local", "standard").reason, "dispatch_claimed");
 });
 
-test("carrier-neutral invariant work contracts keep five closed presentation overlays", () => {
+test("carrier-neutral invariant work contracts keep seven closed presentation overlays", () => {
   const invariantInput = {
     objectiveDigest: DIGEST_A,
     sourceOfTruthDigest: DIGEST_B,
@@ -1100,6 +1147,8 @@ test("carrier-neutral invariant work contracts keep five closed presentation ove
     ["gpt_sol", "codex-sol", "gpt-5.6-sol", "high", "lean, explicit, bounded brief"],
     ["opus", "claude-ce-review", "opus-current", "high", "complete task specification"],
     ["fable", "claude-ce-review", "fable-current", "high", "autonomy and pause boundaries"],
+    ["sonnet", "claude-session", "sonnet", "medium", "bounded objective, relevant context"],
+    ["haiku", "claude-session", "haiku", "low", "exact mechanical change"],
     ["glm", "glm-5-2-engineer", "glm-5.2", "xhigh", "repository standards and boundaries"],
     ["oracle", "oracle-browser", "chatgpt_current_pro", "high", "complete selected file context"],
   ];
@@ -1307,6 +1356,17 @@ test("public CLI environment and JSON cannot mint visible-task authority or sett
     fs.writeFileSync(configPath, JSON.stringify(policy));
     fs.chmodSync(configPath, 0o600);
 
+    fs.writeFileSync(configPath, JSON.stringify(ownerPolicy()));
+    const publicFable = publicCli(request("resolve", {
+      role: "implementation.hard",
+      harness: "claude",
+      adapterId: "claude-session-create",
+      dispatchKind: "subagent_create",
+    }), home);
+    assert.equal(publicFable.reason, "resolved", JSON.stringify(publicFable));
+    assert.equal(publicFable.decision.selected.modelAlias, "fable");
+    fs.writeFileSync(configPath, JSON.stringify(policy));
+
     const callerControlledEnv = {
       CODEX_THREAD_ID: "thread-native-e2e",
       CODEX_PERMISSION_PROFILE: "disabled",
@@ -1425,11 +1485,15 @@ test("public CLI environment and JSON cannot mint visible-task authority or sett
     fs.chmodSync(configPath, 0o600);
     const unsupported = publicCli({
       contractVersion: CONTRACT_VERSION,
-      command: "resolve",
+      command: "admit",
       callerKind: "fleet",
       role: "implementation.mechanical",
       adapterId: "configured-profile-task-create",
       dispatchKind: "task_create",
+      requestId: "glm-public-admit",
+      frozenInputDigest: DIGEST_A,
+      forecast: {},
+      scopes: { task: "glm-public-task" },
       hostScope: "local",
       accountScope: "plan",
       r52: r52Readiness(),

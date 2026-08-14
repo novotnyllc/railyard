@@ -31,7 +31,9 @@ function shellTokens(command) {
       word += char;
       escaped = false;
     } else if (char === "\\") {
-      escaped = true;
+      const next = source[index + 1];
+      if (next && /[\s'"\\;|&#]/.test(next)) escaped = true;
+      else word += char;
     } else if (quote) {
       if (char === quote) quote = "";
       else word += char;
@@ -56,6 +58,49 @@ function shellTokens(command) {
   return tokens;
 }
 
+function isAssignment(value) {
+  return /^[A-Za-z_][A-Za-z0-9_]*=/.test(value);
+}
+
+function basename(value) {
+  return value.split(/[\\/]/).pop();
+}
+
+function commandPrefixAllows(tokens, index) {
+  let start = index;
+  while (start > 0 && tokens[start - 1].kind !== "separator") start -= 1;
+  let cursor = start;
+  while (cursor < index && tokens[cursor].kind === "word" && isAssignment(tokens[cursor].value)) cursor += 1;
+  if (cursor < index && tokens[cursor].kind === "word" && basename(tokens[cursor].value) === "env") {
+    cursor += 1;
+    while (cursor < index && tokens[cursor].kind === "word") {
+      const value = tokens[cursor].value;
+      if (value === "--") {
+        cursor += 1;
+        break;
+      }
+      if (value === "-i" || value === "--ignore-environment") {
+        cursor += 1;
+        continue;
+      }
+      if (value === "-u" || value === "--unset") {
+        cursor += 2;
+        continue;
+      }
+      if (isAssignment(value)) {
+        cursor += 1;
+        continue;
+      }
+      break;
+    }
+  }
+  if (cursor < index && tokens[cursor].kind === "word" && basename(tokens[cursor].value) === "command") {
+    cursor += 1;
+    while (cursor < index && tokens[cursor].kind === "word" && ["-p", "--"].includes(tokens[cursor].value)) cursor += 1;
+  }
+  return cursor === index;
+}
+
 function codexExecDispatches(args) {
   const command = args.command ?? args.cmd;
   if (typeof command !== "string") return [];
@@ -63,9 +108,8 @@ function codexExecDispatches(args) {
   const dispatches = [];
   for (let index = 0; index < tokens.length - 1; index += 1) {
     const token = tokens[index];
-    const previous = tokens[index - 1];
     if (token.kind !== "word" || !/^(?:codex|codex\.exe)$/i.test(token.value.split(/[\\/]/).pop()) || tokens[index + 1]?.value !== "exec") continue;
-    if (index > 0 && previous?.kind !== "separator") continue;
+    if (!commandPrefixAllows(tokens, index)) continue;
     let model;
     let effort;
     let label;
@@ -104,9 +148,19 @@ function codexExecDispatches(args) {
 
 let raw = "";
 process.stdin.setEncoding("utf8");
-process.stdin.on("data", (c) => (raw += c));
 let inputHandled = false;
 let inputTimer;
+function armInputTimer() {
+  if (inputTimer) clearTimeout(inputTimer);
+  inputTimer = setTimeout(() => {
+    handleInput();
+    process.exit(process.exitCode || 0);
+  }, 50);
+}
+process.stdin.on("data", (c) => {
+  raw += c;
+  armInputTimer();
+});
 function handleInput() {
   if (inputHandled) return;
   inputHandled = true;
@@ -268,8 +322,5 @@ function handleInput() {
 process.stdin.on("end", handleInput);
 // Some hook runners keep stdin open after delivering the payload. Never let
 // that turn a fail-open hook into a shell deadlock; parse what arrived and
-// exit within the dispatch budget.
-inputTimer = setTimeout(() => {
-  handleInput();
-  process.exit(process.exitCode || 0);
-}, 50);
+// exit within the dispatch budget. The timer is re-armed after every chunk so
+// a slow JSON write cannot be parsed as a partial request.

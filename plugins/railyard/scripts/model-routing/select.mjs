@@ -162,7 +162,7 @@ export function providerAvailabilityIssue(provider, request = {}) {
     const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
     const config = fs.readFileSync(path.join(codexHome, "config.toml"), "utf8");
     const section = availability.section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`^[ \\t]*\\[${section}\\][ \\t]*\\r?$`, "m").test(config) ? null : "provider_unavailable";
+    return new RegExp(`^[ \\t]*\\[${section}\\][ \\t]*(?:#.*)?\\r?$`, "m").test(config) ? null : "provider_unavailable";
   } catch {
     return "provider_unavailable";
   }
@@ -314,7 +314,10 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         output.push({ ok: false, alias, tierIndex, position, reason: "required_capability_unattested" });
         continue;
       }
-      if (carrier.modelFamily === "claude" && !claudeIdentitySatisfied(model, !observedModel || observedModel === "unknown" ? model.requestedModel : observedModel)) {
+      const claudeIdentity = carrier.modelFamily === "claude" && model.carrierId === "claude-session" && (!observedModel || observedModel === "unknown")
+        ? model.requestedModel
+        : observedModel;
+      if (carrier.modelFamily === "claude" && !claudeIdentitySatisfied(model, claudeIdentity)) {
         output.push({ ok: false, alias, tierIndex, position, reason: "claude_identity_mismatch" });
         continue;
       }

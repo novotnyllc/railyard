@@ -97,6 +97,9 @@ export function validateRequest(input, command) {
   if (!onlyFields(input, allowed)) return error("unknown_request_field");
   if (input.role !== undefined && !validRole(input.role)) return error("invalid_role");
   if (input.callerKind !== undefined && !CALLER_KINDS.has(input.callerKind)) return error("invalid_caller_kind");
+  // Harness is the caller's current invocation classification, not a claim
+  // about provider availability or runtime capability; those remain fixed
+  // router-owned evidence paths below.
   if (input.harness !== undefined && !HARNESS_KINDS.has(input.harness)) return error("invalid_harness");
   if (input.crossHarnessReason !== undefined && (typeof input.crossHarnessReason !== "string" || input.crossHarnessReason.trim().length < 8 || input.crossHarnessReason.length > 256 || input.crossHarnessReason.trim().toLowerCase() === "not_applicable")) return error("invalid_cross_harness_reason");
   if (input.crossHarnessReason !== undefined && input.harness === undefined) return error("harness_required_for_cross_harness_reason");
