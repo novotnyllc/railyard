@@ -318,6 +318,22 @@ function skipStdbufOptions(values, cursor, end) {
   return cursor;
 }
 
+function skipSetsidOptions(values, cursor, end) {
+  cursor += 1;
+  while (cursor < end) {
+    const token = values[cursor];
+    const value = typeof token === "string" ? token : token?.kind === "word" ? token.value : undefined;
+    if (value === undefined) break;
+    if (value === "--") return cursor + 1;
+    if (value.startsWith("-")) {
+      cursor += 1;
+      continue;
+    }
+    break;
+  }
+  return cursor;
+}
+
 const CODEX_GLOBAL_VALUE_OPTIONS = new Set([
   "-c", "--config", "--enable", "--disable", "--remote", "--remote-auth-token-env",
   "-i", "--image", "-m", "--model", "--local-provider", "-p", "--profile",
@@ -492,6 +508,10 @@ function commandPrefixAllows(tokens, index) {
       cursor = skipStdbufOptions(tokens, cursor, index);
       continue;
     }
+    if (launcher === "setsid") {
+      cursor = skipSetsidOptions(tokens, cursor, index);
+      continue;
+    }
     if (launcher === "xargs") {
       cursor += 1;
       const optionsWithArguments = new Set(["-a", "--arg-file", "-d", "--delimiter", "-E", "--eof", "-I", "--replace", "-L", "--max-lines", "-n", "--max-args", "-P", "--max-procs", "-s", "--max-chars"]);
@@ -652,6 +672,10 @@ function shellWrapperTokens(tokens, depth = 0) {
       cursor = skipStdbufOptions(tokens, cursor, tokens.length);
       continue;
     }
+    if (launcher === "setsid") {
+      cursor = skipSetsidOptions(tokens, cursor, tokens.length);
+      continue;
+    }
     break;
   }
   if (cursor > 0 && cursor < tokens.length) return shellWrapperTokens(tokens.slice(cursor), depth);
@@ -717,6 +741,10 @@ function commandTokens(args) {
     }
     if (launcher === "stdbuf") {
       cursor = skipStdbufOptions(values, cursor, values.length);
+      continue;
+    }
+    if (launcher === "setsid") {
+      cursor = skipSetsidOptions(values, cursor, values.length);
       continue;
     }
     if (launcher === "command") {
