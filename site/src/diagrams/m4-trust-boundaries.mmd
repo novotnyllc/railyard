@@ -1,18 +1,31 @@
-flowchart TB
+flowchart LR
+    accTitle: M4 trust boundaries and attack shapes
+    accDescr: Owner instruction becomes signed history, crosses the store transport boundary, and is verified by every host before propagation gates determine apply or hold. Each stolen-key, replay, and hub-credential attempt has its own dashed path to a stopping gate and a named residual.
     subgraph Owner
-        O[Owner instruction chain]
+        O["1 · Instruction<br/>Owner chain"]
     end
-    subgraph Host["Enrolled host (key = one machine)"]
-        K[Signing key] --> S[Signed commits]
-        T[roundhouse-trustd: root-owned roster/refs]
+    subgraph Host["Enrolled host (one machine)"]
+        K["2 · Key<br/>Signing key"] --> S["3 · Sign<br/>Signed history"]
+        T["Root-owned roster / refs"]
     end
-    subgraph Hub["GitHub (outer boundary, never authorization)"]
-        R[(Private store repo)]
+    subgraph Hub["Store boundary (transport only)"]
+        R[("4 · Store<br/>Private repository")]
     end
     subgraph Fleet["Every other host"]
-        V[Ratchet verification per commit]
+        V["5 · Verify<br/>Parent-position ratchet"]
+        G["6 · Gate<br/>Scope · soak · canary · ancestry"]
+        O2["7 · Outcome<br/>Apply or hold + alert"]
     end
     O --> K
-    S --> R --> V
-    V -->|good| A2[Apply after canary]
-    V -->|bad/unknown| HD[Hold + alert]
+    S --> R --> V --> G --> O2
+    T -.-> V
+    O2 -->|apply| A2["Apply after evidence"]
+    O2 -->|hold| HD["Hold + named alert"]
+    AK["ATTEMPT A<br/>stolen machine key"] -.-> GA["A gate<br/>parent / class scope"]
+    GA --> RA["A residual<br/>bounded authority until retirement"]
+    RP["ATTEMPT B<br/>replay / downgrade"] -.-> GB["B gate<br/>ancestry / high-water"]
+    GB --> RB["B residual<br/>offline persistence"]
+    HC["ATTEMPT C<br/>hub credential theft"] -.-> GC["C gate<br/>store transports only"]
+    GC --> RC["C residual<br/>disclosure / availability"]
+    G -.-> AG["8 · Contain<br/>gate stops each attempt"]
+    AG --> RES["9 · Residual<br/>operator-held remainder"]

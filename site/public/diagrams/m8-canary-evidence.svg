@@ -1,9 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 610" role="img" aria-labelledby="title desc">
-  <title id="title">M8 canary evidence</title>
-  <desc id="desc">A canary journals an applied item digest, waits for the configured canary_wait_hours with a 24-hour default and fallback, and publishes a later record or alive heartbeat. A non-canary checks the replicated journal: evidence with liveness applies the item, while a silent or reverted canary holds it.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 610" data-sequence="1,2,3,4,5" role="img" aria-labelledby="title desc">
+  <title id="title">M8 canary evidence sequence</title>
+  <desc id="desc">Five numbered steps carry an exact canary digest through its wait and liveness gate. A downstream host applies the same digest only with evidence and liveness; silence or reversion becomes a named hold.</desc>
   <style>
     .bg{fill:#fffaf1}.actor{fill:#f4bf84;stroke:#8b5e34;stroke-width:2}.node{fill:#fffaf1;stroke:#b45309;stroke-width:2}.edge{stroke:#8b5e34;stroke-width:2;marker-end:url(#arrow)}.label{fill:#171716;font:600 17px system-ui,sans-serif;text-anchor:middle}.small{fill:#6a6258;font:15px system-ui,sans-serif;text-anchor:middle}.arrow{fill:#8b5e34}
     @media(prefers-color-scheme:dark){.bg{fill:#1c1b19}.actor{fill:#76512f;stroke:#dfa05b}.node{fill:#25231f;stroke:#dfa05b}.edge{stroke:#dfa05b}.label{fill:#eee9df}.small{fill:#b2ada3}.arrow{fill:#dfa05b}}
+
+    .step-badge{fill:#b45309;stroke:#fffaf1;stroke-width:2}.step-number{fill:#fffaf1;font:700 14px system-ui,sans-serif;text-anchor:middle;dominant-baseline:middle}.attack-node{fill:#b45309;stroke:#fffaf1;stroke-width:2}.attack-label{fill:#fffaf1;font:700 14px system-ui,sans-serif;text-anchor:middle}.attack-edge{fill:none;stroke:#b45309;stroke-width:2;stroke-dasharray:8 5;marker-end:url(#arrow)}
+    @media(prefers-color-scheme:dark){.step-badge{fill:#dfa05b;stroke:#1c1b19}.step-number{fill:#1c1b19}.attack-node{fill:#dfa05b;stroke:#1c1b19}.attack-label{fill:#1c1b19}.attack-edge{stroke:#dfa05b}}
   </style>
   <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow" d="M 0 0 L 10 5 L 0 10 z"/></marker></defs>
   <rect class="bg" width="1100" height="610" rx="18"/>
@@ -11,7 +14,7 @@
   <g class="label"><text x="170" y="63">Canary host</text><text x="550" y="63">Journal (replicated)</text><text x="930" y="63">Non-canary host</text></g>
   <g stroke="#8b5e34" stroke-width="2" stroke-dasharray="7 7"><path d="M170 85v485"/><path d="M550 85v485"/><path d="M930 85v485"/></g>
   <g class="edge"><path d="M170 145h380"/><path d="M170 255h380"/><path d="M930 355H550"/><path d="M550 470h380"/><path d="M930 525H700"/></g>
-  <g class="small"><text x="360" y="137">applied(item X, digest D) at t0</text><text x="360" y="247">any record or alive heartbeat after t0 + wait</text><text x="740" y="347">gate check for X@D</text><text x="740" y="462">evidence + liveness present</text><text x="810" y="517">canary silent or reverted</text></g>
+  <g class="small"><text x="360" y="137">Apply · item X, digest D at t0</text><text x="360" y="247">Liveness · later record or heartbeat after wait</text><text x="740" y="347">Gate · check X@D</text><text x="740" y="462">evidence + liveness present</text><text x="810" y="517">canary silent or reverted</text></g>
   <g class="node"><rect x="325" y="175" width="450" height="70" rx="10"/><rect x="760" y="430" width="170" height="70" rx="10"/><rect x="940" y="430" width="130" height="70" rx="10"/><rect x="760" y="535" width="170" height="45" rx="10"/></g>
-  <g class="label"><text x="550" y="202">wait ≥ canary_wait_hours</text><text x="550" y="224">24h default / fallback</text><text x="845" y="458">Apply X</text><text x="1005" y="458">Hold X</text><text x="845" y="563">silence is never a pass</text></g>
-</svg>
+  <g class="label"><text x="550" y="202">Wait · canary_wait_hours</text><text x="550" y="224">24h default / fallback</text><text x="845" y="458">Outcome · Apply X</text><text x="1005" y="458">Outcome · Hold X</text><text x="845" y="563">silence is never a pass</text></g>
+<g class="step-marker" data-step="1" data-step-label="Apply" aria-label="Step 1: Apply"><circle class="step-badge" cx="185" cy="145" r="15"/><text class="step-number" x="185" y="145">1</text></g><g class="step-marker" data-step="2" data-step-label="Wait" aria-label="Step 2: Wait"><circle class="step-badge" cx="341" cy="191" r="15"/><text class="step-number" x="341" y="191">2</text></g><g class="step-marker" data-step="3" data-step-label="Liveness" aria-label="Step 3: Liveness"><circle class="step-badge" cx="185" cy="255" r="15"/><text class="step-number" x="185" y="255">3</text></g><g class="step-marker" data-step="4" data-step-label="Gate" aria-label="Step 4: Gate"><circle class="step-badge" cx="945" cy="355" r="15"/><text class="step-number" x="945" y="355">4</text></g><g class="step-marker" data-step="5" data-step-label="Outcome" aria-label="Step 5: Outcome"><circle class="step-badge" cx="776" cy="445" r="15"/><text class="step-number" x="776" y="445">5</text></g></svg>

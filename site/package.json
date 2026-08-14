@@ -8,6 +8,7 @@
     "preview": "astro preview",
     "check:links": "node scripts/check-links.mjs",
     "check:assets": "node scripts/check-assets.mjs",
+    "check:diagrams": "node scripts/check-diagram-sequences.mjs",
     "check:contrast": "node scripts/check-contrast.mjs"
   },
   "dependencies": {

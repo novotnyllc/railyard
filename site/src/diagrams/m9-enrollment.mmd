@@ -1,13 +1,15 @@
 sequenceDiagram
-    participant O as Owner (one instruction)
-    participant S as Sponsor host (enrolled)
+    accTitle: M9 sponsor enrollment sequence
+    accDescr: One owner instruction reaches an enrolled sponsor, which contacts a new host over an already-trusted channel, prepares it, verifies a target-generated key, and publishes a roster edit on main at origin. Newcomer requests stay inert and ephemeral leaves stay channel-bound.
+    participant O as Owner
+    participant S as Sponsor host
     participant N as New host
-    O->>S: "fleet-add host-a"
-    S->>N: reach over already-trusted SSH lane
-    S->>N: install prerequisites, fleet-init
-    N->>N: mint own key
-    N-->>S: pubkey + possession-proof signature
-    S->>N: remote URL + store_id (data, never pasted)
-    S->>S: commit roster line, push
-    Note over N: enrollment complete only when commit is on main@origin
-    Note over N: policy writes soak 24h; evidence paths live immediately
+    O->>S: 1 · Ask fleet-add host-a
+    S->>N: 2 · Contact over trusted SSH lane
+    S->>N: 3 · Prepare prerequisites and fleet-init
+    N->>N: 4 · Key mint on target
+    N-->>S: 5 · Prove public key and possession proof
+    S->>N: 6 · Return remote URL and store identity as data
+    S->>S: 7 · Publish roster line and push
+    Note over N: 8 · Arrive only when commit is on main@origin; durable policy soaks 24h
+    Note over O,N: Newcomer request stays inert; ephemeral leaf stays channel-bound

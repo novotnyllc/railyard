@@ -17,6 +17,14 @@ Roundhouse makes a roster edit count only when a key trusted by the roster at th
 
 ![Trust ratchet parent rule: every parent verifies a roster edit before the roster advances; unknown, removed, or class-refused signers are held and alerted.](/diagrams/m3-trust-ratchet.svg)
 
+### Sequence
+
+1. **Ask.** The new commit asks the roster at its parent position who signed it.
+2. **Answer.** The parent-position roster returns trust, revocation, and path-class facts.
+3. **Verify.** Every merge parent verifies independently before history advances.
+4. **Accept.** Trusted enrollment and trusted writes advance the roster.
+5. **Hold.** An unknown, removed, or class-refused signer keeps held items at the reviewed value and raises a named alert.
+
 The sequence reads left to right for the decision and top to bottom for the resulting host action: accepted history advances the roster, while a refusal keeps held items at their last reviewed value.
 
 ## Six checks per commit

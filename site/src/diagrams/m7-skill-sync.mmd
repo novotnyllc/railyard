@@ -1,9 +1,11 @@
 flowchart LR
-    A[Skill published on one host] --> B[(Signed store commit)]
-    B --> C[Every host: fast pass ~20min]
-    C --> D[Fold -> item skills.name]
-    D --> E[Definition lookup]
-    E --> F[Harness manager verb\nClaude + Codex]
-    F --> G[Hook approval re-run on install/update]
-    G --> H[Journal: applied]
-    H --> I[Same skill, every machine]
+    accTitle: M7 skill sync sequence
+    accDescr: One host publishes a skill into signed history; every receiving host runs a fast pass, folds the item, looks up its definition, invokes the owning harness manager, reruns hook approval, journals the result, and arrives at the same skill identity.
+    A["1 · Publish<br/>One host"] --> B["2 · Store<br/>Signed commit"]
+    B --> C["3 · Fast pass<br/>Every host"]
+    C --> D["4 · Fold<br/>Item identity"]
+    D --> E["5 · Lookup<br/>Definition"]
+    E --> F["6 · Manager<br/>Claude + Codex verb"]
+    F --> G["7 · Hooks<br/>Approval rerun"]
+    G --> H["8 · Journal<br/>Applied / satisfied / held"]
+    H --> I["9 · Arrive<br/>Same skill everywhere"]

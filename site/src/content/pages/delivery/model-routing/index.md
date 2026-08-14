@@ -20,6 +20,18 @@ Make the spending decision once, then carry it through four verbs. `resolve` rea
 
 ![Model routing decision flow from work request through tier selection, admission, one-way claim, carrier work, and imported receipt reconciliation.](/diagrams/m5-model-routing.svg)
 
+### Sequence
+
+1. **Request.** A bounded work request enters with a role and verification shape.
+2. **Resolve.** The router derives the tier ladder and freezes the route inputs.
+3. **Select.** The eligible tier is chosen; hard constraints stay explicit.
+4. **Route.** The decision records model, effort, transport, and any disclosed substitute.
+5. **Admit.** Forecasted demand is compared with the applicable meters; a refusal stops before carrier work.
+6. **Claim.** One-way dispatch claim binds the work to the selected carrier.
+7. **Carrier.** The implementation runs through that bounded carrier surface.
+8. **Reconcile.** Only an imported, identity-bound receipt can settle the carrier result.
+9. **Receipt.** The run log records route, tier, cost, and outcome for the owning delivery.
+
 The flow makes the spend boundary visible: a blocked forecast refuses before carrier work, while an admitted route leaves a costed outcome in the run log.
 
 Keep routing small and accountable. Model selection feeds the same record that carries review, merge, and post-merge evidence. Railyard's routed model selection is one stage of a delivery pipeline: the per-tier decision that picks a model also feeds the audit record showing what ran, at what tier, at what cost, from first dispatch through merged, proven outcome.

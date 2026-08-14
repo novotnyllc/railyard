@@ -34,6 +34,17 @@ The delay gives an attacker a slower path when starting from a new key than when
 
 ![Sponsor enrollment sequence: one owner instruction reaches an enrolled sponsor, which contacts the new host over a trusted channel, verifies key possession, and publishes the roster edit.](/diagrams/m9-enrollment.svg)
 
+### Sequence
+
+1. **Ask.** The owner sends one `fleet-add` instruction to an enrolled sponsor.
+2. **Contact.** The sponsor reaches the newcomer over the already-trusted SSH lane.
+3. **Prepare.** The sponsor installs prerequisites and starts `fleet-init` on the target.
+4. **Key.** The newcomer mints its own key on the target.
+5. **Prove.** The newcomer returns a public key and possession-proof signature.
+6. **Return.** The sponsor sends the remote URL and store identity as data, never pasted authority.
+7. **Publish.** The sponsor commits the roster line and pushes it.
+8. **Arrive.** Enrollment is real only at `main@origin`; durable policy enters its soak while evidence paths are available immediately.
+
 The diagram covers the sponsor-initiated flow; newcomer requests remain inert until out-of-band verification, and ephemeral leaves remain channel-bound.
 
 ## Sponsor receipt

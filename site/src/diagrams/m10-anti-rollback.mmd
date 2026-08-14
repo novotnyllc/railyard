@@ -1,10 +1,12 @@
 flowchart TD
-    A[Fetched head] --> B{Descends from reviewed-ref?}
-    B -->|yes| C{Generation >= high-water?}
-    C -->|yes| D[Adopt; advance marks]
-    C -->|no| H1[Hold + alert]
-    B -->|no| E{Published archive ref exists?}
-    E -->|yes| F[Verify own reviewed-ref inside archive\nby ordinary ratchet rule]
-    F -->|verifies| D
-    F -->|fails| H1
-    E -->|no| H1[Hold + alert = the rollback protection]
+    accTitle: M10 anti-rollback sequence
+    accDescr: A host checks a fetched head against reviewed ancestry and the generation high-water mark. A re-root needs a published archive and ordinary ratchet verification; otherwise the host holds and alerts.
+    A["1 · Fetch<br/>Head arrives"] --> B{2 · Ancestry<br/>Descends from reviewed ref?}
+    B -->|yes| C{3 · Generation<br/>At least high-water?}
+    B -->|no, re-root| D{4 · Archive<br/>Published ref exists?}
+    D -->|yes| E["5 · Verify<br/>Own reviewed ref inside archive"]
+    E -->|verifies| F
+    E -->|fails| H1
+    D -->|no| H1
+    C -->|yes| F["6 · Decide<br/>Adopt; advance marks"]
+    C -->|no| H1["Hold + alert<br/>Rollback protection"]

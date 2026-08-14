@@ -92,6 +92,19 @@ Run the lifecycle as an observable chain from intent through routing, implementa
 
 ![Delivery lifecycle from intent intake through routing, implementation, review, settlement, merge, proof, and durable learning.](/diagrams/m2-delivery-lifecycle.svg)
 
+### Sequence
+
+1. **Ask.** The operator turns a plain-language outcome into one bounded delivery request.
+2. **Route.** Railyard freezes the model, effort, carrier, and transport for the work unit.
+3. **Build.** The implementation lane plans and changes the repository.
+4. **Review.** Thermos challenges the diff through correctness/security and code-quality lenses.
+5. **Quality.** Browser-visible and focused quality checks establish evidence for the current head.
+6. **Publish.** The lane commits and publishes the reviewable change.
+7. **Settle.** Review threads and the merge-settlement condition become current; stale evidence returns to review.
+8. **Merge.** The settled change earns merge authority and reaches the base branch.
+9. **Prove.** Ancestry and the smallest applicable post-merge check prove arrival.
+10. **Learn.** The run receipt preserves the route, decisions, and terminal outcome for the next run.
+
 The diagram is also available as text above: findings return to implementation, and unresolved review threads return to the review gate.
 
 Railyard supplies the load-bearing evidence: its [source repository](https://github.com/novotnyllc/railyard), [release record](https://github.com/novotnyllc/railyard/releases), and [review trail](https://github.com/novotnyllc/railyard/pulls) keep the delivery contract reviewable beside this guide.

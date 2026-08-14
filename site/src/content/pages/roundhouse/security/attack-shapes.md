@@ -19,6 +19,18 @@ Trace the underlying decisions through the [trust ratchet](/roundhouse/security/
 
 ![Trust boundaries: owner instruction reaches a signing key, signed history crosses the store boundary, and every other host verifies before applying after canary evidence or holding with an alert.](/diagrams/m4-trust-boundaries.svg)
 
+### Sequence
+
+1. **Instruction.** The owner chain defines the requested action and its scope.
+2. **Key.** An enrolled host holds the machine signing key under its boundary.
+3. **Sign.** The host produces signed history that can be checked at the parent position.
+4. **Store.** The private repository transports history but never grants authority.
+5. **Verify.** Every receiving host applies the trust ratchet to the incoming commit.
+6. **Gate.** Scope, soak, canary, ancestry, and manager ownership decide whether propagation may continue.
+7. **Outcome.** Good evidence applies; bad or unknown evidence becomes a held, named result.
+8. **Contain.** Each attempt meets its own stopping gate: a stolen key at parent/class scope, replay at ancestry/high-water, and hub credential theft at the transport-only store boundary.
+9. **Residual.** Bounded authority until retirement, offline persistence, and disclosure/availability remain named residuals alongside instruction-chain compromise and genuine first-contact TOFU.
+
 The boundary map keeps store custody and instruction integrity visible as the two authority facts; the repository transports history but does not authorize it.
 
 ## Compromised member enrolls an attacker
