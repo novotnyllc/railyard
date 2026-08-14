@@ -502,6 +502,15 @@ exec 'no explicit flags'` },
   assert.match(continued.err, /reasoning_effort/);
   assert.deepEqual(continued.log, []);
 
+  const arithmeticShift = run({
+    tool_name: "Bash",
+    tool_input: { command: "echo $((1 << 2))\ncodex exec 'no explicit flags'" },
+  });
+  assert.equal(arithmeticShift.code, 2);
+  assert.match(arithmeticShift.err, /model/);
+  assert.match(arithmeticShift.err, /reasoning_effort/);
+  assert.deepEqual(arithmeticShift.log, []);
+
   const heredoc = run({
     tool_name: "Bash",
     tool_input: { command: "cat <<'EOF'\ncodex exec 'no explicit flags'\nEOF" },
@@ -533,6 +542,22 @@ exec 'no explicit flags'` },
   assert.match(multilineExpandedHeredoc.err, /model/);
   assert.match(multilineExpandedHeredoc.err, /reasoning_effort/);
   assert.deepEqual(multilineExpandedHeredoc.log, []);
+
+  const quotedSubstitutionHeredoc = run({
+    tool_name: "Bash",
+    tool_input: { command: "echo \"$(cat <<EOF\ncodex exec 'no explicit flags'\nEOF\n)\"" },
+  });
+  assert.equal(quotedSubstitutionHeredoc.code, 0);
+  assert.deepEqual(quotedSubstitutionHeredoc.log, []);
+
+  const caseExpandedHeredoc = run({
+    tool_name: "Bash",
+    tool_input: { command: "cat <<EOF\n$(case x in x) codex exec 'no explicit flags';; esac)\nEOF" },
+  });
+  assert.equal(caseExpandedHeredoc.code, 2);
+  assert.match(caseExpandedHeredoc.err, /model/);
+  assert.match(caseExpandedHeredoc.err, /reasoning_effort/);
+  assert.deepEqual(caseExpandedHeredoc.log, []);
 
   const escapedDelimiter = run({
     tool_name: "Bash",

@@ -162,6 +162,9 @@ function heredocSpecs(line) {
   const specs = [];
   let quote = "";
   let escaped = false;
+  let arithmeticDepth = 0;
+  let arithmeticReturnQuote = "";
+  const parenFrames = [];
   for (let index = 0; index < line.length; index += 1) {
     const char = line[index];
     if (escaped) {
@@ -172,8 +175,46 @@ function heredocSpecs(line) {
       escaped = true;
       continue;
     }
+    if (arithmeticDepth) {
+      if (char === "(") arithmeticDepth += 1;
+      else if (char === ")") arithmeticDepth -= 1;
+      if (arithmeticDepth === 0) quote = arithmeticReturnQuote;
+      continue;
+    }
     if (quote) {
+      if (quote === '"' && char === "$" && line[index + 1] === "(") {
+        arithmeticReturnQuote = quote;
+        quote = "";
+        if (line[index + 2] === "(") {
+          arithmeticDepth = 2;
+          index += 2;
+        } else {
+          parenFrames.push(arithmeticReturnQuote);
+          index += 1;
+        }
+        continue;
+      }
       if (char === quote) quote = "";
+      continue;
+    }
+    if (char === "$" && line[index + 1] === "(") {
+      arithmeticReturnQuote = "";
+      if (line[index + 2] === "(") {
+        arithmeticDepth = 2;
+        index += 2;
+      } else {
+        parenFrames.push("");
+        index += 1;
+      }
+      continue;
+    }
+    if (parenFrames.length && char === "(") {
+      parenFrames.push(null);
+      continue;
+    }
+    if (parenFrames.length && char === ")") {
+      const returnQuote = parenFrames.pop();
+      if (returnQuote !== null) quote = returnQuote;
       continue;
     }
     if (char === "'" || char === '"') {
@@ -231,22 +272,61 @@ function heredocSpecs(line) {
 function maskHeredocExpansions(line, state) {
   const masked = line.replace(/[^\r]/g, " ").split("");
   const preserve = (index) => { masked[index] = line[index]; };
+  state.caseDepth ??= 0;
+  state.caseAwaitingIn ??= false;
+  state.casePattern ??= false;
+  state.word ??= "";
+  const flushWord = () => {
+    if (state.word === "case") {
+      state.caseDepth += 1;
+      state.caseAwaitingIn = true;
+      state.casePattern = false;
+    } else if (state.caseDepth > 0 && state.caseAwaitingIn && state.word === "in") {
+      state.caseAwaitingIn = false;
+      state.casePattern = true;
+    } else if (state.caseDepth > 0 && state.word === "esac") {
+      state.caseDepth -= 1;
+      state.caseAwaitingIn = false;
+      state.casePattern = false;
+    }
+    state.word = "";
+  };
   for (let index = 0; index < line.length; index += 1) {
     if (state.mode === "paren") {
       preserve(index);
+      const char = line[index];
       if (state.escaped) {
         state.escaped = false;
-      } else if (line[index] === "\\") {
+      } else if (char === "\\") {
         state.escaped = true;
       } else if (state.quote) {
-        if (line[index] === state.quote) state.quote = "";
-      } else if (line[index] === "'" || line[index] === '"') {
-        state.quote = line[index];
-      } else if (line[index] === "(") {
+        if (char === state.quote) state.quote = "";
+      } else if (char === "'" || char === '"') {
+        flushWord();
+        state.quote = char;
+      } else if (char === "(") {
+        flushWord();
         state.depth += 1;
-      } else if (line[index] === ")") {
-        state.depth -= 1;
-        if (state.depth === 0) state.mode = null;
+      } else if (char === ")") {
+        flushWord();
+        if (state.depth === 1 && state.caseDepth > 0 && state.casePattern) {
+          state.casePattern = false;
+        } else {
+          state.depth -= 1;
+          if (state.depth === 0) {
+            state.mode = null;
+            state.caseDepth = 0;
+            state.caseAwaitingIn = false;
+            state.casePattern = false;
+          }
+        }
+      } else if (/\s/.test(char)) {
+        flushWord();
+      } else if (char === ";" || char === "|" || char === "&") {
+        flushWord();
+        if (char === ";" && line[index + 1] === ";" && state.depth === 1 && state.caseDepth > 0) state.casePattern = true;
+      } else {
+        state.word += char;
       }
     } else if (state.mode === "backtick") {
       preserve(index);
