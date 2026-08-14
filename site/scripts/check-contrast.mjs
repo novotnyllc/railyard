@@ -1,14 +1,6 @@
 import { readFile } from 'node:fs/promises';
 
 const css = await readFile(new URL('../src/styles/global.css', import.meta.url), 'utf8');
-const darkStart = css.indexOf('@media (prefers-color-scheme: dark)');
-if (darkStart < 0) throw new Error('Missing dark color scheme');
-
-const variables = (source) => Object.fromEntries(
-  [...source.matchAll(/(--[\w-]+):\s*(#[\da-f]{3,8})/gi)].map(([, name, value]) => [name, value]),
-);
-const light = variables(css.slice(0, darkStart));
-const dark = { ...light, ...variables(css.slice(darkStart)) };
 
 const expectedSelectors = new Set([
   'a:focus-visible',
@@ -82,6 +74,21 @@ function mediaMatches(query, scheme) {
 function ruleApplies(rule, scheme) {
   return rule.media.every((query) => mediaMatches(query, scheme));
 }
+
+function schemeVariables(ruleSet, scheme) {
+  const result = {};
+  for (const rule of ruleSet) {
+    if (rule.selectors.includes(':root') && ruleApplies(rule, scheme)) {
+      for (const [property, propertyValue] of rule.declarationList) {
+        if (property.startsWith('--')) result[property] = propertyValue;
+      }
+    }
+  }
+  return result;
+}
+
+let light = schemeVariables(rules, 'light');
+let dark = schemeVariables(rules, 'dark');
 
 function declaration(ruleSet, selector, property, scheme) {
   let result;
@@ -206,15 +213,20 @@ if (primaryButtonOverrideRatio >= 4.5) {
   throw new Error('Cascade self-check failed to make a low-contrast primary-button hover foreground fail');
 }
 
-function color(scheme, expression) {
+function color(scheme, expression, seen = new Set()) {
+  if (!expression) throw new Error(`Unresolved color: ${expression}`);
   const variable = expression.match(/^var\((--[\w-]+)\)$/)?.[1];
-  const result = variable ? scheme[variable] : expression;
+  if (variable) {
+    if (seen.has(variable)) throw new Error(`Circular color variable: ${variable}`);
+    seen.add(variable);
+  }
+  const result = variable ? color(scheme, scheme[variable], seen) : expression;
   if (!result || !/^#[\da-f]{3,8}$/i.test(result)) throw new Error(`Unresolved color: ${expression}`);
   return result;
 }
 
-function outline(schemeName, scheme, selector) {
-  const result = lastPropertyDeclaration(rules, selector, ['outline', 'outline-color'], schemeName);
+function outline(ruleSet, schemeName, scheme, selector) {
+  const result = lastPropertyDeclaration(ruleSet, selector, ['outline', 'outline-color'], schemeName);
   if (!result) throw new Error(`Unresolved ${schemeName} outline: ${selector}`);
   const expression = result.property === 'outline'
     ? result.value.match(/var\(--[\w-]+\)|#[\da-f]{3,8}/i)?.[0]
@@ -236,15 +248,16 @@ const pairs = [
   ['hover: start callout button', (name, scheme) => color(scheme, declaration(rules, '.start-callout .button:hover', 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout .button:hover'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
   ['hover: previous/next heading', (name, scheme) => color(scheme, firstDeclaration(rules, ['.prev-next a:hover', '.prev-next a'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.prev-next a:hover'], name)), (name, scheme) => scheme['--ground']],
   ['hover: previous/next label', (name, scheme) => color(scheme, declaration(rules, '.prev-next span', 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.prev-next a:hover'], name)), (name, scheme) => scheme['--ground']],
-  ['focus: global outline', (name, scheme) => outline(name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
-  ['focus: card outline', (name, scheme) => outline(name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--paper'], (name, scheme) => scheme['--paper']],
-  ['focus: filled button outline', (name, scheme) => outline(name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
+  ['focus: global anchor outline', (name, scheme) => outline(rules, name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
+  ['focus: global button outline', (name, scheme) => outline(rules, name, scheme, 'button:focus-visible'), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
+  ['focus: card outline', (name, scheme) => outline(rules, name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--paper'], (name, scheme) => scheme['--paper']],
+  ['focus: filled button outline', (name, scheme) => outline(rules, name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
   ['focus: skip link text', (name, scheme) => color(scheme, firstDeclaration(rules, ['.skip-link:focus', '.skip-link'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.skip-link:focus', '.skip-link'], name)), (name, scheme) => scheme['--ground']],
   ['focus: start callout link text', (name, scheme) => color(scheme, firstDeclaration(rules, ['.start-callout a:focus-visible', '.start-callout .button'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout a:focus-visible', '.start-callout .button'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
   ['focus: start callout button text', (name, scheme) => color(scheme, firstDeclaration(rules, ['.start-callout button:focus-visible', '.start-callout .button'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout button:focus-visible', '.start-callout .button'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
-  ['focus: start callout outline', (name, scheme) => outline(name, scheme, '.start-callout a:focus-visible'), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
+  ['focus: start callout outline', (name, scheme) => outline(rules, name, scheme, '.start-callout a:focus-visible'), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
   ['focus: terminal link text', (name, scheme) => color(scheme, terminalForeground(rules, name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.terminal a:focus-visible', '.terminal a', '.terminal'], name)), (name, scheme) => scheme['--ground']],
-  ['focus: terminal outline', (name, scheme) => outline(name, scheme, '.terminal a:focus-visible'), (name, scheme) => scheme['--night'], (name, scheme) => scheme['--night']],
+  ['focus: terminal outline', (name, scheme) => outline(rules, name, scheme, '.terminal a:focus-visible'), (name, scheme) => scheme['--night'], (name, scheme) => scheme['--night']],
 ];
 
 const scenarioOverrideFixture = parseRules(`${css}\n.scenario-card p { color: #777; }`);
@@ -294,6 +307,16 @@ if (contrast(
   throw new Error('Terminal focus self-check failed to make equal text and background colors fail');
 }
 
+const buttonFocusFixture = parseRules(`${css}\nbutton:focus-visible { outline-color: var(--ground); }`);
+const buttonFocusScheme = schemeVariables(buttonFocusFixture, 'light');
+if (contrast(
+  outline(buttonFocusFixture, 'light', buttonFocusScheme, 'button:focus-visible'),
+  buttonFocusScheme['--ground'],
+  buttonFocusScheme['--ground'],
+) >= 4.5) {
+  throw new Error('Button focus self-check failed to make a surface-colored outline fail');
+}
+
 const mediaFixture = parseRules(`${css}\n.text-link:hover { color: #777; }\n@media (max-width: 620px) { .text-link:hover { color: var(--amber-dark); } }`);
 activeViewportWidth = 1280;
 if (declaration(mediaFixture, '.text-link:hover', 'color', 'light') !== '#777') {
@@ -305,23 +328,43 @@ if (declaration(mediaFixture, '.text-link:hover', 'color', 'light') !== 'var(--a
 }
 const mediaFixtureWorstRatio = [620, 1280].map((viewportWidth) => {
   activeViewportWidth = viewportWidth;
+  const scheme = schemeVariables(mediaFixture, 'light');
   return contrast(
-    color(light, declaration(mediaFixture, '.text-link:hover', 'color', 'light')),
-    color(light, backgroundDeclaration(mediaFixture, ['.text-link:hover', '.text-link'], 'light', 'var(--ground)')),
-    light['--ground'],
+    color(scheme, declaration(mediaFixture, '.text-link:hover', 'color', 'light')),
+    color(scheme, backgroundDeclaration(mediaFixture, ['.text-link:hover', '.text-link'], 'light', 'var(--ground)')),
+    scheme['--ground'],
   );
 }).sort((a, b) => a - b)[0];
 if (mediaFixtureWorstRatio >= 4.5) {
   throw new Error('Media self-check failed to retain a low-contrast desktop state');
 }
 
+const variableMediaFixture = parseRules(`${css}\n:root { --interactive-hover: var(--ink); }\n@media (max-width: 620px) { :root { --interactive-hover: var(--paper); } }`);
+activeViewportWidth = 1280;
+if (schemeVariables(variableMediaFixture, 'light')['--interactive-hover'] !== 'var(--ink)') {
+  throw new Error('Variable self-check failed to preserve the desktop custom property');
+}
+const variableDesktopScheme = schemeVariables(variableMediaFixture, 'light');
+if (contrast(
+  color(variableDesktopScheme, firstDeclaration(variableMediaFixture, ['.promise-card h3', '.promise-card:hover', '.promise-card'], 'color', 'light', 'var(--ink)')),
+  color(variableDesktopScheme, backgroundDeclaration(variableMediaFixture, ['.promise-card:hover'], 'light')),
+  variableDesktopScheme['--paper'],
+) >= 4.5) {
+  throw new Error('Variable self-check failed to retain a low-contrast desktop custom property');
+}
+activeViewportWidth = 620;
+if (schemeVariables(variableMediaFixture, 'light')['--interactive-hover'] !== 'var(--paper)') {
+  throw new Error('Variable self-check failed to apply the narrow custom property override');
+}
+
 const results = [];
 const breakpoints = [...css.matchAll(/\((?:min|max)-width:\s*(\d+)px\)/g)].map((match) => Number(match[1]));
 const viewportWidths = [...new Set([320, 1440, ...breakpoints.flatMap((width) => [width - 1, width, width + 1])])].filter((width) => width > 0).sort((a, b) => a - b);
-for (const [schemeName, scheme] of [['light', light], ['dark', dark]]) {
+for (const schemeName of ['light', 'dark']) {
   const viewportResults = [];
   for (const viewportWidth of viewportWidths) {
     activeViewportWidth = viewportWidth;
+    const scheme = schemeVariables(rules, schemeName);
     for (const [label, foregroundValue, backgroundValue, surfaceValue] of pairs) {
       const foreground = foregroundValue(schemeName, scheme);
       const background = backgroundValue(schemeName, scheme);
