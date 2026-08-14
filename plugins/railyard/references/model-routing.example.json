@@ -79,6 +79,14 @@
       "roles": ["implementation.hard", "orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family"],
       "relativeCostIndex": 80
     },
+    "sol_max": {
+      "provider": "codex_sol",
+      "carrierId": "codex-sol",
+      "requestedModel": "gpt-5.6-sol",
+      "efforts": ["max"],
+      "roles": ["implementation.hard"],
+      "relativeCostIndex": 80
+    },
     "terra": {
       "provider": "codex_terra",
       "carrierId": "codex-terra-runtime",
@@ -127,7 +135,7 @@
       "tiers": [["luna"]]
     },
     "implementation.hard": {
-      "tiers": [["fable", "sol"]]
+      "tiers": [["fable", "sol_max"]]
     },
     "implementation.medium": {
       "tiers": [["sonnet", "terra"]]

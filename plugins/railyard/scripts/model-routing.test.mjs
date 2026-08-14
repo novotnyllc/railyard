@@ -469,6 +469,19 @@ test("the owner catalog keeps subscription meters separate and gates GLM on Code
   }
 });
 
+test("the owner catalog gives hard Codex implementation the max-effort Sol route", () => {
+  const policy = ownerPolicy();
+  const hardCodex = handleRequest(request("resolve", {
+    role: "implementation.hard",
+    harness: "codex",
+    adapterId: "codex-task-create",
+    dispatchKind: "task_create",
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(hardCodex.response.reason, "resolved", JSON.stringify(hardCodex.response));
+  assert.equal(hardCodex.response.decision.selected.modelAlias, "sol_max");
+  assert.equal(hardCodex.response.decision.selected.effort, "max");
+});
+
 test("attested Claude review routes do not treat unknown model identity as verified", () => {
   const policy = catalog({
     extraProviders: {
@@ -495,6 +508,34 @@ test("attested Claude review routes do not treat unknown model identity as verif
   }), { catalog: policy, state, now: NOW });
   assert.equal(resolved.response.reason, "no_eligible_route");
   assert.equal(resolved.response.rejectedAlternatives[0].reason, "claude_identity_mismatch");
+});
+
+test("CE review routes remain restricted to Fable and Opus", () => {
+  const policy = catalog({
+    extraProviders: {
+      claude: { carrierId: "claude-ce-review", executionSurface: "provider_subscription", account: "claude", locality: "external", retention: "provider_default", harness: "claude" },
+    },
+    extraModels: {
+      "sonnet-review": { provider: "claude", carrierId: "claude-ce-review", requestedModel: "sonnet", efforts: ["high"], roles: ["review.code"] },
+    },
+    extraRoles: { "review.code": { tiers: [["sonnet-review"]] } },
+  });
+  const state = attestedCapability(policy, {
+    carrierId: "claude-ce-review",
+    adapterId: "claude-cli-via-task",
+    accountScope: "claude",
+    observedModel: "sonnet",
+  });
+  const resolved = handleRequest(request("resolve", {
+    callerKind: "compound-engineering",
+    role: "review.code",
+    harness: "claude",
+    adapterId: "claude-cli-via-task",
+    dispatchKind: "task_create",
+    ceSeam: { id: "ce-code-review.execution", skill: "ce-code-review", artifact: { schema: "railyard/ce-code-review-findings/v1", digest: DIGEST_A } },
+  }), { catalog: policy, state, now: NOW });
+  assert.equal(resolved.response.reason, "no_eligible_route");
+  assert.equal(resolved.response.rejectedAlternatives[0].reason, "ce_model_restricted");
 });
 
 test("catalogs, privacy, and closed CE seams cannot widen routing authority", () => {
@@ -1573,6 +1614,15 @@ test("configured Terra selection requires the fixed runtime attestor", () => {
     accountScope: "codex-sub",
     observedModel: "unknown",
   });
+  const missingCapability = handleRequest(request("resolve", requestFields), {
+    catalog: policy,
+    state: createEmptyState(),
+    now: NOW,
+    trustedRuntimeAttestor: terraAttestor(),
+  });
+  assert.equal(missingCapability.response.reason, "no_eligible_route", JSON.stringify(missingCapability.response));
+  assert.equal(missingCapability.response.rejectedAlternatives.find((item) => item.modelAlias === "terra")?.reason, "runtime_attestation_required");
+
   const untrusted = handleRequest(request("resolve", requestFields), { catalog: policy, state, now: NOW });
   assert.equal(untrusted.response.reason, "no_eligible_route", JSON.stringify(untrusted.response));
   assert.equal(untrusted.response.rejectedAlternatives.find((item) => item.modelAlias === "terra")?.reason, "runtime_attestation_required");

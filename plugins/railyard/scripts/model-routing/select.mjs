@@ -318,6 +318,10 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
       const claudeIdentity = carrier.modelFamily === "claude" && model.carrierId === "claude-session" && (!observedModel || observedModel === "unknown")
         ? model.requestedModel
         : observedModel;
+      if (carrier.modelFamily === "claude" && model.carrierId === "claude-ce-review" && parseClaudeFamily(claudeIdentity)?.family !== undefined && !["fable", "opus"].includes(parseClaudeFamily(claudeIdentity).family)) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "ce_model_restricted" });
+        continue;
+      }
       if (carrier.modelFamily === "claude" && !claudeIdentitySatisfied(model, claudeIdentity)) {
         output.push({ ok: false, alias, tierIndex, position, reason: "claude_identity_mismatch" });
         continue;
@@ -329,7 +333,7 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
           && terra?.verified === true
           && terra.model === model.requestedModel
           && terra.effort === effort
-          && (!capability.observedModel || capability.observedModel === "unknown" || capability.observedModel === terra.model);
+          && (!capability?.observedModel || capability.observedModel === "unknown" || capability.observedModel === terra.model);
         if (!capability || !runtimeVerified) {
           output.push({ ok: false, alias, tierIndex, position, reason: "runtime_attestation_required" });
           continue;

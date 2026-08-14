@@ -247,7 +247,7 @@ top-level keys only: `providers`, `models`, `roles`, `privacy`, `budgets`,
 The owner policy is shipped as the documented
 [`model-routing.example.json`](model-routing.example.json). Its role/tier
 catalog is deliberately ordinary schema data: `implementation.hard` selects
-Fable in a Claude harness or Sol in Codex, `implementation.medium` and
+Fable in a Claude harness or the max-effort Sol alias in Codex, `implementation.medium` and
 `implementation.long-running` select Sonnet or attested Terra,
 `implementation.mechanical` selects Haiku or Luna, and plain
 `implementation` selects Luna. The `implementation.cross-harness`
