@@ -129,7 +129,7 @@ function basename(value) {
   return value.split(/[\\/]/).pop();
 }
 
-const SHELL_CONTROL_WORDS = new Set(["if", "then", "elif", "else", "while", "until", "do", "!"]);
+const SHELL_CONTROL_WORDS = new Set(["if", "then", "elif", "else", "while", "until", "do", "!", "coproc"]);
 const SHELL_LAUNCHERS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish"]);
 const MAX_SHELL_WRAPPER_DEPTH = 4;
 
@@ -459,6 +459,16 @@ function shellWrapperTokens(tokens, depth = 0) {
           cursor += 2;
           continue;
         }
+        if (value === "-S" || value === "--split-string") {
+          const payload = tokens[cursor + 1];
+          if (payload?.kind !== "word") return tokens;
+          const nested = shellWrapperTokens(shellTokens(payload.value), depth + 1);
+          return [...nested, ...tokens.slice(cursor + 2)];
+        }
+        if (value.startsWith("--split-string=")) {
+          const nested = shellWrapperTokens(shellTokens(value.slice("--split-string=".length)), depth + 1);
+          return [...nested, ...tokens.slice(cursor + 1)];
+        }
         if (value.startsWith("--unset=") || (value.startsWith("-u") && value.length > 2) || value.startsWith("--chdir=") || (value.startsWith("-C") && value.length > 2)) {
           cursor += 1;
           continue;
@@ -590,6 +600,14 @@ function commandTokens(args) {
         if (value === "-u" || value === "--unset" || value === "-C" || value === "--chdir") {
           cursor += 2;
           continue;
+        }
+        if (value === "-S" || value === "--split-string") {
+          const payload = values[cursor + 1];
+          if (typeof payload !== "string") return [];
+          return [...shellWrapperTokens(shellTokens(payload)), ...values.slice(cursor + 2).map((item) => ({ kind: "word", value: item }))];
+        }
+        if (value.startsWith("--split-string=")) {
+          return [...shellWrapperTokens(shellTokens(value.slice("--split-string=".length))), ...values.slice(cursor + 1).map((item) => ({ kind: "word", value: item }))];
         }
         if (value.startsWith("--chdir=") || (value.startsWith("-C") && value.length > 2) || value.startsWith("-") || isAssignment(value)) {
           cursor += 1;

@@ -377,6 +377,7 @@ test("codex exec parsing recognizes standard process launchers", () => {
     "time codex exec 'no explicit flags'",
     "nice -n 5 codex exec 'no explicit flags'",
     "nice --adjustment=5 codex exec 'no explicit flags'",
+    "coproc codex exec 'no explicit flags'",
     "env -C /tmp codex exec 'no explicit flags'",
     "env --chdir=/tmp codex exec 'no explicit flags'",
     "env --unset=FOO codex exec 'no explicit flags'",
@@ -409,6 +410,7 @@ test("codex exec parsing recognizes argv shell payloads", () => {
     { tool_name: "shell", tool_input: { command: ["bash", "-lc", "codex exec 'no explicit flags'"] } },
     { tool_name: "local_shell", tool_input: { command: ["bash", "-lc", "result=\"$(codex exec 'no explicit flags')\""] } },
     { tool_name: "unified_exec", tool_input: { input: ["bash", "-lc", "codex exec 'no explicit flags'"] } },
+    { tool_name: "shell", tool_input: { command: ["env", "-S", "codex exec 'no explicit flags'"] } },
   ]) {
     const refused = run(input);
     assert.equal(refused.code, 2, JSON.stringify(input));
@@ -432,6 +434,7 @@ test("codex exec parsing recognizes string shell wrappers", () => {
     `sh -lc "codex exec 'no explicit flags'"`,
     `zsh --command "bash -c 'codex exec no-flags'"`,
     `env -i RAILYARD_TEST=1 bash -c "codex exec 'no explicit flags'"`,
+    `env -S "codex exec 'no explicit flags'"`,
     `nice -n 5 bash -c "codex exec 'no explicit flags'"`,
     `timeout 60 bash -c "codex exec 'no explicit flags'"`,
     `nohup bash -c "codex exec 'no explicit flags'"`,
