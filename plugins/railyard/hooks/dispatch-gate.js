@@ -75,33 +75,73 @@ function commandPrefixAllows(tokens, index) {
   let start = index;
   while (start > 0 && tokens[start - 1].kind !== "separator") start -= 1;
   let cursor = start;
-  while (cursor < index && tokens[cursor].kind === "word" && isAssignment(tokens[cursor].value)) cursor += 1;
-  if (cursor < index && tokens[cursor].kind === "word" && basename(tokens[cursor].value) === "env") {
-    cursor += 1;
-    while (cursor < index && tokens[cursor].kind === "word") {
-      const value = tokens[cursor].value;
-      if (value === "--") {
-        cursor += 1;
+  while (cursor < index) {
+    while (cursor < index && tokens[cursor].kind === "word" && isAssignment(tokens[cursor].value)) cursor += 1;
+    if (cursor >= index || tokens[cursor].kind !== "word") break;
+    const launcher = basename(tokens[cursor].value);
+    if (launcher === "env") {
+      cursor += 1;
+      while (cursor < index && tokens[cursor].kind === "word") {
+        const value = tokens[cursor].value;
+        if (value === "--") {
+          cursor += 1;
+          break;
+        }
+        if (value === "-i" || value === "--ignore-environment") {
+          cursor += 1;
+          continue;
+        }
+        if (value === "-u" || value === "--unset") {
+          cursor += 2;
+          continue;
+        }
+        if (isAssignment(value)) {
+          cursor += 1;
+          continue;
+        }
         break;
       }
-      if (value === "-i" || value === "--ignore-environment") {
-        cursor += 1;
-        continue;
-      }
-      if (value === "-u" || value === "--unset") {
-        cursor += 2;
-        continue;
-      }
-      if (isAssignment(value)) {
-        cursor += 1;
-        continue;
-      }
-      break;
+      continue;
     }
-  }
-  if (cursor < index && tokens[cursor].kind === "word" && basename(tokens[cursor].value) === "command") {
-    cursor += 1;
-    while (cursor < index && tokens[cursor].kind === "word" && ["-p", "--"].includes(tokens[cursor].value)) cursor += 1;
+    if (launcher === "command") {
+      cursor += 1;
+      while (cursor < index && tokens[cursor].kind === "word" && ["-p", "--"].includes(tokens[cursor].value)) cursor += 1;
+      continue;
+    }
+    if (launcher === "timeout") {
+      cursor += 1;
+      const optionsWithArguments = new Set(["-k", "--kill-after", "-s", "--signal"]);
+      while (cursor < index && tokens[cursor].kind === "word") {
+        const value = tokens[cursor].value;
+        if (value === "--") {
+          cursor += 1;
+          break;
+        }
+        if (value.startsWith("-")) {
+          cursor += 1;
+          if (optionsWithArguments.has(value) && cursor < index) cursor += 1;
+          continue;
+        }
+        cursor += 1; // timeout duration
+        break;
+      }
+      continue;
+    }
+    if (launcher === "nohup") {
+      cursor += 1;
+      while (cursor < index && tokens[cursor].kind === "word" && (tokens[cursor].value === "--" || tokens[cursor].value.startsWith("-"))) cursor += 1;
+      continue;
+    }
+    if (launcher === "time") {
+      cursor += 1;
+      while (cursor < index && tokens[cursor].kind === "word" && tokens[cursor].value.startsWith("-")) {
+        const value = tokens[cursor].value;
+        cursor += 1;
+        if (["-f", "--format", "-o", "--output"].includes(value) && cursor < index) cursor += 1;
+      }
+      continue;
+    }
+    break;
   }
   return cursor === index;
 }

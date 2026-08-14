@@ -230,7 +230,7 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         const hasCrossHarnessReason = typeof request.crossHarnessReason === "string"
           && request.crossHarnessReason.trim().length >= 8
           && request.crossHarnessReason.trim().toLowerCase() !== "not_applicable";
-        if (provider.harness !== request.harness && !hasCrossHarnessReason) {
+        if ((request.role === "implementation.cross-harness" || provider.harness !== request.harness) && !hasCrossHarnessReason) {
           output.push({ ok: false, alias, tierIndex, position, reason: "cross_harness_reason_required" });
           continue;
         }

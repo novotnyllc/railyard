@@ -352,6 +352,20 @@ test("codex exec parsing recognizes shell substitutions and groups", () => {
   }
 });
 
+test("codex exec parsing recognizes standard process launchers", () => {
+  for (const command of [
+    "timeout 60 codex exec 'no explicit flags'",
+    "nohup codex exec 'no explicit flags'",
+    "time codex exec 'no explicit flags'",
+  ]) {
+    const refused = run({ tool_name: "Bash", tool_input: { command } });
+    assert.equal(refused.code, 2, command);
+    assert.match(refused.err, /model/, command);
+    assert.match(refused.err, /reasoning_effort/, command);
+    assert.deepEqual(refused.log, [], command);
+  }
+});
+
 test("codex exec parsing ignores comments, prose, and later shell commands", () => {
   const noise = run({
     tool_name: "Bash",

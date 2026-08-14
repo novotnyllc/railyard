@@ -425,6 +425,14 @@ test("the owner catalog selects Fable for hard Claude work and records an explic
   assert.equal(luna.response.decision.requested.crossHarnessReason, crossHarnessReason);
   assert.equal(luna.response.decision.binding.crossHarnessReason, crossHarnessReason);
 
+  const crossHarnessWithoutReason = handleRequest(request("resolve", {
+    role: "implementation.cross-harness",
+    harness: "codex",
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(crossHarnessWithoutReason.response.reason, "no_eligible_route", JSON.stringify(crossHarnessWithoutReason.response));
+  assert.equal(crossHarnessWithoutReason.response.rejectedAlternatives.length > 0, true);
+  assert.equal(crossHarnessWithoutReason.response.rejectedAlternatives.every((item) => item.reason === "cross_harness_reason_required"), true);
+
   const review = handleRequest(request("resolve", { role: "review.code", harness: "codex" }), {
     catalog: policy,
     state: createEmptyState(),
