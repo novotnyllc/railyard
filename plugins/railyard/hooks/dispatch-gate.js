@@ -285,6 +285,68 @@ function skipRedirection(tokens, cursor, index) {
   return cursor;
 }
 
+function envOptionAdvance(value) {
+  if (value === "-S" || value === "--split-string") return 2;
+  if (value.startsWith("--split-string=")) return 1;
+  if (value === "-u" || value === "--unset" || value === "-C" || value === "--chdir") return 2;
+  if (value.startsWith("--unset=") || (value.startsWith("-u") && value.length > 2)) return 1;
+  if (value.startsWith("--chdir=") || (value.startsWith("-C") && value.length > 2)) return 1;
+  if (value === "-i" || value === "--ignore-environment" || value === "--list-signal-handling") return 1;
+  if (["--block-signal", "--default-signal", "--ignore-signal"].includes(value)) return 1;
+  if (["--block-signal=", "--default-signal=", "--ignore-signal="].some((prefix) => value.startsWith(prefix))) return 1;
+  return 0;
+}
+
+const CODEX_GLOBAL_VALUE_OPTIONS = new Set([
+  "-c", "--config", "--enable", "--disable", "--remote", "--remote-auth-token-env",
+  "-i", "--image", "-m", "--model", "--local-provider", "-p", "--profile",
+  "-s", "--sandbox", "-a", "--ask-for-approval", "-C", "--cd", "--add-dir",
+]);
+
+function codexExecStart(tokens, index) {
+  let cursor = index + 1;
+  let model;
+  let effort;
+  while (cursor < tokens.length && tokens[cursor].kind === "word") {
+    const value = tokens[cursor].value;
+    const next = tokens[cursor + 1]?.value;
+    if (value === "exec") return { index: cursor, model, effort };
+    if (value === "--") return null;
+    if (value === "-m" || value === "--model") {
+      model = next;
+      cursor += 2;
+      continue;
+    }
+    if (value.startsWith("--model=")) {
+      model = value.slice("--model=".length);
+      cursor += 1;
+      continue;
+    }
+    if (value === "-c" || value === "--config") {
+      const match = (next || "").match(/^model_reasoning_effort\s*=\s*(.+)$/);
+      if (match) effort = match[1].replace(/^(['"])(.*)\1$/, "$2");
+      cursor += 2;
+      continue;
+    }
+    if (value.startsWith("--config=")) {
+      const match = value.slice("--config=".length).match(/^model_reasoning_effort\s*=\s*(.+)$/);
+      if (match) effort = match[1].replace(/^(['"])(.*)\1$/, "$2");
+      cursor += 1;
+      continue;
+    }
+    if (CODEX_GLOBAL_VALUE_OPTIONS.has(value)) {
+      cursor += 2;
+      continue;
+    }
+    if (value.startsWith("-")) {
+      cursor += 1;
+      continue;
+    }
+    return null;
+  }
+  return null;
+}
+
 function commandPrefixAllows(tokens, index) {
   let start = index;
   while (start > 0 && tokens[start - 1].kind !== "separator") start -= 1;
@@ -314,20 +376,9 @@ function commandPrefixAllows(tokens, index) {
           cursor += 1;
           continue;
         }
-        if (value === "-u" || value === "--unset") {
-          cursor += 2;
-          continue;
-        }
-        if (value.startsWith("--unset=") || (value.startsWith("-u") && value.length > 2)) {
-          cursor += 1;
-          continue;
-        }
-        if (value === "-C" || value === "--chdir") {
-          cursor += 2;
-          continue;
-        }
-        if (value.startsWith("--chdir=") || (value.startsWith("-C") && value.length > 2)) {
-          cursor += 1;
+        const optionAdvance = envOptionAdvance(value);
+        if (optionAdvance) {
+          cursor += optionAdvance;
           continue;
         }
         if (isAssignment(value)) {
@@ -470,10 +521,6 @@ function shellWrapperTokens(tokens, depth = 0) {
           cursor += 1;
           continue;
         }
-        if (value === "-u" || value === "--unset" || value === "-C" || value === "--chdir") {
-          cursor += 2;
-          continue;
-        }
         if (value === "-S" || value === "--split-string") {
           const payload = tokens[cursor + 1];
           if (payload?.kind !== "word") return tokens;
@@ -484,8 +531,9 @@ function shellWrapperTokens(tokens, depth = 0) {
           const nested = shellWrapperTokens(shellTokens(value.slice("--split-string=".length)), depth + 1);
           return [...nested, ...tokens.slice(cursor + 1)];
         }
-        if (value.startsWith("--unset=") || (value.startsWith("-u") && value.length > 2) || value.startsWith("--chdir=") || (value.startsWith("-C") && value.length > 2)) {
-          cursor += 1;
+        const optionAdvance = envOptionAdvance(value);
+        if (optionAdvance) {
+          cursor += optionAdvance;
           continue;
         }
         break;
@@ -612,10 +660,7 @@ function commandTokens(args) {
           cursor += 1;
           break;
         }
-        if (value === "-u" || value === "--unset" || value === "-C" || value === "--chdir") {
-          cursor += 2;
-          continue;
-        }
+        const optionAdvance = envOptionAdvance(value);
         if (value === "-S" || value === "--split-string") {
           const payload = values[cursor + 1];
           if (typeof payload !== "string") return [];
@@ -624,7 +669,11 @@ function commandTokens(args) {
         if (value.startsWith("--split-string=")) {
           return [...shellWrapperTokens(shellTokens(value.slice("--split-string=".length))), ...values.slice(cursor + 1).map((item) => ({ kind: "word", value: item }))];
         }
-        if (value.startsWith("--chdir=") || (value.startsWith("-C") && value.length > 2) || value.startsWith("-") || isAssignment(value)) {
+        if (optionAdvance) {
+          cursor += optionAdvance;
+          continue;
+        }
+        if (value.startsWith("-") || isAssignment(value)) {
           cursor += 1;
           continue;
         }
@@ -646,12 +695,14 @@ function codexExecDispatches(args) {
   const dispatches = [];
   for (let index = 0; index < tokens.length - 1; index += 1) {
     const token = tokens[index];
-    if (token.kind !== "word" || !/^(?:codex|codex\.exe)$/i.test(token.value.split(/[\\/]/).pop()) || tokens[index + 1]?.value !== "exec") continue;
+    if (token.kind !== "word" || !/^(?:codex|codex\.exe)$/i.test(token.value.split(/[\\/]/).pop())) continue;
+    const execStart = codexExecStart(tokens, index);
+    if (!execStart) continue;
     if (!commandPrefixAllows(tokens, index)) continue;
-    let model;
-    let effort;
+    let model = execStart.model;
+    let effort = execStart.effort;
     let label;
-    let cursor = index + 2;
+    let cursor = execStart.index + 1;
     while (cursor < tokens.length && tokens[cursor].kind !== "separator") {
       if (tokens[cursor].kind === "redirection") {
         const afterRedirection = skipRedirection(tokens, cursor, tokens.length);
@@ -660,6 +711,7 @@ function codexExecDispatches(args) {
         continue;
       }
       const value = tokens[cursor].value;
+      if (value === "--") break;
       const next = tokens[cursor + 1]?.value;
       if (value === "-m" || value === "--model") {
         model = next;

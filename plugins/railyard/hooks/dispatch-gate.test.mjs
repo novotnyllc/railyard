@@ -323,6 +323,22 @@ test("codex exec parsing requires explicit model and effort", () => {
   assert.equal(redirected.code, 0);
   assert.equal(redirected.log[0].model, "gpt-5.6-luna");
   assert.equal(redirected.log[0].reasoning_effort, "max");
+
+  const globalOptions = run({
+    tool_name: "Bash",
+    tool_input: { command: "codex -c model_reasoning_effort=max exec -m gpt-5.6-luna" },
+  });
+  assert.equal(globalOptions.code, 0);
+  assert.equal(globalOptions.log[0].model, "gpt-5.6-luna");
+  assert.equal(globalOptions.log[0].reasoning_effort, "max");
+
+  const promptOptions = run({
+    tool_name: "Bash",
+    tool_input: { command: "codex exec -c model_reasoning_effort=max -- --model=gpt-5.6-luna" },
+  });
+  assert.equal(promptOptions.code, 2);
+  assert.match(promptOptions.err, /model/);
+  assert.deepEqual(promptOptions.log, []);
 });
 
 test("codex exec parsing recognizes environment and command wrappers", () => {
@@ -382,6 +398,7 @@ test("codex exec parsing recognizes standard process launchers", () => {
     "env --chdir=/tmp codex exec 'no explicit flags'",
     "env --unset=FOO codex exec 'no explicit flags'",
     "env -uFOO codex exec 'no explicit flags'",
+    "env --block-signal=PIPE codex exec 'no explicit flags'",
   ]) {
     const refused = run({ tool_name: "Bash", tool_input: { command } });
     assert.equal(refused.code, 2, command);
@@ -411,6 +428,7 @@ test("codex exec parsing recognizes argv shell payloads", () => {
     { tool_name: "local_shell", tool_input: { command: ["bash", "-lc", "result=\"$(codex exec 'no explicit flags')\""] } },
     { tool_name: "unified_exec", tool_input: { input: ["bash", "-lc", "codex exec 'no explicit flags'"] } },
     { tool_name: "shell", tool_input: { command: ["env", "-S", "codex exec 'no explicit flags'"] } },
+    { tool_name: "shell", tool_input: { command: ["env", "--block-signal=PIPE", "codex", "exec", "no explicit flags"] } },
   ]) {
     const refused = run(input);
     assert.equal(refused.code, 2, JSON.stringify(input));
