@@ -28,6 +28,7 @@ sides, same escalation ladder, so the columns are directly comparable:
 | Hard implementation | Sol `max` | Fable `high`/`max` |
 | Medium or long-running implementation | Terra `max` | Sonnet `medium` |
 | Mechanical implementation | Luna `max` | Haiku `low` |
+| Defensive security review, threat model, trust/redaction/signing, attack-shape, or audit | Daybreak `high`/`max` when locally available; otherwise Sol | the resolver's configured standard fallback |
 | Implementation default | Luna `max` | the role-specific tier above |
 
 `medium` is the workhorse for steering, not `high`: most steering turns are
@@ -48,6 +49,51 @@ saturates mechanical work, and Opus `high` is the agentic-coding sweet spot —
 overthinks and burns budget. Fable `high` maps to Sol `high`: both are the
 "this is actually hard" step. Fable-over-Opus for difficult review is this
 user's ordering, not a benchmark claim.
+
+## Codex roster and supervised leaf work
+
+The following is the owner-verified Codex roster as of 2026-08-15. It is a
+routing description, not a claim that every account can select every row.
+
+| Model | Best positive use | Boundary |
+| --- | --- | --- |
+| `gpt-5.6-sol` | Frontier agentic coding, hard implementation, oversight, review, and coordination. | The stronger Codex supervisor tier. |
+| `gpt-5.6-terra` | Balanced everyday implementation. | A capable bounded worker, not the default review/coordinator tier. |
+| `gpt-5.6-luna` | Cheapest fork-capable implementation/mechanical leaf work with a complete narrow brief. | Pure sub-agent: no peer orchestration or cross-agent coordination. |
+| `gpt-daybreak-blue-latest` | Approved defensive cybersecurity work. | Limited access; select only after local detection. |
+| `gpt-5.5` | Complex coding, research, and general work. | A broad general tier; it does not replace Sol's frontier agentic-coding/oversight placement. |
+
+OpenAI's [subagent configuration documentation](https://learn.chatgpt.com/docs/agent-configuration/subagents)
+states that a subagent without a more-specific model setting eventually inherits
+its parent model and effort. That native fallback is why every Railyard dispatch
+names an explicit model and effort rather than treating omission as a harmless
+default.
+
+Owner-verified Luna doctrine: Luna is most effective as a supervised leaf: Sol, Opus, or Fable gives it a
+complete narrow specification, bounded files/authority, and an objective
+verification target, then owns review and acceptance of the result. Luna may
+receive a bounded context fork, but it remains a pure sub-agent rather than a
+peer, coordinator, reviewer-of-record, or judgment authority. Its eligible
+catalog roles are therefore fully specified implementation and mechanical work;
+the supervisor retains coordination, review, and multi-agent decisions.
+
+### Daybreak Blue
+
+OpenAI documents Daybreak Blue as defensive cybersecurity-focused and separately
+approved/provisioned; access is scoped to the approved identity and product
+surface. See the [model documentation](https://developers.openai.com/api/docs/models/daybreak-blue-latest)
+and [trusted-access guidance](https://learn.chatgpt.com/docs/cyber-safety).
+Railyard uses the owner-provisioned Codex selector
+`gpt-daybreak-blue-latest` only when the configured local account's resolver
+cache is fresh and available. A stale local security-shaped resolve enumerates
+the fixed Codex App Server model list once, stores `{available,checkedAt}` for
+24 hours, and prefers Daybreak over Sol for the security roles in the catalog.
+One state document admits one Daybreak provider; a changed catalog digest
+invalidates that cache before reuse, even if file timestamps are preserved.
+Remote or differently scoped account requests use the
+normal route without a probe. Missing access, a negative result, or a failed
+enumeration silently keeps the standard route; it is not a warning or an
+entitlement claim. The full fixed probe and cache contract lives in [model routing](model-routing.md#daybreak-blue-local-availability).
 
 ### Session model vs. work tier
 
@@ -137,8 +183,9 @@ checkpoint, addressing by `--name`, and the delivery limits — lives in
 
 ## Nested subagents
 
-A subagent handed a subtask that genuinely splits should dispatch its own
-children rather than serializing the work itself. Both harnesses allow it:
+A supervisor-tier subagent handed a subtask that genuinely splits should
+dispatch its own children rather than serializing the work itself. Both
+harnesses allow that capability:
 
 | Harness | Recursion | Depth |
 | --- | --- | --- |
@@ -149,6 +196,11 @@ At the Claude Code limit the `Agent` tool is withheld, so the deepest subagent
 does its delegated work itself and returns one summary — nothing to detect or
 handle. A worker that must not delegate at all omits `Agent` from its `tools`
 or lists it in `disallowedTools`.
+
+Luna is intentionally a leaf in this doctrine even when it receives a context
+fork: it returns its one bounded implementation result to its stronger parent.
+It does not become a peer-agent dispatcher, reviewer, or cross-agent
+coordinator.
 
 **Every rule applies at every depth.** A nested dispatch is a dispatch: it
 names an explicit model and effort, it carries the same objective, scope,
@@ -273,8 +325,9 @@ cold.
 | Either → ChatGPT Pro one-shot review | `railyard:oracle`, which has its own invocation rules and requires a ChatGPT Pro subscription (see that skill for cached availability detection) |
 
 These are the only supported handoff shapes. The rescue subagent is a
-forwarder, not an orchestrator: one invocation, return its output unchanged;
-leave model and effort unset unless the request names them.
+forwarder, not an orchestrator: one invocation, return its output unchanged.
+The forwarding caller resolves and passes an explicit model and effort; it does
+not rely on the native parent-inheritance fallback.
 
 ## Boundaries this reference does not move
 

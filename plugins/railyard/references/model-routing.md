@@ -7,11 +7,14 @@ is `railyard/model-routing/v1`.
 It is a dependency-free local resolver and private state primitive. It does not
 create tasks, launch subagents, invoke Claude or Oracle, call providers, probe
 remote entitlement, scrape account pages, retain prompts/files/transcripts, or
-read or edit an installed plugin cache. The public CLI has only the fixed,
-source-owned private Oracle receipt-artifact bridge whose plugin source is
-hashed. Public stdin and `CODEX_*` environment variables are caller-controlled;
-they cannot mint visible-task authority or import Codex/native receipts. The
-CLI never launches a carrier or treats the Oracle bridge as account or model
+read or edit an installed plugin cache. One narrow, source-owned exception is
+a configured `security.*` resolve whose Daybreak cache is stale: the public
+CLI can enumerate the local Codex App Server's fixed model list and retain only
+the resulting bounded availability fact. It is not a provider call, an account
+page scrape, or a carrier execution. Public stdin and `CODEX_*` environment
+variables are caller-controlled; they cannot mint visible-task authority or
+import Codex/native receipts. The CLI never launches a claimed carrier or
+treats the Oracle bridge or model-list cache as account/model execution
 evidence. The workflow that owns a claimed decision performs the fixed carrier
 action and returns the bounded evidence.
 
@@ -135,7 +138,8 @@ receipt or capability attestation actually reported.
 The disclosure is content-free and the compact settlement form is retained so
 an exact receipt replay returns the same facts.
 
-`resolve` is read-only. `admit` needs a caller-generated `requestId`, a
+`resolve` is read-only except for the configured Daybreak security-cache refresh
+described below. `admit` needs a caller-generated `requestId`, a
 frozen ordinary-artifact digest, and atomically checks/reserves every supplied
 task/run/project scope. Every hard/strict meter needs a forecast; a missing
 forecast blocks. A repeated identical request returns the original reservation;
@@ -167,7 +171,8 @@ fabricated carrier/model route effect.
 
 ## Built-in no-config policy
 
-No catalog means no external probes and no optional-route assumption.
+No catalog means no external probes and no optional-route assumption. In
+particular, it never performs Daybreak enumeration.
 
 | Work role | Frozen default |
 | --- | --- |
@@ -205,6 +210,29 @@ per-harness defaults. See
 the Codex-only GLM-5.2 route, and the cross-harness handoffs. That reference
 is invocation guidance only; it grants no route this contract has not
 admitted.
+
+## Codex roster and role doctrine
+
+The owner-verified Codex roster is explicit because a missing model selector
+inherits native dispatch context rather than expressing a neutral choice.
+OpenAI's [subagent configuration documentation](https://learn.chatgpt.com/docs/agent-configuration/subagents)
+describes the precedence: a more-specific subagent setting wins, then a
+configured agent default, then the parent model and effort. Railyard therefore
+resolves and dispatches an explicit model and effort for every child.
+
+| Model | Positive routing role |
+| --- | --- |
+| `gpt-5.6-sol` | Frontier agentic-coding tier for hard implementation, oversight, review, and ordinary coordination. |
+| `gpt-5.6-terra` | Balanced everyday implementation tier. |
+| `gpt-5.6-luna` | Cheapest fork-capable pure sub-agent tier for complete, narrow implementation and mechanical work under a stronger supervisor. |
+| `gpt-daybreak-blue-latest` | Limited-access defensive-security tier for the configured security roles when this machine's cache says it is available. |
+| `gpt-5.5` | Broad complex coding, research, and general-work tier; Sol remains the router's frontier agentic-coding/oversight tier. |
+
+Owner-verified Luna doctrine: Luna's modeled role set is deliberately the fully specified implementation
+roles. Its supervisor supplies the complete narrow brief and owns review and
+verification; coordination, reviewer-of-record, and judgment work stay with
+the supervising tier. Luna supports a bounded context fork, but that does not
+change this pure-sub-agent boundary or create a peer/coordinator route.
 
 ## Catalog
 
@@ -256,6 +284,13 @@ explicitly named a cross-harness reason. GLM is still Codex-family even though
 its execution surface is the Z.ai subscription; its candidate is eligible only
 when the configured `[model_providers.zai_litellm]` section exists in the
 Codex `config.toml` and the normal callable attestation is present.
+
+The same example maps `security.review`, `security.threat-model`,
+`security.trust`, `security.redaction`, `security.signing`,
+`security.attack-shape`, and `security.audit` to Daybreak Blue first and Sol
+second. The role list itself is Luna's catalog annotation: only bounded
+implementation roles name Luna, while coordination and review name their
+supervising tier.
 
 The small schema extension is the provider `harness`/`availability` metadata
 and request `harness`/`crossHarnessReason` fields. `harness` classifies the
@@ -330,12 +365,56 @@ Catalog fields may reference them; they cannot extend them.
 | --- | --- | --- |
 | `codex-luna` | selector-native, `gpt-5.6-luna`, Max | default policy |
 | `codex-sol` | selector-native, `gpt-5.6-sol`, High/Max | default policy |
+| `codex-daybreak-blue` | selector-native, `gpt-daybreak-blue-latest`, High/Max, defensive-security roles | fresh local Daybreak cache must be `available:true` |
 | `codex-terra-runtime` | selector-native, runtime-provided Terra at Max | requires runtime evidence; no static slug |
 | `glm-5-2-scout` | separate-task profile, `glm-5.2`, High | `transport_unsupported` until callable task-profile creation is host-attested |
 | `glm-5-2-engineer` | separate-task profile, `glm-5.2`, xhigh | same; not a native agent type or selector model |
 | `claude-ce-review` | fixed CE Claude `-p` review adapter | unsupported until the compatible CE adapter is attested |
 | `oracle-browser` | `chatgpt_current_pro` on `chatgpt_standard` | unsupported until selected-route Oracle capability is attested |
 | `oracle-homebrew-lifecycle` | local-host Oracle install/upgrade lifecycle carrier | unsupported until its separate adapter capability is attested |
+
+### Daybreak Blue local availability
+
+OpenAI describes the public `daybreak-blue-latest` alias as a defensive
+cybersecurity model with separate approval/provisioning, and its trusted-access
+guidance scopes availability to the approved identity, organization/project,
+offering, and product surface. See the [Daybreak model documentation](https://developers.openai.com/api/docs/models/daybreak-blue-latest)
+and [Models and Trusted Access guidance](https://learn.chatgpt.com/docs/cyber-safety).
+Railyard's owner-provisioned Codex selector is the distinct runtime string
+`gpt-daybreak-blue-latest`; it never substitutes the public alias at runtime.
+
+For a configured `security.*` role that includes the fixed Daybreak carrier,
+the CLI obtains a local availability fact through the inspected App Server
+surface: it starts only the fixed `codex app-server --stdio`, sends
+`initialize`, and calls `model/list` with hidden models excluded. The probe
+accepts only an exact visible `id` or `model` match for
+`gpt-daybreak-blue-latest`, follows bounded pages, and retains no raw list.
+This follows OpenAI's documented [App Server model-list method](https://learn.chatgpt.com/docs/app-server).
+
+The validated availability record is exactly
+`{"available":true|false|null,"checkedAt":"<ISO-8601>"}`. Its separate
+state-level catalog-digest binding invalidates a legacy or policy-changed
+record before it is reused. The availability record is fresh for 24 hours only
+when its checked time is not in the future. A fresh positive
+record makes the Daybreak candidate eligible for the local configured Daybreak
+account; a remote host or different account uses the normal fallback without a
+probe. A missing, stale, negative, or unknown record makes that candidate
+ineligible and the catalog's normal Sol/Fable fallback decides the route. A
+stale security resolve refreshes under the existing private state lock; an
+overlapping resolver or failed cache maintenance uses that ordinary fallback
+while the first refresh owns the one probe. A list failure records
+`available:null` for the same TTL, so the resolver neither crashes nor
+repeatedly probes. Non-security and no-catalog resolves do not probe or write
+this cache. The optional availability field is state-schema v5; readers
+migrate a v4 state without the cache before validating it. One state document
+permits only one Daybreak provider, and the catalog's content digest—not just
+its timestamp—must match before reuse; these two boundaries keep the
+two-field fact tied to the one local App Server account. Daybreak's absence is a standard-
+candidate-ineligibility result, not a user-facing entitlement warning.
+
+The cache says only that this local Codex model list exposed the selector at a
+checked time. It does not prove authorization for a particular task, live
+carrier behavior, model output, or a successful security canary.
 
 The current GLM profile facts (`glm-5.2`, High/xhigh, `zai_litellm`, and the
 200,000-token ceiling) are scoped host evidence, not a reusable default or
@@ -346,9 +425,9 @@ The public stdin CLI has a closed receipt bridge only for `oracle-browser` and
 `oracle-homebrew-lifecycle`. It accepts a `receiptId` reference matching a
 private artifact below the canonical user state root. It does not accept
 Codex/native receipt JSON, app-tool evidence, a callback, module path,
-executable, command, or adapter hook. The read-only `resolve` command still
-evaluates the installed policy catalog and returns its selected route; that is
-a planning result, not callable evidence. Public admission and settlement of
+executable, command, or adapter hook. Apart from the narrow local Daybreak
+cache refresh, `resolve` evaluates the installed policy catalog and returns its
+selected route; that is a planning result, not callable evidence. Public admission and settlement of
 configured visible-task and native routes therefore return
 `transport_unsupported`; a trusted in-process embedding may supply the closed
 authority attestor and receipt importer.
@@ -544,10 +623,11 @@ Run the focused contract suite with:
 node --test plugins/railyard/scripts/model-routing.test.mjs
 ```
 
-It exercises catalog and state validation, reason-class negative caches,
-learning limits, R28 decision/settlement/replay disclosure, authority and
-bridge identity binding, work-class/action-receipt invariants, all seven
-metadata presentation overlays, terminal/epoch transitions, protected
+It exercises catalog and state validation, the Daybreak positive/negative/
+unknown 24-hour cache path, Luna's coordinator-role guard, reason-class
+negative caches, learning limits, R28 decision/settlement/replay disclosure,
+authority and bridge identity binding, work-class/action-receipt invariants,
+all seven metadata presentation overlays, terminal/epoch transitions, protected
 inspection, and separate-process public-CLI fixtures. The fixtures prove only
 the local fixed bridge contracts: Oracle private-artifact import, public-CLI
 rejection of caller-controlled authority/native evidence, and trusted

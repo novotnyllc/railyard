@@ -98,10 +98,10 @@ export function breakStaleLock(lock, now) {
   } catch { return false; }
 }
 
-export function withStateLock(file, action, { now = Date.now() } = {}) {
+function acquireStateLock(file, now) {
   const directory = path.dirname(file);
   const directoryIssue = ensurePrivateDirectory(directory);
-  if (directoryIssue) return error(directoryIssue);
+  if (directoryIssue) return { failure: error(directoryIssue) };
   const lock = `${file}.lock`;
   let lockFd;
   let lockIdentity;
@@ -116,17 +116,42 @@ export function withStateLock(file, action, { now = Date.now() } = {}) {
     lockIdentity = fs.fstatSync(lockFd);
     fs.writeFileSync(lockFd, JSON.stringify({ owner: opaqueId("lock", `${process.pid}:${Date.now()}:${crypto.randomUUID()}`), pid: process.pid }) + "\n", "utf8");
     fs.fsyncSync(lockFd);
+    return { lock, lockFd, lockIdentity };
+  } catch (cause) {
+    if (lockFd !== undefined) releaseStateLock({ lock, lockFd, lockIdentity });
+    return { failure: error(cause?.code === "EEXIST" ? "state_lock_held" : "state_lock_failed") };
+  }
+}
+
+function releaseStateLock({ lock, lockFd, lockIdentity }) {
+  try { fs.closeSync(lockFd); } catch { /* no-op */ }
+  try {
+    const current = fs.lstatSync(lock);
+    if (lockIdentity && current.dev === lockIdentity.dev && current.ino === lockIdentity.ino) fs.unlinkSync(lock);
+  } catch { /* retain an ambiguous or replaced lock */ }
+}
+
+export function withStateLock(file, action, { now = Date.now() } = {}) {
+  const acquired = acquireStateLock(file, now);
+  if (acquired.failure) return acquired.failure;
+  try {
     return action();
   } catch (cause) {
     return error(cause?.code === "EEXIST" ? "state_lock_held" : "state_lock_failed");
   } finally {
-    if (lockFd !== undefined) {
-      try { fs.closeSync(lockFd); } catch { /* no-op */ }
-      try {
-        const current = fs.lstatSync(lock);
-        if (lockIdentity && current.dev === lockIdentity.dev && current.ino === lockIdentity.ino) fs.unlinkSync(lock);
-      } catch { /* retain an ambiguous or replaced lock */ }
-    }
+    releaseStateLock(acquired);
+  }
+}
+
+export async function withStateLockAsync(file, action, { now = Date.now() } = {}) {
+  const acquired = acquireStateLock(file, now);
+  if (acquired.failure) return acquired.failure;
+  try {
+    return await action();
+  } catch (cause) {
+    return error(cause?.code === "EEXIST" ? "state_lock_held" : "state_lock_failed");
+  } finally {
+    releaseStateLock(acquired);
   }
 }
 

@@ -70,7 +70,7 @@ export function presentationOverlayFor({ carrierId, model, effort }) {
   const carrier = CARRIER_DESCRIPTORS[carrierId];
   if (!carrier || !carrier.efforts.includes(effort)) return null;
   let family;
-  if (["codex-luna", "codex-sol", "codex-terra-runtime"].includes(carrierId)) {
+  if (["codex-luna", "codex-sol", "codex-terra-runtime", "codex-daybreak-blue"].includes(carrierId)) {
     if (carrier.requestedModel && model !== carrier.requestedModel) return null;
     family = "gpt_sol";
   } else if (CARRIER_DESCRIPTORS[carrierId]?.modelFamily === "claude") {
@@ -221,9 +221,16 @@ export function validateCatalog(catalog) {
     const carrier = CARRIER_DESCRIPTORS[model.carrierId];
     if (catalog.providers[model.provider].carrierId !== model.carrierId) return error("provider_carrier_mismatch", { alias });
     if (carrier?.requestedModel && carrier.requestedModel !== model.requestedModel) return error("fixed_carrier_mismatch", { alias });
+    if (carrier?.executionSurface && carrier.executionSurface !== catalog.providers[model.provider].executionSurface) return error("fixed_carrier_mismatch", { alias });
     if (carrier?.modelFamily === "claude" && !validClaudeFamily(model.requestedModel)) return error("invalid_claude_family", { alias });
     if (model.rates !== undefined && model.rates.some((rate) => rate.carrierId !== model.carrierId || rate.carrierVersion !== carrier?.version || !carrier?.efforts.includes(rate.effort) || (model.efforts !== undefined && !model.efforts.includes(rate.effort)) || (model.effort !== undefined && rate.effort !== model.effort) || (model.billingSurface !== undefined && rate.billingSurface !== model.billingSurface) || (model.billingSurface === undefined && rate.billingSurface !== catalog.providers[model.provider].executionSurface) || (model.identityMode !== "provider_latest_family" && rate.resolvedModelDigest !== stableDigest(model.requestedModel)))) return error("rate_binding_mismatch", { alias });
   }
+  // One local App Server exposes one authenticated Codex account. Keeping one
+  // Daybreak provider per state document makes its two-field cache unambiguous.
+  const daybreakProviders = new Set(Object.values(catalog.models)
+    .filter((model) => model.carrierId === "codex-daybreak-blue")
+    .map((model) => model.provider));
+  if (daybreakProviders.size > 1) return error("daybreak_provider_ambiguous");
   for (const [role, rule] of ownEntries(catalog.roles)) {
     if (!validRole(role) || !onlyFields(rule, new Set(["tiers"])) || !Array.isArray(rule.tiers) || rule.tiers.length === 0) return error("invalid_role", { role });
     for (const [tierIndex, tier] of rule.tiers.entries()) {

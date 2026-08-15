@@ -20,6 +20,11 @@ import {
   handleRequest,
 } from "./dispatch.mjs";
 import {
+  daybreakAvailabilityFresh,
+  isSecurityRole,
+  refreshDaybreakAvailability,
+} from "./daybreak-availability.mjs";
+import {
   resolvePaths,
   safeStat,
 } from "./paths.mjs";
@@ -43,11 +48,13 @@ import {
 } from "./request.mjs";
 import {
   createEmptyState,
+  migrateState,
   validateState,
 } from "./state-schema.mjs";
 import {
   readPrivateJson,
   withStateLock,
+  withStateLockAsync,
   writePrivateJsonLocked,
 } from "./store.mjs";
 
@@ -62,10 +69,21 @@ export function loadCatalogForCli(paths) {
   return validation.ok ? result(true, "catalog_loaded", { catalog: loaded.value, source: paths.config.source, digest: validation.policy.digest }) : validation;
 }
 
-export function loadStateForCli(paths) {
+export function loadStateForCli(paths, catalogDigest) {
   const loaded = readPrivateJson(paths.state.path, { missingOk: true, maxBytes: MAX_STATE_BYTES });
   if (!loaded.ok) return loaded;
-  const state = loaded.value === null ? createEmptyState() : loaded.value;
+  const migrated = loaded.value === null ? createEmptyState() : migrateState(loaded.value);
+  const cache = safeStat(paths.state.path);
+  const catalog = safeStat(paths.config.path);
+  // The fixed App Server observes the configured local account. A newer,
+  // unreadable, or policy-different catalog therefore invalidates its
+  // otherwise two-field cache.
+  let state = migrated;
+  if (state.daybreakAvailability !== undefined && (!cache || !catalog || catalog.mtimeMs > cache.mtimeMs || state.daybreakCatalogDigest !== catalogDigest)) {
+    state = { ...state };
+    delete state.daybreakAvailability;
+    delete state.daybreakCatalogDigest;
+  }
   const validation = validateState(state);
   return validation.ok ? result(true, "state_loaded", { state }) : validation;
 }
@@ -212,7 +230,7 @@ export function runCli(input, options = {}) {
   if (platform === "win32" && mutatesState) return error("secure_state_unsupported");
   if (mutatesState) {
     return withStateLock(paths.state.path, () => {
-      const loaded = loadStateForCli(paths);
+      const loaded = loadStateForCli(paths, catalogLoaded.digest);
       if (!loaded.ok) return loaded;
       const handled = handleRequest(input, handleOptions(loaded.state));
       if (!handled.changed) return handled.response;
@@ -223,12 +241,60 @@ export function runCli(input, options = {}) {
   const needsState = command === "inspect-claim" || (command !== "resolve" && command !== "validate" && command !== "status" ? catalogLoaded.catalog !== null : command === "status");
   let state = createEmptyState();
   if (needsState || catalogLoaded.catalog !== null) {
-    const loaded = loadStateForCli(paths);
+    const loaded = loadStateForCli(paths, catalogLoaded.digest);
     if (!loaded.ok) return loaded;
     state = loaded.state;
   }
   const handled = handleRequest(input, handleOptions(state));
   return handled.response;
+}
+
+function daybreakRefreshRequired(response) {
+  const rejected = response?.decision?.rejectedAlternatives || response?.rejectedAlternatives;
+  return Array.isArray(rejected) && rejected.some((candidate) => candidate.reason === "daybreak_unavailable");
+}
+
+/**
+ * The stdin CLI can make one fixed, local availability observation before a
+ * Daybreak-eligible security resolve. The synchronous export remains useful
+ * for trusted in-process consumers and deliberately does not start a process.
+ */
+export async function runCliAsync(input, options = {}) {
+  const command = normalizeCommand(input || {});
+  if (command !== "resolve" || !isSecurityRole(input?.role)) return runCli(input, options);
+  if ((options.platform || process.platform) === "win32") return runCli(input, options);
+
+  const now = options.now ?? Date.now();
+  const fallback = runCli(input, options);
+  if (!daybreakRefreshRequired(fallback)) return fallback;
+  const paths = resolvePaths({ ...options, env: options.env || process.env });
+  if (!paths.ok) return paths;
+  const catalogLoaded = loadCatalogForCli(paths);
+  if (!catalogLoaded.ok || catalogLoaded.catalog === null) return fallback;
+  const current = loadStateForCli(paths, catalogLoaded.digest);
+  if (!current.ok) return current;
+  if (daybreakAvailabilityFresh(current.state.daybreakAvailability, now)) return fallback;
+
+  const refreshed = await withStateLockAsync(paths.state.path, async () => {
+    const lockedCatalog = loadCatalogForCli(paths);
+    if (!lockedCatalog.ok || lockedCatalog.catalog === null) return fallback;
+    const loaded = loadStateForCli(paths, lockedCatalog.digest);
+    if (!loaded.ok) return loaded;
+    const availability = await refreshDaybreakAvailability(loaded.state, {
+      now,
+      probe: options.daybreakProbe,
+    });
+    if (availability.changed) {
+      loaded.state.daybreakCatalogDigest = lockedCatalog.digest;
+      const written = writePrivateJsonLocked(paths.state.path, loaded.state);
+      if (!written.ok) return written;
+    }
+    return runCli(input, options);
+  }, { now });
+
+  // Cache refresh is best effort. A simultaneous or failed refresh uses the
+  // ordinary stale-cache route rather than making availability a new failure.
+  return refreshed.ok ? refreshed : fallback;
 }
 
 /**
@@ -259,7 +325,7 @@ export function readStdin(maxBytes = MAX_JSON_BYTES) {
 
 // The contract is stdin-only: no caller passes a command as argv, so there is
 // no second, unvalidated command surface to keep in sync.
-export function main() {
+export async function main() {
   let input;
   try {
     const raw = readStdin();
@@ -269,7 +335,12 @@ export function main() {
     process.exitCode = 2;
     return;
   }
-  const output = runCli(input);
+  let output;
+  try {
+    output = await runCliAsync(input);
+  } catch {
+    output = error("resolver_failed");
+  }
   process.stdout.write(`${JSON.stringify(output)}\n`);
   process.exitCode = output.ok ? 0 : 1;
 }

@@ -58,6 +58,9 @@ import {
   TRUSTED_RECEIPT_IMPORTER_ID,
   TRUSTED_RECEIPT_IMPORTER_VERSION,
 } from "./registries.mjs";
+import {
+  validDaybreakAvailability,
+} from "./daybreak-availability.mjs";
 
 /**
  * Persisted records are described by field tables rather than by one
@@ -97,6 +100,12 @@ export function createEmptyState() {
     learningAggregates: {},
     lifecycleReviewRequirements: {},
   };
+}
+
+/** v4 had the same durable records, before Daybreak's optional cache field. */
+export function migrateState(state) {
+  if (!isObject(state) || state.purpose !== STATE_PURPOSE || state.stateSchemaVersion !== 4) return state;
+  return { ...state, stateSchemaVersion: STATE_SCHEMA_VERSION };
 }
 
 export function validSelected(value) {
@@ -621,7 +630,7 @@ export function validateState(state) {
   if (!isObject(state) || state.purpose !== STATE_PURPOSE || state.stateSchemaVersion !== STATE_SCHEMA_VERSION) {
     return error("unsupported_state_schema", { migration: "Remove only an obsolete model-routing state file after preserving required accounting evidence." });
   }
-  const fields = new Set(["purpose", "stateSchemaVersion", "capabilities", "budgetEpochs", "taskAuthority", "leases", "reservations", "settlementTombstones", "spendAggregates", "bridges", "learningControl", "learningOutcomes", "learningAggregates", "lifecycleReviewRequirements"]);
+  const fields = new Set(["purpose", "stateSchemaVersion", "capabilities", "budgetEpochs", "taskAuthority", "leases", "reservations", "settlementTombstones", "spendAggregates", "bridges", "learningControl", "learningOutcomes", "learningAggregates", "lifecycleReviewRequirements", "daybreakAvailability", "daybreakCatalogDigest"]);
   if (!onlyFields(state, fields)) return error("invalid_state", { field: "unknown" });
   for (const field of ["capabilities", "budgetEpochs", "taskAuthority", "leases", "reservations", "settlementTombstones", "spendAggregates", "bridges", "learningControl", "learningOutcomes", "learningAggregates", "lifecycleReviewRequirements"]) {
     if (!isObject(state[field])) return error("invalid_state", { field });
@@ -641,6 +650,9 @@ export function validateState(state) {
   if (!everyRecordValid(state.learningOutcomes, validLearningOutcome)) return error("invalid_state", { field: "learningOutcomes" });
   if (!everyRecordValid(state.learningAggregates, validLearningAggregate)) return error("invalid_state", { field: "learningAggregates" });
   if (!everyRecordValid(state.lifecycleReviewRequirements, validLifecycleReviewRequirement)) return error("invalid_state", { field: "lifecycleReviewRequirements" });
+  if (state.daybreakAvailability !== undefined && !validDaybreakAvailability(state.daybreakAvailability)) return error("invalid_state", { field: "daybreakAvailability" });
+  if (state.daybreakCatalogDigest !== undefined && !validDigest(state.daybreakCatalogDigest)) return error("invalid_state", { field: "daybreakCatalogDigest" });
+  if ((state.daybreakAvailability === undefined) !== (state.daybreakCatalogDigest === undefined)) return error("invalid_state", { field: "daybreakCatalogDigest" });
   return result(true, "state_valid", { digest: stableDigest(state) });
 }
 

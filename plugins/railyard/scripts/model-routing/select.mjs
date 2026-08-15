@@ -35,6 +35,9 @@ import {
 import {
   ceSeamAllows,
 } from "./state-schema.mjs";
+import {
+  daybreakAvailable,
+} from "./daybreak-availability.mjs";
 
 export function adapterFor(request, carrier) {
   const adapterId = request.adapterId || carrier.adapters[0];
@@ -56,6 +59,12 @@ export function effectiveHostScope(request = {}, fallback) {
 
 export function effectiveAccountScope(request = {}, provider = {}, fallback) {
   return request.accountScope || request.priorRoute?.accountScope || fallback || provider?.account || "local";
+}
+
+/** The App Server enumerates only this machine's configured Codex account. */
+export function daybreakAvailabilityScopeMatches(request = {}, provider = {}) {
+  return effectiveHostScope(request) === "local"
+    && effectiveAccountScope(request, provider) === provider.account;
 }
 
 export function capabilityFor(state, { carrierId, carrier, adapterId, provider, policyDigest, request, now, positive = true }) {
@@ -315,6 +324,14 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
       }
       if (!privacyAllows(provider, model, carrier, request, catalog)) {
         output.push({ ok: false, alias, tierIndex, position, reason: "privacy_ineligible" });
+        continue;
+      }
+      if (model.carrierId === "codex-daybreak-blue" && !daybreakAvailabilityScopeMatches(request, provider)) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "daybreak_scope_unavailable" });
+        continue;
+      }
+      if (model.carrierId === "codex-daybreak-blue" && !daybreakAvailable(state.daybreakAvailability, now)) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "daybreak_unavailable" });
         continue;
       }
       const negativeCapability = capabilityFor(state, { carrierId: model.carrierId, carrier, adapterId: adapterResult.adapterId, provider, policyDigest, request, now, positive: false });

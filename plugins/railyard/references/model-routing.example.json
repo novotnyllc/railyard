@@ -25,6 +25,14 @@
       "retention": "provider_default",
       "harness": "codex"
     },
+    "codex_daybreak_blue": {
+      "carrierId": "codex-daybreak-blue",
+      "executionSurface": "codex",
+      "account": "codex-sub",
+      "locality": "external",
+      "retention": "provider_default",
+      "harness": "codex"
+    },
     "codex_terra": {
       "carrierId": "codex-terra-runtime",
       "executionSurface": "codex",
@@ -76,7 +84,7 @@
       "carrierId": "codex-sol",
       "requestedModel": "gpt-5.6-sol",
       "efforts": ["high", "max"],
-      "roles": ["implementation.hard", "orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family"],
+      "roles": ["implementation.hard", "orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
       "relativeCostIndex": 80
     },
     "sol_max": {
@@ -85,6 +93,14 @@
       "requestedModel": "gpt-5.6-sol",
       "efforts": ["max"],
       "roles": ["implementation.hard"],
+      "relativeCostIndex": 80
+    },
+    "daybreak_blue": {
+      "provider": "codex_daybreak_blue",
+      "carrierId": "codex-daybreak-blue",
+      "requestedModel": "gpt-daybreak-blue-latest",
+      "efforts": ["high", "max"],
+      "roles": ["security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
       "relativeCostIndex": 80
     },
     "terra": {
@@ -130,6 +146,27 @@
     },
     "review.cross_family": {
       "tiers": [["sol"]]
+    },
+    "security.review": {
+      "tiers": [["daybreak_blue"], ["sol"]]
+    },
+    "security.threat-model": {
+      "tiers": [["daybreak_blue"], ["sol"]]
+    },
+    "security.trust": {
+      "tiers": [["daybreak_blue"], ["sol"]]
+    },
+    "security.redaction": {
+      "tiers": [["daybreak_blue"], ["sol"]]
+    },
+    "security.signing": {
+      "tiers": [["daybreak_blue"], ["sol"]]
+    },
+    "security.attack-shape": {
+      "tiers": [["daybreak_blue"], ["sol"]]
+    },
+    "security.audit": {
+      "tiers": [["daybreak_blue"], ["sol"]]
     },
     "implementation": {
       "tiers": [["luna"]]
