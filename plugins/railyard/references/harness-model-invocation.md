@@ -88,8 +88,9 @@ Railyard uses the owner-provisioned Codex selector
 cache is fresh and available. A stale local security-shaped resolve enumerates
 the fixed Codex App Server model list once, stores `{available,checkedAt}` for
 24 hours, and prefers Daybreak over Sol for the security roles in the catalog.
-One state document admits one Daybreak provider; a newer catalog invalidates
-that cache before reuse. Remote or differently scoped account requests use the
+One state document admits one Daybreak provider; a changed catalog digest
+invalidates that cache before reuse, even if file timestamps are preserved.
+Remote or differently scoped account requests use the
 normal route without a probe. Missing access, a negative result, or a failed
 enumeration silently keeps the standard route; it is not a warning or an
 entitlement claim. The full fixed probe and cache contract lives in [model routing](model-routing.md#daybreak-blue-local-availability).

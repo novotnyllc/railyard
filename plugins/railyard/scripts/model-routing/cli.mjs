@@ -69,18 +69,20 @@ export function loadCatalogForCli(paths) {
   return validation.ok ? result(true, "catalog_loaded", { catalog: loaded.value, source: paths.config.source, digest: validation.policy.digest }) : validation;
 }
 
-export function loadStateForCli(paths) {
+export function loadStateForCli(paths, catalogDigest) {
   const loaded = readPrivateJson(paths.state.path, { missingOk: true, maxBytes: MAX_STATE_BYTES });
   if (!loaded.ok) return loaded;
   const migrated = loaded.value === null ? createEmptyState() : migrateState(loaded.value);
   const cache = safeStat(paths.state.path);
   const catalog = safeStat(paths.config.path);
-  // The fixed App Server observes the configured local account. A newer or
-  // unreadable catalog therefore invalidates its otherwise two-field cache.
+  // The fixed App Server observes the configured local account. A newer,
+  // unreadable, or policy-different catalog therefore invalidates its
+  // otherwise two-field cache.
   let state = migrated;
-  if (state.daybreakAvailability !== undefined && (!cache || !catalog || catalog.mtimeMs > cache.mtimeMs)) {
+  if (state.daybreakAvailability !== undefined && (!cache || !catalog || catalog.mtimeMs > cache.mtimeMs || state.daybreakCatalogDigest !== catalogDigest)) {
     state = { ...state };
     delete state.daybreakAvailability;
+    delete state.daybreakCatalogDigest;
   }
   const validation = validateState(state);
   return validation.ok ? result(true, "state_loaded", { state }) : validation;
@@ -228,7 +230,7 @@ export function runCli(input, options = {}) {
   if (platform === "win32" && mutatesState) return error("secure_state_unsupported");
   if (mutatesState) {
     return withStateLock(paths.state.path, () => {
-      const loaded = loadStateForCli(paths);
+      const loaded = loadStateForCli(paths, catalogLoaded.digest);
       if (!loaded.ok) return loaded;
       const handled = handleRequest(input, handleOptions(loaded.state));
       if (!handled.changed) return handled.response;
@@ -239,7 +241,7 @@ export function runCli(input, options = {}) {
   const needsState = command === "inspect-claim" || (command !== "resolve" && command !== "validate" && command !== "status" ? catalogLoaded.catalog !== null : command === "status");
   let state = createEmptyState();
   if (needsState || catalogLoaded.catalog !== null) {
-    const loaded = loadStateForCli(paths);
+    const loaded = loadStateForCli(paths, catalogLoaded.digest);
     if (!loaded.ok) return loaded;
     state = loaded.state;
   }
@@ -267,18 +269,23 @@ export async function runCliAsync(input, options = {}) {
   if (!daybreakRefreshRequired(fallback)) return fallback;
   const paths = resolvePaths({ ...options, env: options.env || process.env });
   if (!paths.ok) return paths;
-  const current = loadStateForCli(paths);
+  const catalogLoaded = loadCatalogForCli(paths);
+  if (!catalogLoaded.ok || catalogLoaded.catalog === null) return fallback;
+  const current = loadStateForCli(paths, catalogLoaded.digest);
   if (!current.ok) return current;
   if (daybreakAvailabilityFresh(current.state.daybreakAvailability, now)) return fallback;
 
   const refreshed = await withStateLockAsync(paths.state.path, async () => {
-    const loaded = loadStateForCli(paths);
+    const lockedCatalog = loadCatalogForCli(paths);
+    if (!lockedCatalog.ok || lockedCatalog.catalog === null) return fallback;
+    const loaded = loadStateForCli(paths, lockedCatalog.digest);
     if (!loaded.ok) return loaded;
     const availability = await refreshDaybreakAvailability(loaded.state, {
       now,
       probe: options.daybreakProbe,
     });
     if (availability.changed) {
+      loaded.state.daybreakCatalogDigest = lockedCatalog.digest;
       const written = writePrivateJsonLocked(paths.state.path, loaded.state);
       if (!written.ok) return written;
     }

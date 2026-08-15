@@ -548,6 +548,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
     const cached = JSON.parse(fs.readFileSync(statePath, "utf8"));
     assert.equal(cached.stateSchemaVersion, 5);
     assert.deepEqual(cached.daybreakAvailability, { available: true, checkedAt: new Date(NOW).toISOString() });
+    assert.equal(cached.daybreakCatalogDigest, policyDigest(ownerPolicy()));
 
     const fresh = await runCliAsync(securityRequest, {
       ...options,
@@ -574,6 +575,21 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
     assert.equal(probeCalls, 1);
     fs.unlinkSync(freshLock);
 
+    const legacyCache = { ...cached };
+    delete legacyCache.daybreakCatalogDigest;
+    fs.writeFileSync(statePath, JSON.stringify(legacyCache));
+    fs.chmodSync(statePath, 0o600);
+    const recachedLegacy = await runCliAsync(securityRequest, {
+      ...options,
+      daybreakProbe: async () => {
+        probeCalls += 1;
+        return { available: true };
+      },
+    });
+    assert.equal(recachedLegacy.decision.selected.model, "gpt-daybreak-blue-latest");
+    assert.equal(probeCalls, 2);
+    assert.equal(JSON.parse(fs.readFileSync(statePath, "utf8")).daybreakCatalogDigest, policyDigest(ownerPolicy()));
+
     const remoteScope = await runCliAsync(request("resolve", {
       role: "security.review",
       harness: "codex",
@@ -586,7 +602,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
       },
     });
     assert.equal(remoteScope.decision.selected.model, "gpt-5.6-sol");
-    assert.equal(probeCalls, 1);
+    assert.equal(probeCalls, 2);
 
     const differentAccount = await runCliAsync(request("resolve", {
       role: "security.review",
@@ -600,12 +616,16 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
       },
     });
     assert.equal(differentAccount.decision.selected.model, "gpt-5.6-sol");
-    assert.equal(probeCalls, 1);
+    assert.equal(probeCalls, 2);
 
     const changedCatalog = ownerPolicy();
     changedCatalog.providers.codex_daybreak_blue.account = "codex-sub-b";
+    const stateMtime = fs.statSync(statePath).mtime;
     fs.writeFileSync(configPath, JSON.stringify(changedCatalog));
     fs.chmodSync(configPath, 0o600);
+    const preservedMtime = new Date(stateMtime.getTime() - 1_000);
+    fs.utimesSync(configPath, preservedMtime, preservedMtime);
+    assert.ok(fs.statSync(configPath).mtimeMs <= fs.statSync(statePath).mtimeMs);
     const accountChanged = await runCliAsync(securityRequest, {
       ...options,
       daybreakProbe: async () => {
@@ -614,7 +634,8 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
       },
     });
     assert.equal(accountChanged.decision.selected.model, "gpt-daybreak-blue-latest");
-    assert.equal(probeCalls, 2);
+    assert.equal(probeCalls, 3);
+    assert.equal(JSON.parse(fs.readFileSync(statePath, "utf8")).daybreakCatalogDigest, policyDigest(changedCatalog));
 
     const staleForIneligible = JSON.parse(fs.readFileSync(statePath, "utf8"));
     staleForIneligible.daybreakAvailability.checkedAt = new Date(NOW - DAYBREAK_AVAILABILITY_TTL_MS).toISOString();
@@ -644,7 +665,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
       },
     });
     assert.equal(privateRoute.reason, "no_eligible_route", JSON.stringify(privateRoute));
-    assert.equal(probeCalls, 2);
+    assert.equal(probeCalls, 3);
 
     cached.daybreakAvailability.checkedAt = new Date(NOW + DAYBREAK_AVAILABILITY_TTL_MS).toISOString();
     fs.writeFileSync(statePath, JSON.stringify(cached));
@@ -657,7 +678,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
       },
     });
     assert.equal(future.decision.selected.model, "gpt-5.6-sol");
-    assert.equal(probeCalls, 3);
+    assert.equal(probeCalls, 4);
 
     cached.daybreakAvailability.checkedAt = new Date(NOW - DAYBREAK_AVAILABILITY_TTL_MS).toISOString();
     fs.writeFileSync(statePath, JSON.stringify(cached));
@@ -671,7 +692,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
     });
     assert.equal(unavailable.reason, "resolved", JSON.stringify(unavailable));
     assert.equal(unavailable.decision.selected.model, "gpt-5.6-sol");
-    assert.equal(probeCalls, 4);
+    assert.equal(probeCalls, 5);
 
     const staleLockedState = JSON.parse(fs.readFileSync(statePath, "utf8"));
     staleLockedState.daybreakAvailability.checkedAt = new Date(NOW - DAYBREAK_AVAILABILITY_TTL_MS).toISOString();
@@ -687,7 +708,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
       },
     });
     assert.equal(locked.decision.selected.model, "gpt-5.6-sol");
-    assert.equal(probeCalls, 4);
+    assert.equal(probeCalls, 5);
     fs.unlinkSync(staleLock);
 
     const stale = JSON.parse(fs.readFileSync(statePath, "utf8"));
@@ -703,7 +724,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
     });
     assert.equal(unknown.reason, "resolved", JSON.stringify(unknown));
     assert.equal(unknown.decision.selected.model, "gpt-5.6-sol");
-    assert.equal(probeCalls, 5);
+    assert.equal(probeCalls, 6);
     assert.equal(JSON.parse(fs.readFileSync(statePath, "utf8")).daybreakAvailability.available, null);
 
     const failedWriteState = JSON.parse(fs.readFileSync(statePath, "utf8"));
@@ -720,7 +741,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
         },
       });
       assert.equal(writeFailure.decision.selected.model, "gpt-5.6-sol");
-      assert.equal(probeCalls, 6);
+      assert.equal(probeCalls, 7);
     } finally {
       fs.chmodSync(stateDirectory, 0o700);
       try { fs.unlinkSync(`${statePath}.lock`); } catch { /* no-op */ }
@@ -737,7 +758,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
       },
     });
     assert.equal(nonSecurity.decision.selected.modelAlias, "sol_max");
-    assert.equal(probeCalls, 6);
+    assert.equal(probeCalls, 7);
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
@@ -753,6 +774,7 @@ test("Daybreak availability state migrates v4 and validates its exact cache reco
   for (const availability of [true, false, null]) {
     const state = structuredClone(migrated);
     state.daybreakAvailability = { available: availability, checkedAt: new Date(NOW).toISOString() };
+    state.daybreakCatalogDigest = DIGEST_A;
     assert.equal(validateState(state).ok, true);
   }
   for (const invalid of [
@@ -763,8 +785,19 @@ test("Daybreak availability state migrates v4 and validates its exact cache reco
   ]) {
     const state = structuredClone(migrated);
     state.daybreakAvailability = invalid;
+    state.daybreakCatalogDigest = DIGEST_A;
     assert.equal(validateState(state).field, "daybreakAvailability");
   }
+  const missingCatalogDigest = structuredClone(migrated);
+  missingCatalogDigest.daybreakAvailability = { available: true, checkedAt: new Date(NOW).toISOString() };
+  assert.equal(validateState(missingCatalogDigest).field, "daybreakCatalogDigest");
+  const invalidCatalogDigest = structuredClone(migrated);
+  invalidCatalogDigest.daybreakAvailability = { available: true, checkedAt: new Date(NOW).toISOString() };
+  invalidCatalogDigest.daybreakCatalogDigest = "not-a-digest";
+  assert.equal(validateState(invalidCatalogDigest).field, "daybreakCatalogDigest");
+  const orphanCatalogDigest = structuredClone(migrated);
+  orphanCatalogDigest.daybreakCatalogDigest = DIGEST_A;
+  assert.equal(validateState(orphanCatalogDigest).field, "daybreakCatalogDigest");
 });
 
 test("a catalog has one Daybreak provider for its local state cache", () => {

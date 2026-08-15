@@ -391,9 +391,11 @@ accepts only an exact visible `id` or `model` match for
 `gpt-daybreak-blue-latest`, follows bounded pages, and retains no raw list.
 This follows OpenAI's documented [App Server model-list method](https://learn.chatgpt.com/docs/app-server).
 
-The validated state record is exactly
-`{"available":true|false|null,"checkedAt":"<ISO-8601>"}`. It is fresh for
-24 hours only when its checked time is not in the future. A fresh positive
+The validated availability record is exactly
+`{"available":true|false|null,"checkedAt":"<ISO-8601>"}`. Its separate
+state-level catalog-digest binding invalidates a legacy or policy-changed
+record before it is reused. The availability record is fresh for 24 hours only
+when its checked time is not in the future. A fresh positive
 record makes the Daybreak candidate eligible for the local configured Daybreak
 account; a remote host or different account uses the normal fallback without a
 probe. A missing, stale, negative, or unknown record makes that candidate
@@ -403,11 +405,11 @@ overlapping resolver or failed cache maintenance uses that ordinary fallback
 while the first refresh owns the one probe. A list failure records
 `available:null` for the same TTL, so the resolver neither crashes nor
 repeatedly probes. Non-security and no-catalog resolves do not probe or write
-this cache. The optional field is state-schema v5; readers migrate a v4 state
-without the cache before validating it. One state document permits only one
-Daybreak provider, and a catalog newer than the state invalidates the cache
-before reuse; these two boundaries keep the two-field fact tied to the one
-local App Server account. Daybreak's absence is silent: it is a standard-
+this cache. The optional availability field is state-schema v5; readers
+migrate a v4 state without the cache before validating it. One state document
+permits only one Daybreak provider, and the catalog's content digest—not just
+its timestamp—must match before reuse; these two boundaries keep the
+two-field fact tied to the one local App Server account. Daybreak's absence is a standard-
 candidate-ineligibility result, not a user-facing entitlement warning.
 
 The cache says only that this local Codex model list exposed the selector at a
