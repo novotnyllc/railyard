@@ -2,9 +2,24 @@ import { readFile } from 'node:fs/promises';
 
 const css = await readFile(new URL('../src/styles/global.css', import.meta.url), 'utf8');
 
+const focusRingModels = [
+  { selector: 'a:focus-visible', outlineBackgrounds: ['var(--ground)'], boxShadowBackgrounds: ['var(--ground)'] },
+  { selector: 'button:focus-visible', outlineBackgrounds: ['var(--ground)'], boxShadowBackgrounds: ['var(--ground)'] },
+  { selector: '.skip-link:focus-visible', component: '.skip-link', outlineBackgrounds: ['.skip-link'], boxShadowBackgrounds: ['var(--ground)'] },
+  { selector: '.button-primary:focus-visible', component: '.button-primary', outlineBackgrounds: ['.button-primary'], boxShadowBackgrounds: ['var(--ground)'] },
+  { selector: '.promise-card:focus-visible', component: '.promise-card', outlineBackgrounds: ['.promise-card'], boxShadowBackgrounds: ['var(--ground)'] },
+  { selector: '.scenario-card:focus-visible', component: '.scenario-card', outlineBackgrounds: ['.scenario-card'], boxShadowBackgrounds: ['var(--ground)'] },
+  { selector: '.header-cta:focus-visible', component: '.header-cta:hover', outlineBackgrounds: ['var(--ground)'], boxShadowBackgrounds: ['var(--ground)'] },
+  { selector: '.nav-group a:focus-visible', component: '.nav-group a.active', outlineBackgrounds: ['.nav-group a.active'], boxShadowBackgrounds: ['var(--ground)'] },
+  { selector: '.prev-next a:focus-visible', component: '.prev-next a:hover', outlineBackgrounds: ['.prev-next a:hover'], boxShadowBackgrounds: ['var(--ground)'] },
+  { selector: '.start-callout .button:focus-visible', component: '.start-callout .button', outlineBackgrounds: ['.start-callout .button'], boxShadowBackgrounds: ['.start-callout'] },
+  { selector: '.terminal a:focus-visible', outlineBackgrounds: ['.terminal'], boxShadowBackgrounds: ['.terminal'] },
+  { selector: '.terminal:focus-visible', component: '.terminal', outlineBackgrounds: ['.terminal'], boxShadowBackgrounds: ['var(--ground)'] },
+  { selector: '.prose pre:focus-visible', component: '.prose pre', outlineBackgrounds: ['.prose pre'], boxShadowBackgrounds: ['var(--ground)'] },
+  { selector: '.prose > p:has(> img[src*="/diagrams/"]):focus-visible', outlineBackgrounds: ['var(--ground)'], boxShadowBackgrounds: ['var(--ground)'] },
+];
+
 const expectedSelectors = new Set([
-  'a:focus-visible',
-  'button:focus-visible',
   '.skip-link:focus',
   '.global-nav a:hover',
   '.header-cta:hover',
@@ -15,9 +30,7 @@ const expectedSelectors = new Set([
   '.start-callout .button:hover',
   '.nav-group a:hover',
   '.prev-next a:hover',
-  '.start-callout a:focus-visible',
-  '.start-callout button:focus-visible',
-  '.terminal a:focus-visible',
+  ...focusRingModels.map(({ selector }) => selector),
 ]);
 const actualSelectors = new Set(
   [...css.matchAll(/([^{}]+)\{[^{}]*\}/g)]
@@ -63,17 +76,17 @@ const interactionSubjects = [
   '.skip-link', '.terminal a',
 ];
 const modeledPaintSelectors = new Set([
+  ...focusRingModels.map(({ selector }) => selector),
   '.skip-link', '.global-nav a:hover', '.header-cta:hover', '.button-primary', '.button-primary:hover',
   '.text-link', '.text-link:hover', '.promise-card', '.promise-card:hover', '.promise-card p', '.card-number',
   '.scenario-card', '.scenario-card:hover', '.scenario-card p', '.scenario-number', '.start-callout',
   '.start-callout h2 em', '.start-callout p', '.start-callout .button', '.start-callout .button:hover',
-  '.start-callout a:focus-visible', '.start-callout button:focus-visible', '.nav-group a', '.nav-group a:hover',
+  '.nav-group a', '.nav-group a:hover',
   '.nav-group a.active', '.prev-next a', '.prev-next a:hover', '.prev-next span', '.terminal a',
-  '.terminal a:focus-visible',
 ]);
 function assertNoCompetingPaint(ruleSet) {
   for (const rule of ruleSet) {
-    const paintDeclarations = rule.declarationList.filter(([property]) => ['color', 'background', 'background-color', 'outline', 'outline-color', 'opacity'].includes(property));
+    const paintDeclarations = rule.declarationList.filter(([property]) => ['color', 'background', 'background-color', 'outline', 'outline-color', 'box-shadow', 'opacity'].includes(property));
     const hasPaint = paintDeclarations.length > 0;
     if (!hasPaint) continue;
     for (const selector of rule.selectors) {
@@ -282,6 +295,72 @@ function outline(ruleSet, schemeName, scheme, selectors) {
   return color(scheme, expression);
 }
 
+function boxShadow(ruleSet, schemeName, scheme, selector) {
+  const result = lastPropertyDeclaration(ruleSet, selector, ['box-shadow'], schemeName);
+  if (!result || result.value === 'none') return null;
+  if (result.value.includes(',')) throw new Error(`Multiple focus box-shadow layers need separate models: ${selector}`);
+  const expression = result.value.match(/var\(--[\w-]+\)|#[\da-f]{3,8}/i)?.[0];
+  if (!expression) throw new Error(`Unresolved ${schemeName} focus box-shadow color: ${selector}`);
+  return color(scheme, expression);
+}
+
+function hasBackground(selector) {
+  return rules.some((rule) => rule.selectors.some((candidate) => candidate === selector || candidate.startsWith(`${selector}:`))
+    && rule.declarationList.some(([property]) => ['background', 'background-color'].includes(property)));
+}
+
+function hasExplicitFocusOutline(selector) {
+  return rules.some((rule) => rule.selectors.includes(selector)
+    && rule.declarationList.some(([property, value]) => property === 'outline' && !/\bauto\b/i.test(value)));
+}
+
+if (/\boutline(?:-style)?\s*:\s*auto\b/i.test(css)) {
+  throw new Error('Authored outline-style:auto is forbidden; use an explicit focus-visible outline.');
+}
+
+for (const { component, selector } of focusRingModels.filter(({ component }) => component)) {
+  if (!hasBackground(component)) throw new Error(`Custom-background component has no modeled background: ${component}`);
+  if (!hasExplicitFocusOutline(selector)) throw new Error(`Focusable custom-background component lacks an explicit :focus-visible outline: ${selector}`);
+}
+for (const selector of [...actualSelectors].filter((candidate) => candidate.includes(':focus-visible'))) {
+  if (!hasExplicitFocusOutline(selector)) throw new Error(`Focus-visible selector lacks an explicit outline: ${selector}`);
+}
+
+const focusAdjacentBackgrounds = new Map(focusRingModels.map(({ selector, outlineBackgrounds, boxShadowBackgrounds }) => [
+  selector,
+  { outline: outlineBackgrounds, boxShadow: boxShadowBackgrounds },
+]));
+
+function backgroundColors(selectors, schemeName, scheme) {
+  return selectors.map((selector) => selector.startsWith('var(')
+    ? color(scheme, selector)
+    : color(scheme, backgroundDeclaration(rules, [selector], schemeName, 'var(--ground)')));
+}
+
+const focusRingResults = [];
+for (const selector of [...actualSelectors].filter((candidate) => candidate.includes(':focus-visible'))) {
+  const schemePairs = focusAdjacentBackgrounds.get(selector);
+  if (!schemePairs) throw new Error(`Focus-visible selector lacks adjacent-background model: ${selector}`);
+  for (const schemeName of ['light', 'dark']) {
+    const scheme = schemeVariables(rules, schemeName);
+    const rings = [
+      ['outline', outline(rules, schemeName, scheme, selector), schemePairs.outline],
+      ['box-shadow', boxShadow(rules, schemeName, scheme, selector), schemePairs.boxShadow],
+    ];
+    for (const [ring, foreground, backgrounds] of rings) {
+      if (!foreground) continue;
+      for (const background of backgroundColors(backgrounds, schemeName, scheme)) {
+        const ratio = contrast(foreground, background, scheme['--ground']);
+        focusRingResults.push({ scheme: schemeName, state: `focus-ring: ${selector} ${ring}`, ratio });
+        if (ratio < 3) throw new Error(`Focus ring below 3:1: ${schemeName} ${selector} ${ring} ${ratio.toFixed(2)}:1`);
+      }
+    }
+  }
+}
+
+const focusRingWorst = focusRingResults.reduce((worst, result) => result.ratio < worst.ratio ? result : worst, focusRingResults[0]);
+console.log(`focus-ring gate=pass pairs=${focusRingResults.length} threshold=3.00:1 worst=${focusRingWorst.ratio.toFixed(2)}:1 ${focusRingWorst.scheme} ${focusRingWorst.state}`);
+
 const pairs = [
   ['hover: global navigation', (name, scheme) => color(scheme, declaration(rules, '.global-nav a:hover', 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.global-nav a:hover', '.global-nav a'], name, 'var(--ground)')), (name, scheme) => scheme['--ground']],
   ['hover: header call to action', (name, scheme) => color(scheme, declaration(rules, '.header-cta:hover', 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.header-cta:hover'], name)), (name, scheme) => scheme['--ground']],
@@ -296,18 +375,10 @@ const pairs = [
   ['hover: start callout button', (name, scheme) => color(scheme, declaration(rules, '.start-callout .button:hover', 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout .button:hover'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
   ['hover: previous/next heading', (name, scheme) => color(scheme, firstDeclaration(rules, ['.prev-next a:hover', '.prev-next a'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.prev-next a:hover'], name)), (name, scheme) => scheme['--ground']],
   ['hover: previous/next label', (name, scheme) => color(scheme, declaration(rules, '.prev-next span', 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.prev-next a:hover'], name)), (name, scheme) => scheme['--ground']],
-  ['focus: global anchor outline', (name, scheme) => outline(rules, name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
-  ['focus: global button outline', (name, scheme) => outline(rules, name, scheme, 'button:focus-visible'), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
-  ['focus: card outline', (name, scheme) => outline(rules, name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--paper'], (name, scheme) => scheme['--paper']],
-  ['focus: filled button outline', (name, scheme) => outline(rules, name, scheme, 'a:focus-visible'), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
   ['focus: skip link text', (name, scheme) => color(scheme, firstDeclaration(rules, ['.skip-link:focus', '.skip-link'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.skip-link:focus', '.skip-link'], name)), (name, scheme) => scheme['--ground']],
-  ['focus: skip link outline', (name, scheme) => outline(rules, name, scheme, ['.skip-link:focus', 'a:focus-visible']), (name, scheme) => scheme['--ground'], (name, scheme) => scheme['--ground']],
   ['focus: start callout link text', (name, scheme) => color(scheme, firstDeclaration(rules, ['.start-callout a:focus-visible', '.start-callout .button'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout a:focus-visible', '.start-callout .button'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
   ['focus: start callout button text', (name, scheme) => color(scheme, firstDeclaration(rules, ['.start-callout button:focus-visible', '.start-callout .button'], 'color', name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout button:focus-visible', '.start-callout .button'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
-  ['focus: start callout link outline', (name, scheme) => outline(rules, name, scheme, ['.start-callout a:focus-visible', 'a:focus-visible']), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
-  ['focus: start callout button outline', (name, scheme) => outline(rules, name, scheme, ['.start-callout button:focus-visible', 'button:focus-visible']), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.start-callout'], name))],
   ['focus: terminal link text', (name, scheme) => color(scheme, terminalForeground(rules, name)), (name, scheme) => color(scheme, backgroundDeclaration(rules, ['.terminal a:focus-visible', '.terminal a', '.terminal'], name)), (name, scheme) => scheme['--ground']],
-  ['focus: terminal outline', (name, scheme) => outline(rules, name, scheme, '.terminal a:focus-visible'), (name, scheme) => scheme['--night'], (name, scheme) => scheme['--night']],
 ];
 
 const scenarioOverrideFixture = parseRules(`${css}\n.scenario-card p { color: #777; }`);
