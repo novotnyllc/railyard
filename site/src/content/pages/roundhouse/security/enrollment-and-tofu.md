@@ -21,7 +21,7 @@ Roundhouse enrolls new members through four flows. Each one records key possessi
 
 Choose the flow by the trust already available at the moment a machine joins:
 
-1. **Genesis:** the first store creates the root history, owner key, roster, and reviewed reference.
+1. **Genesis:** `roundhouse fleet-init` creates an unsigned, history-free store; `roundhouse fleet-enroll` mints the node key and makes the self-signed roster commit the genesis, then the store receives its verified-private remote.
 2. **Sponsor-initiated `fleet-add`:** one instruction reaches a newcomer over an already-trusted channel. The sponsor confirms a resolvable SSH name, private remote, `jj`, `yq`, and `roundhouse`; the target has its agent harness, plugins, `tmux`, and `jq` ready. The newcomer mints its own key, returns a public key plus possession-proof signature, and the sponsor publishes the roster edit.
 3. **Newcomer-initiated `fleet-join`:** the newcomer creates an inert request. An operator verifies it out of band; the request is never applied as a roster edit by itself.
 4. **Ephemeral leaf:** `channel_auth: runtime` binds the leaf to the runtime channel, gives the strongest first-contact binding, and provides evidence paths without a first-contact policy window.
@@ -31,6 +31,10 @@ Choose the flow by the trust already available at the moment a machine joins:
 Match the soak to the authority class. Durable enrollment over an already-trusted channel soaks shared-layer authority for 24 hours. Genuine first contact soaks for 72 hours. Ephemeral leaves get no soak because their class cannot write fleet layers or sponsor another member. Every roster change alerts on every host.
 
 The delay gives an attacker a slower path when starting from a new key than when using an already-compromised member. It also gives the operator a distinct alert and an explicit review surface.
+
+## Renew and reparent without changing identity
+
+An ephemeral leaf whose window lapses keeps its previous signed history. `roundhouse fleet-renew NAME [HOURS]` gives the same key a fresh window for later host-owned evidence. `roundhouse fleet-reparent` lets a durable member adopt orphaned leaves; sponsorship remains cleanup metadata, so the operation changes the current relationship without rewriting the leaf's signing identity.
 
 ![Sponsor enrollment sequence: one owner instruction reaches an enrolled sponsor, which contacts the new host over a trusted channel, verifies key possession, and publishes the roster edit.](/diagrams/m9-enrollment.svg)
 

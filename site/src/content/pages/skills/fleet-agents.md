@@ -17,12 +17,16 @@ Fleet agents keeps harnesses, plugins, skills, hooks, agents, MCP servers, and s
 
 Each artifact moves through its owning installer or source. Plugin payloads flow through their source, local skills retain source ownership, and configuration keys use an allowlist. The result records version, resolved bytes, and action outcome.
 
+Promotion proposals remain inert until an operator chooses `roundhouse fleet-accept SLUG`; acceptance moves the unchanged value to its reviewed layer and preserves the proposal trail. Roundhouse self-update has an additional byte boundary: `roundhouse fleet-adopt-pin PLUGIN PIN.json` adopts an authenticated release pin before the plugin that enforces convergence can update itself.
+
 ```text
 > Compare the desired agent surface with host-a and prepare the smallest sync plan.
 item=plugins.review-tools desired_sha=sha256:12af... observed_sha=sha256:12af...
 item=skills.my-review desired_version=2.4.0 observed_version=2.3.0
 manager=codex action=update hook_approval=rerun
 plan_items=1  held_items=0
+proposal=review-system-2-4 fleet-accept=awaiting-operator
+self_update=roundhouse pin=authenticated adoption=required
 ```
 
 ## Scope

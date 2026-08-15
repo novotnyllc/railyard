@@ -15,7 +15,17 @@ Model routing provides the single decision surface for role, work shape, privacy
 
 ## How it works
 
-The route lifecycle moves through `resolve`, `admit`, dispatch claim, and receipt reconciliation. Work contracts bind objective, source of truth, scope, constraints, authorization, acceptance, and stop condition through semantic digests.
+The route lifecycle moves through `resolve`, `admit`, dispatch claim, and receipt reconciliation. Work contracts bind objective, source of truth, scope, constraints, authorization, acceptance, and stop condition through seven SHA-256 semantic digests.
+
+`build-work-contract` turns those digests into a carrier-neutral invariant and a separate source-owned presentation overlay. Switching from Sol to Opus, Fable, Sonnet, Haiku, GLM, or Oracle can change briefing form without changing objective, scope, authority, acceptance, or stop condition. The returned `invariantDigest` detects any semantic mutation before dispatch.
+
+```text
+objective_digest=sha256:12af... source_of_truth_digest=sha256:7c1a...
+scope_digest=sha256:2f4a... constraints_digest=sha256:91bd...
+authorization_digest=sha256:4e1d... acceptance_digest=sha256:63ab...
+stop_digest=sha256:8d20...
+invariant_digest=sha256:55ce... presentation=gpt_sol/lean_bounded_brief
+```
 
 ```text
 > Resolve the implementation route, admit its forecast, and show the receipt binding.

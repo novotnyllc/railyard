@@ -11,6 +11,24 @@ Privilege in an unattended fleet should enter only after signed evidence and can
 
 Roundhouse enforces this boundary with two root-owned components. `roundhouse-trustd` materializes roster, reviewed reference, generation, and KRL state by re-deriving the roster from signed history. The privilege broker executes only a fixed catalog of sealed semantic actions.
 
+The shipped default catalog is 12 lines: one `policy|1|catalog=1` header plus 11 sorted action records. It names four APT actions, two macOS actions, two Windows profile actions, and three WinGet actions:
+
+```text
+apt.autoremove.v1
+apt.install-package-version.v1
+apt.update-metadata.v1
+apt.upgrade-package.v1
+macos.apply-system-setting.v1
+macos.install-signed-pkg.v1
+profile.apply-managed-bundle.v1
+profile.inventory-managed-state.v1
+winget.install-machine-package.v1
+winget.inventory-machine.v1
+winget.upgrade-machine-package.v1
+```
+
+Each record pins action ID, execution context, enabled state, constraint kind, and constraint digest. Policy can enable a known action and bind its exact constraints; it cannot turn the broker into an arbitrary command surface.
+
 ## Decision path
 
 **Action arrives:** a resolved item requests one cataloged privileged operation. **Authority check:** `roundhouse-trustd` derives roster, reviewed reference, generation, and KRL state from signed history rather than caller data. **Propagation gate:** catalog flag, per-binding grant, provenance anchors, version floor, canary evidence, and payload attestation must agree. **Outcome:** the broker executes the sealed action and records `result=allowed`, or refuses the binding without opening an arbitrary root shell. **Residual:** a host without a genuinely root-owned lane retains a same-user trust boundary, which the operator must treat as a different security class.
@@ -25,6 +43,12 @@ Keep every path to privilege narrow and independently inspectable:
 - The invocation uses a hermetic `env -i … sudo -n` environment.
 - Every sourced library verifies its ownership before execution.
 - The root lane carries the reviewed reference, generation, roster, and revocation list as separately protected state.
+
+## Enroll the platform boundary
+
+On POSIX hosts, the owner-operated `enroll-privilege-posix` ceremony installs the fixed broker, policy, constraints, dispatcher, and root-owned trust paths after preview. On Windows, `enroll-privilege-windows.ps1` installs the Administrator-owned broker generation; `privilege-broker-windows.ps1` runs sealed machine actions as LocalSystem. `register-profile-task-windows.ps1` and `profile-worker-windows.ps1` create the separate `RoundhouseProfileV1` ordinary-user S4U lane for managed profile bundles.
+
+These enrollments are local owner boundaries. Agent workflows prepare public identity and policy inputs, inspect status, and submit already-sealed requests; the password or UAC confirmation remains with the person at the host.
 
 ## Unattended update gates
 

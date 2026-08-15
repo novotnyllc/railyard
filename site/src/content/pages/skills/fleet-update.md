@@ -27,7 +27,7 @@ plan=sealed apply=awaiting-explicit-consent
 
 ## Scope
 
-Fleet update owns packages, marketplace refresh, and the fleet scheduler's maintenance path. Agent parity and project readiness remain with their owning skills.
+Fleet update owns packages and the maintenance work started by the fleet scheduler. The scheduler is the native cadence authority; marketplace refresh is the full-pass operation that updates already-installed entries through their owning Codex or Claude manager and verifies the installed bytes. Agent parity and project readiness remain with their owning skills.
 
 ## Source
 

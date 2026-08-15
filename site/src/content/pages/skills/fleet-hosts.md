@@ -17,6 +17,8 @@ Fleet hosts provides that lifecycle. It records the machine entry, checks reacha
 
 Enrollment binds the roster identity to the configured transport identity. Revocation records the chain change, cleans the machine's managed state, and makes the resulting authority state visible across the fleet.
 
+For the first member, `roundhouse fleet-enroll` mints the node key and makes the self-signed roster commit the genesis. Later durable members arrive through the witnessed `fleet-add` flow. Ephemeral leaves retain identity continuity with `roundhouse fleet-renew NAME [HOURS]`; orphaned leaves move under a current durable sponsor through `roundhouse fleet-reparent` without changing their signing key.
+
 ```text
 > Add host-a through the trusted channel, verify key possession, and show its readiness handoff.
 channel=trusted-ssh  prerequisites=ready
