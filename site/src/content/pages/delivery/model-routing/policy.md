@@ -34,6 +34,7 @@ Run the `validate` verb through `railyard:model-routing` before using an edited 
 | `providers` | Account alias, fixed carrier, execution surface, harness, locality, retention, and supported availability source | Configured account and privacy provenance |
 | `models` | Provider, fixed carrier, requested family/model, efforts, roles, fallbacks, rates, and `relativeCostIndex` | Exact selected alias, effort, rate freshness, and rejected alternatives |
 | `roles` | Ordered tier ladders; tier zero may use `cost`, `latency`, `quality`, `reliability`, or `learnedEstimate` | The selected alias and every hard constraint that kept another candidate out |
+| `security.*` roles | Put Daybreak Blue before the general hard tier for review lenses, threat modeling, trust surfaces, redaction and signing, attack-shape analysis, and audits | Fresh local detection of `gpt-daybreak-blue-latest` at `high` or `max`, plus the configured fallback |
 | `privacy` | Provider, locality, retention, and egress restrictions | Tighten-only request handling; the root catalog remains the widest allowed boundary |
 | `budgets` | Task, run, and project meters using `soft`, `hardAdmission`, or `strict` | Forecast, reservation, actual, and charged facets kept in their native meter |
 | `discovery` | Bounded negative-evidence freshness | Transient 60 seconds, auth 5 minutes, and missing binary 1 hour by default; unsupported evidence records a 24-hour window and stays held until the policy or adapter digest changes |
