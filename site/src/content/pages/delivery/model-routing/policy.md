@@ -34,7 +34,7 @@ Run the `validate` verb through `railyard:model-routing` before using an edited 
 | `roles` | Ordered tier ladders; tier zero may use `cost`, `latency`, `quality`, `reliability`, or `learnedEstimate` | The selected alias and every hard constraint that kept another candidate out |
 | `privacy` | Provider, locality, retention, and egress restrictions | Tighten-only request handling; the root catalog remains the widest allowed boundary |
 | `budgets` | Task, run, and project meters using `soft`, `hardAdmission`, or `strict` | Forecast, reservation, actual, and charged facets kept in their native meter |
-| `discovery` | Bounded negative-evidence freshness | Transient 60 seconds, auth 5 minutes, missing binary 1 hour, unsupported 24 hours by default |
+| `discovery` | Bounded negative-evidence freshness | Transient 60 seconds, auth 5 minutes, and missing binary 1 hour by default; unsupported evidence records a 24-hour window and stays held until the policy or adapter digest changes |
 | `learning` | Whether bounded local learning is active | Content-free outcome and aggregate counts; prompts and files remain outside the store |
 
 ```json
