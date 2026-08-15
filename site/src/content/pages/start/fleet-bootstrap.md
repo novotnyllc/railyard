@@ -28,9 +28,11 @@ Create the remote repository as private. The hub transports signed history; the 
 Run these verbs in order:
 
 ```sh
+ROUNDHOUSE_STORE_URL=git@code.example:fleet/store.git
+
 roundhouse fleet-init
 roundhouse fleet-enroll
-roundhouse fleet-set-remote <private-store-url>
+roundhouse fleet-set-remote "$ROUNDHOUSE_STORE_URL"
 roundhouse fleet-verify-remote
 roundhouse fleet-seed
 $EDITOR fleet.yaml

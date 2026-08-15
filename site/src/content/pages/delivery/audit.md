@@ -18,17 +18,19 @@ Record the approach before the work starts, then append route decisions, outcome
 Open every substantial run with the decision that will later grade it: `what:"approach"` and a `because` value naming the loop, isolation boundary, done evidence, and long pole. Append only three doctrine events after that—`decision`, `outcome`, and `deviation`—through the installed run-log helper:
 
 ```sh
-node <railyard-plugin-root>/hooks/run-log.js note \
+RAILYARD_PLUGIN_ROOT=/path/to/railyard/plugin
+
+node "$RAILYARD_PLUGIN_ROOT/hooks/run-log.js" note \
   '{"event":"decision","what":"approach","because":"isolate one writer; prove build, review, merge, and live result"}'
 
-node <railyard-plugin-root>/hooks/run-log.js note \
+node "$RAILYARD_PLUGIN_ROOT/hooks/run-log.js" note \
   '{"event":"decision","what":"fix batch","because":"review found one shared gap","fed_by":"independent review","led_to":"second focused check"}'
 
-node <railyard-plugin-root>/hooks/run-log.js note \
+node "$RAILYARD_PLUGIN_ROOT/hooks/run-log.js" note \
   '{"event":"outcome","what":"second focused check","result":"passed","fed_by":"fix batch"}'
 ```
 
-`fed_by` and `led_to` use plain labels, so a human can reconstruct what caused what without an ID scheme. The helper stamps the current session and keeps labels bounded. Mechanical hook lines add allowed dispatches and session anchors; a refused dispatch does not masquerade as work that ran.
+`fed_by` and `led_to` use plain labels, so a human can reconstruct what caused what without an ID scheme. The helper stamps the current session. Mechanical hook lines add allowed dispatches and session anchors; a refused dispatch does not masquerade as work that ran.
 
 ## The report
 

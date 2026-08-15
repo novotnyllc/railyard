@@ -43,7 +43,7 @@ The dispatch gate keeps the worker identity explicit. A Codex child missing both
 
 ## React Doctor
 
-Run React Doctor at the UI boundary where its findings can still change the chunk. It deterministically scans React code for state-and-effect, performance, architecture, security, accessibility, and maintainability issues, then returns the focused findings to the implementation lane before commit. It works across React frameworks and React-enabled sites; Railyard scopes the gate to the staged UI change.
+Run React Doctor at the UI boundary where its findings can still change the chunk. It scans React code for state-and-effect, performance, architecture, security, accessibility, and maintainability issues, then returns the focused findings to the implementation lane before commit. It works across React frameworks and React-enabled sites; Railyard scopes the gate to the staged UI change.
 
 ```sh
 npx react-doctor@latest --staged --no-score
