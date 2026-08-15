@@ -29,6 +29,8 @@ The operator asks for a native app change to receive clean Xcode and UI-test evi
 
 Use the VM as a separate execution boundary for the native build and test workload. Your host screen remains available while the test run progresses in its own environment.
 
+The integration starts each Xcode build, simulator test, or XCUITest from a clean macOS image, keeps the UI run off the developer's display, and returns build/test status as its own execution receipt. Railyard attaches that receipt to the same reviewed change and retains merge authority in the delivery lane.
+
 ## Source
 
 Read the [Tart Xcode Runner repository](https://github.com/novotnyllc/tart-xcode-runner) for its own installation and runner details.

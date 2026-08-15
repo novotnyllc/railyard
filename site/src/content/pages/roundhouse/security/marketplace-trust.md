@@ -38,6 +38,7 @@ The grouped marketplace install is the consent step for both dependencies. This 
 - Confirm the marketplace entry names the expected repository and plugin version.
 - Compare the pinned version with the release and review trail of the owning repository.
 - Treat a changed marketplace SHA as a new review decision, even when the version string stays the same.
+- For Roundhouse itself, adopt the authenticated release pin with `roundhouse fleet-adopt-pin roundhouse PIN.json` before convergence updates the code that enforces these checks.
 - Keep signing, enrollment, and privileged host actions under their own explicit consent boundaries.
 
 The [canary evidence walkthrough](/roundhouse/security/canary-evidence/) carries the general propagation gate, and [attack shapes](/roundhouse/security/attack-shapes/) separates the contained outcome from its residual.

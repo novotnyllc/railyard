@@ -29,6 +29,10 @@ gate=fix-before-commit
 
 Thermos reviews and synthesizes. The implementation lane fixes findings, and the delivery owner decides the terminal merge state.
 
+## Use one lens deliberately
+
+Invoke `railyard:thermo-nuclear-review` alone when the bounded question is whether a change breaks behavior, weakens security, leaks scope, or harms developer experience. Invoke `railyard:thermo-nuclear-code-quality-review` alone when the bounded question is structure, duplication, complexity, or maintainability. Both return review findings only; Thermos remains the skill that runs and synthesizes the pair.
+
 ## Source
 
 Ships in the `railyard` plugin.

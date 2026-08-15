@@ -18,6 +18,8 @@ Review a coherent change while its reasoning is still local. Thermos runs two le
 
 The synthesis deduplicates findings into one actionable list. Real findings are fixed before the chunk commits, and affected checks run again.
 
+Each lens is also independently invocable when one question deserves its own packet. `railyard:thermo-nuclear-review` is the correctness, security, breakage, developer-experience, and feature-leak skill. `railyard:thermo-nuclear-code-quality-review` is the structure, duplication, maintainability, and complexity skill. Thermos is the paired orchestration that gives both the same frozen input and synthesizes their results.
+
 ![Review gate sequence from a ready diff through parallel Thermos review, synthesis, merge settlement, independent review, merge, post-merge proof, and focused quality gates.](/diagrams/m6-review-gates.svg)
 
 ### Sequence
@@ -38,6 +40,24 @@ The dispatch gate keeps the worker identity explicit. A Codex child missing both
 ```text
 [railyard] Dispatch refused: spawn_agent must set model and reasoning_effort explicitly (no silent inheritance of the session tier). Retry with the fields set.
 ```
+
+## React Doctor
+
+Run React Doctor at the UI boundary where its findings can still change the chunk. It deterministically scans React code for state-and-effect, performance, architecture, security, accessibility, and maintainability issues, then returns the focused findings to the implementation lane before commit. It works across React frameworks and React-enabled sites; Railyard scopes the gate to the staged UI change.
+
+```sh
+npx react-doctor@latest --staged --no-score
+```
+
+Use `--diff` while the branch is still unstaged. The gate applies to browser-visible React work; backend, schema, script, and docs-only changes keep their smaller native checks. A passing invocation becomes one runnable receipt beside focused tests and the later independent review.
+
+```text
+react_doctor scope=staged findings=0 exit=0
+focused_tests=passed
+gate=ready-for-review
+```
+
+The [React Doctor repository](https://github.com/millionco/react-doctor) carries the rule categories and current CLI behavior.
 
 ## Merge settlement
 

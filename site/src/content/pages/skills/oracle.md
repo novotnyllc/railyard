@@ -28,6 +28,19 @@ egress=selected-route  mutation=none
 
 Oracle advises. The repository workflow owns implementation, verification, and merge authority.
 
+## Setup knobs
+
+Resolve `ORACLE_CLI` once per activation from the shipped `ensure-oracle.sh` helper and use that validated absolute executable for later help, preflight, review, status, and reattach commands. `ORACLE_MODEL` selects one normal browser or API target; browser Pro uses the `gpt-5-pro` picker alias. `ORACLE_MODELS` supplies an explicit model set for API preflight or an advisory panel. `ORACLE_REPO` points only at an Oracle source checkout when debugging or rebuilding Oracle itself.
+
+```text
+ORACLE_CLI=/validated/absolute/oracle
+ORACLE_MODEL=gpt-5-pro
+ORACLE_MODELS=model-a,model-b
+ORACLE_REPO=/developer/source/oracle
+```
+
+Routed `oracle-browser` reviews keep their own fixed carrier binding and ignore caller model/path overrides; the setup knobs above serve the ordinary manual Oracle workflow.
+
 ## Source
 
 Ships in the `railyard` plugin.

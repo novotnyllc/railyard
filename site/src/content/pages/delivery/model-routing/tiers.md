@@ -26,11 +26,13 @@ Apply the policy to the work unit, independent of the interactive session model.
 | `codex-luna` | selector-native, `gpt-5.6-luna`, `max` | default policy |
 | `codex-sol` | selector-native, `gpt-5.6-sol`, `high` or `max` | default policy |
 | `codex-terra-runtime` | selector-native, runtime-provided Terra at `max` | requires runtime evidence; no static slug |
-| `glm-5-2-scout` | separate-task profile, `glm-5.2`, `high` | `transport_unsupported` until callable task-profile creation is host-attested |
-| `glm-5-2-engineer` | separate-task profile, `glm-5.2`, `xhigh` | `transport_unsupported` until callable task-profile creation is host-attested; it is not a native agent type or selector model |
+| `glm-5-2-scout` | Codex-only separate-task profile, `glm-5.2`, `high`; Z.ai Coding Plan credits | `transport_unsupported` until callable task-profile creation is host-attested |
+| `glm-5-2-engineer` | Codex-only separate-task profile, `glm-5.2`, `xhigh`; Z.ai Coding Plan credits | `transport_unsupported` until callable task-profile creation is host-attested; it is not a native agent type or selector model |
 | `claude-ce-review` | fixed CE Claude `-p` review adapter | unsupported until the compatible CE adapter is attested |
 | `oracle-browser` | `chatgpt_current_pro` on `chatgpt_standard` | unsupported until selected-route Oracle capability is attested |
 | `oracle-homebrew-lifecycle` | local-host Oracle install/upgrade lifecycle carrier | unsupported until its separate lifecycle adapter is attested |
+
+GLM enters only through the configured Codex `zai_litellm` provider and a callable host attestation. Its subscription credits remain their own meter; the router does not translate them into dollars or add them to Codex or Claude subscription usage.
 
 ## Dispatch-kind table
 
