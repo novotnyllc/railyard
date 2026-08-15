@@ -11,7 +11,7 @@ Start with the shipped defaults, then make account, privacy, and budget choices 
 
 ## The run
 
-The operator copies the shipped example, adds the providers already available in the two harnesses, validates it, and resolves one bounded work class. Railyard freezes the catalog digest before selection and carries the chosen model, effort, carrier, privacy, and meter provenance into the route disclosure. The turn is installing a validated catalog at the user boundary. The run closes when a normal `resolve` names that catalog digest and the expected tier.
+The operator copies the shipped example, adds the providers already available in the two harnesses, validates it, and resolves one bounded work class. Railyard freezes the catalog digest before selection and carries the chosen model, effort, carrier, privacy, and meter provenance into the route disclosure. The turn is installing a validated catalog at the user boundary. The run closes when a normal `resolve` names that catalog digest and the expected model alias.
 
 ## Install the shipped starting point
 
@@ -31,7 +31,7 @@ Run the `validate` verb through `railyard:model-routing` before using an edited 
 | --- | --- | --- |
 | `providers` | Account alias, fixed carrier, execution surface, harness, locality, retention, and supported availability source | Configured account and privacy provenance |
 | `models` | Provider, fixed carrier, requested family/model, efforts, roles, fallbacks, rates, and `relativeCostIndex` | Exact selected alias, effort, rate freshness, and rejected alternatives |
-| `roles` | Ordered tier ladders; tier zero may use `cost`, `latency`, `quality`, `reliability`, or `learnedEstimate` | The tier that won and every hard constraint that kept another candidate out |
+| `roles` | Ordered tier ladders; tier zero may use `cost`, `latency`, `quality`, `reliability`, or `learnedEstimate` | The selected alias and every hard constraint that kept another candidate out |
 | `privacy` | Provider, locality, retention, and egress restrictions | Tighten-only request handling; the root catalog remains the widest allowed boundary |
 | `budgets` | Task, run, and project meters using `soft`, `hardAdmission`, or `strict` | Forecast, reservation, actual, and charged facets kept in their native meter |
 | `discovery` | Bounded negative-evidence freshness | Transient 60 seconds, auth 5 minutes, missing binary 1 hour, unsupported 24 hours by default |
@@ -74,7 +74,7 @@ The catalog names only fixed carrier aliases. Railyard owns the executable adapt
 ```text
 policy_source=user_configuration
 policy_digest=sha256:7c1a...
-role=implementation tier=0 alias=luna
+role=implementation alias=luna
 privacy=tightened carrier=codex-luna
 result=resolved
 ```

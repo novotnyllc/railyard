@@ -45,10 +45,13 @@ Claude Code reaches Codex models through the supported rescue forwarder or a dir
 GLM-5.2 is a Codex-only route through `zai_litellm`:
 
 ```sh
-codex exec -m glm-5.2 -c model_provider=zai_litellm '<bounded brief>'
+codex exec -m glm-5.2 \
+  -c model_provider=zai_litellm \
+  -c model_reasoning_effort=high \
+  '<bounded scout brief>'
 ```
 
-The scout profile uses `high`; the engineer profile uses `xhigh`. Its billing surface is Z.ai Coding Plan credits, a distinct meter that is not converted into USD or combined with another subscription meter.
+The scout profile uses `high`; the engineer profile uses `xhigh` in the same explicit effort field. Its billing surface is Z.ai Coding Plan credits, a distinct meter that is not converted into USD or combined with another subscription meter.
 
 ## Subscription review keeps first-party custody
 
