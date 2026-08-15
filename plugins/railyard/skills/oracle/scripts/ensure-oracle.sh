@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 ORACLE_FORMULA="steipete/tap/oracle"
-ORACLE_MINIMUM_VERSION="0.17.0"
+ORACLE_MINIMUM_VERSION="0.17.3"
 ORACLE_NPM_PACKAGE="@steipete/oracle"
 
 oracle_error() {

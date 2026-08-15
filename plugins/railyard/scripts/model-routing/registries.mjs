@@ -73,12 +73,15 @@ export const NEGATIVE_REASON_CLASS = freeze({
   transient_failure: "transient",
   carrier_unavailable: "transient",
   oracle_failed: "transient",
+  oracle_observed_model_unavailable: "transient",
+  oracle_observed_pro_effort_unavailable: "transient",
   auth: "auth",
   auth_context_unavailable: "auth",
   missing_binary: "missing_binary",
   oracle_not_installed: "missing_binary",
   adapter_binary_missing: "missing_binary",
   unsupported_adapter: "unsupported",
+  oracle_observed_model_mismatch: "unsupported",
   receipt_importer_unsupported: "unsupported",
 });
 

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), "ensure-oracle.sh");
 const FORMULA = "steipete/tap/oracle";
-const NPM_PACKAGE = "@steipete/oracle@0.17.0";
+const NPM_PACKAGE = "@steipete/oracle@0.17.3";
 
 function writeExecutable(file, source) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -58,14 +58,14 @@ function createFixture(initialState, npmState = "missing") {
   if (["current", "multi-keg", "prefix-failure", "bad-executable-version"].includes(initialState)) {
     writeOracle(
       path.join(fixture.prefix, "bin", "oracle"),
-      initialState === "bad-executable-version" ? "0.9.9" : "0.17.0",
+      initialState === "bad-executable-version" ? "0.9.9" : "0.17.3",
     );
   }
   if (initialState === "version-failure") {
-    writeOracle(path.join(fixture.prefix, "bin", "oracle"), "0.17.0", true);
+    writeOracle(path.join(fixture.prefix, "bin", "oracle"), "0.17.3", true);
   }
   if (["current", "stale"].includes(npmState)) {
-    writeOracle(path.join(fixture.npmPrefix, "bin", "oracle"), npmState === "stale" ? "0.9.9" : "0.17.0");
+    writeOracle(path.join(fixture.npmPrefix, "bin", "oracle"), npmState === "stale" ? "0.9.9" : "0.17.3");
   }
   if (["stale", "upgrade-failure"].includes(initialState)) {
     writeOracle(path.join(fixture.prefix, "bin", "oracle"), "0.9.9");
@@ -78,7 +78,7 @@ oracle_test_mode=$(cat "$ORACLE_TEST_STATE")
 
 write_oracle() {
   mkdir -p "$ORACLE_TEST_PREFIX/bin"
-  printf '%s\\n' '#!/bin/sh' 'printf "%s\\n" "oracle 0.17.0"' > "$ORACLE_TEST_PREFIX/bin/oracle"
+  printf '%s\\n' '#!/bin/sh' 'printf "%s\\n" "oracle 0.17.3"' > "$ORACLE_TEST_PREFIX/bin/oracle"
   chmod +x "$ORACLE_TEST_PREFIX/bin/oracle"
 }
 
@@ -92,9 +92,9 @@ case "$1" in
     case "$oracle_test_mode" in
       missing|install-failure) exit 1 ;;
       stale|upgrade-failure) printf '%s\\n' 'oracle 0.9.9' ;;
-      multi-keg) printf '%s\\n' 'oracle 0.9.9 0.17.0 0.16.9' ;;
+      multi-keg) printf '%s\\n' 'oracle 0.9.9 0.17.3 0.16.9' ;;
       inspect-failure) printf 'fake formula inspection failure\\n' >&2; exit 2 ;;
-      *) printf '%s\\n' 'oracle 0.17.0' ;;
+      *) printf '%s\\n' 'oracle 0.17.3' ;;
     esac
     ;;
   install)
@@ -111,7 +111,7 @@ case "$1" in
     printf 'current\\n' > "$ORACLE_TEST_STATE"
     ;;
   upgrade)
-    if [ "$2" != "--formula" ] || [ "$3" != "--minimum-version" ] || [ "$4" != "0.17.0" ] || [ "$5" != "--no-ask" ] || [ "$6" != "${FORMULA}" ] || [ "$#" -ne 6 ]; then
+    if [ "$2" != "--formula" ] || [ "$3" != "--minimum-version" ] || [ "$4" != "0.17.3" ] || [ "$5" != "--no-ask" ] || [ "$6" != "${FORMULA}" ] || [ "$#" -ne 6 ]; then
       printf 'unexpected upgrade arguments\\n' >&2
       exit 64
     fi
@@ -155,11 +155,11 @@ if [ "$oracle_npm_state" = "failure" ]; then
   printf 'fake npm failure\\n' >&2
   exit 2
 fi
-oracle_npm_version=0.17.0
+oracle_npm_version=0.17.3
 case "$oracle_npm_state" in
   post-install-stale) oracle_npm_version=0.9.9 ;;
   post-install-invalid) oracle_npm_version=invalid ;;
-  post-install-prerelease) oracle_npm_version=0.17.0-beta.1 ;;
+  post-install-prerelease) oracle_npm_version=0.17.3-beta.1 ;;
 esac
 mkdir -p "$ORACLE_TEST_NPM_PREFIX/bin"
 printf '%s\\n' '#!/bin/sh' "printf '%s\\n' 'oracle $oracle_npm_version'" > "$ORACLE_TEST_NPM_PREFIX/bin/oracle"
@@ -259,7 +259,7 @@ test("a valid explicit Oracle override resolves without Homebrew", () => {
   const oracle = path.join(fixture.directory, "explicit", "oracle");
 
   try {
-    writeOracle(oracle, "0.17.0");
+    writeOracle(oracle, "0.17.3");
     const result = invoke(fixture, { oracleBin: oracle, rejectBrew: true, rejectNpm: true });
 
     assert.equal(result.status, 0, result.stderr);
@@ -285,7 +285,7 @@ test("invalid explicit overrides fail validation without Homebrew", () => {
 
   try {
     writeOracle(oldOracle, "0.9.9");
-    writeOracle(prereleaseOracle, "0.17.0-beta.1");
+    writeOracle(prereleaseOracle, "0.17.3-beta.1");
     fs.writeFileSync(nonExecutable, "#!/bin/sh\nexit 0\n", { mode: 0o644 });
 
     for (const oracleBin of ["", "oracle", fixture.directory, nonExecutable, oldOracle, prereleaseOracle]) {
@@ -369,7 +369,7 @@ test("a 0.9.x formula upgrades numerically with the narrow Homebrew environment"
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout.trim(), expected);
     assert.deepEqual(brewMutations(fixture), [
-      `upgrade --formula --minimum-version 0.17.0 --no-ask ${FORMULA}|cleanup=1|dependents=1`,
+      `upgrade --formula --minimum-version 0.17.3 --no-ask ${FORMULA}|cleanup=1|dependents=1`,
     ]);
     assert.deepEqual(npmMutations(fixture), []);
     assert.equal(fs.readFileSync(fixture.state, "utf8"), "current\n");

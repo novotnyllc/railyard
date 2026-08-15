@@ -35,7 +35,7 @@ adaptations blindly.
   configuration knobs.
 - Added Oracle's portable, skill-local lifecycle bootstrap: resolve the active
   installed skill directory, run `scripts/ensure-oracle.sh` once, and invoke
-  only its returned absolute Oracle 0.17.0-or-newer path. It prefers
+  only its returned absolute Oracle 0.17.3-or-newer path. It prefers
   `steipete/tap/oracle`, has a bounded `$HOME/.local` npm fallback, treats an
   explicit `ORACLE_BIN` as validation-only, and preserves user-owned Oracle
   configuration, authentication, sessions, and browser state.

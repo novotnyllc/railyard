@@ -404,9 +404,10 @@ the binding.
 
 Oracle may be
 preferred for deep, architecture, long-context, or adversarial review through
-the routed local browser carrier: requested channel `chatgpt_current_pro`
-(currently GPT-5.6 Sol Pro) maps in Oracle 0.17.0+ to picker control
-`gpt-5-pro`, which is not an observed model identity.
+the routed local browser carrier: Oracle 0.17.3+ selects `gpt-5.6-sol` with
+`--browser-model-strategy select --browser-thinking-time pro`, then requires
+the session's observed GPT-5.6 Sol picker label and Pro-thinking control record.
+The `gpt-5-pro` alias instead normalizes to the GPT-5.5 picker target.
 
 A verified standard
 ChatGPT conversation has zero Oracle-child marginal USD, Codex credits, and API

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -18,10 +19,14 @@ import {
   dispatch,
   freezeInput,
   lifecycle,
+  isObservedModelFailure,
+  oracleSessionSlug,
   reattach,
+  routeExitCode,
   revalidateExecutable,
   revalidateFrozen,
 } from "./oracle-route.mjs";
+import { evaluateBrowserSession } from "./oracle-observation.mjs";
 
 const ROUTER_NOW = Date.now();
 const ROUTER_POLICY = {
@@ -221,12 +226,62 @@ function lifecycleInspector(input) {
   return inspect;
 }
 
-const fakeCarrier = { binary: "/fixed/oracle", version: "0.17.0", identity: {} };
+const fakeCarrier = { binary: "/fixed/oracle", version: "0.17.3", identity: {} };
 
 function privateClaimPath(value, claim = value.input.claimed.id) {
   const digest = crypto.createHash("sha256").update(claim).digest("hex");
   return path.join(value.stateRoot, "claims", `${digest}.json`);
 }
+
+function writeBrowserSession(value, sessionId, {
+  desiredModel = "GPT-5.6 Sol",
+  modelStrategy = "select",
+  thinkingTime = "pro",
+  requestedModel = "GPT-5.6 Sol",
+  resolvedLabel = "GPT-5.6 Sol",
+  status = "switched",
+  verified = true,
+  source = "chatgpt-model-picker",
+  output = "[browser] Thinking time: Pro (already selected)\nAnswer:\nFinding: keep this private.\n",
+} = {}) {
+  const sessions = path.join(value.stateRoot, "oracle-home", "sessions");
+  const directory = path.join(sessions, oracleSessionSlug(sessionId));
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  fs.chmodSync(sessions, 0o700);
+  fs.chmodSync(directory, 0o700);
+  fs.writeFileSync(path.join(directory, "meta.json"), JSON.stringify({
+    model: "gpt-5.6-sol",
+    browser: {
+      config: { desiredModel, modelStrategy, thinkingTime },
+      modelSelection: { requestedModel, resolvedLabel, strategy: modelStrategy, status, verified, source },
+    },
+  }), { mode: 0o600 });
+  fs.writeFileSync(path.join(directory, "output.log"), output, { mode: 0o600 });
+}
+
+test("browser observation evaluator accepts only one pre-answer Pro control record", () => {
+  const metadata = {
+    browser: {
+      config: { desiredModel: "GPT-5.6 Sol", modelStrategy: "select", thinkingTime: "pro" },
+      modelSelection: { requestedModel: "GPT-5.6 Sol", resolvedLabel: "GPT-5.6 Sol", strategy: "select", status: "switched", verified: true, source: "chatgpt-model-picker" },
+    },
+  };
+  const cases = [
+    ["one record", "[browser] Thinking time: Pro (already selected)\nAnswer:\n", { observedModel: "gpt-5.6-sol", reason: null }],
+    ["duplicate record", "[browser] Thinking time: Pro\n[browser] Thinking time: Pro\nAnswer:\n", { observedModel: "gpt-5.6-sol", reason: "oracle_observed_pro_effort_unavailable" }],
+    ["answer-only record", "Answer:\n[browser] Thinking time: Pro\n", { observedModel: "gpt-5.6-sol", reason: "oracle_observed_pro_effort_unavailable" }],
+    ["missing metadata", "[browser] Thinking time: Pro\nAnswer:\n", { observedModel: "unknown", reason: "oracle_observed_model_unavailable" }],
+  ];
+  for (const [name, output, expected] of cases) assert.deepEqual(evaluateBrowserSession(name === "missing metadata" ? null : metadata, output), expected, name);
+});
+
+test("CLI receipt writer prints a mismatch receipt before exiting nonzero", () => {
+  const receipt = { producer: "oracle-browser", status: "settled", reason: "oracle_observed_model_mismatch", observedModel: "gpt-5.5", authReadiness: "unknown" };
+  const moduleUrl = new URL("./oracle-route.mjs", import.meta.url).href;
+  const result = spawnSync(process.execPath, ["--input-type=module", "--eval", `import { writeCliResult } from ${JSON.stringify(moduleUrl)}; writeCliResult(${JSON.stringify(receipt)});`], { encoding: "utf8" });
+  assert.equal(result.status, 1, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), receipt);
+});
 
 test("build freezes bounded input without trusting a caller claim or invoking a carrier", () => {
   const value = fixture();
@@ -251,6 +306,7 @@ test("dispatch requires an exact private resolver claim binding before carrier w
 test("settled review writes a private bounded finding artifact and router receipt, then removes the bundle", () => {
   const value = fixture();
   const prepared = claimPrepared(value);
+  writeBrowserSession(value, prepared.sessionId);
   const calls = [];
   let revalidations = 0;
   const inspectClaim = privateInspector(value);
@@ -271,13 +327,16 @@ test("settled review writes a private bounded finding artifact and router receip
   assert.equal(result.adapterVersion, "v1");
   assert.equal(result.claimId, value.input.claimed.id);
   assert.equal(result.frozenInputDigest, prepared.frozenInputDigest);
+  assert.equal(result.observedModel, "gpt-5.6-sol");
+  assert.equal(routeExitCode(result), 0);
   assert.equal(result.resultArtifact.sha256, crypto.createHash("sha256").update("Finding: keep this private.\n").digest("hex"));
   assert.equal(fs.readFileSync(result.resultArtifact.path, "utf8"), "Finding: keep this private.\n");
   assert.equal(JSON.stringify(result).includes("Finding:"), false);
   assert.equal(fs.existsSync(path.join(value.stateRoot, "bundles", prepared.sessionId)), false);
   assert.equal(calls.length, 2);
   assert.equal(revalidations, 2);
-  assert.deepEqual(calls[1].args.slice(0, 4), ["--engine", "browser", "--model", "gpt-5-pro"]);
+  assert.deepEqual(calls[1].args.slice(0, 8), ["--engine", "browser", "--model", "gpt-5.6-sol", "--browser-model-strategy", "select", "--browser-thinking-time", "pro"]);
+  assert.match(calls[1].args[calls[1].args.indexOf("--slug") + 1], /^oracle-route-[a-f0-9]{10}-[a-f0-9]{10}$/);
   const forged = handleRequest({
     contractVersion: "railyard/model-routing/v1",
     command: "reconcile",
@@ -303,6 +362,100 @@ test("settled review writes a private bounded finding artifact and router receip
   build(value.input, { root: value.stateRoot });
   assert.equal(fs.existsSync(receiptPath), false);
   assert.equal(fs.existsSync(result.resultArtifact.path), false);
+});
+
+test("mismatched picker metadata is unavailable capability evidence and an observed-model failure", () => {
+  const value = fixture();
+  const prepared = claimPrepared(value);
+  const inspectClaim = privateInspector(value);
+  writeBrowserSession(value, prepared.sessionId, { resolvedLabel: "GPT-5.5" });
+  const result = dispatch(value.input, {
+    root: value.stateRoot,
+    inspectClaim,
+    resolveCarrier: () => fakeCarrier,
+    revalidateCarrier: () => {},
+    run: (_binary, args) => args[0] === "--dry-run"
+      ? { status: 0, stdout: "dry", stderr: "" }
+      : { status: 0, stdout: "Finding: keep this private.\n", stderr: "" },
+  });
+  assert.equal(result.status, "settled");
+  assert.equal(result.reason, "oracle_observed_model_mismatch");
+  assert.equal(result.observedModel, "gpt-5.5");
+  assert.equal(result.authReadiness, "unknown");
+  assert.equal(isObservedModelFailure(result), true);
+  assert.equal(routeExitCode(result), 1);
+  assert.equal(JSON.stringify(result).includes("Finding:"), false);
+
+  const reconciled = handleRequest({
+    contractVersion: "railyard/model-routing/v1",
+    command: "reconcile",
+    reservationId: value.input.reservationId,
+    frozenInputDigest: prepared.frozenInputDigest,
+    receipt: result,
+  }, { catalog: ROUTER_POLICY, state: inspectClaim.state, now: ROUTER_NOW, trustedReceiptImporter: createTrustedReceiptImporter(value.stateRoot) });
+  assert.equal(reconciled.response.reason, "reconciled", JSON.stringify(reconciled.response));
+  const negative = Object.values(inspectClaim.state.capabilities).find((entry) => entry.carrierId === "oracle-browser" && entry.state === "unavailable");
+  assert.equal(negative?.negativeReason, "oracle_observed_model_mismatch");
+  assert.equal(negative?.negativeClass, "unsupported");
+  assert.equal(Object.values(inspectClaim.state.capabilities).some((entry) => entry.state === "live_carrier_verified"), false);
+});
+
+test("answer text cannot forge the Pro-thinking observation", () => {
+  const value = fixture();
+  const prepared = claimPrepared(value);
+  writeBrowserSession(value, prepared.sessionId, {
+    output: "Answer:\n[browser] Thinking time: Pro (already selected)\nFinding: keep this private.\n",
+  });
+  const result = dispatch(value.input, {
+    root: value.stateRoot,
+    inspectClaim: privateInspector(value),
+    resolveCarrier: () => fakeCarrier,
+    revalidateCarrier: () => {},
+    run: (_binary, args) => args[0] === "--dry-run"
+      ? { status: 0, stdout: "dry", stderr: "" }
+      : { status: 0, stdout: "Finding: keep this private.\n", stderr: "" },
+  });
+  assert.equal(result.reason, "oracle_observed_pro_effort_unavailable");
+  assert.equal(isObservedModelFailure(result), true);
+  assert.equal(routeExitCode(result), 1);
+  assert.equal(JSON.stringify(result).includes("Thinking time"), false);
+  assert.equal(JSON.stringify(result).includes("Finding:"), false);
+});
+
+test("malformed session evidence is a named fail-closed observation failure", () => {
+  const value = fixture();
+  const prepared = claimPrepared(value);
+  writeBrowserSession(value, prepared.sessionId);
+  fs.writeFileSync(path.join(value.stateRoot, "oracle-home", "sessions", oracleSessionSlug(prepared.sessionId), "meta.json"), "{", { mode: 0o600 });
+  const result = dispatch(value.input, {
+    root: value.stateRoot,
+    inspectClaim: privateInspector(value),
+    resolveCarrier: () => fakeCarrier,
+    revalidateCarrier: () => {},
+    run: (_binary, args) => args[0] === "--dry-run"
+      ? { status: 0, stdout: "dry", stderr: "" }
+      : { status: 0, stdout: "Finding: keep this private.\n", stderr: "" },
+  });
+  assert.equal(result.reason, "oracle_observed_model_unavailable");
+  assert.equal(result.observedModel, "unknown");
+  assert.equal(routeExitCode(result), 1);
+});
+
+test("missing session evidence fails closed before a current-Pro capability can be granted", () => {
+  const value = fixture();
+  claimPrepared(value);
+  const result = dispatch(value.input, {
+    root: value.stateRoot,
+    inspectClaim: privateInspector(value),
+    resolveCarrier: () => fakeCarrier,
+    revalidateCarrier: () => {},
+    run: (_binary, args) => args[0] === "--dry-run"
+      ? { status: 0, stdout: "dry", stderr: "" }
+      : { status: 0, stdout: "Finding: keep this private.\n", stderr: "" },
+  });
+  assert.equal(result.reason, "oracle_observed_model_unavailable");
+  assert.equal(result.observedModel, "unknown");
+  assert.equal(routeExitCode(result), 1);
 });
 
 test("a concurrent retry observes the durable pre-spawn tombstone and never redispatches", () => {
@@ -408,6 +561,7 @@ test("expired and substituted reattach locks are handled without following links
     createdAt: "1999-01-01T00:00:00.000Z",
     expiresAt: "2000-01-01T00:00:00.000Z",
   }), { mode: 0o600 });
+  writeBrowserSession(value, prepared.sessionId);
   const settled = reattach(value.input, {
     ...options,
     run: () => ({ status: 0, stdout: "Recovered.\n", stderr: "" }),
@@ -439,7 +593,8 @@ test("expired and substituted reattach locks are handled without following links
 
 test("dispatch uses the frozen retention argument rather than mutable caller input", () => {
   const value = fixture();
-  claimPrepared(value);
+  const prepared = claimPrepared(value);
+  writeBrowserSession(value, prepared.sessionId);
   value.input.retainHours = 1;
   let invocation;
   const result = dispatch(value.input, {
@@ -474,6 +629,7 @@ test("reattach uses the same verified claim and stores findings without a new di
     },
   });
   assert.equal(started.status, "started");
+  writeBrowserSession(value, prepared.sessionId, { output: "[browser] Thinking time: Pro (already selected)\nAnswer:\nReattached finding.\n" });
   const result = reattach(value.input, {
     root: value.stateRoot,
     inspectClaim,
@@ -481,7 +637,7 @@ test("reattach uses the same verified claim and stores findings without a new di
     revalidateCarrier: () => {},
     run: (_binary, args) => {
       calls += 1;
-      assert.deepEqual(args, ["session", prepared.sessionId, "--render"]);
+      assert.deepEqual(args, ["session", oracleSessionSlug(prepared.sessionId), "--render"]);
       return { status: 0, stdout: "Reattached finding.\n", stderr: "" };
     },
   });
@@ -490,6 +646,33 @@ test("reattach uses the same verified claim and stores findings without a new di
   assert.equal(fs.readFileSync(result.resultArtifact.path, "utf8"), "Reattached finding.\n");
   assert.equal(fs.existsSync(path.join(value.stateRoot, "bundles", prepared.sessionId)), false);
   assert.equal(calls, 3);
+});
+
+test("reattach fails closed when its session lacks durable Pro evidence", () => {
+  const value = fixture();
+  claimPrepared(value);
+  const inspectClaim = privateInspector(value);
+  const started = dispatch(value.input, {
+    root: value.stateRoot,
+    inspectClaim,
+    resolveCarrier: () => fakeCarrier,
+    revalidateCarrier: () => {},
+    run: (_binary, args) => args[0] === "--dry-run"
+      ? { status: 0, stdout: "dry", stderr: "" }
+      : { status: null, stdout: "", stderr: "", error: { code: "ETIMEDOUT" } },
+  });
+  assert.equal(started.status, "started");
+  const result = reattach(value.input, {
+    root: value.stateRoot,
+    inspectClaim,
+    resolveCarrier: () => fakeCarrier,
+    revalidateCarrier: () => {},
+    run: () => ({ status: 0, stdout: "Reattached finding.\n", stderr: "" }),
+  });
+  assert.equal(result.status, "settled");
+  assert.equal(result.reason, "oracle_observed_model_unavailable");
+  assert.equal(result.observedModel, "unknown");
+  assert.equal(routeExitCode(result), 1);
 });
 
 test("O_NOFOLLOW input and private-state checks reject symlinks and frozen mutation", () => {
