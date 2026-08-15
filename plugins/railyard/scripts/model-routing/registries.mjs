@@ -347,6 +347,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     version: "v1",
     transport: "selector-native",
     requestedModel: "gpt-daybreak-blue-latest",
+    executionSurface: "codex",
     efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
     adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
     roles: ["security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],

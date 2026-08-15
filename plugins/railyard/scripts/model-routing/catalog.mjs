@@ -221,6 +221,7 @@ export function validateCatalog(catalog) {
     const carrier = CARRIER_DESCRIPTORS[model.carrierId];
     if (catalog.providers[model.provider].carrierId !== model.carrierId) return error("provider_carrier_mismatch", { alias });
     if (carrier?.requestedModel && carrier.requestedModel !== model.requestedModel) return error("fixed_carrier_mismatch", { alias });
+    if (carrier?.executionSurface && carrier.executionSurface !== catalog.providers[model.provider].executionSurface) return error("fixed_carrier_mismatch", { alias });
     if (carrier?.modelFamily === "claude" && !validClaudeFamily(model.requestedModel)) return error("invalid_claude_family", { alias });
     if (model.rates !== undefined && model.rates.some((rate) => rate.carrierId !== model.carrierId || rate.carrierVersion !== carrier?.version || !carrier?.efforts.includes(rate.effort) || (model.efforts !== undefined && !model.efforts.includes(rate.effort)) || (model.effort !== undefined && rate.effort !== model.effort) || (model.billingSurface !== undefined && rate.billingSurface !== model.billingSurface) || (model.billingSurface === undefined && rate.billingSurface !== catalog.providers[model.provider].executionSurface) || (model.identityMode !== "provider_latest_family" && rate.resolvedModelDigest !== stableDigest(model.requestedModel)))) return error("rate_binding_mismatch", { alias });
   }

@@ -56,7 +56,7 @@ export function daybreakListed(value) {
 
 /**
  * Ask the App Server only whether its visible model list contains Daybreak.
- * No caller controls the binary, argv, JSON-RPC method, or output retention.
+ * The JSON-RPC requests are fixed here; `codex` resolves through PATH.
  */
 export function probeCodexDaybreak({ spawnProcess = spawn, timeoutMs = APP_SERVER_TIMEOUT_MS } = {}) {
   return new Promise((resolve, reject) => {

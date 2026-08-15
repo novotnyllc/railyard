@@ -75,10 +75,17 @@ function fakeAppServer(onRequest) {
     return true;
   };
   const requests = [];
+  let buffer = "";
   child.stdin.on("data", (chunk) => {
-    const message = JSON.parse(String(chunk));
-    requests.push(message);
-    onRequest(message, child, requests);
+    buffer += String(chunk);
+    for (;;) {
+      const newline = buffer.indexOf("\n");
+      if (newline < 0) return;
+      const message = JSON.parse(buffer.slice(0, newline));
+      buffer = buffer.slice(newline + 1);
+      requests.push(message);
+      onRequest(message, child, requests);
+    }
   });
   return { child, requests };
 }
@@ -770,6 +777,25 @@ test("a catalog has one Daybreak provider for its local state cache", () => {
     provider: "codex_daybreak_blue_b",
   };
   assert.equal(validateCatalog(policy).reason, "daybreak_provider_ambiguous");
+});
+
+test("a catalog cannot bind Daybreak to another execution surface", () => {
+  const policy = ownerPolicy();
+  policy.providers.codex_daybreak_blue.executionSurface = "provider_subscription";
+  const validation = validateCatalog(policy);
+  assert.equal(validation.reason, "fixed_carrier_mismatch");
+  assert.equal(validation.alias, "daybreak_blue");
+});
+
+test("the fake App Server buffers split and coalesced JSON-RPC requests in order", () => {
+  const observed = [];
+  const server = fakeAppServer((message) => observed.push(message.id));
+  const initialize = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+  const modelList = JSON.stringify({ jsonrpc: "2.0", id: 2, method: "model/list", params: { includeHidden: false } });
+  server.child.stdin.write(initialize.slice(0, 12));
+  server.child.stdin.write(`${initialize.slice(12)}\n${modelList}\n`);
+  assert.deepEqual(observed, [1, 2]);
+  assert.deepEqual(server.requests.map((message) => message.id), [1, 2]);
 });
 
 test("the Daybreak App Server probe accepts only a visible exact selector and degrades failures", async () => {
