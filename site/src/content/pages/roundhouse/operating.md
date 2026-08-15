@@ -24,6 +24,8 @@ Windows Task Scheduler user task
 
 The fast run polls, fetches, reconciles, reviews, applies, journals, publishes, and nudges peers. The full run adds marketplace refresh, package maintenance, evidence retention, and doctor rows.
 
+Treat the names as two responsibilities. The **fleet scheduler** is the one native cadence authority—launchd, systemd, or Task Scheduler—that starts fast and full passes. **Marketplace refresh** is one full-pass maintenance operation inside that cadence: it refreshes the configured catalog, updates the plugins already owned by it through each harness's native manager, and verifies the resolved executor bytes afterward.
+
 ## CLI reference
 
 Start an investigation by resolving `CLI` to the installed script through the owning skill:
@@ -66,6 +68,8 @@ When a machine joins, retires, rolls back an item, or returns from loss, keep th
 "$CLI" fleet-rollback skills.my-review --now
 "$CLI" fleet-reconstitute host-a
 ```
+
+The [bootstrap walkthrough](/start/fleet-bootstrap/) owns `fleet-init`, `fleet-enroll`, `fleet-set-remote`, `fleet-verify-remote`, and `fleet-seed`. [Store recovery](/roundhouse/store-recovery/) owns `fleet-renew`, `fleet-reparent`, `fleet-checkpoint`, and `fleet-reroot`, preserving the distinction between routine continuity and a new history root.
 
 ```text
 fleet-add host-a --job fleet-agent
