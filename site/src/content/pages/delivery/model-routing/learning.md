@@ -11,7 +11,7 @@ Use observed delivery outcomes to improve estimates while policy remains operato
 
 ## The run
 
-The operator enables learning and completes several comparable work units. Terminal reconciliation records categorical work shape, carrier, effort, meter facts, duration, retries, verification, and rating under opaque outcome IDs. After five samples, the router can apply a bounded estimate adjustment inside the already-eligible tier. The turn is the fifth comparable settlement. The run closes when `learning inspect` reports the aggregate and the next route disclosure names `learnedEstimate` as a tiebreak rather than a new route.
+The operator enables learning and completes several comparable work units. Terminal reconciliation records categorical work shape, carrier, effort, meter facts, duration, retries, verification, and rating under opaque outcome IDs. After five samples, the router can apply a bounded estimate adjustment inside the already-eligible tier. The turn is the fifth comparable settlement. The run closes when `learning inspect` reports the aggregate, the catalog lists `learnedEstimate` in tier-zero `softPriorities`, and the next decision's `learning` block reports `provenance: "learned_estimate"` with a route-effect `tieBreakInfluence`.
 
 ## What is retained
 
