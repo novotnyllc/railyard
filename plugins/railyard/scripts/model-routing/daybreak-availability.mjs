@@ -10,6 +10,7 @@ import {
 export const DAYBREAK_MODEL = "gpt-daybreak-blue-latest";
 export const DAYBREAK_AVAILABILITY_TTL_MS = 24 * 60 * 60 * 1000;
 export const APP_SERVER_TIMEOUT_MS = 5_000;
+export const APP_SERVER_TERMINATION_GRACE_MS = 100;
 export const MAX_APP_SERVER_RESPONSE_BYTES = 1024 * 1024;
 export const MAX_APP_SERVER_MODEL_LIST_PAGES = 16;
 
@@ -58,7 +59,10 @@ export function daybreakListed(value) {
  * Ask the App Server only whether its visible model list contains Daybreak.
  * The JSON-RPC requests are fixed here; `codex` resolves through PATH.
  */
-export function probeCodexDaybreak({ spawnProcess = spawn, timeoutMs = APP_SERVER_TIMEOUT_MS } = {}) {
+export function probeCodexDaybreak({ spawnProcess = spawn, timeoutMs = APP_SERVER_TIMEOUT_MS, terminationGraceMs = APP_SERVER_TERMINATION_GRACE_MS } = {}) {
+  const graceMs = Number.isInteger(terminationGraceMs)
+    ? Math.min(Math.max(terminationGraceMs, 0), APP_SERVER_TERMINATION_GRACE_MS)
+    : APP_SERVER_TERMINATION_GRACE_MS;
   return new Promise((resolve, reject) => {
     let child;
     try {
@@ -76,21 +80,50 @@ export function probeCodexDaybreak({ spawnProcess = spawn, timeoutMs = APP_SERVE
     }
 
     let done = false;
+    let settled = false;
+    let exited = false;
     let stage = "initialize";
     let requestId = 2;
     let pageCount = 0;
     let buffer = "";
     let responseBytes = 0;
+    let terminationTimer;
+    let completion;
+    const detach = () => {
+      try { child.stdin.destroy(); } catch { /* no-op */ }
+      try { child.stdout.destroy(); } catch { /* no-op */ }
+      try { child.unref?.(); } catch { /* no-op */ }
+    };
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(terminationTimer);
+      detach();
+      if (completion.cause) reject(completion.cause);
+      else resolve(completion.value);
+    };
     const finish = (cause, value) => {
       if (done) return;
       done = true;
+      completion = { cause, value };
       clearTimeout(timeout);
       try { child.stdin.end(); } catch { /* no-op */ }
+      if (exited || typeof child.kill !== "function") {
+        settle();
+        return;
+      }
       if (!child.killed) {
         try { child.kill("SIGTERM"); } catch { /* no-op */ }
       }
-      if (cause) reject(cause);
-      else resolve(value);
+      if (exited) {
+        settle();
+        return;
+      }
+      terminationTimer = setTimeout(() => {
+        if (exited) return;
+        try { child.kill("SIGKILL"); } catch { /* no-op */ }
+        settle();
+      }, graceMs);
     };
     const send = (id, method, params) => {
       try {
@@ -105,7 +138,10 @@ export function probeCodexDaybreak({ spawnProcess = spawn, timeoutMs = APP_SERVE
 
     child.on("error", () => finish(new Error("app_server_start_failed")));
     child.on("exit", (code) => {
-      if (!done) finish(new Error(code === 0 ? "app_server_closed" : "app_server_failed"));
+      exited = true;
+      clearTimeout(terminationTimer);
+      if (done) settle();
+      else finish(new Error(code === 0 ? "app_server_closed" : "app_server_failed"));
     });
     child.stdin.on("error", () => finish(new Error("app_server_write_failed")));
     child.stdout.on("error", () => finish(new Error("app_server_read_failed")));

@@ -72,6 +72,7 @@ function fakeAppServer(onRequest) {
   child.stdout = new PassThrough();
   child.kill = () => {
     child.killed = true;
+    child.emit("exit", 0);
     return true;
   };
   const requests = [];
@@ -796,6 +797,24 @@ test("the fake App Server buffers split and coalesced JSON-RPC requests in order
   server.child.stdin.write(`${initialize.slice(12)}\n${modelList}\n`);
   assert.deepEqual(observed, [1, 2]);
   assert.deepEqual(server.requests.map((message) => message.id), [1, 2]);
+});
+
+test("the Daybreak App Server probe force-kills a TERM-ignoring process before settling", async () => {
+  const server = fakeAppServer(() => {});
+  const signals = [];
+  server.child.kill = (signal) => {
+    signals.push(signal);
+    server.child.killed = true;
+    if (signal === "SIGKILL") server.child.emit("exit", 137);
+    return true;
+  };
+  await assert.rejects(
+    probeCodexDaybreak({ spawnProcess: () => server.child, timeoutMs: 1, terminationGraceMs: 1 }),
+    /app_server_timeout/,
+  );
+  assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
+  assert.equal(server.child.stdin.destroyed, true);
+  assert.equal(server.child.stdout.destroyed, true);
 });
 
 test("the Daybreak App Server probe accepts only a visible exact selector and degrades failures", async () => {
