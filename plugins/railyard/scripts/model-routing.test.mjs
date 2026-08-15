@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -12,11 +14,18 @@ import {
   CARRIER_DESCRIPTORS,
   CONTRACT_VERSION,
   createEmptyState,
+  DAYBREAK_MODEL,
+  DAYBREAK_AVAILABILITY_TTL_MS,
   handleRequest,
+  MAX_APP_SERVER_RESPONSE_BYTES,
   measureFastPath,
+  migrateState,
   pathSafetyIssue,
+  probeCodexDaybreak,
+  probeDaybreakAvailability,
   resolvePaths,
   runCli,
+  runCliAsync,
   scopeAccountingId,
   stableDigest,
   providerAvailabilityIssue,
@@ -54,6 +63,24 @@ function request(command, fields = {}) {
   };
   for (const [key, nested] of Object.entries(value)) if (nested === undefined) delete value[key];
   return value;
+}
+
+function fakeAppServer(onRequest) {
+  const child = new EventEmitter();
+  child.killed = false;
+  child.stdin = new PassThrough();
+  child.stdout = new PassThrough();
+  child.kill = () => {
+    child.killed = true;
+    return true;
+  };
+  const requests = [];
+  child.stdin.on("data", (chunk) => {
+    const message = JSON.parse(String(chunk));
+    requests.push(message);
+    onRequest(message, child, requests);
+  });
+  return { child, requests };
 }
 
 function rate({ model = "gpt-5.6-luna", carrierId = "codex-luna", effort = "max", billingSurface = "codex", amount = "0.10" } = {}) {
@@ -471,6 +498,342 @@ test("the owner catalog selects Fable for hard Claude work and records an explic
   const missingReason = { ...review.response.decision.binding };
   delete missingReason.crossHarnessReason;
   assert.equal(validBinding(missingReason), false);
+});
+
+test("security resolves cache Daybreak availability once per TTL and otherwise retain the standard fallback", async () => {
+  const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "model-routing-daybreak-cli-")));
+  try {
+    fs.chmodSync(home, 0o700);
+    const configDirectory = path.join(home, ".config", "railyard");
+    const stateDirectory = path.join(home, ".local", "state", "railyard");
+    privateDirectory(configDirectory);
+    privateDirectory(path.join(home, ".local"));
+    privateDirectory(path.join(home, ".local", "state"));
+    privateDirectory(stateDirectory);
+    const configPath = path.join(configDirectory, "model-routing.json");
+    const statePath = path.join(stateDirectory, "model-routing-state.json");
+    fs.writeFileSync(configPath, JSON.stringify(ownerPolicy()));
+    fs.chmodSync(configPath, 0o600);
+    const v4 = createEmptyState();
+    v4.stateSchemaVersion = 4;
+    fs.writeFileSync(statePath, JSON.stringify(v4));
+    fs.chmodSync(statePath, 0o600);
+
+    const options = {
+      cwd: process.cwd(),
+      env: isolatedCliEnvironment(home),
+      home,
+      now: NOW,
+    };
+    const securityRequest = request("resolve", { role: "security.review", harness: "codex" });
+    let probeCalls = 0;
+    const available = await runCliAsync(securityRequest, {
+      ...options,
+      daybreakProbe: async () => {
+        probeCalls += 1;
+        return { available: true };
+      },
+    });
+    assert.equal(available.reason, "resolved", JSON.stringify(available));
+    assert.equal(available.decision.selected.model, "gpt-daybreak-blue-latest");
+    assert.equal(probeCalls, 1);
+    const cached = JSON.parse(fs.readFileSync(statePath, "utf8"));
+    assert.equal(cached.stateSchemaVersion, 5);
+    assert.deepEqual(cached.daybreakAvailability, { available: true, checkedAt: new Date(NOW).toISOString() });
+
+    const fresh = await runCliAsync(securityRequest, {
+      ...options,
+      now: NOW + 1,
+      daybreakProbe: async () => {
+        probeCalls += 1;
+        return { available: false };
+      },
+    });
+    assert.equal(fresh.decision.selected.model, "gpt-daybreak-blue-latest");
+    assert.equal(probeCalls, 1);
+
+    const freshLock = `${statePath}.lock`;
+    fs.writeFileSync(freshLock, JSON.stringify({ owner: "fresh-cache", pid: process.pid }) + "\n", { mode: 0o600 });
+    const unlockedFresh = await runCliAsync(securityRequest, {
+      ...options,
+      now: NOW + 2,
+      daybreakProbe: async () => {
+        probeCalls += 1;
+        return { available: false };
+      },
+    });
+    assert.equal(unlockedFresh.decision.selected.model, "gpt-daybreak-blue-latest");
+    assert.equal(probeCalls, 1);
+    fs.unlinkSync(freshLock);
+
+    const remoteScope = await runCliAsync(request("resolve", {
+      role: "security.review",
+      harness: "codex",
+      hostScope: "remote-runner",
+    }), {
+      ...options,
+      daybreakProbe: async () => {
+        probeCalls += 1;
+        return { available: true };
+      },
+    });
+    assert.equal(remoteScope.decision.selected.model, "gpt-5.6-sol");
+    assert.equal(probeCalls, 1);
+
+    const differentAccount = await runCliAsync(request("resolve", {
+      role: "security.review",
+      harness: "codex",
+      accountScope: "different-account",
+    }), {
+      ...options,
+      daybreakProbe: async () => {
+        probeCalls += 1;
+        return { available: true };
+      },
+    });
+    assert.equal(differentAccount.decision.selected.model, "gpt-5.6-sol");
+    assert.equal(probeCalls, 1);
+
+    const changedCatalog = ownerPolicy();
+    changedCatalog.providers.codex_daybreak_blue.account = "codex-sub-b";
+    fs.writeFileSync(configPath, JSON.stringify(changedCatalog));
+    fs.chmodSync(configPath, 0o600);
+    const accountChanged = await runCliAsync(securityRequest, {
+      ...options,
+      daybreakProbe: async () => {
+        probeCalls += 1;
+        return { available: true };
+      },
+    });
+    assert.equal(accountChanged.decision.selected.model, "gpt-daybreak-blue-latest");
+    assert.equal(probeCalls, 2);
+
+    const staleForIneligible = JSON.parse(fs.readFileSync(statePath, "utf8"));
+    staleForIneligible.daybreakAvailability.checkedAt = new Date(NOW - DAYBREAK_AVAILABILITY_TTL_MS).toISOString();
+    fs.writeFileSync(statePath, JSON.stringify(staleForIneligible));
+    fs.chmodSync(statePath, 0o600);
+    const wrongHarness = await runCliAsync(request("resolve", {
+      role: "security.review",
+      harness: "claude",
+      crossHarnessReason: "review must remain in Claude",
+    }), {
+      ...options,
+      daybreakProbe: async () => {
+        probeCalls += 1;
+        return { available: true };
+      },
+    });
+    assert.equal(wrongHarness.reason, "no_eligible_route", JSON.stringify(wrongHarness));
+    const privateRoute = await runCliAsync(request("resolve", {
+      role: "security.review",
+      harness: "codex",
+      privacy: { locality: "local_only" },
+    }), {
+      ...options,
+      daybreakProbe: async () => {
+        probeCalls += 1;
+        return { available: true };
+      },
+    });
+    assert.equal(privateRoute.reason, "no_eligible_route", JSON.stringify(privateRoute));
+    assert.equal(probeCalls, 2);
+
+    cached.daybreakAvailability.checkedAt = new Date(NOW + DAYBREAK_AVAILABILITY_TTL_MS).toISOString();
+    fs.writeFileSync(statePath, JSON.stringify(cached));
+    fs.chmodSync(statePath, 0o600);
+    const future = await runCliAsync(securityRequest, {
+      ...options,
+      daybreakProbe: async () => {
+        probeCalls += 1;
+        return { available: false };
+      },
+    });
+    assert.equal(future.decision.selected.model, "gpt-5.6-sol");
+    assert.equal(probeCalls, 3);
+
+    cached.daybreakAvailability.checkedAt = new Date(NOW - DAYBREAK_AVAILABILITY_TTL_MS).toISOString();
+    fs.writeFileSync(statePath, JSON.stringify(cached));
+    fs.chmodSync(statePath, 0o600);
+    const unavailable = await runCliAsync(securityRequest, {
+      ...options,
+      daybreakProbe: async () => {
+        probeCalls += 1;
+        return { available: false };
+      },
+    });
+    assert.equal(unavailable.reason, "resolved", JSON.stringify(unavailable));
+    assert.equal(unavailable.decision.selected.model, "gpt-5.6-sol");
+    assert.equal(probeCalls, 4);
+
+    const staleLockedState = JSON.parse(fs.readFileSync(statePath, "utf8"));
+    staleLockedState.daybreakAvailability.checkedAt = new Date(NOW - DAYBREAK_AVAILABILITY_TTL_MS).toISOString();
+    fs.writeFileSync(statePath, JSON.stringify(staleLockedState));
+    fs.chmodSync(statePath, 0o600);
+    const staleLock = `${statePath}.lock`;
+    fs.writeFileSync(staleLock, JSON.stringify({ owner: "stale-cache", pid: process.pid }) + "\n", { mode: 0o600 });
+    const locked = await runCliAsync(securityRequest, {
+      ...options,
+      daybreakProbe: async () => {
+        probeCalls += 1;
+        return { available: true };
+      },
+    });
+    assert.equal(locked.decision.selected.model, "gpt-5.6-sol");
+    assert.equal(probeCalls, 4);
+    fs.unlinkSync(staleLock);
+
+    const stale = JSON.parse(fs.readFileSync(statePath, "utf8"));
+    stale.daybreakAvailability.checkedAt = new Date(NOW - DAYBREAK_AVAILABILITY_TTL_MS).toISOString();
+    fs.writeFileSync(statePath, JSON.stringify(stale));
+    fs.chmodSync(statePath, 0o600);
+    const unknown = await runCliAsync(securityRequest, {
+      ...options,
+      daybreakProbe: async () => {
+        probeCalls += 1;
+        throw new Error("fake_probe_failure");
+      },
+    });
+    assert.equal(unknown.reason, "resolved", JSON.stringify(unknown));
+    assert.equal(unknown.decision.selected.model, "gpt-5.6-sol");
+    assert.equal(probeCalls, 5);
+    assert.equal(JSON.parse(fs.readFileSync(statePath, "utf8")).daybreakAvailability.available, null);
+
+    const failedWriteState = JSON.parse(fs.readFileSync(statePath, "utf8"));
+    failedWriteState.daybreakAvailability.checkedAt = new Date(NOW - DAYBREAK_AVAILABILITY_TTL_MS).toISOString();
+    fs.writeFileSync(statePath, JSON.stringify(failedWriteState));
+    fs.chmodSync(statePath, 0o600);
+    try {
+      const writeFailure = await runCliAsync(securityRequest, {
+        ...options,
+        daybreakProbe: async () => {
+          probeCalls += 1;
+          fs.chmodSync(stateDirectory, 0o500);
+          return { available: true };
+        },
+      });
+      assert.equal(writeFailure.decision.selected.model, "gpt-5.6-sol");
+      assert.equal(probeCalls, 6);
+    } finally {
+      fs.chmodSync(stateDirectory, 0o700);
+      try { fs.unlinkSync(`${statePath}.lock`); } catch { /* no-op */ }
+    }
+
+    const nonSecurity = await runCliAsync(request("resolve", {
+      role: "implementation.hard",
+      harness: "codex",
+    }), {
+      ...options,
+      daybreakProbe: async () => {
+        probeCalls += 1;
+        return { available: true };
+      },
+    });
+    assert.equal(nonSecurity.decision.selected.modelAlias, "sol_max");
+    assert.equal(probeCalls, 6);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("Daybreak availability state migrates v4 and validates its exact cache record", () => {
+  const v4 = createEmptyState();
+  v4.stateSchemaVersion = 4;
+  assert.equal(validateState(v4).reason, "unsupported_state_schema");
+  const migrated = migrateState(v4);
+  assert.equal(migrated.stateSchemaVersion, 5);
+  assert.equal(validateState(migrated).ok, true);
+  for (const availability of [true, false, null]) {
+    const state = structuredClone(migrated);
+    state.daybreakAvailability = { available: availability, checkedAt: new Date(NOW).toISOString() };
+    assert.equal(validateState(state).ok, true);
+  }
+  for (const invalid of [
+    { available: true },
+    { available: "true", checkedAt: new Date(NOW).toISOString() },
+    { available: true, checkedAt: "not-a-date" },
+    { available: true, checkedAt: new Date(NOW).toISOString(), extra: true },
+  ]) {
+    const state = structuredClone(migrated);
+    state.daybreakAvailability = invalid;
+    assert.equal(validateState(state).field, "daybreakAvailability");
+  }
+});
+
+test("a catalog has one Daybreak provider for its local state cache", () => {
+  const policy = ownerPolicy();
+  policy.providers.codex_daybreak_blue_b = {
+    ...policy.providers.codex_daybreak_blue,
+    account: "codex-sub-b",
+  };
+  policy.models.daybreak_blue_b = {
+    ...policy.models.daybreak_blue,
+    provider: "codex_daybreak_blue_b",
+  };
+  assert.equal(validateCatalog(policy).reason, "daybreak_provider_ambiguous");
+});
+
+test("the Daybreak App Server probe accepts only a visible exact selector and degrades failures", async () => {
+  const paged = fakeAppServer((message, child) => {
+    if (message.id === 1) child.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, result: {} })}\n`);
+    if (message.id === 2) child.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: 2, result: { data: [{ id: DAYBREAK_MODEL, hidden: true }], nextCursor: "page-two" } })}\n`);
+    if (message.id === 3) child.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: 3, result: { data: [{ model: DAYBREAK_MODEL, hidden: false }] } })}\n`);
+  });
+  assert.equal(await probeCodexDaybreak({ spawnProcess: () => paged.child }), true);
+  assert.deepEqual(paged.requests.map((message) => [message.id, message.method, message.params.cursor]), [
+    [1, "initialize", undefined],
+    [2, "model/list", undefined],
+    [3, "model/list", "page-two"],
+  ]);
+
+  const hidden = fakeAppServer((message, child) => {
+    if (message.id === 1) child.stdout.write(`${JSON.stringify({ id: 1, result: {} })}\n`);
+    if (message.id === 2) child.stdout.write(`${JSON.stringify({ id: 2, result: { data: [{ id: DAYBREAK_MODEL, hidden: true }] } })}\n`);
+  });
+  assert.equal(await probeCodexDaybreak({ spawnProcess: () => hidden.child }), false);
+
+  const large = fakeAppServer((message, child) => {
+    if (message.id === 1) child.stdout.write(`${JSON.stringify({ id: 1, result: {} })}\n`);
+    if (message.id === 2) {
+      const response = `${JSON.stringify({ id: 2, result: { data: Array.from({ length: 200_000 }, () => ({})) } })}\n`;
+      assert.ok(Buffer.byteLength(response) < MAX_APP_SERVER_RESPONSE_BYTES);
+      child.stdout.write(response);
+    }
+  });
+  assert.equal(await probeCodexDaybreak({ spawnProcess: () => large.child }), false);
+
+  const unknownFrom = async (onRequest, timeoutMs = 25) => {
+    const server = fakeAppServer(onRequest);
+    return probeDaybreakAvailability({ probe: () => probeCodexDaybreak({ spawnProcess: () => server.child, timeoutMs }) });
+  };
+  assert.deepEqual(await unknownFrom((message, child) => {
+    if (message.id === 1) child.stdout.write("null\n");
+  }), { available: null });
+  assert.deepEqual(await unknownFrom((message, child) => {
+    if (message.id === 1) child.stdout.write(`${JSON.stringify({ id: 1 })}\n`);
+  }), { available: null });
+  assert.deepEqual(await unknownFrom((message, child) => {
+    if (message.id === 1) child.stdout.emit("error", new Error("fake_read_failure"));
+  }), { available: null });
+  assert.deepEqual(await unknownFrom((message, child) => {
+    if (message.id === 1) child.stdin.emit("error", new Error("fake_write_failure"));
+  }), { available: null });
+  assert.deepEqual(await unknownFrom((message, child) => {
+    if (message.id === 1) child.stdout.write("x".repeat(MAX_APP_SERVER_RESPONSE_BYTES + 1));
+  }), { available: null });
+  assert.deepEqual(await unknownFrom(() => {}, 1), { available: null });
+});
+
+test("a catalog cannot promote Luna into a coordinator role", () => {
+  const policy = ownerPolicy();
+  policy.roles.orchestration = { tiers: [["luna", "sol"]] };
+  const resolved = handleRequest(request("resolve", {
+    role: "orchestration",
+    harness: "codex",
+  }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
+  assert.equal(resolved.response.decision.selected.modelAlias, "sol");
+  assert.equal(resolved.response.decision.rejectedAlternatives[0].modelAlias, "luna");
+  assert.equal(resolved.response.decision.rejectedAlternatives[0].reason, "role_ineligible");
 });
 
 test("the owner catalog keeps subscription meters separate and gates GLM on Codex config", () => {
@@ -2061,6 +2424,15 @@ test("build-work-contract reaches the same closed builder through the command di
   assert.equal(built.changed, false);
   assert.equal(built.response.contract.presentation.family, "gpt_sol");
   assert.equal(built.response.contract.invariantDigest, buildInvariantWorkContract(workContract).contract.invariantDigest);
+
+  const daybreak = buildInvariantWorkContract({
+    ...workContract,
+    carrierId: "codex-daybreak-blue",
+    model: "gpt-daybreak-blue-latest",
+    effort: "ultra",
+  });
+  assert.equal(daybreak.ok, true, JSON.stringify(daybreak));
+  assert.equal(daybreak.contract.presentation.family, "gpt_sol");
 
   assert.equal(handleRequest(request("build-work-contract"), { now: NOW }).response.reason, "invalid_work_contract");
   assert.equal(handleRequest(request("build-work-contract", { workContract: { ...workContract, prompt: "not metadata" } }), { now: NOW }).response.reason, "invalid_work_contract");

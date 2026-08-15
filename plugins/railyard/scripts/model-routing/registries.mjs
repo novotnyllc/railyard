@@ -8,7 +8,7 @@ export const CONTRACT_VERSION = "railyard/model-routing/v1";
 
 export const CATALOG_SCHEMA_VERSION = 1;
 
-export const STATE_SCHEMA_VERSION = 4;
+export const STATE_SCHEMA_VERSION = 5;
 
 export const STATE_PURPOSE = "railyard/model-routing-state";
 
@@ -90,7 +90,7 @@ export const MODEL_RE = /^[a-z0-9][a-z0-9._:-]{0,127}$/i;
 
 export const DIGEST_RE = /^[a-f0-9]{64}$/;
 
-export const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
+export const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max", "ultra"]);
 
 export const HARNESS_KINDS = new Set(["claude", "codex"]);
 
@@ -341,7 +341,15 @@ export const CARRIER_DESCRIPTORS = freeze({
     requestedModel: "gpt-5.6-sol",
     efforts: ["high", "max"],
     adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
-    roles: ["orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family", "implementation.hard"],
+    roles: ["orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family", "implementation.hard", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
+  }),
+  "codex-daybreak-blue": freeze({
+    version: "v1",
+    transport: "selector-native",
+    requestedModel: "gpt-daybreak-blue-latest",
+    efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
+    adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
+    roles: ["security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
   }),
   "codex-terra-runtime": freeze({
     version: "v1",
