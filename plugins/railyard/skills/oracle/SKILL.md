@@ -18,8 +18,12 @@ activation:
    `checkedAt` is within 7 days, trust it — available means proceed,
    unavailable means say so and stop offering Oracle.
 2. If missing or stale, look for cheap local evidence first: a successful
-   `gpt-5-pro` browser session in `"$ORACLE_CLI" status --hours 720` proves
-   Pro; write the cache and proceed.
+   `gpt-5.6-sol` browser session whose metadata records
+   `resolvedLabel=GPT-5.6 Sol; verified=yes` and whose pre-`Answer:` session
+   log has exactly one `[browser] Thinking time: Pro` control record proves
+   the supported browser-Pro pair; write the cache and proceed. A
+   `gpt-5-pro` browser session is not proof: Oracle 0.17.3 normalizes it to
+   the `GPT-5.5` picker target.
 3. Otherwise the first real run is the check. Never launch a throwaway browser
    run purely to probe. A login or account-selection surface, or a missing Pro
    picker target, means unavailable: write `available: false` and stop without
@@ -35,10 +39,10 @@ When an active caller supplies an admitted, claimed
 `railyard/model-routing/v1` `oracle-browser` review decision, use this
 skill's `scripts/oracle-route.mjs` carrier instead of the manual bootstrap
 below. It accepts only the `chatgpt_current_pro` channel, fixes Oracle to
-local Homebrew Oracle `>=0.17.0`, and spawns only
-`--engine browser --model gpt-5-pro` (the picker control is not an
-observed-model claim). Key invariants, enforced by the script and its tests
-rather than by prose:
+local Homebrew Oracle `>=0.17.3`, and spawns only
+`--engine browser --model gpt-5.6-sol --browser-model-strategy select
+--browser-thinking-time pro`. Key invariants, enforced by the script and its
+tests rather than by prose:
 
 - It verifies the claimed review and frozen-input digest through
   model-routing's read-only claim inspection before any Oracle or Homebrew
@@ -50,6 +54,13 @@ rather than by prose:
 - It freezes the prompt/file bundle, revalidates its digest before the one
   browser spawn, and keeps review output in a bounded private artifact whose
   receipt exposes only a locator and digest.
+- After every completed dispatch or reattach, it reads only the route-owned
+  session metadata allowlist plus the pre-`Answer:` control region of that
+  session's `output.log`. It accepts the review only when the metadata proves
+  verified `GPT-5.6 Sol` selection and exactly one
+  `[browser] Thinking time: Pro` record; missing, duplicate, or mismatched
+  evidence is a named failure receipt and a nonzero route CLI exit. Never
+  accept model-answer text as picker or effort proof.
 - A detached session is reattached by the same claim on the same host, never
   redispatched; retries return the existing or an `ambiguous` receipt, never a
   second launch. A login/account-selection surface stops without interaction.
@@ -79,7 +90,7 @@ session commands. Agents whose shell variables do not persist between tool
 calls must retain the returned absolute path and substitute it literally in
 later Oracle commands.
 
-Oracle requires version 0.17.0 or newer. `ORACLE_BIN` is only an explicit
+Oracle requires version 0.17.3 or newer. `ORACLE_BIN` is only an explicit
 validation-only input override: it must be an absolute executable at that
 version or newer; the helper does not replace it. Otherwise the helper prefers the canonical
 `steipete/tap/oracle` Homebrew formula. A current selected package owner is a
@@ -87,28 +98,34 @@ no-op. If Homebrew is unavailable, cannot repair its missing or stale formula,
 or cannot post-verify the selected formula, the bounded fallback is:
 
 ```bash
-npm install --global --prefix "$HOME/.local" @steipete/oracle@0.17.0
+npm install --global --prefix "$HOME/.local" @steipete/oracle@0.17.3
 ```
 
 A current stable `~/.local/bin/oracle` avoids repeat Homebrew attempts. The
 bootstrap preserves Oracle configuration, authentication, sessions, browser
 profiles, cookies, and other browser state.
 
-## Main use case (browser, GPT-5.6 Pro)
+## Main use case (browser, GPT-5.6 Sol + Pro thinking)
 
 Default workflow here: `--engine browser` with the user's preferred signed-in reasoning model. This is the “human in the loop” path: it can take ~10 minutes to ~1 hour; expect a stored session you can reattach to.
 
 Recommended defaults:
 - Engine: browser (`--engine browser`)
-- Browser Pro: `${ORACLE_MODEL:-gpt-5-pro}` selects ChatGPT's current Pro picker target (GPT-5.6 Sol Pro when available)
+- Browser Pro: `${ORACLE_MODEL:-gpt-5.6-sol}` with
+  `--browser-model-strategy select --browser-thinking-time pro` selects
+  `GPT-5.6 Sol` and requests the verified Pro-thinking tier
 - Browser base Sol: `--model gpt-5.6-sol --browser-thinking-time heavy`
 - API Pro: `--model gpt-5.6-sol --reasoning-mode pro --reasoning-effort max`
 - Attachments: directories/globs + excludes; avoid secrets.
 
-Oracle 0.17.0 or newer is required for GPT-5.6 Pro. Pro is not a separate API
-model slug: `gpt-5.6-pro` and `gpt-5.6-sol-pro` are invalid. Browser mode uses
-the `gpt-5-pro` picker alias; API mode uses `gpt-5.6-sol` plus the Pro reasoning
-flags above. GPT-5.6 availability remains account-dependent.
+Oracle 0.17.3 or newer is required for this browser-Pro pair. Pro is not a
+separate browser or API model slug: `gpt-5.6-pro` and `gpt-5.6-sol-pro` are
+invalid. Oracle 0.17.3 exposes no browser flag that deterministically targets
+an unnamed newer Pro picker label; its `gpt-5-pro` alias normalizes to
+`gpt-5.5-pro` and the `GPT-5.5` picker. Browser mode therefore uses
+`gpt-5.6-sol` plus Pro thinking and requires the observed pair below; API mode
+uses `gpt-5.6-sol` plus the Pro reasoning flags above. GPT-5.6 availability
+remains account-dependent.
 
 ## Browser profile mode (choose one)
 
@@ -188,7 +205,13 @@ bootstrap failure.
   - Use when CLI startup or time-to-first-output feels slow; inspect `first-output` and `exit`.
 
 - Browser run (main path; long-running is normal):
-  - `"$ORACLE_CLI" --engine browser --model "${ORACLE_MODEL:-gpt-5-pro}" -p "<task>" --file "src/**"`
+  - `"$ORACLE_CLI" --engine browser --model "${ORACLE_MODEL:-gpt-5.6-sol}" --browser-model-strategy select --browser-thinking-time pro -p "<task>" --file "src/**"`
+  - For a Browser-Pro run, `ORACLE_MODEL` must resolve to `gpt-5.6-sol`.
+    After completion, accept it only when its session metadata reports
+    verified `GPT-5.6 Sol` and its own pre-`Answer:` `output.log` has exactly
+    one `[browser] Thinking time: Pro` line. Otherwise stop and report the
+    observed picker state; do not silently accept a downgrade or use answer
+    text as evidence.
 
 - API Pro run (only after explicit cost consent):
   - `"$ORACLE_CLI" --engine api --model gpt-5.6-sol --reasoning-mode pro --reasoning-effort max -p "<task>" --file "src/**"`
@@ -226,7 +249,10 @@ bootstrap failure.
 ## Engines (API vs browser)
 
 - Auto-pick: uses `api` when `OPENAI_API_KEY` is set, otherwise `browser`.
-- GPT-5.6 Pro selection is surface-specific: browser uses `gpt-5-pro`; API uses `gpt-5.6-sol --reasoning-mode pro`.
+- GPT-5.6 Pro effort is surface-specific: browser uses
+  `gpt-5.6-sol --browser-model-strategy select --browser-thinking-time pro`
+  with the required observed-model assertion; API uses
+  `gpt-5.6-sol --reasoning-mode pro`.
 - Browser engine supports GPT + Gemini only; use `--engine api` for Claude/Grok/Codex or multi-model runs.
 - **API runs require explicit user consent** before starting because they incur usage costs.
 - Browser attachments:

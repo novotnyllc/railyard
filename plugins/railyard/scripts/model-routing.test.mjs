@@ -33,7 +33,7 @@ import {
   validateState,
 } from "./model-routing.mjs";
 import { validBinding } from "./model-routing/state-schema.mjs";
-import { build as buildOracle, dispatch as dispatchOracle } from "../skills/oracle/scripts/oracle-route.mjs";
+import { build as buildOracle, dispatch as dispatchOracle, oracleSessionSlug } from "../skills/oracle/scripts/oracle-route.mjs";
 
 const NOW = Date.parse("2026-08-04T12:00:00.000Z");
 const DIGEST_A = "a".repeat(64);
@@ -1752,7 +1752,7 @@ test("Oracle auth failure is negatively cached and lifecycle success creates a r
   const reviewClaim = claim(policy, state, review, { identity: reviewIdentity });
   const oracleReceipt = baseReceipt(reviewClaim.response.reservation, reviewIdentity, {
     receiptId: "oracle-receipt", producer: "oracle-browser", measuredUsage: {}, measuredBilled: false,
-    requestedModel: "chatgpt_current_pro", adapterModelControl: "gpt-5-pro", documentedProductLabel: "GPT-5.6 Sol Pro", observedModel: "unknown", executionSurface: "chatgpt_standard",
+    requestedModel: "chatgpt_current_pro", adapterModelControl: "gpt-5.6-sol", documentedProductLabel: "GPT-5.6 Sol + Pro thinking", observedModel: "unknown", executionSurface: "chatgpt_standard",
     chargedMeters: { marginalUsd: 0, codexCredits: 0, openaiApiSpend: 0 }, originalHostDigest: DIGEST_A, recordedAt: "2026-08-04T12:00:00.000Z", expiresAt: "2026-08-05T12:00:00.000Z", outputTrusted: false, reason: "auth_context_unavailable", authReadiness: "auth_context_unavailable", retentionClass: "local-private-24h",
   });
   assert.equal(handleRequest(request("reconcile", { reservationId: review.reservation.reservationId, frozenInputDigest: DIGEST_A, receipt: oracleReceipt }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(oracleReceipt) }).response.reason, "reconciled");
@@ -1838,6 +1838,28 @@ test("the public CLI accepts only a fixed Oracle receipt reference and settles a
     }, home);
     assert.equal(claimed.reason, "dispatch_claimed", JSON.stringify(claimed));
 
+    const oracleHome = path.join(root, "oracle-home");
+    const oracleSessions = path.join(oracleHome, "sessions");
+    const oracleSession = path.join(oracleSessions, oracleSessionSlug(prepared.sessionId));
+    privateDirectory(oracleHome);
+    privateDirectory(oracleSessions);
+    privateDirectory(oracleSession);
+    fs.writeFileSync(path.join(oracleSession, "meta.json"), JSON.stringify({
+      model: "gpt-5.6-sol",
+      browser: {
+        config: { desiredModel: "GPT-5.6 Sol", modelStrategy: "select", thinkingTime: "pro" },
+        modelSelection: {
+          requestedModel: "GPT-5.6 Sol",
+          resolvedLabel: "GPT-5.6 Sol",
+          strategy: "select",
+          status: "switched",
+          verified: true,
+          source: "chatgpt-model-picker",
+        },
+      },
+    }), { mode: 0o600 });
+    fs.writeFileSync(path.join(oracleSession, "output.log"), "[browser] Thinking time: Pro (already selected)\nAnswer:\nFixture finding.\n", { mode: 0o600 });
+
     const receipt = dispatchOracle({
       contractVersion: CONTRACT_VERSION,
       route: { adapter: "oracle-browser", requestedModel: "chatgpt_current_pro", executionSurface: "chatgpt_standard" },
@@ -1861,11 +1883,13 @@ test("the public CLI accepts only a fixed Oracle receipt reference and settles a
         trustedEmbedding: true,
         trustedPathOverrides: true,
       }),
-      resolveCarrier: () => ({ binary: "/usr/bin/true", version: "0.17.1" }),
+      resolveCarrier: () => ({ binary: "/usr/bin/true", version: "0.17.3" }),
       revalidateCarrier: () => "/usr/bin/true",
-      run: () => ({ status: 0, stdout: "", stderr: "" }),
+      run: () => ({ status: 0, stdout: "Fixture finding.\n", stderr: "" }),
     });
     assert.equal(receipt.status, "settled");
+    assert.equal(receipt.reason, null);
+    assert.equal(receipt.observedModel, "gpt-5.6-sol");
 
     const rawRejected = publicCli({
       contractVersion: CONTRACT_VERSION,
@@ -1889,11 +1913,7 @@ test("the public CLI accepts only a fixed Oracle receipt reference and settles a
 
     const status = publicCli({ contractVersion: CONTRACT_VERSION, command: "status" }, home);
     assert.equal(status.ok, true, JSON.stringify(status));
-    // The Oracle bridge reports no model identity, so a settled receipt is host
-    // capability evidence.  live_carrier_verified is reserved for a receipt that
-    // actually names the model that answered.
-    assert.ok(Object.values(status.readiness).some((entry) => entry.state === "host_capability_attested"));
-    assert.ok(Object.values(status.readiness).every((entry) => entry.state !== "live_carrier_verified"));
+    assert.ok(Object.values(status.readiness).some((entry) => entry.state === "live_carrier_verified"), JSON.stringify(status));
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }

@@ -7,6 +7,12 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { runCli as runRouter, stableDigest } from "../../../scripts/model-routing.mjs";
+import {
+  BROWSER_MODEL as FIXED_MODEL,
+  BROWSER_MODEL_STRATEGY as FIXED_BROWSER_MODEL_STRATEGY,
+  BROWSER_THINKING_TIME as FIXED_BROWSER_THINKING_TIME,
+  evaluateBrowserSession,
+} from "./oracle-observation.mjs";
 
 const CONTRACT = "railyard/model-routing/v1";
 const PRODUCER = "oracle-browser";
@@ -15,9 +21,8 @@ const ADAPTER_VERSION = "v1";
 const IMPORTER_ID = "railyard-adapter-receipt-importer-v1";
 const IMPORTER_VERSION = "v1";
 const FORMULA = "steipete/tap/oracle";
-const FIXED_MODEL = "gpt-5-pro";
-const PRODUCT_LABEL = "GPT-5.6 Sol Pro";
-const MIN_VERSION = [0, 17, 0];
+const PRODUCT_LABEL = "GPT-5.6 Sol + Pro thinking";
+const MIN_VERSION = [0, 17, 3];
 const MAX_PROMPT_BYTES = 128 * 1024;
 const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_TOTAL_BYTES = 4 * 1024 * 1024;
@@ -49,6 +54,12 @@ function stable(value) {
 function opaqueId(prefix, seed) {
   const body = seed ? hash(seed).slice(0, 32) : crypto.randomBytes(16).toString("hex");
   return `${prefix}_${body}`;
+}
+
+export function oracleSessionSlug(sessionId) {
+  if (typeof sessionId !== "string" || !/^oracle_[a-f0-9]{32}$/.test(sessionId)) fail("invalid_session_slug");
+  const digest = hash(sessionId);
+  return `oracle-route-${digest.slice(0, 10)}-${digest.slice(10, 20)}`;
 }
 
 function routeRoot() {
@@ -241,7 +252,13 @@ export function freezeInput(input, suppliedRoot = routeRoot()) {
     promptSha256: hash(Buffer.from(input.prompt)),
     files: files.map(({ sourceSha256, sha256, bytes }) => ({ sourceSha256, sha256, bytes })),
     exclusions: [...input.exclusions].sort(),
-    arguments: { engine: "browser", model: FIXED_MODEL, retainHours: input.retainHours },
+    arguments: {
+      engine: "browser",
+      model: FIXED_MODEL,
+      browserModelStrategy: FIXED_BROWSER_MODEL_STRATEGY,
+      browserThinkingTime: FIXED_BROWSER_THINKING_TIME,
+      retainHours: input.retainHours,
+    },
   };
   manifest.inputDigest = hash(stable(manifest));
   writeExclusive(path.join(bundle, "manifest.json"), JSON.stringify(manifest));
@@ -604,7 +621,7 @@ function baseReceipt(binding, sessionId, status, extra = {}) {
     requestedModel: "chatgpt_current_pro",
     adapterModelControl: FIXED_MODEL,
     documentedProductLabel: PRODUCT_LABEL,
-    observedModel: "unknown",
+    observedModel: extra.observedModel ?? "unknown",
     executionSurface: "chatgpt_standard",
   });
   if (status === "settled") value.outcomeId = opaqueId("outcome", `${binding.claimId}:${binding.frozenInputDigest}`);
@@ -672,6 +689,49 @@ function detectAuthSurface(text) {
   return /\b(?:sign\s*in|log\s*in|login|choose\s+(?:an\s+)?account|account\s+selection)\b/i.test(text);
 }
 
+function sessionEvidencePaths(oracleHome, sessionId) {
+  const sessions = path.join(oracleHome, "sessions");
+  const directory = path.join(sessions, oracleSessionSlug(sessionId));
+  if (!fs.existsSync(sessions) || !fs.existsSync(directory)) return null;
+  assertPrivateDirectory(sessions);
+  assertPrivateDirectory(directory);
+  return { metadata: path.join(directory, "meta.json"), output: path.join(directory, "output.log") };
+}
+
+function observeBrowserSession(oracleHome, sessionId) {
+  try {
+    const paths = sessionEvidencePaths(oracleHome, sessionId);
+    if (!paths || !fs.existsSync(paths.metadata) || !fs.existsSync(paths.output)) {
+      return { observedModel: "unknown", reason: "oracle_observed_model_unavailable" };
+    }
+    return evaluateBrowserSession(
+      readJsonRegular(paths.metadata),
+      readBoundedRegular(paths.output, MAX_RESULT_BYTES, "unsafe_private_state").toString("utf8"),
+    );
+  } catch {
+    return { observedModel: "unknown", reason: "oracle_observed_model_unavailable" };
+  }
+}
+
+export function isObservedModelFailure(receipt) {
+  return receipt?.producer === PRODUCER && receipt?.status === "settled" && !hasPositiveBrowserObservation(receipt);
+}
+
+function hasPositiveBrowserObservation(receipt) {
+  return receipt?.reason === null
+    && receipt?.observedModel === FIXED_MODEL
+    && receipt?.authReadiness === "fresh_success";
+}
+
+export function routeExitCode(receipt) {
+  return isObservedModelFailure(receipt) ? 1 : 0;
+}
+
+export function writeCliResult(result) {
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+  process.exitCode = routeExitCode(result);
+}
+
 function persistResult(root, sessionId, output) {
   const bytes = Buffer.from(output);
   if (bytes.length > MAX_RESULT_BYTES || bytes.includes(0) || SECRET.test(output)) fail("unsafe_oracle_result");
@@ -680,6 +740,30 @@ function persistResult(root, sessionId, output) {
   const artifactPath = path.join(directory, `${artifactId}.txt`);
   writeExclusive(artifactPath, bytes);
   return { artifactId, path: artifactPath, sha256: hash(bytes), bytes: bytes.length, sessionId };
+}
+
+function completedBrowserResult(root, oracleHome, sessionId, result) {
+  const output = String(result.stdout || "");
+  const diagnostic = `${output}\n${String(result.stderr || "")}`;
+  let observation = { observedModel: "unknown", reason: null };
+  let reason = result.status === 0 ? null : "oracle_failed";
+  let resultArtifact;
+  if (reason === "oracle_failed" && detectAuthSurface(diagnostic)) {
+    reason = "auth_context_unavailable";
+  } else {
+    try {
+      if (output) resultArtifact = persistResult(root, sessionId, output);
+      if (result.status === 0) observation = observeBrowserSession(oracleHome, sessionId);
+      if (reason === null) reason = observation.reason;
+    } catch (error) { reason = error.code || "oracle_failed"; }
+  }
+  const completed = {
+    reason,
+    observedModel: observation.observedModel,
+    authReadiness: result.status === 0 && reason === null ? "fresh_success" : "unknown",
+  };
+  if (resultArtifact) completed.resultArtifact = resultArtifact;
+  return completed;
 }
 
 export function build(input, options = {}) {
@@ -729,7 +813,15 @@ export function dispatch(input, options = {}) {
     return finishClaim(root, claim, baseReceipt(binding, frozen.manifest.sessionId, "no_start", { reason: error.code || "carrier_unavailable", retentionClass }), frozen.bundle);
   }
   const oracleHome = ensureChild(root, "oracle-home");
-  const args = ["--engine", "browser", "--model", FIXED_MODEL, "--retain-hours", String(frozen.manifest.arguments.retainHours), "--slug", frozen.manifest.sessionId, "-p", readBoundedRegular(frozen.promptPath, MAX_PROMPT_BYTES, "frozen_input_changed").toString("utf8")];
+  const args = [
+    "--engine", "browser",
+    "--model", frozen.manifest.arguments.model,
+    "--browser-model-strategy", frozen.manifest.arguments.browserModelStrategy,
+    "--browser-thinking-time", frozen.manifest.arguments.browserThinkingTime,
+    "--retain-hours", String(frozen.manifest.arguments.retainHours),
+    "--slug", oracleSessionSlug(frozen.manifest.sessionId),
+    "-p", readBoundedRegular(frozen.promptPath, MAX_PROMPT_BYTES, "frozen_input_changed").toString("utf8"),
+  ];
   for (const file of frozen.files) args.push("--file", file.bundlePath);
   revalidateFrozen(frozen);
   revalidate(carrier);
@@ -740,24 +832,14 @@ export function dispatch(input, options = {}) {
   revalidateFrozen(frozen);
   revalidate(carrier);
   const result = run(carrier.binary, args, spawnOptions);
-  const output = String(result.stdout || "");
-  const diagnostic = `${output}\n${String(result.stderr || "")}`;
   if (result.error?.code === "ETIMEDOUT") {
     return finishClaim(root, claim, baseReceipt(binding, frozen.manifest.sessionId, "started", { reason: "detached", carrierVersion: carrier.version, retentionClass }), null);
   }
-  if (result.status !== 0 && detectAuthSurface(diagnostic)) {
-    return finishClaim(root, claim, baseReceipt(binding, frozen.manifest.sessionId, "settled", { reason: "auth_context_unavailable", authReadiness: "unknown", carrierVersion: carrier.version, retentionClass }), frozen.bundle);
-  }
-  let resultArtifact;
-  let reason = result.status === 0 ? null : "oracle_failed";
-  try { if (output) resultArtifact = persistResult(root, frozen.manifest.sessionId, output); }
-  catch (error) { reason = error.code; }
+  const completed = completedBrowserResult(root, oracleHome, frozen.manifest.sessionId, result);
   return finishClaim(root, claim, baseReceipt(binding, frozen.manifest.sessionId, "settled", {
-    reason,
     carrierVersion: carrier.version,
-    authReadiness: result.status === 0 ? "fresh_success" : "unknown",
     retentionClass,
-    resultArtifact,
+    ...completed,
   }), frozen.bundle);
 }
 
@@ -831,25 +913,20 @@ export function reattach(input, options = {}) {
     const carrier = resolve(options.carrierOptions);
     revalidate(carrier);
     const oracleHome = ensureChild(root, "oracle-home");
-    const result = (options.run || spawnSync)(carrier.binary, ["session", input.sessionId, "--render"], {
+    const result = (options.run || spawnSync)(carrier.binary, ["session", oracleSessionSlug(input.sessionId), "--render"], {
       encoding: "utf8", env: fixedEnvironment(oracleHome), timeout: boundedTimeout(input.timeoutMs), maxBuffer: MAX_RESULT_BYTES,
     });
-    let status = "settled";
-    let reason = result.status === 0 ? null : "oracle_failed";
-    let resultArtifact;
-    if (result.error?.code === "ETIMEDOUT") { status = "started"; reason = "detached"; }
-    else if (result.status !== 0 && detectAuthSurface(`${result.stdout || ""}\n${result.stderr || ""}`)) reason = "auth_context_unavailable";
-    else {
-      try { if (result.stdout) resultArtifact = persistResult(root, input.sessionId, String(result.stdout)); }
-      catch (error) { reason = error.code; }
-    }
+    const timedOut = result.error?.code === "ETIMEDOUT";
+    const status = timedOut ? "started" : "settled";
+    const completed = timedOut
+      ? { reason: "detached", observedModel: "unknown", authReadiness: "unknown" }
+      : completedBrowserResult(root, oracleHome, input.sessionId, result);
     const value = persistReceipt(root, baseReceipt(binding, input.sessionId, status, {
-      reason,
       carrierVersion: carrier.version,
-      resultArtifact,
       reattached: true,
       retentionClass: prior.retentionClass,
       expiresAt: prior.expiresAt,
+      ...completed,
     }));
     replaceRegularJson(claimPath, { ...claimState, state: status, receiptId: value.receiptId });
     if (status === "settled") removePrivateBundle(root, input.sessionId);
@@ -886,7 +963,8 @@ function main() {
     const input = JSON.parse(fs.readFileSync(0, "utf8"));
     const operation = { build, "dry-run": build, validate, dispatch, reattach, lifecycle }[process.argv[2] || "build"];
     if (!operation) fail("unsupported_action");
-    process.stdout.write(`${JSON.stringify(operation(input))}\n`);
+    const result = operation(input);
+    writeCliResult(result);
   } catch (error) {
     process.stdout.write(`${JSON.stringify({ status: "blocked", reason: error.code || "invalid_request" })}\n`);
     process.exitCode = 1;
