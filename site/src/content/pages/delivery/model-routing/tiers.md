@@ -15,6 +15,7 @@ Spend premium reasoning on premium difficulty. Start by naming the work role, pl
 | --- | --- |
 | `implementation` and bounded subroles | `gpt-5.6-luna` at `max`, carrying `implementationEngine: {"mode":"prefer","target":"codex","model":"gpt-5.6-luna","source":"deliver"}`. `prefer` records an assumed no-config capability; a trusted runtime can make it `require`. |
 | orchestration or independent review | `gpt-5.6-sol` at `high`; `max` for high, critical, or explicitly complex work |
+| security review lenses, threat modeling, trust surfaces, redaction and signing, attack-shape analysis, or security audit | `gpt-daybreak-blue-latest` at `high` or `max` when detected on the local Codex account; otherwise the configured general hard tier |
 | unavailable or unselectable Luna implementation | A runtime-attested Terra model at `max`, disclosed as `implementation_model_substitute`; the router does not invent a Terra slug |
 
 Apply the policy to the work unit, independent of the interactive session model. A Codex or Claude session can hand implementation to the same Luna route. The carrier reports `offline_implementation_ready`, `host_capability_attested`, or `live_carrier_verified` as separate states; a local resolver pass proves only the first.

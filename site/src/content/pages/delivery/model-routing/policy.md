@@ -13,6 +13,8 @@ Start with the shipped defaults, then make account, privacy, and budget choices 
 
 The operator copies the shipped example, adds the providers already available in the two harnesses, validates it, and resolves one bounded work class. Railyard freezes the catalog digest before selection and carries the chosen model, effort, carrier, privacy, and meter provenance into the route disclosure. The turn is installing a validated catalog at the user boundary. The run closes when a normal `resolve` names that catalog digest and the expected model alias.
 
+Spend security judgment on a model built for it. When the local Codex account exposes Daybreak Blue, Railyard prefers it for defensive-security work—review lenses, threat modeling, trust surfaces, redaction and signing, attack-shape analysis, and audits—before the general hard tier. The native model list is checked only when this work needs it, remembered for 24 hours, and quietly leaves the established route in place wherever Daybreak is not available.
+
 ## Install the shipped starting point
 
 From a Railyard source checkout:
