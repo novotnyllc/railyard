@@ -13,6 +13,8 @@ Start with the shipped defaults, then make account, privacy, and budget choices 
 
 The operator copies the shipped example, adds the providers already available in the two harnesses, validates it, and resolves one bounded work class. Railyard freezes the catalog digest before selection and carries the chosen model, effort, carrier, privacy, and meter provenance into the route disclosure. The turn is installing a validated catalog at the user boundary. The run closes when a normal `resolve` names that catalog digest and the expected model alias.
 
+Spend security judgment on a model built for it. Put Daybreak Blue first in a configured `security.*` role, and Railyard prefers it when the local Codex account exposes it for defensive-security work—review lenses, threat modeling, trust surfaces, redaction and signing, attack-shape analysis, and audits—before the general hard tier. The native model list is checked only when this configured security work needs it, remembered for 24 hours, and quietly leaves the established route in place wherever Daybreak is not available.
+
 ## Install the shipped starting point
 
 From a Railyard source checkout:
@@ -32,6 +34,7 @@ Run the `validate` verb through `railyard:model-routing` before using an edited 
 | `providers` | Account alias, fixed carrier, execution surface, harness, locality, retention, and supported availability source | Configured account and privacy provenance |
 | `models` | Provider, fixed carrier, requested family/model, efforts, roles, fallbacks, rates, and `relativeCostIndex` | Exact selected alias, effort, rate freshness, and rejected alternatives |
 | `roles` | Ordered tier ladders; tier zero may use `cost`, `latency`, `quality`, `reliability`, or `learnedEstimate` | The selected alias and every hard constraint that kept another candidate out |
+| `security.*` roles | Put Daybreak Blue before the general hard tier for review lenses, threat modeling, trust surfaces, redaction and signing, attack-shape analysis, and audits | Fresh local detection of `gpt-daybreak-blue-latest` at `high` or `max`, plus the configured fallback |
 | `privacy` | Provider, locality, retention, and egress restrictions | Tighten-only request handling; the root catalog remains the widest allowed boundary |
 | `budgets` | Task, run, and project meters using `soft`, `hardAdmission`, or `strict` | Forecast, reservation, actual, and charged facets kept in their native meter |
 | `discovery` | Bounded negative-evidence freshness | Transient 60 seconds, auth 5 minutes, and missing binary 1 hour by default; unsupported evidence records a 24-hour window and stays held until the policy or adapter digest changes |
