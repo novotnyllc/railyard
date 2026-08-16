@@ -57,4 +57,18 @@ alert: anti-rollback
 
 In the higher-stakes case, an anonymized host sees generation 17 after it has already trusted generation 18. An absent archive leaves the re-root unauthorized, so the host preserves the reviewed state and raises `anti-rollback`.
 
+## Recovery completes
+
+Recovery does not lower either high-water mark. `fleet-checkpoint` publishes its ordinary signed commit as `refs/tags/rh-checkpoint-<epoch>` and `refs/roundhouse/archive/YYYYMMDD`. Before re-rooting, `fleet-reroot` refreshes origin and atomically republishes that archive ref; it refuses unless fetched `main@origin` and this host's resolvable `reviewed-ref` are covered by the checkpoint, or if local `main` has advanced beyond it. On reconnect, the host finds its reviewed reference in the archive, replays the ordinary ratchet through the checkpoint, checks that the checkpoint generation is at least 18, verifies the new root against the checkpoint roster, and only then advances root-owned `reviewed-ref` to the new root.
+
+```text
+checkpoint_tag=refs/tags/rh-checkpoint-<epoch>
+archive_ref=refs/roundhouse/archive/YYYYMMDD
+recovery reviewed-ref=advanced-to-new-root generation>=18
+doctor head-signature=ok ratchet-replay=ok monotonicity=ok
+doctor checkpoint-tags=ok archive-present=ok exit=0
+```
+
+The outcome is a clean doctor and a restored reviewed line without weakening the refusal that exposed the missing proof. The archive remains the residual evidence to retain. For the same hold → evidence → release arc at the item layer, read [The change that waited for evidence](/roundhouse/security/marketplace-trust/).
+
 The mark is root-owned where the privileged lane exists. The store's ordinary signed history remains the source of the reviewed reference.
