@@ -727,7 +727,8 @@ export function routeExitCode(receipt) {
   if (!["prepared", "validated", "started", "settled"].includes(receipt?.status)) return 1;
   if (receipt.status !== "settled") return 0;
   if (receipt.producer === PRODUCER) return isObservedModelFailure(receipt) ? 1 : 0;
-  return receipt.reason === null ? 0 : 1;
+  if (receipt.producer === LIFECYCLE_PRODUCER) return receipt.reason === null ? 0 : 1;
+  return 1;
 }
 
 export function writeCliResult(result) {

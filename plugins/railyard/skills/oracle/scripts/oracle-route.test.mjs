@@ -289,6 +289,7 @@ test("CLI receipt writer fails closed for uncompleted receipts", () => {
     { producer: "oracle-browser", status: "no_start", reason: "oracle_dry_run_failed" },
     { producer: "oracle-browser", status: "ambiguous", reason: "claim_already_in_progress" },
     { status: "blocked", reason: "invalid_request" },
+    { status: "settled", reason: null },
   ]) {
     const result = spawnSync(process.execPath, ["--input-type=module", "--eval", `import { writeCliResult } from ${JSON.stringify(moduleUrl)}; writeCliResult(${JSON.stringify(receipt)});`], { encoding: "utf8" });
     assert.equal(result.status, 1, result.stderr);
@@ -829,6 +830,7 @@ test("claimed Homebrew lifecycle is fixed, idempotent, and requires a fresh revi
   assert.equal(result.status, "settled");
   assert.equal(result.reason, null);
   assert.equal(result.producer, "oracle-homebrew-lifecycle");
+  assert.equal(routeExitCode(result), 0);
   assert.equal(result.dispatchKind, "lifecycle_action");
   assert.equal(result.sessionId, "lifecycle_session");
   assert.equal(result.beforeVersion, "0.17.0");
