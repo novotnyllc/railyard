@@ -59,7 +59,7 @@ In the higher-stakes case, an anonymized host sees generation 17 after it has al
 
 ## Recovery completes
 
-Recovery does not lower either high-water mark. `fleet-checkpoint` publishes its ordinary signed commit as `refs/tags/rh-checkpoint-<epoch>` and `refs/roundhouse/archive/YYYYMMDD`; `fleet-reroot` refuses unless fetched `main@origin` and this host's resolvable `reviewed-ref` are covered by that checkpoint, or if local `main` has advanced beyond it. On reconnect, the host finds its reviewed reference in the archive, replays the ordinary ratchet through the checkpoint, checks that the checkpoint generation is at least 18, verifies the new root against the checkpoint roster, and only then advances root-owned `reviewed-ref` to the new root.
+Recovery does not lower either high-water mark. `fleet-checkpoint` publishes its ordinary signed commit as `refs/tags/rh-checkpoint-<epoch>` and `refs/roundhouse/archive/YYYYMMDD`. Before re-rooting, `fleet-reroot` refreshes origin and atomically republishes that archive ref; it refuses unless fetched `main@origin` and this host's resolvable `reviewed-ref` are covered by the checkpoint, or if local `main` has advanced beyond it. On reconnect, the host finds its reviewed reference in the archive, replays the ordinary ratchet through the checkpoint, checks that the checkpoint generation is at least 18, verifies the new root against the checkpoint roster, and only then advances root-owned `reviewed-ref` to the new root.
 
 ```text
 checkpoint_tag=refs/tags/rh-checkpoint-<epoch>
