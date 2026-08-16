@@ -724,7 +724,10 @@ function hasPositiveBrowserObservation(receipt) {
 }
 
 export function routeExitCode(receipt) {
-  return isObservedModelFailure(receipt) ? 1 : 0;
+  if (!["prepared", "validated", "started", "settled"].includes(receipt?.status)) return 1;
+  if (receipt.status !== "settled") return 0;
+  if (receipt.producer === PRODUCER) return isObservedModelFailure(receipt) ? 1 : 0;
+  return receipt.reason === null ? 0 : 1;
 }
 
 export function writeCliResult(result) {

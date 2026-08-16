@@ -283,6 +283,19 @@ test("CLI receipt writer prints a mismatch receipt before exiting nonzero", () =
   assert.deepEqual(JSON.parse(result.stdout), receipt);
 });
 
+test("CLI receipt writer fails closed for uncompleted receipts", () => {
+  const moduleUrl = new URL("./oracle-route.mjs", import.meta.url).href;
+  for (const receipt of [
+    { producer: "oracle-browser", status: "no_start", reason: "oracle_dry_run_failed" },
+    { producer: "oracle-browser", status: "ambiguous", reason: "claim_already_in_progress" },
+    { status: "blocked", reason: "invalid_request" },
+  ]) {
+    const result = spawnSync(process.execPath, ["--input-type=module", "--eval", `import { writeCliResult } from ${JSON.stringify(moduleUrl)}; writeCliResult(${JSON.stringify(receipt)});`], { encoding: "utf8" });
+    assert.equal(result.status, 1, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), receipt);
+  }
+});
+
 test("build freezes bounded input without trusting a caller claim or invoking a carrier", () => {
   const value = fixture();
   const result = build(value.input, { root: value.stateRoot });
