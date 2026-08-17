@@ -202,13 +202,7 @@ export const CE_SEAMS = freeze({
   "ce-plan.execution": freeze({ skill: "ce-plan", artifactSchema: "railyard/ce-plan-execution-input/v1", roles: ["research", "investigation", "implementation", "implementation.bounded_fix"], carriers: ["glm-5-2-scout", "glm-5-2-engineer", "codex-luna"] }),
   "ce-work.execution": freeze({ skill: "ce-work", artifactSchema: "railyard/ce-work-execution-input/v1", roles: ["implementation", "implementation.bounded_fix", "implementation.mechanical"], carriers: ["glm-5-2-engineer", "codex-luna"] }),
   "ce-debug.execution": freeze({ skill: "ce-debug", artifactSchema: "railyard/ce-debug-diagnosis/v1", roles: ["investigation", "research"], carriers: ["codex-daybreak-blue", "glm-5-2-scout", "codex-luna"] }),
-  // codex-daybreak-blue is the REFUSAL fallback for a cross-family review, not a
-  // cross-family reviewer in its own right: when the Claude reviewer declines
-  // the material - low-level, cryptographic or otherwise security-adjacent work
-  // it will not engage with - a same-family Daybreak review is better than no
-  // review. Fable stays tier 0 wherever both are offered; the seam only makes
-  // the fallback reachable.
-  "ce-code-review.execution": freeze({ skill: "ce-code-review", artifactSchema: "railyard/ce-code-review-findings/v1", roles: ["review.code", "review.cross_family"], carriers: ["claude-ce-review", "oracle-browser", "codex-daybreak-blue"] }),
+  "ce-code-review.execution": freeze({ skill: "ce-code-review", artifactSchema: "railyard/ce-code-review-findings/v1", roles: ["review.code", "review.cross_family"], carriers: ["claude-ce-review", "oracle-browser"] }),
   "ce-doc-review.execution": freeze({ skill: "ce-doc-review", artifactSchema: "railyard/ce-doc-review-findings/v1", roles: ["review.plan", "review.cross_family"], carriers: ["claude-ce-review", "oracle-browser"] }),
   "ce-pov.execution": freeze({ skill: "ce-pov", artifactSchema: "railyard/ce-pov-review/v1", roles: ["review.cross_family", "review.architecture"], carriers: ["claude-ce-review", "oracle-browser"] }),
   "ce-pr-review.execution": freeze({ skill: "ce-babysit-pr", artifactSchema: "railyard/ce-pr-review-findings/v1", roles: ["review.code", "review.cross_family"], carriers: ["claude-ce-review", "oracle-browser"] }),
@@ -368,7 +362,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     // an in-harness fallback those roles resolve to nothing whenever Oracle is
     // not attested, so Daybreak carries them too - matching its standing
     // preference for deep technical work.
-    roles: ["investigation", "research", "review", "review.code", "review.cross_family", "review.deep", "review.architecture", "review.long_context", "review.adversarial", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
+    roles: ["investigation", "research", "review", "review.code", "review.deep", "review.architecture", "review.long_context", "review.adversarial", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
   }),
   "codex-terra-runtime": freeze({
     version: "v1",

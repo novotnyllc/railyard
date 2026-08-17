@@ -2679,17 +2679,15 @@ function daybreakReady(policy) {
   return state;
 }
 
-test("a cross-family review offers Fable first and Daybreak as the refusal fallback", () => {
+test("a cross-family review routes to the Claude reviewer through the attested seam", () => {
   const policy = catalog({
     extraProviders: {
       claude_review: { carrierId: "claude-ce-review", executionSurface: "provider_subscription", account: "claude", locality: "external", retention: "provider_default", harness: "claude" },
-      daybreak: { carrierId: "codex-daybreak-blue", executionSurface: "codex", account: "local", locality: "external", retention: "provider_default", harness: "codex" },
     },
     extraModels: {
       fable_review: { provider: "claude_review", carrierId: "claude-ce-review", requestedModel: "fable", efforts: ["high"], roles: ["review.cross_family"] },
-      daybreak_blue: { provider: "daybreak", carrierId: "codex-daybreak-blue", requestedModel: "gpt-daybreak-blue-latest", efforts: ["high"], roles: ["review.cross_family"] },
     },
-    extraRoles: { "review.cross_family": { tiers: [["fable_review"], ["daybreak_blue"]] } },
+    extraRoles: { "review.cross_family": { tiers: [["fable_review"]] } },
   });
   const state = attestedCapability(policy, {
     carrierId: "claude-ce-review",
@@ -2711,23 +2709,9 @@ test("a cross-family review offers Fable first and Daybreak as the refusal fallb
   assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
   assert.equal(resolved.response.decision.selected.modelAlias, "fable_review", "Fable is the cross-family reviewer");
 
-  // Now CONSTRUCT the fallback rather than asserting about it from the happy
-  // path: with no attested Claude capability, Fable drops out and Daybreak must
-  // actually be selected. Checking rejectedAlternatives on the success above
-  // would prove nothing — once tier 0 resolves, tier 1 is never evaluated, so
-  // the absence of a seam rejection there is vacuous.
-  const withoutClaude = handleRequest(request("resolve", {
-    callerKind: "compound-engineering",
-    role: "review.cross_family",
-    harness: "codex",
-    crossHarnessReason: "cross-family second opinion on codex-authored work",
-    ceSeam: seam,
-  }), { catalog: policy, state: daybreakReady(policy), now: NOW });
-
-  assert.equal(withoutClaude.response.reason, "resolved", JSON.stringify(withoutClaude.response));
-  assert.equal(
-    withoutClaude.response.decision.selected.modelAlias,
-    "daybreak_blue",
-    "with the Claude reviewer unavailable the seam must still admit the Daybreak fallback",
-  );
+  // Deliberately NO carrier fallback on refusal: provider-task-routing.md
+  // rejects a provider refusal-fallback outright and allows exactly one retry
+  // on the SAME routed model. Tier order could not express it anyway - the
+  // schemas carry no refusal signal, so a lower tier would fire on mere
+  // unavailability, which is not a refusal.
 });

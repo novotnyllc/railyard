@@ -700,13 +700,18 @@ the route. It is a replacement of execution mechanism, not a rewrite of CE.
 is for — those adapters are the only way a Codex session can reach a Claude
 model at all. Fable is that reviewer.
 
-Daybreak Blue is the **refusal fallback**, not a cross-family reviewer in its
-own right. When the Claude reviewer declines the material — low-level,
-cryptographic or otherwise security-adjacent work it will not engage with — a
-same-family Daybreak review beats no review, so the seam admits it and Fable
-stays tier 0 wherever both are offered. Refusal is not a router concept: the
-resolver publishes the ordered tiers and the review skill walks them when a
-reviewer declines.
+A refusal does **not** re-route to another carrier. `provider-task-routing.md`
+is explicit: a provider-emitted `model_refusal_fallback` is rejected outright,
+and after a refusal the caller may make exactly one fresh attempt on the *same*
+routed model with a rephrased prompt that makes the legitimate, read-only
+purpose explicit. A review produced by a different carrier is not review
+evidence for the routed model, so swapping carriers would silently answer a
+different question than the one asked.
+
+Tier order cannot express "on refusal" in any case: the request and state
+schemas carry no refusal signal, so a fresh resolve just re-picks tier 0, while
+a lower tier would be reached whenever the top carrier is merely unavailable -
+which is not a refusal at all.
 
 Preserve CE workflow, persona, plan/legitimacy and root-cause authority,
 canonical writer, review/validator/merge authority, least-privilege tooling,
