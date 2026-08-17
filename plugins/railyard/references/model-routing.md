@@ -695,6 +695,19 @@ the route. It is a replacement of execution mechanism, not a rewrite of CE.
 | already-legitimized bounded execution step | claimed `glm-5-2-engineer` separate task | the ordinary CE executor outcome artifact |
 | code/doc/POV/PR read-only review seam | claimed `claude-ce-review` through its supported CE Claude `-p` path, or Oracle only where the closed role/carrier pair permits it | the ordinary seam-specific review receipt/findings artifact |
 
+`review.cross_family` exists to leave the family: a Codex-side CE review asks a
+**Claude** model for the independent opinion, which is what `claude-ce-review`
+is for — those adapters are the only way a Codex session can reach a Claude
+model at all. Fable is that reviewer.
+
+Daybreak Blue is the **refusal fallback**, not a cross-family reviewer in its
+own right. When the Claude reviewer declines the material — low-level,
+cryptographic or otherwise security-adjacent work it will not engage with — a
+same-family Daybreak review beats no review, so the seam admits it and Fable
+stays tier 0 wherever both are offered. Refusal is not a router concept: the
+resolver publishes the ordered tiers and the review skill walks them when a
+reviewer declines.
+
 Preserve CE workflow, persona, plan/legitimacy and root-cause authority,
 canonical writer, review/validator/merge authority, least-privilege tooling,
 security boundaries, verification, artifact schema, and terminal state. The AU

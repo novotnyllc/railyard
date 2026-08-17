@@ -105,6 +105,40 @@ A current stable `~/.local/bin/oracle` avoids repeat Homebrew attempts. The
 bootstrap preserves Oracle configuration, authentication, sessions, browser
 profiles, cookies, and other browser state.
 
+### Config defaults (owned here, not by a dotfile manager)
+
+Run this once per host, before the first browser run. It is idempotent and
+fills in only keys that are ABSENT, so an explicit user value always wins:
+
+```bash
+node "$SKILL_DIR/scripts/ensure-oracle-config.mjs"
+```
+
+These defaults belong to this skill because they must reach every user of the
+plugin. A dotfile manager (chezmoi or anything else) is a personal choice, and
+nothing here may assume one exists — if the skill needs a setting to behave
+correctly, putting it there is the skill's job.
+
+`browser.headless: true` is the load-bearing one. Oracle's headful "hide" is
+implemented as `--window-position=-32000,-32000`, and macOS clamps a window
+that far off-screen back toward the display, so a window appears anyway.
+Headless is the only way to genuinely not show one, and it also sidesteps the
+"Chrome didn't shut down correctly / restore tabs" bubble, because there is no
+window to restore into. Measured: a headless one-shot returned in ~31s with no
+visible window.
+
+**Do not reach for `oracle serve` or `--browser-attach-running` to get this.**
+Both are worse locally, on evidence:
+
+- `serve --manual-login` launches Chrome with no `--headless` and ignores
+  `browser.headless`, so it leaves a *permanently* visible window rather than a
+  transient one, and the same trivial prompt took ~1m10s through it versus ~31s
+  direct. Its real use is remote: one signed-in host serving machines that are
+  not signed in, where the window is on a machine nobody is looking at.
+- `--browser-attach-running` requires Oracle's own attach metadata and rejects a
+  hand-launched headless Chrome; pointed at a real everyday Chrome it drives the
+  user's own browser, which is neither hidden nor safe to automate.
+
 ## Main use case (browser, GPT-5.6 Sol + Pro thinking)
 
 Default workflow here: `--engine browser` with the user's preferred signed-in reasoning model. This is the “human in the loop” path: it can take ~10 minutes to ~1 hour; expect a stored session you can reattach to.

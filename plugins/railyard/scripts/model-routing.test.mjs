@@ -2664,3 +2664,70 @@ test("a Terra runtime attestation is accepted at every effort the carrier declar
     assert.equal(fixedRuntimeDecision(attestation(effort), request, provider), null, `terra attestation at ${JSON.stringify(effort)} must be refused`);
   }
 });
+
+// review.cross_family exists to leave the family: a Codex-side CE review asks a
+// CLAUDE model for the independent opinion. Fable is that reviewer. Daybreak is
+// the REFUSAL fallback — when the Claude reviewer declines the material (
+// low-level, cryptographic, otherwise security-adjacent work it will not
+// engage with), a same-family Daybreak review beats no review. Both must be
+// eligible under one CE seam for the caller to be able to walk the tiers,
+// which is what this pins: the seam admits both, and Fable outranks Daybreak.
+function daybreakReady(policy) {
+  const state = createEmptyState();
+  state.daybreakAvailability = { available: true, checkedAt: new Date(NOW).toISOString() };
+  state.daybreakCatalogDigest = policyDigest(policy);
+  return state;
+}
+
+test("a cross-family review offers Fable first and Daybreak as the refusal fallback", () => {
+  const policy = catalog({
+    extraProviders: {
+      claude_review: { carrierId: "claude-ce-review", executionSurface: "provider_subscription", account: "claude", locality: "external", retention: "provider_default", harness: "claude" },
+      daybreak: { carrierId: "codex-daybreak-blue", executionSurface: "codex", account: "local", locality: "external", retention: "provider_default", harness: "codex" },
+    },
+    extraModels: {
+      fable_review: { provider: "claude_review", carrierId: "claude-ce-review", requestedModel: "fable", efforts: ["high"], roles: ["review.cross_family"] },
+      daybreak_blue: { provider: "daybreak", carrierId: "codex-daybreak-blue", requestedModel: "gpt-daybreak-blue-latest", efforts: ["high"], roles: ["review.cross_family"] },
+    },
+    extraRoles: { "review.cross_family": { tiers: [["fable_review"], ["daybreak_blue"]] } },
+  });
+  const state = attestedCapability(policy, {
+    carrierId: "claude-ce-review",
+    adapterId: "claude-cli-via-task",
+    accountScope: "claude",
+    observedModel: "fable",
+  });
+  const seam = { id: "ce-code-review.execution", skill: "ce-code-review", artifact: { schema: "railyard/ce-code-review-findings/v1", digest: DIGEST_A } };
+  const resolved = handleRequest(request("resolve", {
+    callerKind: "compound-engineering",
+    role: "review.cross_family",
+    harness: "codex",
+    crossHarnessReason: "cross-family second opinion on codex-authored work",
+    adapterId: "claude-cli-via-task",
+    dispatchKind: "task_create",
+    ceSeam: seam,
+  }), { catalog: policy, state, now: NOW });
+
+  assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
+  assert.equal(resolved.response.decision.selected.modelAlias, "fable_review", "Fable is the cross-family reviewer");
+
+  // Now CONSTRUCT the fallback rather than asserting about it from the happy
+  // path: with no attested Claude capability, Fable drops out and Daybreak must
+  // actually be selected. Checking rejectedAlternatives on the success above
+  // would prove nothing — once tier 0 resolves, tier 1 is never evaluated, so
+  // the absence of a seam rejection there is vacuous.
+  const withoutClaude = handleRequest(request("resolve", {
+    callerKind: "compound-engineering",
+    role: "review.cross_family",
+    harness: "codex",
+    crossHarnessReason: "cross-family second opinion on codex-authored work",
+    ceSeam: seam,
+  }), { catalog: policy, state: daybreakReady(policy), now: NOW });
+
+  assert.equal(withoutClaude.response.reason, "resolved", JSON.stringify(withoutClaude.response));
+  assert.equal(
+    withoutClaude.response.decision.selected.modelAlias,
+    "daybreak_blue",
+    "with the Claude reviewer unavailable the seam must still admit the Daybreak fallback",
+  );
+});
