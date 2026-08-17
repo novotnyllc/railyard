@@ -47,8 +47,21 @@ as expensive.
 
 ### Step 2 — Assign each cell its meter
 
-One meter per billing relationship. Never total or rank across meters — the
-router already refuses to, and the refusal is correct.
+One meter per billing relationship. Never total or rank across meters.
+
+**The router does not enforce this for you.** `candidateSort()` checks that
+meters match only on the *exact rate* path; when it falls through to
+`relativeCostIndex` there is no meter test, so two indices normalized against
+different meters get compared directly. A cost-priority tier that spans meters
+— `implementation.cross-harness` with Luna (`codex-sub`) and GLM
+(`zai-credits`) is exactly this shape — therefore produces an ordering with no
+economic meaning: it is comparing "1% of the most expensive zai model" against
+"8% of the most expensive codex model" as though they were the same unit.
+
+The operating rule that follows: **do not put `softPriorities: ["cost"]` on a
+tier whose models span meters.** Within a tier, cost ranking is only meaningful
+among same-meter models; across meters, express the preference as tier order,
+which is a policy statement rather than a fake arithmetic comparison.
 
 ### Step 3 — Derive a within-meter price index
 
@@ -81,6 +94,24 @@ expires mid-quarter should not silently re-rank the fleet.
 
 Record the promotion in `promotionExpiresAt` so the expiry is mechanical.
 
+**Do not add the promotional amount as an exact rate.** `freshRate()` treats a
+rate entry as exact until `promotionExpiresAt`, and `candidateSort()` gives an
+exact rate precedence over `relativeCostIndex` — so entering the promotion
+re-ranks the fleet *by the promotion*, during exactly the window this section
+says to plan on the post-promotion index. Expiry then only makes the entry
+ineligible; it does not activate a planning rate, because there is no rate
+underneath it to fall back to.
+
+Encode it the way the resolver actually reads:
+
+- Leave the promotional amount out of `rates[]` entirely, and set
+  `relativeCostIndex` from the **post-promotion** price. Planning then reflects
+  the price you will actually pay, and nothing silently re-ranks at expiry.
+- If the live promotional price genuinely should drive routing for its window,
+  enter it as the exact rate *and* enter the post-promotion rate as the
+  replacement that takes effect at expiry — an expiring entry with no successor
+  is a cliff, not a schedule.
+
 ### Step 5 — Effort weighting requires measurement, not arithmetic
 
 This is the step most likely to be faked, so it is stated plainly:
@@ -94,8 +125,17 @@ So:
 
 - Rate entries for the same model at different efforts carry the **same
   amount**. That is correct, not an oversight.
-- The effort multiplier must come from observed outcomes — the resolver's
-  learning subsystem (`learningOutcomes`, `learningAggregates`).
+- The effort multiplier must come from observed outcomes — specifically from
+  the retained `learningOutcomes`, **grouped by route**.
+
+  Not from `learningAggregates`: `updateLearning()` accumulates measured usage
+  only into the route-independent `baseDemand` aggregate, while the per
+  model/effort `routeEffect` aggregates carry quality signals and no usage
+  totals at all. `baseDemand` pools every route for a work class, so it cannot
+  yield cost per completed task for a given model or effort no matter how much
+  data it holds. Either group the retained outcomes by route yourself, or add
+  route-level usage aggregation first — the aggregate table as it stands cannot
+  answer this question.
 - Until that has data, **do not rank efforts by cost.** Choose effort by
   capability need through the role vocabulary, and let cost decide only
   between models at equal capability.
@@ -109,7 +149,22 @@ Anyone assigning effort weights from a price list is inventing them.
 | `checkedAt + staleAfterSeconds` elapsed | Re-check the published rate; refresh or drop the entry. |
 | `promotionExpiresAt` reached | Planning index becomes the live index; verify the reverted rate. |
 | Carrier version changes | Rates are carrier-bound; re-verify before reuse. |
-| A model's resolved identity changes | `resolvedModelDigest` mismatch invalidates the rate automatically. |
+| A model's resolved identity changes | `resolvedModelDigest` mismatch invalidates the rate automatically — **except** where the identity moves underneath a stable selector; see below. |
+
+`resolvedModelDigest` only invalidates what it can observe. `freshRate()`
+hashes `candidate.model.requestedModel` whenever `observedModel` is unknown,
+and the Daybreak availability probe records `{available, checkedAt}` and no
+model identity at all. So when `gpt-daybreak-blue-latest` is repointed at a
+different underlying model, the selector string is unchanged, the digest is
+unchanged, and a Sol-derived Daybreak rate stays "valid" across the very
+identity change it was supposed to catch. The repository also treats this
+owner selector as distinct from the public alias and never substitutes the
+public alias at runtime, so nothing else closes the gap either.
+
+Until the probe records an observed model identity, a Daybreak rate must not be
+carried as an exact rate derived from Sol's published price. Leave Daybreak
+unranked, or re-verify it manually on a schedule and treat the digest as
+evidence of nothing.
 | `learningAggregates` reaches usable volume | Replace Step 3 arithmetic with measured cost per completed task. |
 
 Step 3 is a bootstrap. Measured outcomes supersede it; that is the intended
