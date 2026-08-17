@@ -344,7 +344,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     requestedModel: "gpt-5.6-sol",
     efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
     adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
-    roles: ["orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family", "implementation.hard", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit", "security.reverse-engineering", "security.firmware", "security.low-level", "security.cryptography", "security.memory"],
+    roles: ["orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family", "implementation.hard", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
   }),
   "codex-daybreak-blue": freeze({
     version: "v1",
@@ -353,7 +353,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     executionSurface: "codex",
     efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
     adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
-    roles: ["security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit", "security.reverse-engineering", "security.firmware", "security.low-level", "security.cryptography", "security.memory"],
+    roles: ["review", "review.code", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
   }),
   "codex-terra-runtime": freeze({
     version: "v1",
