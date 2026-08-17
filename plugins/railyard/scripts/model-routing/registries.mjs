@@ -95,7 +95,11 @@ export const DIGEST_RE = /^[a-f0-9]{64}$/;
 
 export const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max", "ultra"]);
 
-export const HARNESS_KINDS = new Set(["claude", "codex"]);
+// Oracle is its own harness, not a flavour of codex: the oracle-* carriers ship
+// here but had no harness value to be attributed to, so every oracle route was
+// rejected "harness_unattributed" the moment a request declared a harness.
+// Naming it also makes codex->oracle correctly demand a crossHarnessReason.
+export const HARNESS_KINDS = new Set(["claude", "codex", "oracle"]);
 
 export const SOFT_PRIORITIES = new Set(["cost", "latency", "quality", "reliability", "learnedEstimate"]);
 
@@ -197,7 +201,7 @@ export const RUNTIME_ATTESTOR = "railyard-runtime-attestor-v1";
 export const CE_SEAMS = freeze({
   "ce-plan.execution": freeze({ skill: "ce-plan", artifactSchema: "railyard/ce-plan-execution-input/v1", roles: ["research", "investigation", "implementation", "implementation.bounded_fix"], carriers: ["glm-5-2-scout", "glm-5-2-engineer", "codex-luna"] }),
   "ce-work.execution": freeze({ skill: "ce-work", artifactSchema: "railyard/ce-work-execution-input/v1", roles: ["implementation", "implementation.bounded_fix", "implementation.mechanical"], carriers: ["glm-5-2-engineer", "codex-luna"] }),
-  "ce-debug.execution": freeze({ skill: "ce-debug", artifactSchema: "railyard/ce-debug-diagnosis/v1", roles: ["investigation", "research"], carriers: ["glm-5-2-scout", "codex-luna"] }),
+  "ce-debug.execution": freeze({ skill: "ce-debug", artifactSchema: "railyard/ce-debug-diagnosis/v1", roles: ["investigation", "research"], carriers: ["codex-daybreak-blue", "glm-5-2-scout", "codex-luna"] }),
   "ce-code-review.execution": freeze({ skill: "ce-code-review", artifactSchema: "railyard/ce-code-review-findings/v1", roles: ["review.code", "review.cross_family"], carriers: ["claude-ce-review", "oracle-browser"] }),
   "ce-doc-review.execution": freeze({ skill: "ce-doc-review", artifactSchema: "railyard/ce-doc-review-findings/v1", roles: ["review.plan", "review.cross_family"], carriers: ["claude-ce-review", "oracle-browser"] }),
   "ce-pov.execution": freeze({ skill: "ce-pov", artifactSchema: "railyard/ce-pov-review/v1", roles: ["review.cross_family", "review.architecture"], carriers: ["claude-ce-review", "oracle-browser"] }),
@@ -334,7 +338,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     version: "v1",
     transport: "selector-native",
     requestedModel: "gpt-5.6-luna",
-    efforts: ["max"],
+    efforts: ["low", "medium", "high", "xhigh", "max"],
     adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
     roles: ["implementation", "implementation.fix", "implementation.mechanical", "implementation.medium", "implementation.long-running", "implementation.cross-harness"],
   }),
@@ -342,9 +346,9 @@ export const CARRIER_DESCRIPTORS = freeze({
     version: "v1",
     transport: "selector-native",
     requestedModel: "gpt-5.6-sol",
-    efforts: ["high", "max"],
+    efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
     adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
-    roles: ["orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family", "implementation.hard", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
+    roles: ["investigation", "research", "orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family", "review.deep", "review.architecture", "review.long_context", "review.adversarial", "implementation.hard", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
   }),
   "codex-daybreak-blue": freeze({
     version: "v1",
@@ -353,13 +357,18 @@ export const CARRIER_DESCRIPTORS = freeze({
     executionSurface: "codex",
     efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
     adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
-    roles: ["security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
+    // The review.deep family is Oracle's specialty, but Oracle is a browser
+    // carrier behind a callable attestation and a cross-harness opt-in.  Without
+    // an in-harness fallback those roles resolve to nothing whenever Oracle is
+    // not attested, so Daybreak carries them too - matching its standing
+    // preference for deep technical work.
+    roles: ["investigation", "research", "review", "review.code", "review.deep", "review.architecture", "review.long_context", "review.adversarial", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
   }),
   "codex-terra-runtime": freeze({
     version: "v1",
     transport: "selector-native",
     requestedModel: null,
-    efforts: ["max"],
+    efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
     adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
     roles: ["implementation", "implementation.fix", "implementation.mechanical", "implementation.medium", "implementation.long-running"],
     runtimeVerifiedOnly: true,
@@ -403,9 +412,18 @@ export const CARRIER_DESCRIPTORS = freeze({
     version: "v1",
     transport: "selector-native",
     requestedModel: null,
-    efforts: ["low", "medium", "high", "max"],
+    efforts: ["low", "medium", "high", "xhigh", "max"],
     adapters: ["claude-session-create"],
-    roles: ["implementation", "implementation.hard", "implementation.medium", "implementation.long-running", "implementation.mechanical"],
+    // Review roles deliberately do NOT belong here.  references/model-routing.md
+    // fixes the Claude review seam to the claimed `claude-ce-review` CE adapter,
+    // which binds a review to a compound-engineering artifact digest and returns
+    // bound findings.  Putting review on the plain session carrier would let the
+    // resolver pick `claude-session-create` with no ceSeam and no callable
+    // capability attestation - a bare agent session treated as an authorized
+    // review route, with no receipt enforcement behind it.  A Claude session
+    // that wants an in-family review goes through the CE adapter; the fact that
+    // this is less convenient is the point of the attestation, not a gap in it.
+    roles: ["implementation", "implementation.hard", "implementation.medium", "implementation.long-running", "implementation.mechanical", "implementation.bounded_fix"],
     modelFamily: "claude",
   }),
   "oracle-browser": freeze({

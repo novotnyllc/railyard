@@ -477,7 +477,11 @@ export function fixedRuntimeDecision(trustedRuntimeAttestor, request = {}, provi
   try { attestation = trustedRuntimeAttestor(Object.freeze({ contractVersion: CONTRACT_VERSION, runtime: "codex", hostScope, accountScope })); }
   catch { return null; }
   if (!isObject(attestation) || !onlyFields(attestation, new Set(["attestorId", "attestationDigest", "lunaAvailability", "terra", "hostScope", "accountScope"])) || attestation.attestorId !== RUNTIME_ATTESTOR || !validDigest(attestation.attestationDigest) || attestation.hostScope !== hostScope || attestation.accountScope !== accountScope || !["available", "unavailable", "unselectable"].includes(attestation.lunaAvailability)) return null;
-  if (attestation.terra !== undefined && (!onlyFields(attestation.terra, new Set(["verified", "model", "effort"])) || attestation.terra.verified !== true || !validModel(attestation.terra.model) || attestation.terra.effort !== "max")) return null;
+  // Terra ships the same effort range as Sol and Luna (low..ultra).  Pinning
+  // this to "max" rejected every legitimate attestation at any other effort,
+  // so a Terra route could only ever be admitted at max - which is not how the
+  // carrier is declared.  Gate on the carrier's own effort list instead.
+  if (attestation.terra !== undefined && (!onlyFields(attestation.terra, new Set(["verified", "model", "effort"])) || attestation.terra.verified !== true || !validModel(attestation.terra.model) || !CARRIER_DESCRIPTORS["codex-terra-runtime"].efforts.includes(attestation.terra.effort))) return null;
   return { ...attestation, provenance: "measured_fact" };
 }
 
