@@ -414,13 +414,16 @@ export const CARRIER_DESCRIPTORS = freeze({
     requestedModel: null,
     efforts: ["low", "medium", "high", "xhigh", "max"],
     adapters: ["claude-session-create"],
-    // Review roles belong here as well as on claude-ce-review.  The ce-review
-    // carrier is the *attested* seam: it binds a review to a compound-
-    // engineering artifact digest and rightly refuses anything else.  That
-    // seam is not a substitute for a plain in-family review, and without
-    // these a Claude session had no routable reviewer of its own family at
-    // all - every review role resolved cross-harness or not at all.
-    roles: ["implementation", "implementation.hard", "implementation.medium", "implementation.long-running", "implementation.mechanical", "implementation.bounded_fix", "review", "review.code", "review.plan", "review.secondary"],
+    // Review roles deliberately do NOT belong here.  references/model-routing.md
+    // fixes the Claude review seam to the claimed `claude-ce-review` CE adapter,
+    // which binds a review to a compound-engineering artifact digest and returns
+    // bound findings.  Putting review on the plain session carrier would let the
+    // resolver pick `claude-session-create` with no ceSeam and no callable
+    // capability attestation - a bare agent session treated as an authorized
+    // review route, with no receipt enforcement behind it.  A Claude session
+    // that wants an in-family review goes through the CE adapter; the fact that
+    // this is less convenient is the point of the attestation, not a gap in it.
+    roles: ["implementation", "implementation.hard", "implementation.medium", "implementation.long-running", "implementation.mechanical", "implementation.bounded_fix"],
     modelFamily: "claude",
   }),
   "oracle-browser": freeze({

@@ -370,12 +370,37 @@ Catalog fields may reference them; they cannot extend them.
 
 | Carrier | Transport and fixed facts | Availability truth |
 | --- | --- | --- |
-| `codex-luna` | selector-native, `gpt-5.6-luna`, Max | default policy |
-| `codex-sol` | selector-native, `gpt-5.6-sol`, Medium/High/Xhigh/Max | default policy |
-| `codex-daybreak-blue` | selector-native, `gpt-daybreak-blue-latest`, High/Max, defensive-security roles | fresh local Daybreak cache must be `available:true` |
-| `codex-terra-runtime` | selector-native, runtime-provided Terra at Max | requires runtime evidence; no static slug |
+| `codex-luna` | selector-native, `gpt-5.6-luna`, Low/Medium/High/Xhigh/Max | default policy |
+| `codex-sol` | selector-native, `gpt-5.6-sol`, Low/Medium/High/Xhigh/Max/Ultra | default policy |
+| `codex-daybreak-blue` | selector-native, `gpt-daybreak-blue-latest`, High/Max, defensive-security **and deep-technical** roles (see below) | fresh local Daybreak cache must be `available:true` |
+| `codex-terra-runtime` | selector-native, runtime-provided Terra at Low/Medium/High/Xhigh/Max/Ultra | requires runtime evidence; no static slug |
 | `glm-5-2-scout` | separate-task profile, `glm-5.2`, High | `transport_unsupported` until callable task-profile creation is host-attested |
 | `glm-5-2-engineer` | separate-task profile, `glm-5.2`, xhigh | same; not a native agent type or selector model |
+
+Carrier effort ranges mirror what the executor actually ships, read from the
+Codex model catalogue (`~/.codex/models_cache.json`), not a routing preference.
+Luna, Sol and Terra all advertise the full reasoning range; Luna's own default
+is Medium. Earlier revisions of this table pinned Luna and Terra to Max, which
+made a catalogue that asked for anything lower fail `effort_unsupported` for a
+model that supports it perfectly well. Pinning an operating point is a job for
+a role's tier in the catalogue, where it can be argued case by case — not for
+the carrier contract, which should describe the executor as it is.
+
+### Daybreak Blue role scope
+
+Daybreak Blue carries the `security.*` roles and, deliberately, `review`,
+`review.code`, `investigation`, `research` and the `review.deep` family. The
+widening is a routing-doctrine decision made by the operator on observed
+results: it is measurably better at deep technical work — firmware, low-level
+code, cryptography, reverse engineering — and at open-ended "why isn't this
+working" debugging, which is not a security topic but is the same skill. An
+auth change is security work and belongs here on those grounds alone.
+
+Two limits stay in force and are not implied away by the above. The local
+availability cache attests only that the model is reachable from this machine;
+it does not attest that a given task is authorized for a limited-access tier.
+And this tier's access terms are the operator's to honour — the router
+enforces reachability, never entitlement.
 | `claude-ce-review` | fixed CE Claude `-p` review adapter | unsupported until the compatible CE adapter is attested |
 | `oracle-browser` | `chatgpt_current_pro` on `chatgpt_standard` | unsupported until selected-route Oracle capability is attested |
 | `oracle-homebrew-lifecycle` | local-host Oracle install/upgrade lifecycle carrier | unsupported until its separate adapter capability is attested |
