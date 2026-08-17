@@ -32,6 +32,7 @@ import {
   validateCatalog,
   validateState,
 } from "./model-routing.mjs";
+import { fixedRuntimeDecision } from "./model-routing/select.mjs";
 import { validBinding } from "./model-routing/state-schema.mjs";
 import { build as buildOracle, dispatch as dispatchOracle, oracleSessionSlug } from "../skills/oracle/scripts/oracle-route.mjs";
 
@@ -2633,4 +2634,33 @@ test("a mutating command that refuses leaves the caller's state exactly as it fo
   assert.equal(settled.changed, true);
   assert.equal(state.reservations[admission.reservation.reservationId].phase, "settled");
   assert.equal(Object.keys(state.spendAggregates).length, 2);
+});
+
+test("a Terra runtime attestation is accepted at every effort the carrier declares, and only those", () => {
+  const attestation = (effort) => () => ({
+    attestorId: "railyard-runtime-attestor-v1",
+    attestationDigest: DIGEST_A,
+    lunaAvailability: "unavailable",
+    hostScope: "local",
+    accountScope: "codex-sub",
+    terra: { verified: true, model: "gpt-5.6-terra", effort },
+  });
+  const request = { hostScope: "local" };
+  const provider = { account: "codex-sub" };
+
+  // Positive control across the whole declared range - this previously accepted
+  // "max" alone, so every other effort silently produced a null decision.
+  const declared = CARRIER_DESCRIPTORS["codex-terra-runtime"].efforts;
+  assert.ok(declared.length > 1, `terra should declare a range, got ${JSON.stringify(declared)}`);
+  for (const effort of declared) {
+    const decision = fixedRuntimeDecision(attestation(effort), request, provider);
+    assert.ok(decision, `terra attestation at ${effort} should be accepted`);
+    assert.equal(decision.terra.effort, effort);
+    assert.equal(decision.provenance, "measured_fact");
+  }
+
+  // Negative: an effort the carrier does not declare is still refused outright.
+  for (const effort of ["bogus", "", "MAX"]) {
+    assert.equal(fixedRuntimeDecision(attestation(effort), request, provider), null, `terra attestation at ${JSON.stringify(effort)} must be refused`);
+  }
 });

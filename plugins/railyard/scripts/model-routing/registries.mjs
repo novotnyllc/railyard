@@ -95,7 +95,11 @@ export const DIGEST_RE = /^[a-f0-9]{64}$/;
 
 export const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max", "ultra"]);
 
-export const HARNESS_KINDS = new Set(["claude", "codex"]);
+// Oracle is its own harness, not a flavour of codex: the oracle-* carriers ship
+// here but had no harness value to be attributed to, so every oracle route was
+// rejected "harness_unattributed" the moment a request declared a harness.
+// Naming it also makes codex->oracle correctly demand a crossHarnessReason.
+export const HARNESS_KINDS = new Set(["claude", "codex", "oracle"]);
 
 export const SOFT_PRIORITIES = new Set(["cost", "latency", "quality", "reliability", "learnedEstimate"]);
 
@@ -344,7 +348,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     requestedModel: "gpt-5.6-sol",
     efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
     adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
-    roles: ["investigation", "research", "orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family", "implementation.hard", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
+    roles: ["investigation", "research", "orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family", "review.deep", "review.architecture", "review.long_context", "review.adversarial", "implementation.hard", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
   }),
   "codex-daybreak-blue": freeze({
     version: "v1",
@@ -353,7 +357,12 @@ export const CARRIER_DESCRIPTORS = freeze({
     executionSurface: "codex",
     efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
     adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
-    roles: ["investigation", "research", "review", "review.code", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
+    // The review.deep family is Oracle's specialty, but Oracle is a browser
+    // carrier behind a callable attestation and a cross-harness opt-in.  Without
+    // an in-harness fallback those roles resolve to nothing whenever Oracle is
+    // not attested, so Daybreak carries them too - matching its standing
+    // preference for deep technical work.
+    roles: ["investigation", "research", "review", "review.code", "review.deep", "review.architecture", "review.long_context", "review.adversarial", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
   }),
   "codex-terra-runtime": freeze({
     version: "v1",
@@ -405,7 +414,13 @@ export const CARRIER_DESCRIPTORS = freeze({
     requestedModel: null,
     efforts: ["low", "medium", "high", "xhigh", "max"],
     adapters: ["claude-session-create"],
-    roles: ["implementation", "implementation.hard", "implementation.medium", "implementation.long-running", "implementation.mechanical"],
+    // Review roles belong here as well as on claude-ce-review.  The ce-review
+    // carrier is the *attested* seam: it binds a review to a compound-
+    // engineering artifact digest and rightly refuses anything else.  That
+    // seam is not a substitute for a plain in-family review, and without
+    // these a Claude session had no routable reviewer of its own family at
+    // all - every review role resolved cross-harness or not at all.
+    roles: ["implementation", "implementation.hard", "implementation.medium", "implementation.long-running", "implementation.mechanical", "implementation.bounded_fix", "review", "review.code", "review.plan", "review.secondary"],
     modelFamily: "claude",
   }),
   "oracle-browser": freeze({
