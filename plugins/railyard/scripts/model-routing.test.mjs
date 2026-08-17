@@ -2679,17 +2679,15 @@ function daybreakReady(policy) {
   return state;
 }
 
-test("a cross-family review offers Fable first and Daybreak as the refusal fallback", () => {
+test("a cross-family review routes to the Claude reviewer through the attested seam", () => {
   const policy = catalog({
     extraProviders: {
       claude_review: { carrierId: "claude-ce-review", executionSurface: "provider_subscription", account: "claude", locality: "external", retention: "provider_default", harness: "claude" },
-      daybreak: { carrierId: "codex-daybreak-blue", executionSurface: "codex", account: "local", locality: "external", retention: "provider_default", harness: "codex" },
     },
     extraModels: {
       fable_review: { provider: "claude_review", carrierId: "claude-ce-review", requestedModel: "fable", efforts: ["high"], roles: ["review.cross_family"] },
-      daybreak_blue: { provider: "daybreak", carrierId: "codex-daybreak-blue", requestedModel: "gpt-daybreak-blue-latest", efforts: ["high"], roles: ["review.cross_family"] },
     },
-    extraRoles: { "review.cross_family": { tiers: [["fable_review"], ["daybreak_blue"]] } },
+    extraRoles: { "review.cross_family": { tiers: [["fable_review"]] } },
   });
   const state = attestedCapability(policy, {
     carrierId: "claude-ce-review",
@@ -2711,23 +2709,118 @@ test("a cross-family review offers Fable first and Daybreak as the refusal fallb
   assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
   assert.equal(resolved.response.decision.selected.modelAlias, "fable_review", "Fable is the cross-family reviewer");
 
-  // Now CONSTRUCT the fallback rather than asserting about it from the happy
-  // path: with no attested Claude capability, Fable drops out and Daybreak must
-  // actually be selected. Checking rejectedAlternatives on the success above
-  // would prove nothing — once tier 0 resolves, tier 1 is never evaluated, so
-  // the absence of a seam rejection there is vacuous.
-  const withoutClaude = handleRequest(request("resolve", {
+  // Deliberately NO carrier fallback on refusal: provider-task-routing.md
+  // rejects a provider refusal-fallback outright and allows exactly one retry
+  // on the SAME routed model. Tier order could not express it anyway - the
+  // schemas carry no refusal signal, so a lower tier would fire on mere
+  // unavailability, which is not a refusal.
+});
+
+// The refusal fallback has exactly one legitimate trigger. These three cases
+// pin it, and the middle one is the whole point: a top carrier that is merely
+// UNAVAILABLE must not silently produce a same-family answer to a question that
+// asked for a cross-family one.
+test("a cross-family review substitutes only on an actual refusal, never on unavailability", () => {
+  const policy = catalog({
+    extraProviders: {
+      claude_review: { carrierId: "claude-ce-review", executionSurface: "provider_subscription", account: "claude", locality: "external", retention: "provider_default", harness: "claude" },
+      daybreak: { carrierId: "codex-daybreak-blue", executionSurface: "codex", account: "local", locality: "external", retention: "provider_default", harness: "codex" },
+    },
+    extraModels: {
+      fable_review: { provider: "claude_review", carrierId: "claude-ce-review", requestedModel: "fable", efforts: ["high"], roles: ["review.cross_family"] },
+      daybreak_blue: { provider: "daybreak", carrierId: "codex-daybreak-blue", requestedModel: "gpt-daybreak-blue-latest", efforts: ["high"], roles: ["review.cross_family"] },
+    },
+    extraRoles: {
+      "review.cross_family": { tiers: [{ models: ["fable_review"] }, { models: ["daybreak_blue"], afterRefusalOnly: true }] },
+    },
+  });
+  const seam = { id: "ce-code-review.execution", skill: "ce-code-review", artifact: { schema: "railyard/ce-code-review-findings/v1", digest: DIGEST_A } };
+  const base = {
     callerKind: "compound-engineering",
     role: "review.cross_family",
     harness: "codex",
     crossHarnessReason: "cross-family second opinion on codex-authored work",
     ceSeam: seam,
-  }), { catalog: policy, state: daybreakReady(policy), now: NOW });
+  };
+  const claudeReady = attestedCapability(policy, {
+    carrierId: "claude-ce-review",
+    adapterId: "claude-cli-via-task",
+    accountScope: "claude",
+    observedModel: "fable",
+  });
 
-  assert.equal(withoutClaude.response.reason, "resolved", JSON.stringify(withoutClaude.response));
+  // 1. No refusal: the Claude reviewer answers, and nothing is a substitute.
+  const normal = handleRequest(request("resolve", { ...base, adapterId: "claude-cli-via-task", dispatchKind: "task_create" }), { catalog: policy, state: claudeReady, now: NOW });
+  assert.equal(normal.response.reason, "resolved", JSON.stringify(normal.response));
+  assert.equal(normal.response.decision.selected.modelAlias, "fable_review");
+  assert.equal(normal.response.decision.fallback?.reason ?? "not_applicable", "not_applicable");
+
+  // 2. THE ONE THAT MATTERS. Claude simply unavailable, no refusal recorded:
+  //    the refusal-gated tier stays shut and the resolve FAILS rather than
+  //    quietly returning a same-family review.
+  const unavailable = handleRequest(request("resolve", base), { catalog: policy, state: daybreakReady(policy), now: NOW });
+  assert.equal(unavailable.response.reason, "no_eligible_route", JSON.stringify(unavailable.response));
   assert.equal(
-    withoutClaude.response.decision.selected.modelAlias,
-    "daybreak_blue",
-    "with the Claude reviewer unavailable the seam must still admit the Daybreak fallback",
+    unavailable.response.rejectedAlternatives.find((item) => item.modelAlias === "daybreak_blue")?.reason,
+    "refusal_required",
+    "an unavailable top carrier must NOT open the refusal-gated tier",
+  );
+
+  // 3. An actual refusal: the substitute is reachable, and the decision says
+  //    plainly that it IS a substitute.
+  const state = daybreakReady(policy);
+  const afterRefusal = handleRequest(request("resolve", { ...base, refusedAliases: ["fable_review"] }), { catalog: policy, state, now: NOW });
+  assert.equal(afterRefusal.response.reason, "resolved", JSON.stringify(afterRefusal.response));
+  assert.equal(afterRefusal.response.decision.selected.modelAlias, "daybreak_blue");
+  assert.equal(afterRefusal.response.decision.fallback.reason, "review_refusal_substitute");
+  assert.equal(
+    afterRefusal.response.decision.rejectedAlternatives.find((item) => item.modelAlias === "fable_review")?.reason,
+    "model_refused",
+    "the refused model must be reported as refused, not as unavailable",
+  );
+});
+
+// relativeCostIndex is normalized WITHIN a meter, so it ranks honestly among
+// same-meter models and means nothing across meters. Both halves matter: the
+// first is why cost priority is worth configuring at all, the second is why it
+// must not silently decide a cross-meter contest with a fabricated comparison.
+test("cost ranks within a meter and is not a discriminator across meters", () => {
+  const policy = catalog({
+    extraProviders: {
+      codex_b: { carrierId: "codex-sol", executionSurface: "codex", account: "local", locality: "external", retention: "provider_default" },
+      // Same carrier as `luna` (so it is genuinely eligible - no attestation
+      // gate to reject it for an unrelated reason) but a DIFFERENT meter.
+      codex_other: { carrierId: "codex-luna", executionSurface: "codex", account: "other-meter", locality: "external", retention: "provider_default" },
+    },
+    extraModels: {
+      // Same meter as `luna` (account "local"), and far more expensive.
+      pricey: { provider: "codex_b", carrierId: "codex-sol", requestedModel: "gpt-5.6-sol", efforts: ["max"], roles: ["implementation"], relativeCostIndex: 900 },
+      cheap_other: { provider: "codex_other", carrierId: "codex-luna", requestedModel: "gpt-5.6-luna", efforts: ["max"], roles: ["implementation.mechanical"], relativeCostIndex: 1 },
+    },
+    extraRoles: {
+      // Deliberately lists the expensive model FIRST, so a pass is cost
+      // actually winning rather than list position happening to agree.
+      implementation: { tiers: [{ models: ["pricey", "luna"], softPriorities: ["cost"] }] },
+      // cheap_other sits on a different meter and is listed second with a far
+      // LOWER index (1 vs 50). If the index were compared across meters it
+      // would win - that is exactly the bug this pins.
+      "implementation.mechanical": { tiers: [{ models: ["luna", "cheap_other"], softPriorities: ["cost"] }] },
+    },
+  });
+
+  const sameMeter = handleRequest(request("resolve", { role: "implementation" }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(sameMeter.response.reason, "resolved", JSON.stringify(sameMeter.response));
+  assert.equal(
+    sameMeter.response.decision.selected.modelAlias,
+    "luna",
+    "within one meter, the cheaper index must win even when listed second",
+  );
+
+  const crossMeter = handleRequest(request("resolve", { role: "implementation.mechanical" }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(crossMeter.response.reason, "resolved", JSON.stringify(crossMeter.response));
+  assert.equal(
+    crossMeter.response.decision.selected.modelAlias,
+    "luna",
+    "across meters cost decides nothing: list position governs, so the first entry wins despite the far lower index",
   );
 });

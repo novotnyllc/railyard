@@ -230,8 +230,24 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
     const tier = roleRule.tiers[tierIndex];
     const aliases = Array.isArray(tier) ? tier : tier.models;
     const priorities = tierIndex === 0 && isObject(tier) && tier.softPriorities !== undefined ? tier.softPriorities : [];
+    // A refusal-gated tier exists for exactly one situation: the caller came
+    // back because a model DECLINED the work. It must never be reached because
+    // a higher tier was merely unavailable - that would silently answer a
+    // different question with a different carrier.
+    const refused = new Set(request.refusedAliases ?? []);
+    const refusalGated = isObject(tier) && tier.afterRefusalOnly === true;
     for (let position = 0; position < aliases.length; position += 1) {
       const alias = aliases[position];
+      // A model that already refused this work cannot be handed it again.
+      if (refused.has(alias)) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "model_refused" });
+        continue;
+      }
+      // ...and a refusal-gated tier stays closed until something actually was.
+      if (refusalGated && refused.size === 0) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "refusal_required" });
+        continue;
+      }
       const model = catalog.models[alias];
       const provider = catalog.providers[model.provider];
       const carrier = CARRIER_DESCRIPTORS[model.carrierId];
@@ -395,12 +411,19 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         continue;
       }
       const implementationRole = request.role === "implementation" || request.role?.startsWith("implementation.");
-      const substitute = implementationRole
-        && model.carrierId === "codex-terra-runtime"
-        && runtime
-        && ["unavailable", "unselectable"].includes(runtime.lunaAvailability)
-        ? "implementation_model_substitute"
-        : null;
+      // A refusal-gated tier only ever yields a SUBSTITUTE. Recording it is not
+      // bookkeeping: the caller asked a specific model a specific question, and
+      // an answer from a different carrier is not that model's review. The
+      // decision has to say so, or a substituted opinion gets filed as the one
+      // that was requested.
+      const substitute = refusalGated
+        ? "review_refusal_substitute"
+        : implementationRole
+          && model.carrierId === "codex-terra-runtime"
+          && runtime
+          && ["unavailable", "unselectable"].includes(runtime.lunaAvailability)
+          ? "implementation_model_substitute"
+          : null;
       output.push({
         ok: true,
         alias,
@@ -445,8 +468,24 @@ export function candidateSort(left, right) {
       continue;
     }
     const direction = priority === "quality" || priority === "reliability" ? -1 : 1;
-    if (priority === "cost" && left.exactRate && right.exactRate && left.exactRate.meter === right.exactRate.meter && left.exactRate.units !== right.exactRate.units) {
-      return left.exactRate.units < right.exactRate.units ? -1 : 1;
+    if (priority === "cost") {
+      if (left.exactRate && right.exactRate && left.exactRate.meter === right.exactRate.meter && left.exactRate.units !== right.exactRate.units) {
+        return left.exactRate.units < right.exactRate.units ? -1 : 1;
+      }
+      // relativeCostIndex is normalized WITHIN a meter - each meter's index is a
+      // percentage of the most expensive routable model on THAT meter. Comparing
+      // two of them across meters is arithmetic on incommensurable units: it
+      // reads "1% of the priciest zai model" as cheaper than "8% of the priciest
+      // codex model" when the two percentages describe different denominators
+      // and different billing relationships entirely.
+      //
+      // The exact-rate branch above already guards its own meter. This guards
+      // the index. Cross-meter pairs simply are not cost-comparable, so cost
+      // stops being a discriminator for them and the ordering falls through to
+      // the remaining priorities and then tier position - a deliberate policy
+      // statement rather than a fabricated number. Within a meter, cost ranks
+      // exactly as configured.
+      if (left.provider?.account !== right.provider?.account) continue;
     }
     const key = priority === "cost" ? "relativeCostIndex" : priority;
     const a = left.model[key];
