@@ -21,7 +21,6 @@ import {
 } from "./dispatch.mjs";
 import {
   daybreakAvailabilityFresh,
-  isSecurityRole,
   refreshDaybreakAvailability,
 } from "./daybreak-availability.mjs";
 import {
@@ -261,7 +260,12 @@ function daybreakRefreshRequired(response) {
  */
 export async function runCliAsync(input, options = {}) {
   const command = normalizeCommand(input || {});
-  if (command !== "resolve" || !isSecurityRole(input?.role)) return runCli(input, options);
+  // Any role the catalog routes to Daybreak may refresh its availability, not
+  // just a security.* one: daybreakRefreshRequired below already fires only
+  // when this resolve wanted Daybreak and was rejected for a stale cache, so
+  // gating on the role NAME as well left every other Daybreak-eligible role
+  // unable to warm its own cache - silently falling back for 24h at a time.
+  if (command !== "resolve") return runCli(input, options);
   if ((options.platform || process.platform) === "win32") return runCli(input, options);
 
   const now = options.now ?? Date.now();
