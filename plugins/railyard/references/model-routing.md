@@ -278,7 +278,14 @@ catalog is deliberately ordinary schema data: `implementation.hard` selects
 Fable in a Claude harness or the max-effort Sol alias in Codex, `implementation.medium` and
 `implementation.long-running` select Sonnet, attested Terra, or healthy Luna,
 `implementation.mechanical` selects Haiku or Luna, and plain
-`implementation` selects Luna. The `implementation.cross-harness`
+`implementation` selects Luna. Terra's tier position ahead of Luna is inert
+under the built-in fixed runtime attestor and matters only for a caller that
+embeds its own trusted runtime attestor: the `codex-terra-runtime` carrier's
+`runtimeVerifiedOnly` gate accepts Terra only when that attestation reports
+Luna `unavailable`/`unselectable`, and the same attestation excludes Luna as a
+candidate whenever it does. Terra and Luna are therefore mutually exclusive by
+construction, never a live preference between two eligible candidates, so
+reordering the tier would change nothing observable. The `implementation.cross-harness`
 role orders Luna and GLM by the existing cost tiebreak when the caller has
 explicitly named a cross-harness reason. GLM is still Codex-family even though
 its execution surface is the Z.ai subscription; its candidate is eligible only
@@ -364,7 +371,7 @@ Catalog fields may reference them; they cannot extend them.
 | Carrier | Transport and fixed facts | Availability truth |
 | --- | --- | --- |
 | `codex-luna` | selector-native, `gpt-5.6-luna`, Max | default policy |
-| `codex-sol` | selector-native, `gpt-5.6-sol`, High/Max | default policy |
+| `codex-sol` | selector-native, `gpt-5.6-sol`, Medium/High/Xhigh/Max | default policy |
 | `codex-daybreak-blue` | selector-native, `gpt-daybreak-blue-latest`, High/Max, defensive-security roles | fresh local Daybreak cache must be `available:true` |
 | `codex-terra-runtime` | selector-native, runtime-provided Terra at Max | requires runtime evidence; no static slug |
 | `glm-5-2-scout` | separate-task profile, `glm-5.2`, High | `transport_unsupported` until callable task-profile creation is host-attested |
