@@ -196,6 +196,18 @@ evidence, and escalates without waiting for a terminal result. A provider
 fallback may consume allowance and must be reported, but it is not review
 evidence for the routed model.
 
+A second refusal of the rephrased prompt is the ONLY case in which a different
+carrier may run the review, and only where the catalog marks that tier
+`afterRefusalOnly`. The caller re-resolves with the refused alias in
+`refusedAliases`; the router then reports the refused model as `model_refused`
+and returns the substitute with `fallback.reason: "review_refusal_substitute"`.
+That reason is load-bearing and must be carried into the artifact: a review
+produced by a substitute carrier is evidence about the code, never review
+evidence for the routed model, and must not be filed as the opinion that was
+requested. Mere unavailability of the routed model never opens that tier - the
+router refuses it with `refusal_required` - because an unavailable reviewer is a
+failed review, not a refused one.
+
 After a refusal, the caller may make exactly one fresh attempt on the same
 routed model. First inspect the refusal category and the original prompt for
 ambiguous wording, then write a semantically equivalent rephrase that makes the

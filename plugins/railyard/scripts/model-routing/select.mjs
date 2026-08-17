@@ -230,8 +230,24 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
     const tier = roleRule.tiers[tierIndex];
     const aliases = Array.isArray(tier) ? tier : tier.models;
     const priorities = tierIndex === 0 && isObject(tier) && tier.softPriorities !== undefined ? tier.softPriorities : [];
+    // A refusal-gated tier exists for exactly one situation: the caller came
+    // back because a model DECLINED the work. It must never be reached because
+    // a higher tier was merely unavailable - that would silently answer a
+    // different question with a different carrier.
+    const refused = new Set(request.refusedAliases ?? []);
+    const refusalGated = isObject(tier) && tier.afterRefusalOnly === true;
     for (let position = 0; position < aliases.length; position += 1) {
       const alias = aliases[position];
+      // A model that already refused this work cannot be handed it again.
+      if (refused.has(alias)) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "model_refused" });
+        continue;
+      }
+      // ...and a refusal-gated tier stays closed until something actually was.
+      if (refusalGated && refused.size === 0) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "refusal_required" });
+        continue;
+      }
       const model = catalog.models[alias];
       const provider = catalog.providers[model.provider];
       const carrier = CARRIER_DESCRIPTORS[model.carrierId];
@@ -395,12 +411,19 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         continue;
       }
       const implementationRole = request.role === "implementation" || request.role?.startsWith("implementation.");
-      const substitute = implementationRole
-        && model.carrierId === "codex-terra-runtime"
-        && runtime
-        && ["unavailable", "unselectable"].includes(runtime.lunaAvailability)
-        ? "implementation_model_substitute"
-        : null;
+      // A refusal-gated tier only ever yields a SUBSTITUTE. Recording it is not
+      // bookkeeping: the caller asked a specific model a specific question, and
+      // an answer from a different carrier is not that model's review. The
+      // decision has to say so, or a substituted opinion gets filed as the one
+      // that was requested.
+      const substitute = refusalGated
+        ? "review_refusal_substitute"
+        : implementationRole
+          && model.carrierId === "codex-terra-runtime"
+          && runtime
+          && ["unavailable", "unselectable"].includes(runtime.lunaAvailability)
+          ? "implementation_model_substitute"
+          : null;
       output.push({
         ok: true,
         alias,
