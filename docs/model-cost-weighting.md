@@ -117,7 +117,8 @@ end state, not a fallback.
 
 ## Current table
 
-Rates as published 2026-08-05, re-read 2026-08-16. Re-check before relying
+Rates as published 2026-08-05, re-read 2026-08-16 against OpenAI's pricing
+documentation. Re-check before relying
 on them.
 
 ### Meter: `claude-sub` — reference model `fable`
@@ -136,9 +137,22 @@ exactly, which is the intended check on the method.
 | Model | Input | Output | Work unit | Index | Planning index |
 | --- | --- | --- | --- | --- | --- |
 | `sol` | 5.00 | 30.00 | 39.50 | **100** | 100 |
+| `daybreak_blue` | 5.00 | 30.00 | 39.50 | **100** | 100 |
 | `terra` | 2.00 | 12.00 | 15.80 | **40** | **80** (listed at 50% off) |
 | `luna` | 0.20 | 1.20 | 1.58 | **4** | **8** (listed at 50% off) |
-| `daybreak_blue` | — | — | — | **unranked** | no published rate |
+
+`daybreak-blue-latest` is not separately priced: OpenAI's pricing
+documentation states the alias **currently points to `gpt-5.6-sol`**, so it
+carries Sol's rate exactly. Two consequences worth holding onto:
+
+- Routing a security role to Daybreak rather than Sol buys **access and
+  approval posture, not a cheaper or dearer unit** — the cost arm of that
+  decision is neutral, and the routing rationale is entitlement, not price.
+- "Currently points to" is an alias that can be repointed. The rate is
+  correct only while that holds, which is exactly what `resolvedModelDigest`
+  on a rate entry exists to catch: if the alias moves to a different model,
+  the digest stops matching and the rate is dropped rather than silently
+  misapplied.
 
 ### Meter: `zai-credits`
 
@@ -160,9 +174,11 @@ to keep `glm` from being compared against a USD-metered model.
 3. **`sonnet` needs re-checking before 2026-08-31.** Its index is built on an
    introductory rate whose reverted value is not published.
 
-4. **`daybreak_blue` cannot be cost-ranked**, which is harmless: it occupies
-   tier 0 alone for the seven `security.*` roles, so cost never decides. Do
-   not invent a rate to make the table look complete.
+4. **`daybreak_blue` costs exactly what Sol costs**, because the alias
+   currently resolves to `gpt-5.6-sol`. So preferring Daybreak for the seven
+   `security.*` roles is an access and approval decision with no price
+   consequence either way — worth knowing before anyone tries to justify or
+   attack that routing on cost grounds.
 
 5. **Most indices are inert.** Only `softPriorities: ["cost"]` tiers read
    them. Populating `rates[]` and opting the right tiers in is what makes
