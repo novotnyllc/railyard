@@ -184,7 +184,7 @@ export const ACTION_RECEIPT_REASONS = new Set(["budget_neutral_message", "active
 
 export const ACTION_INHERITANCE_REASONS = new Set(["not_applicable", "intentional_same_class_inheritance"]);
 
-export const ACTION_FALLBACK_REASONS = new Set(["not_applicable", "implementation_model_substitute", "higher_ranked_candidate_cannot_fit_hard_constraint"]);
+export const ACTION_FALLBACK_REASONS = new Set(["not_applicable", "implementation_model_substitute", "higher_ranked_candidate_cannot_fit_hard_constraint", "review_refusal_substitute"]);
 
 export const FIXED_LOCAL_PROBE_ATTESTOR = "railyard-fixed-local-probe-v1";
 
@@ -202,7 +202,11 @@ export const CE_SEAMS = freeze({
   "ce-plan.execution": freeze({ skill: "ce-plan", artifactSchema: "railyard/ce-plan-execution-input/v1", roles: ["research", "investigation", "implementation", "implementation.bounded_fix"], carriers: ["glm-5-2-scout", "glm-5-2-engineer", "codex-luna"] }),
   "ce-work.execution": freeze({ skill: "ce-work", artifactSchema: "railyard/ce-work-execution-input/v1", roles: ["implementation", "implementation.bounded_fix", "implementation.mechanical"], carriers: ["glm-5-2-engineer", "codex-luna"] }),
   "ce-debug.execution": freeze({ skill: "ce-debug", artifactSchema: "railyard/ce-debug-diagnosis/v1", roles: ["investigation", "research"], carriers: ["codex-daybreak-blue", "glm-5-2-scout", "codex-luna"] }),
-  "ce-code-review.execution": freeze({ skill: "ce-code-review", artifactSchema: "railyard/ce-code-review-findings/v1", roles: ["review.code", "review.cross_family"], carriers: ["claude-ce-review", "oracle-browser"] }),
+  // codex-daybreak-blue is admitted ONLY so a refusal-triggered substitute can
+  // be reached; it is not a cross-family reviewer. The catalog gates it behind
+  // `afterRefusalOnly`, and the decision records `review_refusal_substitute`, so
+  // a substituted review is never presented as the routed model's own.
+  "ce-code-review.execution": freeze({ skill: "ce-code-review", artifactSchema: "railyard/ce-code-review-findings/v1", roles: ["review.code", "review.cross_family"], carriers: ["claude-ce-review", "oracle-browser", "codex-daybreak-blue"] }),
   "ce-doc-review.execution": freeze({ skill: "ce-doc-review", artifactSchema: "railyard/ce-doc-review-findings/v1", roles: ["review.plan", "review.cross_family"], carriers: ["claude-ce-review", "oracle-browser"] }),
   "ce-pov.execution": freeze({ skill: "ce-pov", artifactSchema: "railyard/ce-pov-review/v1", roles: ["review.cross_family", "review.architecture"], carriers: ["claude-ce-review", "oracle-browser"] }),
   "ce-pr-review.execution": freeze({ skill: "ce-babysit-pr", artifactSchema: "railyard/ce-pr-review-findings/v1", roles: ["review.code", "review.cross_family"], carriers: ["claude-ce-review", "oracle-browser"] }),
@@ -362,7 +366,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     // an in-harness fallback those roles resolve to nothing whenever Oracle is
     // not attested, so Daybreak carries them too - matching its standing
     // preference for deep technical work.
-    roles: ["investigation", "research", "review", "review.code", "review.deep", "review.architecture", "review.long_context", "review.adversarial", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
+    roles: ["investigation", "research", "review", "review.code", "review.cross_family", "review.deep", "review.architecture", "review.long_context", "review.adversarial", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
   }),
   "codex-terra-runtime": freeze({
     version: "v1",

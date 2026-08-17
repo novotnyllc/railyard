@@ -235,7 +235,10 @@ export function validateCatalog(catalog) {
     if (!validRole(role) || !onlyFields(rule, new Set(["tiers"])) || !Array.isArray(rule.tiers) || rule.tiers.length === 0) return error("invalid_role", { role });
     for (const [tierIndex, tier] of rule.tiers.entries()) {
       const aliases = Array.isArray(tier) ? tier : tier?.models;
-      if (isObject(tier) && !onlyFields(tier, new Set(["models", "softPriorities"]))) return error("invalid_role", { role });
+      if (isObject(tier) && !onlyFields(tier, new Set(["models", "softPriorities", "afterRefusalOnly"]))) return error("invalid_role", { role });
+      // A refusal-gated tier is meaningless at tier 0 (nothing has been refused
+      // yet) and must be an explicit boolean, never a truthy accident.
+      if (isObject(tier) && tier.afterRefusalOnly !== undefined && (typeof tier.afterRefusalOnly !== "boolean" || tierIndex === 0)) return error("invalid_role", { role });
       if (!Array.isArray(aliases) || aliases.length === 0 || aliases.some((alias) => !validId(alias) || !Object.hasOwn(catalog.models, alias))) return error("invalid_role", { role });
       if (isObject(tier) && tier.softPriorities !== undefined && (!validSoftPriorities(tier.softPriorities) || tierIndex !== 0)) return error("invalid_role", { role });
     }

@@ -93,7 +93,7 @@ export function validateRequest(input, command) {
   if (bounded) return error(bounded);
   const commands = new Set(["validate", "resolve", "admit", "claim-dispatch", "reconcile", "status", "inspect-claim", "refresh", "mint-task-authority", "issue-lease", "accept-lease", "claim-slot", "release-lease", "seal-epoch", "build-work-contract", "learning.inspect", "learning.clear", "learning.disable", "learning.enable"]);
   if (!commands.has(command)) return error("unknown_command");
-  const allowed = new Set(["contractVersion", "command", "operation", "callerKind", "role", "adapterId", "dispatchKind", "budgetEffect", "effort", "workShape", "workClassDigest", "priorWorkClassDigest", "contextFork", "r52", "requestId", "actionId", "privacy", "runtime", "risk", "contextClass", "complex", "explicitModelRequirement", "transport", "scope", "scopes", "forecast", "activeReservationId", "bridgeLifecycleId", "taskAuthorityId", "objectiveEpoch", "objectiveDigest", "instructionDigest", "senderOwner", "hostScope", "accountScope", "dispatchIdentity", "destinationScope", "destinationClass", "currentTurn", "postLifecycleRequirementId", "frozenInputDigest", "reservationId", "claimId", "receipt", "remoteProbe", "capability", "ceSeam", "priorRoute", "authority", "lease", "epochId", "workContract", "harness", "crossHarnessReason"]);
+  const allowed = new Set(["contractVersion", "command", "operation", "callerKind", "role", "adapterId", "dispatchKind", "budgetEffect", "effort", "workShape", "workClassDigest", "priorWorkClassDigest", "contextFork", "r52", "requestId", "actionId", "privacy", "runtime", "risk", "contextClass", "complex", "explicitModelRequirement", "transport", "scope", "scopes", "forecast", "activeReservationId", "bridgeLifecycleId", "taskAuthorityId", "objectiveEpoch", "objectiveDigest", "instructionDigest", "senderOwner", "hostScope", "accountScope", "dispatchIdentity", "destinationScope", "destinationClass", "currentTurn", "postLifecycleRequirementId", "frozenInputDigest", "reservationId", "claimId", "receipt", "remoteProbe", "capability", "ceSeam", "priorRoute", "authority", "lease", "epochId", "workContract", "harness", "crossHarnessReason", "refusedAliases"]);
   if (!onlyFields(input, allowed)) return error("unknown_request_field");
   if (input.role !== undefined && !validRole(input.role)) return error("invalid_role");
   if (input.callerKind !== undefined && !CALLER_KINDS.has(input.callerKind)) return error("invalid_caller_kind");
@@ -101,6 +101,11 @@ export function validateRequest(input, command) {
   // about provider availability or runtime capability; those remain fixed
   // router-owned evidence paths below.
   if (input.harness !== undefined && !HARNESS_KINDS.has(input.harness)) return error("invalid_harness");
+  // Model aliases the caller has already had REFUSED for this work. This is the
+  // only refusal signal the router gets: without it a fresh resolve simply
+  // re-picks the same tier-0 model, and a lower tier would otherwise be reached
+  // on mere unavailability - which is not a refusal.
+  if (input.refusedAliases !== undefined && (!Array.isArray(input.refusedAliases) || input.refusedAliases.length === 0 || input.refusedAliases.length > 8 || input.refusedAliases.some((alias) => !validId(alias)) || new Set(input.refusedAliases).size !== input.refusedAliases.length)) return error("invalid_refused_aliases");
   if (input.crossHarnessReason !== undefined && (typeof input.crossHarnessReason !== "string" || input.crossHarnessReason.trim().length < 8 || input.crossHarnessReason.length > 256 || input.crossHarnessReason.trim().toLowerCase() === "not_applicable")) return error("invalid_cross_harness_reason");
   if (input.crossHarnessReason !== undefined && input.harness === undefined) return error("harness_required_for_cross_harness_reason");
   if (input.adapterId !== undefined && !validId(input.adapterId)) return error("invalid_adapter");

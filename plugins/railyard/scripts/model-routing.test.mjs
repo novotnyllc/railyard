@@ -2715,3 +2715,67 @@ test("a cross-family review routes to the Claude reviewer through the attested s
   // schemas carry no refusal signal, so a lower tier would fire on mere
   // unavailability, which is not a refusal.
 });
+
+// The refusal fallback has exactly one legitimate trigger. These three cases
+// pin it, and the middle one is the whole point: a top carrier that is merely
+// UNAVAILABLE must not silently produce a same-family answer to a question that
+// asked for a cross-family one.
+test("a cross-family review substitutes only on an actual refusal, never on unavailability", () => {
+  const policy = catalog({
+    extraProviders: {
+      claude_review: { carrierId: "claude-ce-review", executionSurface: "provider_subscription", account: "claude", locality: "external", retention: "provider_default", harness: "claude" },
+      daybreak: { carrierId: "codex-daybreak-blue", executionSurface: "codex", account: "local", locality: "external", retention: "provider_default", harness: "codex" },
+    },
+    extraModels: {
+      fable_review: { provider: "claude_review", carrierId: "claude-ce-review", requestedModel: "fable", efforts: ["high"], roles: ["review.cross_family"] },
+      daybreak_blue: { provider: "daybreak", carrierId: "codex-daybreak-blue", requestedModel: "gpt-daybreak-blue-latest", efforts: ["high"], roles: ["review.cross_family"] },
+    },
+    extraRoles: {
+      "review.cross_family": { tiers: [{ models: ["fable_review"] }, { models: ["daybreak_blue"], afterRefusalOnly: true }] },
+    },
+  });
+  const seam = { id: "ce-code-review.execution", skill: "ce-code-review", artifact: { schema: "railyard/ce-code-review-findings/v1", digest: DIGEST_A } };
+  const base = {
+    callerKind: "compound-engineering",
+    role: "review.cross_family",
+    harness: "codex",
+    crossHarnessReason: "cross-family second opinion on codex-authored work",
+    ceSeam: seam,
+  };
+  const claudeReady = attestedCapability(policy, {
+    carrierId: "claude-ce-review",
+    adapterId: "claude-cli-via-task",
+    accountScope: "claude",
+    observedModel: "fable",
+  });
+
+  // 1. No refusal: the Claude reviewer answers, and nothing is a substitute.
+  const normal = handleRequest(request("resolve", { ...base, adapterId: "claude-cli-via-task", dispatchKind: "task_create" }), { catalog: policy, state: claudeReady, now: NOW });
+  assert.equal(normal.response.reason, "resolved", JSON.stringify(normal.response));
+  assert.equal(normal.response.decision.selected.modelAlias, "fable_review");
+  assert.equal(normal.response.decision.fallback?.reason ?? "not_applicable", "not_applicable");
+
+  // 2. THE ONE THAT MATTERS. Claude simply unavailable, no refusal recorded:
+  //    the refusal-gated tier stays shut and the resolve FAILS rather than
+  //    quietly returning a same-family review.
+  const unavailable = handleRequest(request("resolve", base), { catalog: policy, state: daybreakReady(policy), now: NOW });
+  assert.equal(unavailable.response.reason, "no_eligible_route", JSON.stringify(unavailable.response));
+  assert.equal(
+    unavailable.response.rejectedAlternatives.find((item) => item.modelAlias === "daybreak_blue")?.reason,
+    "refusal_required",
+    "an unavailable top carrier must NOT open the refusal-gated tier",
+  );
+
+  // 3. An actual refusal: the substitute is reachable, and the decision says
+  //    plainly that it IS a substitute.
+  const state = daybreakReady(policy);
+  const afterRefusal = handleRequest(request("resolve", { ...base, refusedAliases: ["fable_review"] }), { catalog: policy, state, now: NOW });
+  assert.equal(afterRefusal.response.reason, "resolved", JSON.stringify(afterRefusal.response));
+  assert.equal(afterRefusal.response.decision.selected.modelAlias, "daybreak_blue");
+  assert.equal(afterRefusal.response.decision.fallback.reason, "review_refusal_substitute");
+  assert.equal(
+    afterRefusal.response.decision.rejectedAlternatives.find((item) => item.modelAlias === "fable_review")?.reason,
+    "model_refused",
+    "the refused model must be reported as refused, not as unavailable",
+  );
+});
