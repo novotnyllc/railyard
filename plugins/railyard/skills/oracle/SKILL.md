@@ -296,6 +296,53 @@ bootstrap failure.
   - Host: `"$ORACLE_CLI" serve --host 0.0.0.0 --port 9473 --token <secret>`
   - Client: `"$ORACLE_CLI" --engine browser --remote-host <host:port> --remote-token <secret> -p "<task>" --file "src/**"`
 
+## Follow-ups: do not restart a consult you already paid for
+
+Oracle is one-shot **by default**, not by necessity, and re-review is the most
+common shape of work here. Starting a fresh session to re-examine something
+Oracle already has in context re-uploads the same tree, re-pays the input
+tokens, and throws away everything it concluded last round — the second answer
+is usually worse than the first for exactly that reason.
+
+Two distinct mechanisms; they are not interchangeable:
+
+- **`--followup <sessionId|responseId>`** continues a *stored* session in a
+  later run. This is the one for "you reviewed this, here is the revision" —
+  the normal re-review loop. Reuse the slug you set on the first run to find
+  it, or `oracle status` to list recent sessions.
+  - `"$ORACLE_CLI" --followup <sessionId> -p "<what changed and what to re-check>"`
+  - Attach only the files that CHANGED. The prior turn is still in context;
+    re-sending the unchanged tree is the waste this exists to avoid.
+  - `--followup-model <model>` picks which model's response to continue from in
+    a multi-model session.
+
+- **`--browser-follow-up <prompt>`** (repeatable) queues additional turns in the
+  SAME run, in one ChatGPT conversation. Use it when the turns are known in
+  advance — "review this, then propose the diff, then list the risks" — not for
+  reacting to what came back.
+
+Set `--slug "<3-5 words>"` on every first-round consult. Without it the session
+id is the only handle, and a re-review a day later has nothing memorable to
+attach to.
+
+**Never re-run a prompt to "check" a detached or timed-out session.** Reattach
+with `oracle session <slug>`; a duplicate prompt is blocked without `--force`
+precisely because re-running is almost always the wrong instinct.
+
+## Shared project context
+
+`oracle project-sources` uploads files into a ChatGPT Project's persistent
+Sources tab, so recurring consults against a stable codebase stop re-sending
+the same tree every time.
+
+- `"$ORACLE_CLI" project-sources list --chatgpt-url <project-url>`
+- `"$ORACLE_CLI" project-sources add --chatgpt-url <project-url> --file "src/**"`
+
+Point runs at the project with `--chatgpt-url`. This suits a long-lived repo
+reviewed repeatedly; it is not a substitute for `--file` on a one-off consult,
+and stale Sources are worse than none — refresh them when the tree moves, or
+the model reasons confidently about code that no longer exists.
+
 ## API preflight
 
 - API runs require explicit user consent and cost money.
