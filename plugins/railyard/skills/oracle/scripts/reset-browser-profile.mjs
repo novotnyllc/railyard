@@ -22,11 +22,30 @@ const prefs = join(homedir(), ".oracle", "browser-profile", "Default", "Preferen
 // underneath a live Chrome is therefore either silently discarded on its next
 // flush or an outright corrupting interleave - and if a second Oracle run is
 // mid-flight, this would be one run mutating another's browser state.
-const holder = execFileSync("/bin/sh", ["-c",
-  `pgrep -f -- "--user-data-dir=${join(homedir(), ".oracle", "browser-profile")}" || true`,
-], { encoding: "utf8" }).trim();
-if (holder) {
-  console.error(`oracle profile is in use (pids: ${holder.split("\n").join(", ")}); not touching it.`);
+// Does any process hold this profile? Read the process table and match in JS
+// rather than shelling out with the path in the command line: `pgrep -f` scans
+// full command lines, so a `sh -c 'pgrep -f -- "...--user-data-dir=<path>"'`
+// matches ITS OWN shell, making the answer always "held" and this helper a
+// permanent no-op. macOS pgrep has no --ignore-ancestors to opt out of that.
+// This node process's own argv does not contain the path, so it cannot
+// self-match.
+const profileDir = join(homedir(), ".oracle", "browser-profile");
+let holders = [];
+try {
+  holders = execFileSync("/bin/ps", ["-ax", "-o", "pid=,args="], { encoding: "utf8" })
+    .split("\n")
+    .filter((line) => line.includes(`--user-data-dir=${profileDir}`))
+    .map((line) => line.trim().split(/\s+/)[0])
+    .filter(Boolean);
+} catch {
+  // Cannot enumerate processes: refuse rather than assume the profile is free.
+  // Editing Preferences under a live Chrome is the thing this guard exists to
+  // prevent, so an unknown answer must fail closed.
+  console.error("cannot read the process table; not touching the oracle profile.");
+  process.exit(0);
+}
+if (holders.length > 0) {
+  console.error(`oracle profile is in use (pids: ${holders.join(", ")}); not touching it.`);
   console.error("Close the automation Chrome, or just run headless - it needs no window state.");
   process.exit(0);
 }
