@@ -49,19 +49,18 @@ as expensive.
 
 One meter per billing relationship. Never total or rank across meters.
 
-**The router does not enforce this for you.** `candidateSort()` checks that
-meters match only on the *exact rate* path; when it falls through to
-`relativeCostIndex` there is no meter test, so two indices normalized against
-different meters get compared directly. A cost-priority tier that spans meters
-— `implementation.cross-harness` with Luna (`codex-sub`) and GLM
-(`zai-credits`) is exactly this shape — therefore produces an ordering with no
-economic meaning: it is comparing "1% of the most expensive zai model" against
-"8% of the most expensive codex model" as though they were the same unit.
+**The router enforces this within `candidateSort()`.** Cost ranks candidates by
+`relativeCostIndex` only when they share a meter; a cross-meter pair is not
+cost-comparable, so cost stops being a discriminator for it and the ordering
+falls through to the remaining priorities and then tier position. That keeps
+cost doing real work where the numbers mean something, without ever inventing a
+comparison between "1% of the priciest model on one meter" and "8% of the
+priciest on another" — different denominators, different billing relationships.
 
-The operating rule that follows: **do not put `softPriorities: ["cost"]` on a
-tier whose models span meters.** Within a tier, cost ranking is only meaningful
-among same-meter models; across meters, express the preference as tier order,
-which is a policy statement rather than a fake arithmetic comparison.
+So `softPriorities: ["cost"]` is worth setting on any tier containing two or
+more models **on the same meter**, and is simply inert (not harmful) on a tier
+that spans meters. Set it wherever a same-meter contest exists; express
+cross-meter preference as tier order.
 
 ### Step 3 — Derive a within-meter price index
 

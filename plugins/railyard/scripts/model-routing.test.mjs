@@ -2779,3 +2779,48 @@ test("a cross-family review substitutes only on an actual refusal, never on unav
     "the refused model must be reported as refused, not as unavailable",
   );
 });
+
+// relativeCostIndex is normalized WITHIN a meter, so it ranks honestly among
+// same-meter models and means nothing across meters. Both halves matter: the
+// first is why cost priority is worth configuring at all, the second is why it
+// must not silently decide a cross-meter contest with a fabricated comparison.
+test("cost ranks within a meter and is not a discriminator across meters", () => {
+  const policy = catalog({
+    extraProviders: {
+      codex_b: { carrierId: "codex-sol", executionSurface: "codex", account: "local", locality: "external", retention: "provider_default" },
+      // Same carrier as `luna` (so it is genuinely eligible - no attestation
+      // gate to reject it for an unrelated reason) but a DIFFERENT meter.
+      codex_other: { carrierId: "codex-luna", executionSurface: "codex", account: "other-meter", locality: "external", retention: "provider_default" },
+    },
+    extraModels: {
+      // Same meter as `luna` (account "local"), and far more expensive.
+      pricey: { provider: "codex_b", carrierId: "codex-sol", requestedModel: "gpt-5.6-sol", efforts: ["max"], roles: ["implementation"], relativeCostIndex: 900 },
+      cheap_other: { provider: "codex_other", carrierId: "codex-luna", requestedModel: "gpt-5.6-luna", efforts: ["max"], roles: ["implementation.mechanical"], relativeCostIndex: 1 },
+    },
+    extraRoles: {
+      // Deliberately lists the expensive model FIRST, so a pass is cost
+      // actually winning rather than list position happening to agree.
+      implementation: { tiers: [{ models: ["pricey", "luna"], softPriorities: ["cost"] }] },
+      // cheap_other sits on a different meter and is listed second with a far
+      // LOWER index (1 vs 50). If the index were compared across meters it
+      // would win - that is exactly the bug this pins.
+      "implementation.mechanical": { tiers: [{ models: ["luna", "cheap_other"], softPriorities: ["cost"] }] },
+    },
+  });
+
+  const sameMeter = handleRequest(request("resolve", { role: "implementation" }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(sameMeter.response.reason, "resolved", JSON.stringify(sameMeter.response));
+  assert.equal(
+    sameMeter.response.decision.selected.modelAlias,
+    "luna",
+    "within one meter, the cheaper index must win even when listed second",
+  );
+
+  const crossMeter = handleRequest(request("resolve", { role: "implementation.mechanical" }), { catalog: policy, state: createEmptyState(), now: NOW });
+  assert.equal(crossMeter.response.reason, "resolved", JSON.stringify(crossMeter.response));
+  assert.equal(
+    crossMeter.response.decision.selected.modelAlias,
+    "luna",
+    "across meters cost decides nothing: list position governs, so the first entry wins despite the far lower index",
+  );
+});

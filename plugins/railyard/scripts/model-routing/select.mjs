@@ -468,8 +468,24 @@ export function candidateSort(left, right) {
       continue;
     }
     const direction = priority === "quality" || priority === "reliability" ? -1 : 1;
-    if (priority === "cost" && left.exactRate && right.exactRate && left.exactRate.meter === right.exactRate.meter && left.exactRate.units !== right.exactRate.units) {
-      return left.exactRate.units < right.exactRate.units ? -1 : 1;
+    if (priority === "cost") {
+      if (left.exactRate && right.exactRate && left.exactRate.meter === right.exactRate.meter && left.exactRate.units !== right.exactRate.units) {
+        return left.exactRate.units < right.exactRate.units ? -1 : 1;
+      }
+      // relativeCostIndex is normalized WITHIN a meter - each meter's index is a
+      // percentage of the most expensive routable model on THAT meter. Comparing
+      // two of them across meters is arithmetic on incommensurable units: it
+      // reads "1% of the priciest zai model" as cheaper than "8% of the priciest
+      // codex model" when the two percentages describe different denominators
+      // and different billing relationships entirely.
+      //
+      // The exact-rate branch above already guards its own meter. This guards
+      // the index. Cross-meter pairs simply are not cost-comparable, so cost
+      // stops being a discriminator for them and the ordering falls through to
+      // the remaining priorities and then tier position - a deliberate policy
+      // statement rather than a fabricated number. Within a meter, cost ranks
+      // exactly as configured.
+      if (left.provider?.account !== right.provider?.account) continue;
     }
     const key = priority === "cost" ? "relativeCostIndex" : priority;
     const a = left.model[key];
