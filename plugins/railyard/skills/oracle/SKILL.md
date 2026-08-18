@@ -215,6 +215,24 @@ NODE
 An unsigned-in private browser profile is an authentication state, not a
 bootstrap failure.
 
+### Before a HEADFUL browser run
+
+```bash
+node "$SKILL_DIR/scripts/reset-browser-profile.mjs"
+```
+
+Oracle kills its automation Chrome rather than exiting it, so the profile keeps
+`exit_type: "Crashed"` and every launch shows the "didn't shut down correctly /
+restore tabs" bubble, which can steal focus from the automation. It also
+persists `window_placement`, so a window once positioned offscreen stays there.
+This clears both, and refuses outright while any process holds the profile —
+editing Preferences under a live Chrome is the thing worth avoiding, so an
+unknown answer fails closed.
+
+Not needed with `browser.headless: true` (the configured default): there is no
+window to place and no bubble to show. Run it when a headful run is
+deliberately chosen, or after a run was interrupted.
+
 ## Golden path (fast + reliable)
 
 1. Pick a tight file set (fewest files that still contain the truth).
