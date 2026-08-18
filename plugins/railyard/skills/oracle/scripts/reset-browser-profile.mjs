@@ -32,7 +32,12 @@ const prefs = join(homedir(), ".oracle", "browser-profile", "Default", "Preferen
 const profileDir = join(homedir(), ".oracle", "browser-profile");
 let holders = [];
 try {
-  holders = execFileSync("/bin/ps", ["-ax", "-o", "pid=,args="], { encoding: "utf8" })
+  // -ww: never let ps clamp args to the output width. execFileSync gives this
+  // child a pipe and macOS ps only clamps on a tty, so today's invocation is
+  // already full-width - but Chrome's command line runs past 1000 characters,
+  // and a truncated line reads as "profile free" and corrupts a live profile.
+  // The guard should not depend on how stdout happens to be wired.
+  holders = execFileSync("/bin/ps", ["-axww", "-o", "pid=,args="], { encoding: "utf8" })
     .split("\n")
     .filter((line) => line.includes(`--user-data-dir=${profileDir}`))
     .map((line) => line.trim().split(/\s+/)[0])
