@@ -1,15 +1,22 @@
 ---
 import { withBase } from '../config/site.mjs';
 const { nav = [], active = '' } = Astro.props;
+
+// Only the group you are reading is expanded. Rendering all 77 links at once
+// meant the nav could never fit a viewport, so it grew its own scrollbar inside
+// the page's — you could not see the shape of the site, only a slice of it.
+// Collapsed groups still show their label, so the whole map is visible at a
+// glance and any group can be opened in place without navigating away.
+const activeGroupKey = nav.find((group) => group.items.some((item) => item.id === active))?.key;
 ---
 <aside class="docs-sidebar" aria-label="Documentation navigation">
   <div class="sidebar-label">Explore the yard</div>
   {nav.map((group) => (
-    <section class="nav-group">
-      <p class="nav-group-label">{group.label}</p>
+    <details class="nav-group" open={group.key === activeGroupKey}>
+      <summary class="nav-group-label">{group.label}</summary>
       <ul>
         {group.items.map((item) => <li class:list={{ [`nav-depth-${item.depth}`]: item.depth > 0 }}><a class:list={{ active: active === item.id }} aria-current={active === item.id ? 'page' : undefined} href={withBase(item.href)}>{item.title}</a></li>)}
       </ul>
-    </section>
+    </details>
   ))}
 </aside>
