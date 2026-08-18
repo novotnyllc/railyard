@@ -11,6 +11,7 @@ const focusRingModels = [
   { selector: '.scenario-card:focus-visible', component: '.scenario-card', outlineBackgrounds: ['.scenario-card'], boxShadowBackgrounds: ['var(--ground)'] },
   { selector: '.header-cta:focus-visible', component: '.header-cta:hover', outlineBackgrounds: ['var(--ground)'], boxShadowBackgrounds: ['var(--ground)'] },
   { selector: '.nav-group a:focus-visible', component: '.nav-group a.active', outlineBackgrounds: ['.nav-group a.active'], boxShadowBackgrounds: ['var(--ground)'] },
+  { selector: '.nav-group > summary:focus-visible', outlineBackgrounds: ['var(--ground)'], boxShadowBackgrounds: ['var(--ground)'] },
   { selector: '.prev-next a:focus-visible', component: '.prev-next a:hover', outlineBackgrounds: ['.prev-next a:hover'], boxShadowBackgrounds: ['var(--ground)'] },
   { selector: '.start-callout .button:focus-visible', component: '.start-callout .button', outlineBackgrounds: ['.start-callout .button'], boxShadowBackgrounds: ['.start-callout'] },
   { selector: '.terminal a:focus-visible', outlineBackgrounds: ['.terminal'], boxShadowBackgrounds: ['.terminal'] },
@@ -29,6 +30,7 @@ const expectedSelectors = new Set([
   '.scenario-card:hover',
   '.start-callout .button:hover',
   '.nav-group a:hover',
+  '.nav-group > summary:hover',
   '.prev-next a:hover',
   ...focusRingModels.map(({ selector }) => selector),
 ]);
@@ -72,7 +74,7 @@ function parseRules(source) {
 const rules = parseRules(css);
 const interactionSubjects = [
   '.global-nav a', '.header-cta', '.button-primary', '.text-link', '.promise-card', '.scenario-card',
-  '.card-number', '.scenario-number', '.start-callout', '.nav-group a', '.prev-next a', '.prev-next span',
+  '.card-number', '.scenario-number', '.start-callout', '.nav-group a', '.nav-group > summary', '.prev-next a', '.prev-next span',
   '.skip-link', '.terminal a',
 ];
 const modeledPaintSelectors = new Set([
@@ -82,6 +84,7 @@ const modeledPaintSelectors = new Set([
   '.scenario-card', '.scenario-card:hover', '.scenario-card p', '.scenario-number', '.start-callout',
   '.start-callout h2 em', '.start-callout p', '.start-callout .button', '.start-callout .button:hover',
   '.nav-group a', '.nav-group a:hover',
+  '.nav-group > summary:hover', '.nav-group > summary::before',
   '.nav-group a.active', '.prev-next a', '.prev-next a:hover', '.prev-next span', '.terminal a',
 ]);
 function assertNoCompetingPaint(ruleSet) {
@@ -522,7 +525,12 @@ for (const schemeName of ['light', 'dark']) {
     const navColor = color(scheme, declaration(rules, '.nav-group a:hover', 'color', schemeName));
     const authoredNavBackground = color(scheme, backgroundDeclaration(rules, ['.nav-group a:hover'], schemeName));
     viewportResults.push({ scheme: schemeName, state: 'hover: sidebar link', ratio: contrast(navColor, authoredNavBackground, scheme['--ground']), viewportWidth });
+
+    // The group toggle paints only text; its backdrop is the page ground.
+    const summaryColor = color(scheme, declaration(rules, '.nav-group > summary:hover', 'color', schemeName));
+    viewportResults.push({ scheme: schemeName, state: 'hover: sidebar group toggle', ratio: contrast(summaryColor, scheme['--ground'], scheme['--ground']), viewportWidth });
   }
+
   for (const state of new Set(viewportResults.map((result) => result.state))) {
     results.push(viewportResults.filter((result) => result.state === state).sort((a, b) => a.ratio - b.ratio)[0]);
   }
