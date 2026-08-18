@@ -103,3 +103,15 @@ a:focus-visible, button:focus-visible { outline-color: var(--focus-ring); }
 .terminal a:focus-visible { outline: 3px solid var(--focus-ring-code); outline-offset: 0; box-shadow: 0 0 0 5px var(--focus-ring-code); }
 .terminal:focus-visible, .prose pre:focus-visible { outline: 3px solid var(--focus-ring-code); outline-offset: 0; box-shadow: 0 0 0 6px var(--focus-ring); }
 .prose > p:has(> img[src*="/diagrams/"]):focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 4px; }
+
+/* Sidebar: progressive disclosure. Only the active group is open, so the nav
+   shows the whole map (14 labels) instead of a slice of 77 links inside its own
+   scrollbar. The inner scroll stays as a safety net for a very long open group,
+   but it is no longer how the nav is normally read. */
+.nav-group > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: .4rem; padding: .2rem 0; }
+.nav-group > summary::-webkit-details-marker { display: none; }
+.nav-group > summary::before { content: ""; width: 0; height: 0; border-left: 4px solid currentColor; border-top: 3.5px solid transparent; border-bottom: 3.5px solid transparent; opacity: .55; transition: transform .12s ease; flex: none; }
+.nav-group[open] > summary::before { transform: rotate(90deg); }
+.nav-group > summary:hover { color: var(--amber-dark); }
+.nav-group > summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .nav-group > summary::before { transition: none; } }
