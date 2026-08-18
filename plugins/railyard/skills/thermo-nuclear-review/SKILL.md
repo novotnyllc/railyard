@@ -28,6 +28,19 @@ It can be easy to break developers' ability to run / build the code locally. You
 - Remapping ports / networking
 - Adding scripts that must be run for certain functionality to continue working. Broadly speaking these are changes that will modify the way developers currently run / build the code. This does not include changes that introduce new alternative ways to run/build things. Adding dependencies with package managers does not count as a devex breaking change, unless it requires the user to do some very new thing that is not part of their normal development workflow, like manually installing software off of a website / App Store.
 
+## Failure Memory Guidelines
+Error handling that reaches a WRONG and DURABLE conclusion from a failure is a
+distinct defect class, and ordinary review keeps missing it: nothing crashes,
+the error is handled, the tests pass — and the code now believes something
+false for the rest of the process. Read `references/failure-memory.md` and
+apply it to every failure branch in the diff. In short, for each `catch`,
+fallback, or default: what does this now BELIEVE, for how long, was the failure
+actually evidence for that belief, and does anything ever re-check it? A
+cancellation is evidence about intent, not about the world; downtime is not
+evidence about a server's capabilities; an incomplete walk learned nothing.
+Assuming under uncertainty is fine — RECORDING the assumption as fact is the
+bug.
+
 ## Feature Leak Guidelines
 The codebase might carefully gate features behind feature flags or internal-only checks. You MUST NOT allow any features that are meant to be behind a feature gate leak. These leaks are often subtle. Be VERY careful and thorough.
 
