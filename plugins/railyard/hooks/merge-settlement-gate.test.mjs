@@ -46,6 +46,7 @@ function settlement({
   head = HEAD,
   reviewedHeads = [],
   reviews,
+  reviewedAgoMs = 0,
   eyesAgoMs,
   eyesBy = BOT,
   threads = [],
@@ -55,6 +56,7 @@ function settlement({
 } = {}) {
   const reviewNodes = reviews ?? reviewedHeads.map((oid) => ({
     state: "APPROVED",
+    submittedAt: new Date(Date.now() - reviewedAgoMs).toISOString(),
     author: { login: BOT },
     commit: { oid },
   }));
@@ -213,6 +215,37 @@ gated("one reviewer finishing does not discharge another reviewer's 👀", () =>
   assert.match(r.err, /hard cap 20m/);
 });
 
+gated("a 👀 added AFTER a completed review is a fresh pass, not discharged", () => {
+  // Same reviewer, same head, no new push: it reviewed, then reacted again to
+  // start a second pass. Discharging by identity alone dropped that signal and
+  // merged out from under the pass in flight.
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({
+      reviewedHeads: [HEAD],
+      headAgeMs: 10 * 60 * 1000,
+      reviewedAgoMs: 6 * 60 * 1000,
+      eyesAgoMs: 2 * 60 * 1000,
+    }),
+  });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /👀 reaction from copilot-pull-request-reviewer/);
+});
+
+gated("a pending review is never discharged by a completed one", () => {
+  // The completed review is a previous pass; the unsubmitted one is current.
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({
+      headAgeMs: 6 * 60 * 1000,
+      reviews: [
+        { state: "APPROVED", submittedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(), author: { login: BOT }, commit: { oid: HEAD } },
+        { state: "PENDING", submittedAt: null, author: { login: BOT }, commit: null },
+      ],
+    }),
+  });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /pending \(unsubmitted\) review/);
+});
+
 gated("a reviewer that reviewed an earlier head is still expected on this one", () => {
   const r = run(bash("gh pr merge 7"), {
     graphql: settlement({ reviewedHeads: [OLD_SHA], headAgeMs: 8 * 60 * 1000 }),
@@ -268,13 +301,15 @@ gated("a review on the head allows immediately, with no residual clock", () => {
 });
 
 gated("a reviewer's own 👀 does not outlive their review on the head", () => {
-  // The bot reacted, then posted. Counting its own reaction as an outstanding
-  // signal would hold every merge for the full cap after a complete review.
+  // The bot reacted at t+1m, then posted at t+2m. Counting its own discharged
+  // reaction as outstanding would hold every merge for the full cap after a
+  // complete review.
   const r = run(bash("gh pr merge 7"), {
     graphql: settlement({
       reviewedHeads: [HEAD],
       headAgeMs: 5 * 60 * 1000,
       eyesAgoMs: 4 * 60 * 1000,
+      reviewedAgoMs: 3 * 60 * 1000,
     }),
   });
   assert.equal(r.code, 0);

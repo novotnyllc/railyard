@@ -65,7 +65,7 @@ query($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){
     pullRequest(number:$number){
       headRefOid
-      reviews(last:100){nodes{state author{login} commit{oid}}}
+      reviews(last:100){nodes{state submittedAt author{login} commit{oid}}}
       reviewThreads(first:100){totalCount nodes{isResolved}}
       reactions(content:EYES,last:20){nodes{createdAt user{login}}}
       commits(last:1){nodes{commit{committedDate}}}
@@ -742,11 +742,13 @@ function reviewedHead(state) {
 // Reviewers that have shown intent on this head but have not posted yet. Each
 // entry is a phrase the refusal names, so the model can see WHAT it is waiting
 // on instead of just a clock.
-// Signals are matched to reviewer IDENTITY, not counted in aggregate: one
-// reviewer landing on the head does not discharge another reviewer's 👀. So a
-// signal is dropped only when THAT reviewer has posted on this head, which is
-// also what keeps a reviewer's own earlier reaction from outliving their
-// review.
+// Signals are matched to reviewer IDENTITY and to TIME, not counted in
+// aggregate: one reviewer landing on the head does not discharge another
+// reviewer's 👀, and a reviewer's own review discharges only the reactions it
+// came AFTER. A 👀 added once a review is already posted (a second pass on the
+// same head, no new push) is a fresh registration and still holds the merge.
+// A PENDING review is never discharged: it is by definition unsubmitted, so a
+// completed review beside it is a previous pass, not that one.
 // A PENDING review is only ever the MERGING ACCOUNT'S OWN: GitHub exposes an
 // unsubmitted review to its author alone, so this query — authenticated as
 // whoever runs the merge — cannot see a bot's pending review. It is kept
@@ -758,32 +760,39 @@ function reviewedHead(state) {
 // merge for the full cap; a pending review request would hold on every
 // requested human reviewer. Add either if bots stop reacting.
 function inProgressSignals(state, committed) {
-  const landed = new Set();
+  // login -> when that reviewer's newest review on THIS head was submitted.
+  // NaN means "landed, but the time is unreadable", which discharges owed
+  // reviews but never a reaction, since the ordering cannot be shown.
+  const landed = new Map();
   for (const review of state.reviews) {
-    if (review && review.state !== "PENDING" && review.commit?.oid === state.head) {
-      landed.add(who(review.author?.login));
-    }
+    if (!review || review.state === "PENDING" || review.commit?.oid !== state.head) continue;
+    const login = who(review.author?.login);
+    const at = review.submittedAt ? Date.parse(review.submittedAt) : NaN;
+    const seen = landed.get(login);
+    landed.set(login, seen === undefined || (!Number.isNaN(at) && at > seen) ? at : seen);
   }
   const signals = [];
   const earlier = new Set();
   for (const review of state.reviews) {
     const login = who(review?.author?.login);
-    if (landed.has(login)) continue;
     if (review?.state === "PENDING") {
       signals.push("a pending (unsubmitted) review from " + login);
-    } else if (review?.commit?.oid && review.commit.oid !== state.head) {
+    } else if (review?.commit?.oid && review.commit.oid !== state.head &&
+      !landed.has(login)) {
       earlier.add(login);
     }
   }
   for (const reaction of state.reactions) {
     const login = who(reaction?.user?.login);
-    if (landed.has(login)) continue;
     const at = reaction?.createdAt ? Date.parse(reaction.createdAt) : NaN;
     // An unreadable head date leaves "after the push" undecidable, so a
     // reaction contributes nothing rather than blocking on a guess.
-    if (!Number.isNaN(at) && !Number.isNaN(committed) && at >= committed) {
-      signals.push("a 👀 reaction from " + login + " after the head push");
-    }
+    if (Number.isNaN(at) || Number.isNaN(committed) || at < committed) continue;
+    const reviewedAt = landed.get(login);
+    // Discharged only by that reviewer's OWN review, submitted at/after the
+    // reaction. A reaction added later is a new pass they have not posted yet.
+    if (reviewedAt !== undefined && !Number.isNaN(reviewedAt) && reviewedAt >= at) continue;
+    signals.push("a 👀 reaction from " + login + " after the head push");
   }
   for (const login of earlier) {
     signals.push(login + " reviewed an earlier head and has not reviewed this one yet");
