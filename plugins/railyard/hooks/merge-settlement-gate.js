@@ -10,13 +10,21 @@
 // dispatch-gate.js closes the silent-model-inheritance race — as mechanism,
 // not prose.
 //
-// Refuses only two determinable states:
+// Refuses only determinable states:
 //   (a) the PR has unresolved review threads, or
-//   (b) the head commit has zero reviews AND is younger than the settlement
-//       window (bot reviewers may not have posted yet).
-// Everything else allows — including a head that has sat past the window with
-// no reviews, so a repository that genuinely has no reviewers is never
-// blocked.
+//   (b) the head commit has no review yet AND is inside a bounded wait.
+// The wait is SIGNAL-AWARE rather than a flat clock. Bots that intend to
+// review REGISTER within ~1-3 minutes of a push — a 👀 reaction, a pending
+// review, or a review they already posted on an earlier head. So:
+//   - a review already on this head, with nothing unresolved, allows
+//     immediately (no residual clock);
+//   - no signal at all past the 3-minute registration window means nobody is
+//     coming, so it allows;
+//   - a signal that has not turned into a review yet holds the merge until it
+//     does, capped at 20 minutes from the head push so a flaky signal cannot
+//     lock the repository forever.
+// Everything else allows — a repository that genuinely has no reviewers is
+// never blocked.
 //
 // Cross-platform, dependency-free. Fails OPEN on anything it cannot determine
 // (gh missing, network error, timeout, unparseable output, unrecognized
@@ -27,8 +35,15 @@ const { execFileSync } = require("child_process");
 const path = require("path");
 
 // Bot reviewers observed posting 3m26s and 4m58s after the head commit on the
-// PR that motivated this gate; 10 minutes is ~2x that worst case.
-const SETTLEMENT_WINDOW_MS = 10 * 60 * 1000;
+// PR that motivated this gate — but they REGISTERED (👀 on the PR, a review
+// left pending) inside the first minute. Registration is the cheap signal, so
+// the no-signal wait is 3 minutes, not the ~2x-worst-case 10 the flat clock
+// used to burn on every merge in every repository with no reviewers at all.
+const REGISTRATION_WINDOW_MS = 3 * 60 * 1000;
+// A registered reviewer that never posts must not hold merges forever: past
+// this the gate allows with a warning naming the stale signal. ~4x the
+// observed worst-case post time.
+const SIGNAL_CAP_MS = 20 * 60 * 1000;
 // The two calls are sequential in the worst case, so their SUM plus Node
 // startup must clear the harness's 5s PreToolUse cap with room to spare —
 // otherwise the harness kills the hook before its own fail-open path runs, and
@@ -50,8 +65,9 @@ query($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){
     pullRequest(number:$number){
       headRefOid
-      reviews(last:100){nodes{commit{oid}}}
+      reviews(last:100){nodes{state submittedAt author{login} commit{oid}}}
       reviewThreads(first:100){totalCount nodes{isResolved}}
+      reactions(content:EYES,last:20){nodes{createdAt user{login}}}
       commits(last:1){nodes{commit{committedDate}}}
     }
   }
@@ -684,9 +700,8 @@ function settlement(target, command) {
     head: pr.headRefOid,
     threads,
     threadTotal: pr.reviewThreads?.totalCount ?? threads.length,
-    reviewedHead: (pr.reviews?.nodes || []).some(
-      (review) => review?.commit?.oid === pr.headRefOid,
-    ),
+    reviews: pr.reviews?.nodes || [],
+    reactions: pr.reactions?.nodes || [],
     // pushedDate is null from GitHub today, so committedDate is the available
     // proxy for "when did this head get its chance?" — seconds apart for a
     // freshly pushed branch. ponytail: a long-dormant local commit pushed late
@@ -705,6 +720,51 @@ function humanDuration(ms) {
 const ALLOW = { kind: "allow" };
 const refuse = (why) => ({ kind: "refuse", why });
 const degrade = (why) => ({ kind: "degrade", why });
+// Allowed, but with something the operator has to know: the merge went ahead
+// past a signal that never produced a review.
+const warn = (why) => ({ kind: "warn", why });
+
+const who = (login) => login || "a reviewer";
+
+// Has a reviewer looked at THIS head? Either the review is recorded against
+// the head commit, or it was submitted at/after the head was pushed (a review
+// that lands mid-push can carry the previous oid).
+function reviewedHead(state, committed) {
+  return state.reviews.some((review) => {
+    if (!review || review.state === "PENDING") return false;
+    if (review.commit?.oid === state.head) return true;
+    const at = review.submittedAt ? Date.parse(review.submittedAt) : NaN;
+    return !Number.isNaN(at) && !Number.isNaN(committed) && at >= committed;
+  });
+}
+
+// Reviewers that have shown intent on this head but have not posted yet. Each
+// entry is a phrase the refusal names, so the model can see WHAT it is waiting
+// on instead of just a clock.
+// ponytail: reactions and reviews only — an interim "I'm on it" comment is a
+// weaker signal and a human's ordinary comment would read as one, holding the
+// merge for the full cap. Add comment scanning if bots stop reacting.
+function inProgressSignals(state, committed) {
+  const signals = [];
+  const earlier = new Set();
+  for (const review of state.reviews) {
+    if (review?.state === "PENDING") {
+      signals.push("a pending (unsubmitted) review from " + who(review?.author?.login));
+    } else if (review?.commit?.oid && review.commit.oid !== state.head) {
+      earlier.add(who(review?.author?.login));
+    }
+  }
+  for (const reaction of state.reactions) {
+    const at = reaction?.createdAt ? Date.parse(reaction.createdAt) : NaN;
+    if (!Number.isNaN(at) && at >= committed) {
+      signals.push("a 👀 reaction from " + who(reaction?.user?.login) + " after the head push");
+    }
+  }
+  for (const login of earlier) {
+    signals.push(login + " reviewed an earlier head and has not reviewed this one yet");
+  }
+  return signals;
+}
 
 // One command's verdict. Pure decision over gathered facts, so the handler
 // below stays a loop over commands rather than a nest of branches.
@@ -752,29 +812,63 @@ function verdictFor(command) {
     );
   }
 
-  if (state.reviewedHead) return ALLOW; // reviewed, nothing unresolved
-
   const committed = state.committedDate ? Date.parse(state.committedDate) : NaN;
+
+  // Fast path: this head already has a review and nothing is unresolved. The
+  // reviewers who were coming have arrived, so there is no clock left to run.
+  if (reviewedHead(state, committed)) return ALLOW;
+
   if (Number.isNaN(committed)) {
     return degrade("could not read the head commit date for PR #" + target.number);
   }
 
+  const head = state.head.slice(0, 7);
   const age = Date.now() - committed;
-  if (age < SETTLEMENT_WINDOW_MS) {
+  const signals = inProgressSignals(state, committed);
+
+  if (!signals.length) {
+    // Nobody has registered. Inside the registration window that is
+    // indistinguishable from a bot that has not woken up yet; past it, it means
+    // no reviewer is coming — so allow, and never block a repository that
+    // genuinely has no reviewers.
+    if (age >= REGISTRATION_WINDOW_MS) return ALLOW;
     return refuse(
-      "the head commit " + state.head.slice(0, 7) + " of PR #" + target.number +
-        " has no reviews yet and is only " + humanDuration(age) +
-        " old. Bot reviewers (Copilot, the Codex connector) post minutes" +
-        " AFTER a push, so green CI is not merge authority yet. Wait " +
-        humanDuration(SETTLEMENT_WINDOW_MS - age) + " more (settlement window " +
-        humanDuration(SETTLEMENT_WINDOW_MS) + " from the head commit), then" +
-        " retry — if no review has arrived by then the gate allows the merge," +
-        " so waiting is always sufficient. Do not bypass this guard.",
+      "the head commit " + head + " of PR #" + target.number + " has no review" +
+        " and no reviewer has registered on it, and it is only " +
+        humanDuration(age) + " old. Bot reviewers (Copilot, the Codex" +
+        " connector, CodeRabbit) register within ~1-3 minutes of a push — a 👀" +
+        " reaction, a pending review — so this is too early to tell silence" +
+        " from a reviewer that has not woken up yet, and green CI is not merge" +
+        " authority. Wait " + humanDuration(REGISTRATION_WINDOW_MS - age) +
+        " more (registration window " + humanDuration(REGISTRATION_WINDOW_MS) +
+        " from the head commit), then retry — if nothing has registered by" +
+        " then the gate allows the merge, so waiting is always sufficient. Do" +
+        " not bypass this guard.",
     );
   }
-  // Past the window with no reviews: this repo has no reviewers. Allow, always
-  // — never block such a repository indefinitely.
-  return ALLOW;
+
+  if (age < SIGNAL_CAP_MS) {
+    return refuse(
+      "PR #" + target.number + " has a review in progress on head " + head +
+        " — " + signals.join("; ") + " — but no review has posted yet (head is " +
+        humanDuration(age) + " old). A reviewer that registered is a reviewer" +
+        " whose findings are still coming, and reviews that arrive after CI" +
+        " turns green are still real findings. Wait for the review to post, or" +
+        " at most " + humanDuration(SIGNAL_CAP_MS - age) + " more (hard cap " +
+        humanDuration(SIGNAL_CAP_MS) + " from the head commit), after which the" +
+        " gate allows the merge regardless — so waiting is always sufficient." +
+        " Do not bypass this guard.",
+    );
+  }
+
+  // Past the cap with the signal still unfulfilled: a flaky or abandoned
+  // reviewer must not lock the repository. Allow, but say what was left behind.
+  return warn(
+    "PR #" + target.number + " still shows " + signals.join("; ") +
+      ", but no review landed on head " + head + " in " + humanDuration(age) +
+      " (hard cap " + humanDuration(SIGNAL_CAP_MS) + " from the head commit)." +
+      " The signal is stale, so the merge proceeds without that review.",
+  );
 }
 
 let raw = "";
@@ -810,6 +904,14 @@ process.stdin.on("end", () => {
     return;
   }
   for (const v of verdicts) {
+    if (v.kind === "warn") {
+      // Judged, allowed, and not silent: the gate knows exactly what it waived.
+      process.stderr.write(
+        "[railyard] Merge-settlement gate WARNING (allowing the merge): " +
+          v.why + "\n",
+      );
+      continue;
+    }
     if (v.kind !== "degrade") continue;
     // Fail open, but say so: the model must know the gate could not judge.
     process.stderr.write(

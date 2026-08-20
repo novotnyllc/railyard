@@ -39,21 +39,36 @@ esac
 const HEAD = "a36a1cf89334911b243c7e9e3d368ce21598394a";
 const OLD_SHA = "1111111111111111111111111111111111111111";
 
+const BOT = "copilot-pull-request-reviewer";
+
 // Mirrors the shape the real query returns (verified live against a real PR).
 function settlement({
   head = HEAD,
   reviewedHeads = [],
+  reviews,
+  eyesAgoMs,
   threads = [],
   threadTotal,
   headAgeMs = 30 * 1000,
   committedDate,
 } = {}) {
+  const reviewNodes = reviews ?? reviewedHeads.map((oid) => ({
+    state: "APPROVED",
+    submittedAt: null,
+    author: { login: BOT },
+    commit: { oid },
+  }));
+  const reactionNodes = eyesAgoMs === undefined ? [] : [{
+    createdAt: new Date(Date.now() - eyesAgoMs).toISOString(),
+    user: { login: BOT },
+  }];
   return JSON.stringify({
     data: {
       repository: {
         pullRequest: {
           headRefOid: head,
-          reviews: { nodes: reviewedHeads.map((oid) => ({ commit: { oid } })) },
+          reviews: { nodes: reviewNodes },
+          reactions: { nodes: reactionNodes },
           reviewThreads: {
             totalCount: threadTotal ?? threads.length,
             nodes: threads.map((isResolved) => ({ isResolved })),
@@ -139,14 +154,14 @@ gated("unresolved threads are refused, naming the count and the remedy", () => {
   assert.match(r.err, /never\s+bypassed/);
 });
 
-gated("zero reviews on a fresh head is refused with wait guidance", () => {
+gated("no review and no signal inside the registration window is refused", () => {
   const r = run(bash("gh pr merge 7 --squash"), {
-    graphql: settlement({ reviewedHeads: [], headAgeMs: 90 * 1000 }),
+    graphql: settlement({ reviewedHeads: [], headAgeMs: 60 * 1000 }),
   });
   assert.equal(r.code, 2);
-  assert.match(r.err, /no reviews yet/);
-  assert.match(r.err, /Wait 9m more/);
-  assert.match(r.err, /settlement window 10m/);
+  assert.match(r.err, /no reviewer has registered/);
+  assert.match(r.err, /Wait 2m more/);
+  assert.match(r.err, /registration window 3m/);
   assert.match(r.err, /a36a1cf/); // names the head it judged
   // The message is the whole remedy: it must never offer an escape hatch.
   // (`gh pr merge --admin` is the real bypass, so name it explicitly.)
@@ -156,19 +171,90 @@ gated("zero reviews on a fresh head is refused with wait guidance", () => {
   assert.match(r.err, /waiting is always sufficient/);
 });
 
-gated("a review on an older SHA is not settlement for a new head", () => {
+gated("a 👀 reaction after the push holds the merge until the review posts", () => {
+  // The whole point of the signal-aware wait: a reviewer that registered is a
+  // reviewer whose findings are still coming, so this waits past 3 minutes.
   const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({ reviewedHeads: [OLD_SHA], headAgeMs: 60 * 1000 }),
+    graphql: settlement({ headAgeMs: 5 * 60 * 1000, eyesAgoMs: 4 * 60 * 1000 }),
   });
   assert.equal(r.code, 2);
-  assert.match(r.err, /no reviews yet/);
+  assert.match(r.err, /👀 reaction from copilot-pull-request-reviewer/);
+  assert.match(r.err, /hard cap 20m/);
+  assert.match(r.err, /Wait 15m more|at most 15m more/);
+  assert.match(r.err, /waiting is always sufficient/);
+  assert.doesNotMatch(r.err, /--no-verify|--admin|skip the gate|disable the (gate|hook)/i);
+});
+
+gated("a pending (unsubmitted) review is an in-progress signal", () => {
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({
+      headAgeMs: 6 * 60 * 1000,
+      reviews: [{ state: "PENDING", submittedAt: null, author: { login: "coderabbitai" }, commit: null }],
+    }),
+  });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /pending \(unsubmitted\) review from coderabbitai/);
+});
+
+gated("a reviewer that reviewed an earlier head is still expected on this one", () => {
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({ reviewedHeads: [OLD_SHA], headAgeMs: 8 * 60 * 1000 }),
+  });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /reviewed an earlier head/);
+  assert.match(r.err, /copilot-pull-request-reviewer/);
+});
+
+gated("unresolved threads outrank every allow path", () => {
+  // Reviewed head, stale signal, long past the cap: threads still block.
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({
+      reviewedHeads: [HEAD],
+      threads: [true, false],
+      headAgeMs: 3 * 60 * 60 * 1000,
+      eyesAgoMs: 2 * 60 * 60 * 1000,
+    }),
+  });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /1 unresolved review thread/);
 });
 
 // --- allows ---------------------------------------------------------------
 
-gated("reviews on the head with all threads resolved is allowed silently", () => {
+gated("a review on the head allows immediately, with no residual clock", () => {
+  // The head is 30s old — far inside every window. A completed review with
+  // nothing unresolved is settlement, so there is nothing left to wait for.
   const r = run(bash("gh pr merge 7 --squash"), {
     graphql: settlement({ reviewedHeads: [HEAD], threads: [true, true] }),
+  });
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+});
+
+gated("a review submitted after the head push counts even on an older oid", () => {
+  // A review posted while a push was landing can carry the previous oid; it
+  // still looked at what is on the branch now.
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({
+      headAgeMs: 60 * 1000,
+      reviews: [{
+        state: "COMMENTED",
+        submittedAt: new Date(Date.now() - 30 * 1000).toISOString(),
+        author: { login: BOT },
+        commit: { oid: OLD_SHA },
+      }],
+    }),
+  });
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+});
+
+gated("no signal past the 3-minute registration window is allowed", () => {
+  // The flat 10-minute clock burned seven more minutes here for nothing: bots
+  // that intend to review register within ~1-3 minutes, so silence is an
+  // answer.
+  const r = run(bash("gh pr merge 7 --squash"), {
+    graphql: settlement({ reviewedHeads: [], threads: [], headAgeMs: 4 * 60 * 1000 }),
   });
   assert.equal(r.code, 0);
   assert.equal(r.err, "");
@@ -177,6 +263,28 @@ gated("reviews on the head with all threads resolved is allowed silently", () =>
 gated("a stale head with zero reviews is allowed (repo has no reviewers)", () => {
   const r = run(bash("gh pr merge 7 --squash"), {
     graphql: settlement({ reviewedHeads: [], threads: [], headAgeMs: 3 * 60 * 60 * 1000 }),
+  });
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+});
+
+gated("a signal that never produced a review is capped, allowed, and named", () => {
+  // A flaky 👀 must not lock merges in the repository forever.
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({ headAgeMs: 25 * 60 * 1000, eyesAgoMs: 24 * 60 * 1000 }),
+  });
+  assert.equal(r.code, 0);
+  assert.match(r.err, /WARNING/);
+  assert.match(r.err, /allowing the merge/);
+  assert.match(r.err, /👀 reaction from copilot-pull-request-reviewer/);
+  assert.match(r.err, /stale/);
+});
+
+gated("a 👀 reaction from BEFORE the head push is not a signal for it", () => {
+  // It belongs to the previous head; treating it as current would hold every
+  // subsequent push for the full cap.
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({ headAgeMs: 4 * 60 * 1000, eyesAgoMs: 9 * 60 * 1000 }),
   });
   assert.equal(r.code, 0);
   assert.equal(r.err, "");
@@ -345,7 +453,7 @@ gated("Codex exec_command string cmd is extracted and gated", () => {
     tool_input: { cmd: "gh pr merge 7 --squash", yield_time_ms: 250 },
   }, { graphql: settlement({ reviewedHeads: [], headAgeMs: 60 * 1000 }) });
   assert.equal(r.code, 2);
-  assert.match(r.err, /no reviews yet/);
+  assert.match(r.err, /no reviewer has registered/);
 });
 
 gated("Codex unified_exec input array is extracted and gated", () => {

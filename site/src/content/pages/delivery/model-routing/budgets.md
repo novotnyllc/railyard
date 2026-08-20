@@ -42,7 +42,7 @@ Budget receipts belong to the same evidence chain as review and merge. The merge
 [railyard] Merge refused: PR #42 has 1 unresolved review thread(s). Reviews that arrive after CI turns green are still real findings. Address each one — fix it, or reply on the thread with the rationale for declining — then resolve the threads (resolveReviewThread via gh api graphql) and retry this merge. A tripped guard is waited out or fixed, never bypassed.
 ```
 
-A fresh head with no review waits through the ten-minute settlement window. If the gate cannot determine the state, it fails open with a `DEGRADED` stderr notice and tells the operator that review settlement was not verified.
+A fresh head with no review and no reviewer registered on it waits through the three-minute registration window; a reviewer that has registered but not posted holds the merge until the review lands, capped at 20 minutes. If the gate cannot determine the state, it fails open with a `DEGRADED` stderr notice and tells the operator that review settlement was not verified.
 
 ## Receipt shape
 
