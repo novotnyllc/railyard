@@ -17,7 +17,7 @@ An operator owns a repository-wide logging migration with a production risk hidi
 
 The operator splits the risk along its natural boundary. Lane A covers about 40 mechanical call sites and their fixes on `codex-luna`; the dispatch gate confirms model and effort. Lane B owns the async flush seam and is a deliberate escalation to a Claude worker on Opus at high effort, the fleet default for dispatched workers. Thermos runs correctness/security and quality in parallel. It returns four findings: two missed call sites and a format-string regression in lane A, plus a flush-order race under cancellation in lane B. Each lane re-dispatches its fix on the tier that produced it.
 
-The migration earns its finish through settled evidence. The merge-settlement gate holds `gh pr merge` until every thread is resolved and the current head has a review; when no reviewer even registers, the three-minute registration window is the fallback. After merge, ancestry proof and the smallest routed verification run. The run log carries each route, claim, imported receipt, finding, and final outcome.
+The migration earns its finish through settled evidence. The merge-settlement gate holds `gh pr merge` until every thread is resolved and the current head has a review. Both waits are bounded: when no reviewer even registers, the three-minute registration window releases the merge, and when a reviewer registered but never posted, the 20-minute cap releases it with a `WARNING` naming the stale signal. After merge, ancestry proof and the smallest routed verification run. The run log carries each route, claim, imported receipt, finding, and final outcome.
 
 | Ledger (relative cost units) | Tier | Volume | Cost |
 | --- | --- | --- | ---: |

@@ -65,7 +65,7 @@ query($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){
     pullRequest(number:$number){
       headRefOid
-      reviews(last:100){nodes{state submittedAt author{login} commit{oid}}}
+      reviews(last:100){nodes{state author{login} commit{oid}}}
       reviewThreads(first:100){totalCount nodes{isResolved}}
       reactions(content:EYES,last:20){nodes{createdAt user{login}}}
       commits(last:1){nodes{commit{committedDate}}}
@@ -726,16 +726,17 @@ const warn = (why) => ({ kind: "warn", why });
 
 const who = (login) => login || "a reviewer";
 
-// Has a reviewer looked at THIS head? Either the review is recorded against
-// the head commit, or it was submitted at/after the head was pushed (a review
-// that lands mid-push can carry the previous oid).
-function reviewedHead(state, committed) {
-  return state.reviews.some((review) => {
-    if (!review || review.state === "PENDING") return false;
-    if (review.commit?.oid === state.head) return true;
-    const at = review.submittedAt ? Date.parse(review.submittedAt) : NaN;
-    return !Number.isNaN(at) && !Number.isNaN(committed) && at >= committed;
-  });
+// Has a reviewer looked at THIS head? Commit-OID equality ONLY. A review
+// submitted after the head's timestamp but recorded against an older oid is
+// indistinguishable from a review of the PREVIOUS head that happened to land
+// late, so treating it as settlement would reopen the exact stale-review race
+// this gate exists to close. Such a review is an in-progress signal instead:
+// the gate waits for that reviewer to come back to the new head.
+function reviewedHead(state) {
+  return state.reviews.some(
+    (review) => review && review.state !== "PENDING" &&
+      review.commit?.oid === state.head,
+  );
 }
 
 // Reviewers that have shown intent on this head but have not posted yet. Each
@@ -816,7 +817,7 @@ function verdictFor(command) {
 
   // Fast path: this head already has a review and nothing is unresolved. The
   // reviewers who were coming have arrived, so there is no clock left to run.
-  if (reviewedHead(state, committed)) return ALLOW;
+  if (reviewedHead(state)) return ALLOW;
 
   if (Number.isNaN(committed)) {
     return degrade("could not read the head commit date for PR #" + target.number);

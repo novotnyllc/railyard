@@ -54,7 +54,6 @@ function settlement({
 } = {}) {
   const reviewNodes = reviews ?? reviewedHeads.map((oid) => ({
     state: "APPROVED",
-    submittedAt: null,
     author: { login: BOT },
     commit: { oid },
   }));
@@ -142,7 +141,7 @@ function run(input, fixtures = {}) {
   return { code: result.status, err: result.stderr, calls, hosts, tokens, xdg, cwds };
 }
 
-// --- refusals (the only two determinable violations) ----------------------
+// --- refusals (determinable violations only) ------------------------------
 
 gated("unresolved threads are refused, naming the count and the remedy", () => {
   const r = run(bash("gh pr merge 7 --squash"), {
@@ -205,6 +204,25 @@ gated("a reviewer that reviewed an earlier head is still expected on this one", 
   assert.match(r.err, /copilot-pull-request-reviewer/);
 });
 
+gated("a late review recorded on an older oid is a signal, never settlement", () => {
+  // A review of the PREVIOUS head can be submitted after the new head's
+  // timestamp. Reading that as settlement would allow merging a head nobody
+  // has looked at — the exact stale-review race this gate closes. Only
+  // commit-OID equality settles; the late review makes the gate WAIT.
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({
+      headAgeMs: 60 * 1000,
+      reviews: [{
+        state: "COMMENTED",
+        author: { login: BOT },
+        commit: { oid: OLD_SHA },
+      }],
+    }),
+  });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /reviewed an earlier head/);
+});
+
 gated("unresolved threads outrank every allow path", () => {
   // Reviewed head, stale signal, long past the cap: threads still block.
   const r = run(bash("gh pr merge 7"), {
@@ -226,24 +244,6 @@ gated("a review on the head allows immediately, with no residual clock", () => {
   // nothing unresolved is settlement, so there is nothing left to wait for.
   const r = run(bash("gh pr merge 7 --squash"), {
     graphql: settlement({ reviewedHeads: [HEAD], threads: [true, true] }),
-  });
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-});
-
-gated("a review submitted after the head push counts even on an older oid", () => {
-  // A review posted while a push was landing can carry the previous oid; it
-  // still looked at what is on the branch now.
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({
-      headAgeMs: 60 * 1000,
-      reviews: [{
-        state: "COMMENTED",
-        submittedAt: new Date(Date.now() - 30 * 1000).toISOString(),
-        author: { login: BOT },
-        commit: { oid: OLD_SHA },
-      }],
-    }),
   });
   assert.equal(r.code, 0);
   assert.equal(r.err, "");
