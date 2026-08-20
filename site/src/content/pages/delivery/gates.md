@@ -28,7 +28,7 @@ Each lens is also independently invocable when one question deserves its own pac
 2. **Gates.** Keep only evidence for the current implementation head in the packet.
 3. **Thermos.** Run parallel correctness/security and code-quality reviews against that packet.
 4. **Return.** Synthesize real findings and send fixes back to the owning implementation lane.
-5. **Settle.** Require resolved threads and current review authority, using the bounded settlement window when applicable.
+5. **Settle.** Require resolved threads and current review authority, using the bounded signal-aware wait when applicable.
 6. **Review.** Run the independent review that confirms the settled packet.
 7. **Merge.** Merge only after the current gates authorize the branch.
 8. **Prove.** Verify merge ancestry and the focused post-merge result.
@@ -61,7 +61,7 @@ The [React Doctor repository](https://github.com/millionco/react-doctor) carries
 
 ## Merge settlement
 
-Tie merge authority to the latest branch head and its settled review evidence. The merge-settlement hook gives a new head time to receive reviews and carries unresolved threads in the settlement state.
+Tie merge authority to the latest branch head and its settled review evidence. The merge-settlement hook waits on reviewer *signals* rather than a flat clock — a review already on the head allows immediately, silence past a short registration window allows, and a registered-but-unposted reviewer holds the merge until it lands — and carries unresolved threads in the settlement state.
 
 An unresolved thread returns:
 
@@ -69,11 +69,13 @@ An unresolved thread returns:
 [railyard] Merge refused: PR #42 has 1 unresolved review thread(s). Reviews that arrive after CI turns green are still real findings. Address each one — fix it, or reply on the thread with the rationale for declining — then resolve the threads (resolveReviewThread via gh api graphql) and retry this merge. A tripped guard is waited out or fixed, never bypassed.
 ```
 
-A fresh head with no reviews is held for the ten-minute settlement window:
+A fresh head with no review and nobody registered on it is held for the three-minute registration window:
 
 ```text
-[railyard] Merge refused: the head commit 4e1d... of PR #42 has no reviews yet and is only 2m old. Bot reviewers post after a push, so green CI is not merge authority yet. Wait 8m more (settlement window 10m from the head commit), then retry.
+[railyard] Merge refused: the head commit 4e1d... of PR #42 has no review and no reviewer has registered on it, and it is only 60s old. Bot reviewers (Copilot, the Codex connector, CodeRabbit) register within ~1-3 minutes of a push — a 👀 reaction on the PR — so this is too early to tell silence from a reviewer that has not woken up yet. Wait 2m more (registration window 3m from the head commit), then retry.
 ```
+
+The signals that cross accounts are the PR's 👀 reactions and reviews posted on an earlier head; an unsubmitted review is visible only to its own author, so it guards the merging account against its own pending review rather than another reviewer's. When a reviewer *has* registered but has not posted, the wait follows that signal instead of a clock: the merge is held until the review lands, capped at 20 minutes from the head push, after which the gate allows the merge and names the stale signal in a `WARNING` stderr line.
 
 The [merge-settlement hook](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.js) and its [proof tests](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.test.mjs) are public implementation evidence.
 
