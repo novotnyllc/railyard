@@ -72,10 +72,10 @@ An unresolved thread returns:
 A fresh head with no review and nobody registered on it is held for the three-minute registration window:
 
 ```text
-[railyard] Merge refused: the head commit 4e1d... of PR #42 has no review and no reviewer has registered on it, and it is only 60s old. Bot reviewers (Copilot, the Codex connector, CodeRabbit) register within ~1-3 minutes of a push — a 👀 reaction, a pending review — so this is too early to tell silence from a reviewer that has not woken up yet. Wait 2m more (registration window 3m from the head commit), then retry.
+[railyard] Merge refused: the head commit 4e1d... of PR #42 has no review and no reviewer has registered on it, and it is only 60s old. Bot reviewers (Copilot, the Codex connector, CodeRabbit) register within ~1-3 minutes of a push — a 👀 reaction on the PR — so this is too early to tell silence from a reviewer that has not woken up yet. Wait 2m more (registration window 3m from the head commit), then retry.
 ```
 
-When a reviewer *has* registered but has not posted, the wait follows that signal instead of a clock: the merge is held until the review lands, capped at 20 minutes from the head push, after which the gate allows the merge and names the stale signal in a `WARNING` stderr line.
+The signals that cross accounts are the PR's 👀 reactions and reviews posted on an earlier head; an unsubmitted review is visible only to its own author, so it guards the merging account against its own pending review rather than another reviewer's. When a reviewer *has* registered but has not posted, the wait follows that signal instead of a clock: the merge is held until the review lands, capped at 20 minutes from the head push, after which the gate allows the merge and names the stale signal in a `WARNING` stderr line.
 
 The [merge-settlement hook](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.js) and its [proof tests](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.test.mjs) are public implementation evidence.
 

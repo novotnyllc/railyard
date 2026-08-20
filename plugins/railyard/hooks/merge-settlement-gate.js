@@ -14,8 +14,8 @@
 //   (a) the PR has unresolved review threads, or
 //   (b) the head commit has no review yet AND is inside a bounded wait.
 // The wait is SIGNAL-AWARE rather than a flat clock. Bots that intend to
-// review REGISTER within ~1-3 minutes of a push — a 👀 reaction, a pending
-// review, or a review they already posted on an earlier head. So:
+// review REGISTER within ~1-3 minutes of a push — a 👀 reaction on the PR, or
+// a review they already posted on an earlier head and owe on this one. So:
 //   - a review already on this head, with nothing unresolved and no OTHER
 //     reviewer still registered, allows immediately (no residual clock);
 //   - no signal at all past the 3-minute registration window means nobody is
@@ -747,9 +747,16 @@ function reviewedHead(state) {
 // signal is dropped only when THAT reviewer has posted on this head, which is
 // also what keeps a reviewer's own earlier reaction from outliving their
 // review.
+// A PENDING review is only ever the MERGING ACCOUNT'S OWN: GitHub exposes an
+// unsubmitted review to its author alone, so this query — authenticated as
+// whoever runs the merge — cannot see a bot's pending review. It is kept
+// because "you left a review unsubmitted and are merging anyway" is a real
+// state worth refusing, NOT as cross-user registration evidence. The 👀
+// reaction is the signal that actually crosses accounts.
 // ponytail: reactions and reviews only — an interim "I'm on it" comment is a
 // weaker signal and a human's ordinary comment would read as one, holding the
-// merge for the full cap. Add comment scanning if bots stop reacting.
+// merge for the full cap; a pending review request would hold on every
+// requested human reviewer. Add either if bots stop reacting.
 function inProgressSignals(state, committed) {
   const landed = new Set();
   for (const review of state.reviews) {
@@ -858,7 +865,7 @@ function verdictFor(command) {
         " and no reviewer has registered on it, and it is only " +
         humanDuration(age) + " old. Bot reviewers (Copilot, the Codex" +
         " connector, CodeRabbit) register within ~1-3 minutes of a push — a 👀" +
-        " reaction, a pending review — so this is too early to tell silence" +
+        " reaction on the PR — so this is too early to tell silence" +
         " from a reviewer that has not woken up yet, and green CI is not merge" +
         " authority. Wait " + humanDuration(REGISTRATION_WINDOW_MS - age) +
         " more (registration window " + humanDuration(REGISTRATION_WINDOW_MS) +
