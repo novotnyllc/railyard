@@ -16,8 +16,8 @@
 // The wait is SIGNAL-AWARE rather than a flat clock. Bots that intend to
 // review REGISTER within ~1-3 minutes of a push — a 👀 reaction, a pending
 // review, or a review they already posted on an earlier head. So:
-//   - a review already on this head, with nothing unresolved, allows
-//     immediately (no residual clock);
+//   - a review already on this head, with nothing unresolved and no OTHER
+//     reviewer still registered, allows immediately (no residual clock);
 //   - no signal at all past the 3-minute registration window means nobody is
 //     coming, so it allows;
 //   - a signal that has not turned into a review yet holds the merge until it
@@ -742,23 +742,40 @@ function reviewedHead(state) {
 // Reviewers that have shown intent on this head but have not posted yet. Each
 // entry is a phrase the refusal names, so the model can see WHAT it is waiting
 // on instead of just a clock.
+// Signals are matched to reviewer IDENTITY, not counted in aggregate: one
+// reviewer landing on the head does not discharge another reviewer's 👀. So a
+// signal is dropped only when THAT reviewer has posted on this head, which is
+// also what keeps a reviewer's own earlier reaction from outliving their
+// review.
 // ponytail: reactions and reviews only — an interim "I'm on it" comment is a
 // weaker signal and a human's ordinary comment would read as one, holding the
 // merge for the full cap. Add comment scanning if bots stop reacting.
 function inProgressSignals(state, committed) {
+  const landed = new Set();
+  for (const review of state.reviews) {
+    if (review && review.state !== "PENDING" && review.commit?.oid === state.head) {
+      landed.add(who(review.author?.login));
+    }
+  }
   const signals = [];
   const earlier = new Set();
   for (const review of state.reviews) {
+    const login = who(review?.author?.login);
+    if (landed.has(login)) continue;
     if (review?.state === "PENDING") {
-      signals.push("a pending (unsubmitted) review from " + who(review?.author?.login));
+      signals.push("a pending (unsubmitted) review from " + login);
     } else if (review?.commit?.oid && review.commit.oid !== state.head) {
-      earlier.add(who(review?.author?.login));
+      earlier.add(login);
     }
   }
   for (const reaction of state.reactions) {
+    const login = who(reaction?.user?.login);
+    if (landed.has(login)) continue;
     const at = reaction?.createdAt ? Date.parse(reaction.createdAt) : NaN;
-    if (!Number.isNaN(at) && at >= committed) {
-      signals.push("a 👀 reaction from " + who(reaction?.user?.login) + " after the head push");
+    // An unreadable head date leaves "after the push" undecidable, so a
+    // reaction contributes nothing rather than blocking on a guess.
+    if (!Number.isNaN(at) && !Number.isNaN(committed) && at >= committed) {
+      signals.push("a 👀 reaction from " + login + " after the head push");
     }
   }
   for (const login of earlier) {
@@ -814,10 +831,14 @@ function verdictFor(command) {
   }
 
   const committed = state.committedDate ? Date.parse(state.committedDate) : NaN;
+  const signals = inProgressSignals(state, committed);
 
-  // Fast path: this head already has a review and nothing is unresolved. The
-  // reviewers who were coming have arrived, so there is no clock left to run.
-  if (reviewedHead(state)) return ALLOW;
+  // Fast path: this head has a review, nothing is unresolved, and no OTHER
+  // reviewer is still registered. Every reviewer that was coming has arrived,
+  // so there is no clock left to run. One reviewer finishing does not speak
+  // for another whose 👀 is still outstanding — that would merge out from
+  // under the reviewer who announced they were looking.
+  if (reviewedHead(state) && !signals.length) return ALLOW;
 
   if (Number.isNaN(committed)) {
     return degrade("could not read the head commit date for PR #" + target.number);
@@ -825,7 +846,6 @@ function verdictFor(command) {
 
   const head = state.head.slice(0, 7);
   const age = Date.now() - committed;
-  const signals = inProgressSignals(state, committed);
 
   if (!signals.length) {
     // Nobody has registered. Inside the registration window that is
@@ -850,9 +870,10 @@ function verdictFor(command) {
 
   if (age < SIGNAL_CAP_MS) {
     return refuse(
-      "PR #" + target.number + " has a review in progress on head " + head +
-        " — " + signals.join("; ") + " — but no review has posted yet (head is " +
-        humanDuration(age) + " old). A reviewer that registered is a reviewer" +
+      "PR #" + target.number + " has a review still in progress on head " +
+        head + " — " + signals.join("; ") + " — so the review evidence for this" +
+        " head is incomplete (head is " + humanDuration(age) +
+        " old). A reviewer that registered is a reviewer" +
         " whose findings are still coming, and reviews that arrive after CI" +
         " turns green are still real findings. Wait for the review to post, or" +
         " at most " + humanDuration(SIGNAL_CAP_MS - age) + " more (hard cap " +
@@ -866,7 +887,7 @@ function verdictFor(command) {
   // reviewer must not lock the repository. Allow, but say what was left behind.
   return warn(
     "PR #" + target.number + " still shows " + signals.join("; ") +
-      ", but no review landed on head " + head + " in " + humanDuration(age) +
+      ", but that never produced a review on head " + head + " in " + humanDuration(age) +
       " (hard cap " + humanDuration(SIGNAL_CAP_MS) + " from the head commit)." +
       " The signal is stale, so the merge proceeds without that review.",
   );

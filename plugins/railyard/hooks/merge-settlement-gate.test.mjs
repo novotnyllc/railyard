@@ -47,6 +47,7 @@ function settlement({
   reviewedHeads = [],
   reviews,
   eyesAgoMs,
+  eyesBy = BOT,
   threads = [],
   threadTotal,
   headAgeMs = 30 * 1000,
@@ -59,7 +60,7 @@ function settlement({
   }));
   const reactionNodes = eyesAgoMs === undefined ? [] : [{
     createdAt: new Date(Date.now() - eyesAgoMs).toISOString(),
-    user: { login: BOT },
+    user: { login: eyesBy },
   }];
   return JSON.stringify({
     data: {
@@ -195,6 +196,23 @@ gated("a pending (unsubmitted) review is an in-progress signal", () => {
   assert.match(r.err, /pending \(unsubmitted\) review from coderabbitai/);
 });
 
+gated("one reviewer finishing does not discharge another reviewer's 👀", () => {
+  // Copilot posted on the head while CodeRabbit is still explicitly looking.
+  // Allowing here merges out from under the reviewer that announced itself,
+  // and its findings arrive after the merge — the whole race this gate closes.
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({
+      reviewedHeads: [HEAD],
+      headAgeMs: 5 * 60 * 1000,
+      eyesAgoMs: 4 * 60 * 1000,
+      eyesBy: "coderabbitai",
+    }),
+  });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /👀 reaction from coderabbitai/);
+  assert.match(r.err, /hard cap 20m/);
+});
+
 gated("a reviewer that reviewed an earlier head is still expected on this one", () => {
   const r = run(bash("gh pr merge 7"), {
     graphql: settlement({ reviewedHeads: [OLD_SHA], headAgeMs: 8 * 60 * 1000 }),
@@ -244,6 +262,28 @@ gated("a review on the head allows immediately, with no residual clock", () => {
   // nothing unresolved is settlement, so there is nothing left to wait for.
   const r = run(bash("gh pr merge 7 --squash"), {
     graphql: settlement({ reviewedHeads: [HEAD], threads: [true, true] }),
+  });
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+});
+
+gated("a reviewer's own 👀 does not outlive their review on the head", () => {
+  // The bot reacted, then posted. Counting its own reaction as an outstanding
+  // signal would hold every merge for the full cap after a complete review.
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({
+      reviewedHeads: [HEAD],
+      headAgeMs: 5 * 60 * 1000,
+      eyesAgoMs: 4 * 60 * 1000,
+    }),
+  });
+  assert.equal(r.code, 0);
+  assert.equal(r.err, "");
+});
+
+gated("a reviewer that reviewed BOTH an earlier head and this one is done", () => {
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({ reviewedHeads: [OLD_SHA, HEAD], headAgeMs: 5 * 60 * 1000 }),
   });
   assert.equal(r.code, 0);
   assert.equal(r.err, "");
