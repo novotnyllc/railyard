@@ -67,7 +67,7 @@ query($owner:String!,$name:String!,$number:Int!){
       headRefOid
       reviews(last:100){nodes{state submittedAt author{login} commit{oid}}}
       reviewThreads(first:100){totalCount nodes{isResolved}}
-      reactions(content:EYES,last:20){nodes{createdAt user{login}}}
+      reactions(content:EYES,last:100){nodes{createdAt user{login}}}
       commits(last:1){nodes{commit{committedDate}}}
     }
   }
