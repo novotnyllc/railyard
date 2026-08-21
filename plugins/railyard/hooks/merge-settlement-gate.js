@@ -916,6 +916,13 @@ function verdictFor(command) {
   const holding = signals.filter((signal) => age < signal.cap);
   const dropped = signals.filter((signal) => age >= signal.cap);
   const named = (list) => list.map((signal) => signal.why).join("; ");
+  // Each holding signal carries its OWN remaining time and cap. The aggregate
+  // below is the longest one, so reporting only that hides that the inference
+  // in a mixed set expires much sooner — which is exactly the wait a caller
+  // would otherwise re-check too late.
+  const namedWithClocks = (list) => list.map((signal) =>
+    signal.why + ", " + humanDuration(signal.cap - age) + " left of its " +
+      humanDuration(signal.cap) + " cap").join("; ");
   // Whatever was discharged is named wherever the verdict is reported, so the
   // operator always learns WHO did not come back.
   const discharged = dropped.length
@@ -926,7 +933,7 @@ function verdictFor(command) {
     const cap = Math.max(...holding.map((signal) => signal.cap));
     return refuse(
       "PR #" + target.number + " has a review still in progress on head " +
-        head + " — " + named(holding) + " — so the review evidence for this" +
+        head + " — " + namedWithClocks(holding) + " — so the review evidence for this" +
         " head is incomplete (head is " + humanDuration(age) +
         " old). A reviewer that registered is a reviewer" +
         " whose findings are still coming, and reviews that arrive after CI" +

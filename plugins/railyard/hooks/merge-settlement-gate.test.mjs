@@ -308,6 +308,24 @@ gated("a mixed set holds to the longest cap still applying", () => {
   assert.match(r.err, /copilot-pull-request-reviewer reviewed an earlier head/);
 });
 
+gated("each holding signal reports its OWN remaining time and cap", () => {
+  // Both classes live at a 5m head age. Reporting only the longest cap hides
+  // that the inference expires in 2m while the claim still has 15m to run.
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({
+      reviewedHeads: [OLD_SHA],
+      headAgeMs: 5 * 60 * 1000,
+      eyesAgoMs: 4 * 60 * 1000,
+      eyesBy: "coderabbitai",
+    }),
+  });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /reviewed an earlier head.*2m left of its 7m cap/);
+  assert.match(r.err, /👀 reaction from coderabbitai.*15m left of its 20m cap/);
+  assert.match(r.err, /at most 15m more \(hard cap 20m/); // aggregate unchanged
+  assert.doesNotMatch(r.err, /Already discharged/); // nothing spent yet
+});
+
 gated("a spent 👀 does not shorten to the inference cap in a mixed set", () => {
   // The inverse mix: the claim is the SHORT-lived one only because it is older
   // than its own cap. Past 20m both classes are spent, so the merge proceeds
