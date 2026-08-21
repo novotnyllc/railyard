@@ -247,12 +247,101 @@ gated("a pending review is never discharged by a completed one", () => {
 });
 
 gated("a reviewer that reviewed an earlier head is still expected on this one", () => {
+  // Inside the 7m inference cap: the measured re-review lands here (median
+  // 3m58s on the PR that motivated the split), so this is worth waiting for.
   const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({ reviewedHeads: [OLD_SHA], headAgeMs: 8 * 60 * 1000 }),
+    graphql: settlement({ reviewedHeads: [OLD_SHA], headAgeMs: 5 * 60 * 1000 }),
   });
   assert.equal(r.code, 2);
   assert.match(r.err, /reviewed an earlier head/);
+  assert.match(r.err, /inferred, not claimed/); // names the signal CLASS
   assert.match(r.err, /copilot-pull-request-reviewer/);
+  assert.match(r.err, /hard cap 7m/);
+  assert.match(r.err, /at most 2m more/);
+  assert.match(r.err, /waiting is always sufficient/);
+});
+
+gated("an earlier-head signal discharges at 7m, naming who never came back", () => {
+  // The measured failure mode: a quota-limited bot reviewed one early head and
+  // never returned, so holding this inference to the 20m claim cap burned the
+  // full cap on every push for a reviewer that was never coming.
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({ reviewedHeads: [OLD_SHA], headAgeMs: 8 * 60 * 1000 }),
+  });
+  assert.equal(r.code, 0);
+  assert.match(r.err, /WARNING/);
+  assert.match(r.err, /allowing the merge/);
+  assert.match(r.err, /copilot-pull-request-reviewer/); // who did not return
+  assert.match(r.err, /hard cap 7m/);
+  assert.match(r.err, /stale/);
+});
+
+gated("a 👀 still holds to 20m where an earlier-head signal would be spent", () => {
+  // Same 8m head age as the discharge case above: the CLASS is what differs,
+  // because a 👀 is somebody affirmatively saying they are on it.
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({ headAgeMs: 8 * 60 * 1000, eyesAgoMs: 7 * 60 * 1000 }),
+  });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /👀 reaction from copilot-pull-request-reviewer/);
+  assert.match(r.err, /explicit claim/);
+  assert.match(r.err, /hard cap 20m/);
+});
+
+gated("a mixed set holds to the longest cap still applying", () => {
+  // coderabbitai claimed the head with a 👀 (20m); the Copilot bot only
+  // reviewed an earlier one (7m) and is spent at 8m. The merge waits out the
+  // claim, and the refusal still names the discharged inference.
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({
+      reviewedHeads: [OLD_SHA],
+      headAgeMs: 8 * 60 * 1000,
+      eyesAgoMs: 7 * 60 * 1000,
+      eyesBy: "coderabbitai",
+    }),
+  });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /👀 reaction from coderabbitai/);
+  assert.match(r.err, /hard cap 20m/);
+  assert.match(r.err, /at most 12m more/);
+  assert.match(r.err, /Already discharged/);
+  assert.match(r.err, /copilot-pull-request-reviewer reviewed an earlier head/);
+});
+
+gated("each holding signal reports its OWN remaining time and cap", () => {
+  // Both classes live at a 5m head age. Reporting only the longest cap hides
+  // that the inference expires in 2m while the claim still has 15m to run.
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({
+      reviewedHeads: [OLD_SHA],
+      headAgeMs: 5 * 60 * 1000,
+      eyesAgoMs: 4 * 60 * 1000,
+      eyesBy: "coderabbitai",
+    }),
+  });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /reviewed an earlier head.*2m left of its 7m cap/);
+  assert.match(r.err, /👀 reaction from coderabbitai.*15m left of its 20m cap/);
+  assert.match(r.err, /at most 15m more \(hard cap 20m/); // aggregate unchanged
+  assert.doesNotMatch(r.err, /Already discharged/); // nothing spent yet
+});
+
+gated("a spent 👀 does not shorten to the inference cap in a mixed set", () => {
+  // The inverse mix: the claim is the SHORT-lived one only because it is older
+  // than its own cap. Past 20m both classes are spent, so the merge proceeds
+  // and both are named.
+  const r = run(bash("gh pr merge 7"), {
+    graphql: settlement({
+      reviewedHeads: [OLD_SHA],
+      headAgeMs: 25 * 60 * 1000,
+      eyesAgoMs: 24 * 60 * 1000,
+      eyesBy: "coderabbitai",
+    }),
+  });
+  assert.equal(r.code, 0);
+  assert.match(r.err, /WARNING/);
+  assert.match(r.err, /👀 reaction from coderabbitai/);
+  assert.match(r.err, /reviewed an earlier head/);
 });
 
 gated("a late review recorded on an older oid is a signal, never settlement", () => {

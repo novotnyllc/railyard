@@ -21,8 +21,12 @@
 //   - no signal at all past the 3-minute registration window means nobody is
 //     coming, so it allows;
 //   - a signal that has not turned into a review yet holds the merge until it
-//     does, capped at 20 minutes from the head push so a flaky signal cannot
-//     lock the repository forever.
+//     does, capped from the head push so a flaky signal cannot lock the
+//     repository forever. The cap depends on what KIND of signal it is: an
+//     explicit CLAIM (a 👀 after the push, a review left pending) is somebody
+//     affirmatively saying they are on it and gets the long cap; "reviewed an
+//     earlier head" is an INFERENCE the gate drew, not a claim anyone made,
+//     and gets a much shorter one.
 // Everything else allows — a repository that genuinely has no reviewers is
 // never blocked.
 //
@@ -40,10 +44,25 @@ const path = require("path");
 // the no-signal wait is 3 minutes, not the ~2x-worst-case 10 the flat clock
 // used to burn on every merge in every repository with no reviewers at all.
 const REGISTRATION_WINDOW_MS = 3 * 60 * 1000;
-// A registered reviewer that never posts must not hold merges forever: past
-// this the gate allows with a warning naming the stale signal. ~4x the
-// observed worst-case post time.
+// A reviewer that CLAIMED this head — a 👀 added after the push, or a review
+// left pending — said affirmatively that it is working. That claim gets the
+// long cap; past it the gate allows with a warning naming the stale signal.
 const SIGNAL_CAP_MS = 20 * 60 * 1000;
+// "Reviewed an earlier head" is an inference, not a claim: nobody promised to
+// come back. Holding it to the claim cap made every push wait 20 minutes on
+// reviewers that were quota-limited and never returned at all.
+//
+// Measured on novotnyllc/agent-utilities#65 (2026-08-21, 31 heads over ~4.5h):
+// chatgpt-codex-connector re-reviewed 15 of them, at a median 3m58s and a mean
+// 4m22s after the head commit (13 of 15 inside 6m; outliers 6m51s and 7m07s) —
+// and those are upper bounds, since the push follows the commit it carries.
+// The other two bots never came back: copilot-pull-request-reviewer reviewed
+// exactly one head (05:56Z) and skipped the following 29; coderabbitai went
+// silent after 08:20Z and skipped the last 13. So 7 minutes covers the
+// re-review that actually happens, and stops paying 20 for the ones that do
+// not. ponytail: one number for every bot; split per-reviewer only if some
+// reviewer's real re-review latency lands outside this.
+const EARLIER_HEAD_CAP_MS = 7 * 60 * 1000;
 // The two calls are sequential in the worst case, so their SUM plus Node
 // startup must clear the harness's 5s PreToolUse cap with room to spare —
 // otherwise the harness kills the hook before its own fail-open path runs, and
@@ -740,8 +759,9 @@ function reviewedHead(state) {
 }
 
 // Reviewers that have shown intent on this head but have not posted yet. Each
-// entry is a phrase the refusal names, so the model can see WHAT it is waiting
-// on instead of just a clock.
+// entry is `{ why, cap }`: a phrase the refusal names, so the model can see
+// WHAT it is waiting on instead of just a clock, and the cap for that signal's
+// CLASS — an explicit claim holds longer than an inference the gate drew.
 // Signals are matched to reviewer IDENTITY and to TIME, not counted in
 // aggregate: one reviewer landing on the head does not discharge another
 // reviewer's 👀, and a reviewer's own review discharges only the reactions it
@@ -772,11 +792,12 @@ function inProgressSignals(state, committed) {
     landed.set(login, seen === undefined || (!Number.isNaN(at) && at > seen) ? at : seen);
   }
   const signals = [];
+  const claim = (why) => signals.push({ why: why + " (explicit claim)", cap: SIGNAL_CAP_MS });
   const earlier = new Set();
   for (const review of state.reviews) {
     const login = who(review?.author?.login);
     if (review?.state === "PENDING") {
-      signals.push("a pending (unsubmitted) review from " + login);
+      claim("a pending (unsubmitted) review from " + login);
     } else if (review?.commit?.oid && review.commit.oid !== state.head &&
       !landed.has(login)) {
       earlier.add(login);
@@ -792,10 +813,14 @@ function inProgressSignals(state, committed) {
     // Discharged only by that reviewer's OWN review, submitted at/after the
     // reaction. A reaction added later is a new pass they have not posted yet.
     if (reviewedAt !== undefined && !Number.isNaN(reviewedAt) && reviewedAt >= at) continue;
-    signals.push("a 👀 reaction from " + login + " after the head push");
+    claim("a 👀 reaction from " + login + " after the head push");
   }
   for (const login of earlier) {
-    signals.push(login + " reviewed an earlier head and has not reviewed this one yet");
+    signals.push({
+      why: login + " reviewed an earlier head and has not reviewed this one yet" +
+        " (inferred, not claimed)",
+      cap: EARLIER_HEAD_CAP_MS,
+    });
   }
   return signals;
 }
@@ -884,27 +909,50 @@ function verdictFor(command) {
     );
   }
 
-  if (age < SIGNAL_CAP_MS) {
+  // Each signal is capped by its own CLASS, so an inference cannot hold the
+  // merge for as long as a claim. A mixed set holds until the LONGEST cap that
+  // still applies — the reviewer that actually claimed the head is the one
+  // whose findings are still owed.
+  const holding = signals.filter((signal) => age < signal.cap);
+  const dropped = signals.filter((signal) => age >= signal.cap);
+  const named = (list) => list.map((signal) => signal.why).join("; ");
+  // Each holding signal carries its OWN remaining time and cap. The aggregate
+  // below is the longest one, so reporting only that hides that the inference
+  // in a mixed set expires much sooner — which is exactly the wait a caller
+  // would otherwise re-check too late.
+  const namedWithClocks = (list) => list.map((signal) =>
+    signal.why + ", " + humanDuration(signal.cap - age) + " left of its " +
+      humanDuration(signal.cap) + " cap").join("; ");
+  // Whatever was discharged is named wherever the verdict is reported, so the
+  // operator always learns WHO did not come back.
+  const discharged = dropped.length
+    ? " Already discharged (no review after their own cap): " + named(dropped) + "."
+    : "";
+
+  if (holding.length) {
+    const cap = Math.max(...holding.map((signal) => signal.cap));
     return refuse(
       "PR #" + target.number + " has a review still in progress on head " +
-        head + " — " + signals.join("; ") + " — so the review evidence for this" +
+        head + " — " + namedWithClocks(holding) + " — so the review evidence for this" +
         " head is incomplete (head is " + humanDuration(age) +
         " old). A reviewer that registered is a reviewer" +
         " whose findings are still coming, and reviews that arrive after CI" +
         " turns green are still real findings. Wait for the review to post, or" +
-        " at most " + humanDuration(SIGNAL_CAP_MS - age) + " more (hard cap " +
-        humanDuration(SIGNAL_CAP_MS) + " from the head commit), after which the" +
+        " at most " + humanDuration(cap - age) + " more (hard cap " +
+        humanDuration(cap) + " from the head commit), after which the" +
         " gate allows the merge regardless — so waiting is always sufficient." +
-        " Do not bypass this guard.",
+        " Do not bypass this guard." + discharged,
     );
   }
 
-  // Past the cap with the signal still unfulfilled: a flaky or abandoned
-  // reviewer must not lock the repository. Allow, but say what was left behind.
+  // Past every applicable cap with the signals still unfulfilled: a flaky or
+  // abandoned reviewer must not lock the repository. Allow, but say what was
+  // left behind and who never returned.
+  const cap = Math.max(...signals.map((signal) => signal.cap));
   return warn(
-    "PR #" + target.number + " still shows " + signals.join("; ") +
+    "PR #" + target.number + " still shows " + named(signals) +
       ", but that never produced a review on head " + head + " in " + humanDuration(age) +
-      " (hard cap " + humanDuration(SIGNAL_CAP_MS) + " from the head commit)." +
+      " (hard cap " + humanDuration(cap) + " from the head commit)." +
       " The signal is stale, so the merge proceeds without that review.",
   );
 }
