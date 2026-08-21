@@ -38,8 +38,7 @@ modified:
 
 - Compound Engineering
   ([EveryInc/compound-engineering-plugin](https://github.com/EveryInc/compound-engineering-plugin))
-  — the delivery workflow engine; Goal Driven Delivery routes through its
-  workflows.
+  — the delivery workflow engine; Deliver routes through its workflows.
 - ponytail
   ([DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)) — the
   efficiency discipline railyard carries into both the code and the process and

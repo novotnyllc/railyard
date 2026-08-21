@@ -108,9 +108,9 @@ plan-boundary routing decision.
 ## Delivery tail (merge and post-merge proof)
 
 For implementation delivery, LFG owns plan → work → simplify → review →
-browser test → commit/push/PR → CI and review settlement. Goal Driven
-Delivery owns what comes after. When LFG returns, execute this tail rather
-than merely reporting merge readiness:
+browser test → commit/push/PR → CI and review settlement. Deliver owns
+what comes after. When LFG returns, execute this tail rather than merely
+reporting merge readiness:
 
 1. Consume any bounded follow-up watch LFG returns; continue until review, CI,
    branch currency, and stack state are settled, without a new user request.

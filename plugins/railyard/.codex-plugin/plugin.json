@@ -1,7 +1,7 @@
 {
   "name": "railyard",
-  "version": "0.8.13",
-  "description": "The delivery system for agent work: model routing, goal-driven delivery, task orchestration, cross-machine placement, review gates, Oracle, and Codex runtime hygiene.",
+  "version": "0.8.14",
+  "description": "The delivery system for agent work: model routing, deliver, task orchestration, cross-machine placement, review gates, Oracle, and Codex runtime hygiene.",
   "author": {
     "name": "Claire Novotny LLC",
     "url": "https://github.com/novotnyllc"
@@ -13,7 +13,7 @@
   "hooks": "./codex/hooks.json",
   "interface": {
     "displayName": "Railyard",
-    "shortDescription": "Model routing, goal-driven delivery, task orchestration, review gates, and Oracle",
+    "shortDescription": "Model routing, deliver, task orchestration, review gates, and Oracle",
     "longDescription": "Railyard is the delivery system for agent work: budget-aware model routing, intent-routed LFG-first delivery (the deliver skill), multi-agent and cross-machine orchestration (the orchestrate skill), deep review gates, Oracle second-model review, guided setup and doctor diagnosis, and Codex runtime hygiene. It only dispatches cross-machine work to hosts the sibling roundhouse plugin has verified are ready; machine administration itself lives there.",
     "developerName": "Claire Novotny LLC",
     "category": "Productivity",

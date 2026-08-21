@@ -1,7 +1,7 @@
 {
   "name": "railyard",
-  "version": "0.8.13",
-  "description": "The delivery system for agent work: model routing, goal-driven delivery, task orchestration, cross-machine placement, review gates, Oracle, and Codex runtime hygiene.",
+  "version": "0.8.14",
+  "description": "The delivery system for agent work: model routing, deliver, task orchestration, cross-machine placement, review gates, Oracle, and Codex runtime hygiene.",
   "author": {
     "name": "Claire Novotny LLC",
     "url": "https://github.com/novotnyllc"
