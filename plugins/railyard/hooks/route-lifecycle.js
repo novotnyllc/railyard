@@ -20,7 +20,7 @@ const MAX_CONTINUATIONS = 10;
 function handleStart(payload) {
   var agentId = payload.agent_id || payload.session_id || null;
   if (!agentId) return { continue_: true };
-  var route = rs.getActiveRoute(null);
+  var route = rs.getActiveRoute(payload.parent_session_id || payload.session_id || null);
   // Find pending_spawn routes from any session — the child may run in its
   // own session context. Match by state, not by parent_session_id here,
   // because the parent session created the route but the child gets a new
@@ -50,15 +50,29 @@ function handleStop(payload) {
   var route = rs.findByAgent(agentId);
   if (!route) return {};
 
+  // lfg_complete requires feedback_resolved receipt
+  if (route.state === "lfg_complete") {
+    var hasFeedbackResolved = false;
+    for (var ri = 0; ri < (route.receipts || []).length; ri++) {
+      if (route.receipts[ri].event === "feedback_resolved") { hasFeedbackResolved = true; break; }
+    }
+    if (!hasFeedbackResolved) {
+      return { decision: "block", reason: "[railyard] lfg_complete requires a feedback_resolved receipt. Dispatch ce-resolve-pr-feedback and record feedback_resolved before completing." };
+    }
+  }
+
   // Terminal states allow return.
   if (rs.TERMINAL_STATES.has(route.state)) return {};
 
   // Intermediate state: block and continue the carrier.
-  route.continuations = (route.continuations || 0) + 1;
-  if (route.continuations > MAX_CONTINUATIONS) {
-    rs.transition(route.route_id, "failed", { failure_reason: "continuation_budget_exhausted after " + MAX_CONTINUATIONS + " continuations" });
-    return {}; // Allow the stop; the route is now terminal-failed.
+  var freshRoute = rs.readRoute(route.route_id);
+  if (!freshRoute) return {};
+  freshRoute.continuations = (freshRoute.continuations || 0) + 1;
+  if (freshRoute.continuations > MAX_CONTINUATIONS) {
+    rs.transition(route.route_id, "failed", { failure_reason: "continuation_budget_exhausted after " + MAX_CONTINUATIONS });
+    return {};
   }
+  rs.writeRoute(freshRoute);
   rs.recordReceipt(route.route_id, { event: "premature_stop", attempt: route.continuations, last_state: route.state });
 
   var reason = "[railyard] Route-carrier incomplete: current state is '" + route.state + "'.\n" +

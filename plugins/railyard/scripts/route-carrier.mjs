@@ -16,6 +16,8 @@ const sessionId = process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION
 
 function die(msg) { process.stderr.write(msg + "\n"); process.exit(1); }
 
+if (!sessionId) die("No lane identity available. Set CODEX_THREAD_ID or CLAUDE_CODE_SESSION_ID.");
+
 switch (cmd) {
   case "enter": {
     // route-carrier.mjs enter <label> — creates a new route frame

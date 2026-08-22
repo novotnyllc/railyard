@@ -1022,10 +1022,13 @@ process.stdin.on("data", (c) => {
 });
 // Build the carrier kernel text injected into the spawn prompt.
 function buildCarrierKernel(routeId) {
-  return "[railyard] Route-carrier protocol active (route " + routeId.slice(0, 8) + ")."
+  var cli = require("path").join(__dirname, "..", "scripts", "route-carrier.mjs");
+  return "[railyard] Route-carrier protocol active. Route ID: " + routeId + "."
     + " You are the LFG delivery carrier. Execute compound-engineering:lfg through its full pipeline."
-    + " Record stage receipts: node " + __dirname + "/route-state.js receipt <route-id> <event>"
-    + " Terminal states: lfg_complete | blocked. Do NOT return early at checkpoints.";
+    + " Record stage receipts: node " + cli + " receipt " + routeId + " <event>"
+    + " For terminal states use TRANSITION: node " + cli + " transition " + routeId + " lfg_complete"
+    + " Or block: node " + cli + " block <reason>"
+    + " Do NOT return early at checkpoints. SubagentStop will force continuation.";
 }
 
 function handleInput({ final = false } = {}) {
@@ -1093,7 +1096,7 @@ function handleInput({ final = false } = {}) {
     // Route-carrier receipt for Claude Code subagent dispatches
     const ccDispatchText = [args.prompt, args.description, args.subagent_type]
       .filter((v) => typeof v === "string").join(" ");
-    if (/\blfg\b|deliver|babysit|railyard:route:lfg/i.test(ccDispatchText)) {
+    if (/\b(?:lfg|compound-engineering:lfg|railyard:deliver|ce-babysit-pr|ce-resolve-pr-feedback)\b/i.test(ccDispatchText)) {
       var ccSid = input.session_id || process.env.CLAUDE_CODE_SESSION_ID || null;
       if (rs && rs.getActiveRoute(ccSid)) {
         block("[railyard] An active LFG carrier already exists for this lane.");
@@ -1103,10 +1106,20 @@ function handleInput({ final = false } = {}) {
       record({ event: "route_carrier", tool, model: args.model ? args.model.trim() : "",
         label: clip(args.description || ""), session_id: clip(input.session_id),
         route_id: ccRoute ? ccRoute.route_id : undefined });
+      // Feedback resolution receipt: ce-resolve-pr-feedback was dispatched
+      if (rs && /ce-resolve-pr-feedback/i.test(ccDispatchText)) {
+        var fbRoute = ccRoute;
+        if (fbRoute) rs.recordReceipt(fbRoute.route_id, { event: "feedback_resolution_started" });
+      }
+      // Feedback resolution receipt: ce-resolve-pr-feedback was dispatched
+      if (rs && /ce-resolve-pr-feedback/i.test(ccDispatchText)) {
+        var fbRoute = ccRoute;
+        if (fbRoute) rs.recordReceipt(fbRoute.route_id, { event: "feedback_resolution_started" });
+      }
       if (ccRoute && typeof args.prompt === "string") {
         process.stdout.write(JSON.stringify({ updatedInput: {
           model: args.model, description: args.description, subagent_type: args.subagent_type,
-          prompt: args.prompt + "\\n\\n" + buildCarrierKernel(ccRoute.route_id),
+          prompt: args.prompt + String.fromCharCode(10) + String.fromCharCode(10) + buildCarrierKernel(ccRoute.route_id),
         }}) + "\\n");
         return;
       }
@@ -1177,13 +1190,15 @@ function handleInput({ final = false } = {}) {
             " -c model_provider=<provider>`).",
         );
       }
+        return;
+        return;
     }
     // Route-carrier receipt: when a subagent dispatch names a delivery
     // pipeline skill (LFG, babysit-pr, etc.), record it so the route gate
     // can verify that delivery was actually dispatched before push/PR.
     const dispatchText = [args.task_name, args.message, args.prompt]
       .filter((v) => typeof v === "string").join(" ");
-    if (/\blfg\b|deliver|babysit|railyard:route:lfg/i.test(dispatchText)) {
+    if (/\b(?:lfg|compound-engineering:lfg|railyard:deliver|ce-babysit-pr|ce-resolve-pr-feedback)\b/i.test(dispatchText)) {
       var codexSid = input.session_id || process.env.CODEX_THREAD_ID || null;
       if (rs && rs.getActiveRoute(codexSid)) {
         block("[railyard] An active LFG carrier already exists for this lane.");
@@ -1193,10 +1208,20 @@ function handleInput({ final = false } = {}) {
       record({ event: "route_carrier", tool, model: args.model ? args.model.trim() : "",
         label: clip(args.task_name || args.description || ""), session_id: clip(input.session_id),
         route_id: codexRoute ? codexRoute.route_id : undefined });
+      // Feedback resolution receipt: ce-resolve-pr-feedback was dispatched
+      if (rs && /ce-resolve-pr-feedback/i.test(dispatchText)) {
+        var fbRoute = codexRoute;
+        if (fbRoute) rs.recordReceipt(fbRoute.route_id, { event: "feedback_resolution_started" });
+      }
+      // Feedback resolution receipt: ce-resolve-pr-feedback was dispatched
+      if (rs && /ce-resolve-pr-feedback/i.test(dispatchText)) {
+        var fbRoute = codexRoute;
+        if (fbRoute) rs.recordReceipt(fbRoute.route_id, { event: "feedback_resolution_started" });
+      }
       if (codexRoute && typeof args.message === "string") {
         process.stdout.write(JSON.stringify({ updatedInput: {
           model: args.model, reasoning_effort: args.reasoning_effort, task_name: args.task_name,
-          message: args.message + "\\n\\n" + buildCarrierKernel(codexRoute.route_id),
+          message: args.message + String.fromCharCode(10) + String.fromCharCode(10) + buildCarrierKernel(codexRoute.route_id),
         }}) + "\\n");
         return;
       }
@@ -1233,6 +1258,46 @@ function handleInput({ final = false } = {}) {
       );
       return;
     }
+    // Feedback resolution gate: gh pr comment/reply requires feedback_resolution_started
+    if (/gh pr comment|pulls.*comments.*replies/.test(text)) {
+      if (rs) {
+        var fsid = process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID || null;
+        var fRoute = rs.getActiveRoute(fsid);
+        if (fRoute) {
+          var hasFeedback = false;
+          for (var fi = 0; fi < (fRoute.receipts || []).length; fi++) {
+            if (fRoute.receipts[fi].event === "feedback_resolution_started") { hasFeedback = true; break; }
+          }
+          if (!hasFeedback) {
+            block(
+              "[railyard] Feedback resolution gate: dispatch ce-resolve-pr-feedback before replying to PR feedback."
+            );
+            return;
+          }
+        }
+      }
+    }
+
+    // Feedback resolution gate: gh pr comment/reply requires feedback_resolution_started
+    if (/gh pr comment|pulls.*comments.*replies/.test(text)) {
+      if (rs) {
+        var fsid = process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID || null;
+        var fRoute = rs.getActiveRoute(fsid);
+        if (fRoute) {
+          var hasFeedback = false;
+          for (var fi = 0; fi < (fRoute.receipts || []).length; fi++) {
+            if (fRoute.receipts[fi].event === "feedback_resolution_started") { hasFeedback = true; break; }
+          }
+          if (!hasFeedback) {
+            block(
+              "[railyard] Feedback resolution gate: dispatch ce-resolve-pr-feedback before replying to PR feedback."
+            );
+            return;
+          }
+        }
+      }
+    }
+
 
     // Merge gate: gh pr merge requires lfg_complete.
     if (/\bgh\s+pr\s+merge\b/.test(text)) {

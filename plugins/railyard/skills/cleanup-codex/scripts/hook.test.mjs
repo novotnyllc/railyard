@@ -258,7 +258,7 @@ test("plugin packaging exposes actual root SessionEnd cleanup and no Claude hook
   ));
   assert.deepEqual(
     Object.keys(claudeHooks.hooks).sort(),
-    ["PreToolUse", "SessionStart", "Stop", "SubagentStop", "UserPromptSubmit"],
+    ["PreToolUse", "SessionStart", "Stop", "SubagentStart", "SubagentStop", "UserPromptSubmit"],
   );
   // The Stop hook is the retrospective reminder, not a cleanup hook.
   assert.match(claudeHooks.hooks.Stop[0].hooks[0].command, /railyard-retro\.js/);
@@ -271,7 +271,7 @@ test("plugin packaging exposes actual root SessionEnd cleanup and no Claude hook
   }
   assert.deepEqual(
     Object.keys(hooks.hooks).sort(),
-    ["PreToolUse", "SessionEnd", "SessionStart", "UserPromptSubmit"],
+    ["PreToolUse", "SessionEnd", "SessionStart", "SubagentStart", "SubagentStop", "UserPromptSubmit"],
   );
   const commandHook = hooks.hooks.SessionEnd[0].hooks[0];
   assert.equal(commandHook.type, "command");
@@ -304,7 +304,7 @@ test("Claude loader excludes the Codex-only SessionEnd hook", (context) => {
   // Claude loads the routing hooks, the audit markers, and the Stop
   // retrospective reminder; the Codex-only SessionEnd cleanup hook must not
   // appear.
-  assert.match(loaded.stdout, /Hooks \(5\)/);
+  assert.match(loaded.stdout, /Hooks \(6\)/);
   assert.match(loaded.stdout, /SessionStart/);
   assert.match(loaded.stdout, /SubagentStop/);
   assert.match(loaded.stdout, /UserPromptSubmit/);
