@@ -33,7 +33,7 @@ node --test \
   plugins/railyard/skills/cleanup-codex/scripts/hook.test.mjs \
   plugins/railyard/skills/cleanup-codex/scripts/canary.test.mjs \
   plugins/railyard/hooks/routing-nudge.test.mjs \
-  plugins/railyard/hooks/dispatch-gate.test.mjs \
+  plugins/railyard/hooks/dispatch-gate.test.mjs   plugins/railyard/hooks/route-state.test.mjs   plugins/railyard/hooks/route-lifecycle.test.mjs \
   plugins/railyard/hooks/routing-charter.test.mjs \
   plugins/railyard/hooks/railyard-retro.test.mjs \
   plugins/railyard/hooks/merge-settlement-gate.test.mjs
