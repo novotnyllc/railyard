@@ -5,6 +5,8 @@
 // verbs must co-occur with software objects, list structure must co-occur
 // with a task verb — so ordinary conversation stays silent. At most one
 // line is ever injected. Cross-platform, dependency-free, never blocks.
+let rs = null;
+try { rs = require("./route-state.js"); } catch {}
 let raw = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (c) => (raw += c));
@@ -122,6 +124,7 @@ process.stdin.on("end", () => {
     line =
       "[railyard] Delivery intent: route through railyard:deliver (model-routing intake first; ends at merge + post-merge proof unless a narrower stop is asked).";
   }
+  if (line && rs) { try { rs.recordDeliveryCandidate(JSON.parse(raw).session_id || process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID || null, process.cwd()); } catch {} }
   if (line) process.stdout.write(line + "\n");
   // Windows pipe stdout flushes async; process.exit() here could drop the
   // line. exitCode + natural exit flushes on every platform.

@@ -11,6 +11,7 @@
 // verdict: a missing or broken recorder leaves the gate exactly as it was.
 let record = () => {};
 let hasEntry = () => false;
+let rs = null;
 let clip = (value, max = 120) => {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
@@ -19,6 +20,7 @@ let clip = (value, max = 120) => {
 };
 try {
   ({ record, clip, hasEntry } = require("./run-log.js"));
+  try { rs = require("./route-state.js"); } catch {}
 } catch {}
 
 function shellTokens(command) {
@@ -1083,7 +1085,9 @@ function handleInput({ final = false } = {}) {
     // Route-carrier receipt for Claude Code subagent dispatches
     const ccDispatchText = [args.prompt, args.description, args.subagent_type]
       .filter((v) => typeof v === "string").join(" ");
-    if (/\\blfg\\b|deliver|babysit|resolve.*pr|ce-resolve/i.test(ccDispatchText)) {
+    if (/\blfg\b|deliver|babysit|railyard:route:lfg/i.test(ccDispatchText)) {
+      var ccSid = input.session_id || process.env.CLAUDE_CODE_SESSION_ID || null;
+      var ccRoute = rs ? rs.createRoute({ session_id: ccSid, label: clip(args.description) }) : null;
       record({ event: "route_carrier", tool, model: args.model ? args.model.trim() : "",
         label: clip(args.description || ""), session_id: clip(input.session_id) });
     }
@@ -1159,7 +1163,9 @@ function handleInput({ final = false } = {}) {
     // can verify that delivery was actually dispatched before push/PR.
     const dispatchText = [args.task_name, args.message, args.prompt]
       .filter((v) => typeof v === "string").join(" ");
-    if (/\\blfg\\b|deliver|babysit|resolve.*pr|ce-resolve/i.test(dispatchText)) {
+    if (/\blfg\b|deliver|babysit|railyard:route:lfg/i.test(dispatchText)) {
+      var codexSid = input.session_id || process.env.CODEX_THREAD_ID || null;
+      var codexRoute = rs ? rs.createRoute({ session_id: codexSid, label: clip(args.task_name) }) : null;
       record({ event: "route_carrier", tool, model: args.model ? args.model.trim() : "",
         label: clip(args.task_name || args.description || ""), session_id: clip(input.session_id) });
     }
@@ -1178,6 +1184,7 @@ function handleInput({ final = false } = {}) {
   }
 
   if (["Bash", "shell", "local_shell", "exec_command", "unified_exec"].includes(tool)) {
+
     // Route-carrier gate: before any mutation surface (git push, gh pr create),
     // verify that a delivery pipeline was dispatched via a run-log entry. This
     // catches the repeated failure where agents implement directly and skip
@@ -1187,17 +1194,88 @@ function handleInput({ final = false } = {}) {
       : typeof args.cmd === "string" ? args.cmd
       : Array.isArray(args.input) ? args.input.join(" ")
       : "";
+    // TOCTOU guard: refuse a single shell call that both mutates HEAD and creates a PR.
+    if (/\b(git\s+(commit|merge|rebase|cherry-pick|revert|reset|checkout|switch|pull)\b).*\b(gh\s+pr\s+create\b)|\b(gh\s+pr\s+create\b).*\b(git\s+(commit|merge|rebase|cherry-pick|revert|reset|checkout|switch|pull)\b)/.test(text)) {
+      block(
+        "[railyard] TOCTOU guard: this shell call both changes HEAD and creates a PR. Split them."
+      );
+      return;
+    }
+
+    // Merge gate: gh pr merge requires lfg_complete.
+    if (/\bgh\s+pr\s+merge\b/.test(text)) {
+      if (rs) {
+        var msid = process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID || null;
+        var mcomplete = false;
+        try {
+          var mdir = rs.stateDir();
+          var mfs = require('fs');
+          var mfiles = mfs.readdirSync(mdir).filter(function(f) { return f.endsWith('.json') && !f.startsWith('candidate-'); });
+          for (var mi = 0; mi < mfiles.length; mi++) {
+            var mr = rs.readRoute(mfiles[mi].replace('.json', ''));
+            if (mr && mr.state === 'lfg_complete' && (!msid || mr.parent_session_id === msid)) { mcomplete = true; break; }
+          }
+        } catch {}
+        if (!mcomplete) {
+          block(
+            "[railyard] Merge refused: the delivery route has not reached lfg_complete."
+          );
+          return;
+        }
+      }
+    }
     if (/\bgit\s+push\b|\bgh\s+pr\s+create\b/.test(text)) {
-      if (!hasEntry("route_carrier")) {
+      if (rs) {
+        var sessionId = process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID || null;
+        var activeRoute = rs.getActiveRoute(sessionId);
+        var hasCandidate = rs.hasDeliveryCandidate(sessionId);
+        if (activeRoute && activeRoute.state === 'pending_spawn') {
+          block(
+            "[railyard] Push refused: delivery route is pending_spawn. The carrier subagent must actually start before any push."
+          );
+          return;
+        }
+        if (!activeRoute && hasCandidate) {
+          block(
+            "[railyard] Push refused: session classified as delivery work but no carrier dispatched. Dispatch a carrier naming lfg/deliver/babysit."
+          );
+          return;
+        }
+      } else if (!hasEntry("route_carrier")) {
+        // Fallback: run-log only when route-state is unavailable
         block(
-          "[railyard] Route carrier missing: no delivery pipeline was dispatched"
-          + " in this session before attempting to push or open a PR. If you are"
-          + " running railyard:deliver, invoke compound-engineering:lfg (or the"
-          + " appropriate CE skill) as a subagent first. Direct implementation"
-          + " bypasses review, feedback resolution, and merge settlement. If this"
-          + " is an explicit local-only edit, commit without pushing."
+          "[railyard] Route carrier missing: no delivery pipeline was dispatched. If you are running railyard:deliver, invoke compound-engineering:lfg as a subagent first."
         );
         return;
+      }
+    }
+    // PR-create gate: requires carrier_started + HEAD-bound pr_create_ready receipt.
+    if (new RegExp("\\bgh\\s+pr\\s+create\\b").test(text)) {
+      if (rs) {
+        var psid = process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID || null;
+        var prRoute = rs.getActiveRoute(psid);
+        if (!prRoute) {
+          block(
+            "[railyard] Route carrier required: no active delivery route. Dispatch a carrier naming lfg/deliver/babysit before creating a PR."
+          );
+          return;
+        }
+        if (prRoute.state === "pending_spawn") {
+          block(
+            "[railyard] Route carrier not started: pending_spawn. Wait for SubagentStart before PR creation."
+          );
+          return;
+        }
+        var prReceipt = null;
+        for (var ri = (prRoute.receipts || []).length - 1; ri >= 0; ri--) {
+          if (prRoute.receipts[ri].event === "pr_create_ready") { prReceipt = prRoute.receipts[ri]; break; }
+        }
+        if (!prReceipt) {
+          block(
+            "[railyard] PR-create receipt missing: carrier must record pr_create_ready --head-sha <sha> --branch <branch>."
+          );
+          return;
+        }
       }
     }
     try {

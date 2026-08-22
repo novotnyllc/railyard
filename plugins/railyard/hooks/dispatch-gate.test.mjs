@@ -6,6 +6,8 @@ import { mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync } from "n
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+
+const rs = await import("./route-state.js");
 const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "dispatch-gate.js");
 
 // Hermetic CODEX_HOME: never read the developer's real ~/.codex/config.toml.
@@ -34,7 +36,7 @@ function run(input, codexHome, logDir) {
   const r = spawnSync(process.execPath, [script], {
     input: typeof input === "string" ? input : JSON.stringify(input),
     encoding: "utf8",
-    env: { ...process.env, CODEX_HOME: home, RAILYARD_RUN_LOG_DIR: logs },
+    env: { ...process.env, CODEX_HOME: home, RAILYARD_RUN_LOG_DIR: logs, RAILYARD_ROUTE_STATE_DIR: process.env.RAILYARD_ROUTE_STATE_DIR },
   });
   if (!codexHome) rmSync(home, { recursive: true, force: true });
   const log = readLog(logs);
@@ -776,18 +778,6 @@ test("missing tool_input fails safe by refusing dispatch tools", () => {
   assert.equal(run({ tool_name: "Agent" }).code, 2);
 });
 
-test("git push without a route_carrier entry is refused", () => {
-  const r = run({ tool_name: "exec_command", tool_input: { cmd: "git push origin main" } });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /Route carrier missing/);
-});
-
-test("gh pr create without a route_carrier entry is refused", () => {
-  const r = run({ tool_name: "exec_command", tool_input: { cmd: "gh pr create --title x" } });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /Route carrier missing/);
-});
-
 test("non-mutation shell commands pass the route gate", () => {
   const r = run({ tool_name: "exec_command", tool_input: { cmd: "ls -la && git status" } });
   assert.equal(r.code, 0);
@@ -805,4 +795,85 @@ test("spawn_agent with lfg in task records route_carrier entry", () => {
   assert.ok(rc.length > 0, "expected at least one route_carrier entry");
   rmSync(home, { recursive: true, force: true });
   rmSync(logs, { recursive: true, force: true });
+});
+
+// === Route-carrier gate tests (route-state based, not run-log) ===
+
+test("git push without any delivery candidate or route passes", () => {
+  process.env.RAILYARD_ROUTE_STATE_DIR = mkdtempSync(path.join(tmpdir(), "gate-clean-"));
+  const r = run({ tool_name: "exec_command", tool_input: { cmd: "git push origin main" } });
+  assert.equal(r.code, 0);
+});
+
+test("gh pr create with no active route is refused", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "gate-pr-"));
+  process.env.RAILYARD_ROUTE_STATE_DIR = dir;
+  // No route created
+  const r = spawnSync(process.execPath, [script], {
+    input: JSON.stringify({ tool_name: "exec_command", tool_input: { cmd: "cd /tmp && gh pr create --title x" } }),
+    encoding: "utf8",
+    env: { ...process.env, RAILYARD_ROUTE_STATE_DIR: dir },
+  });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /Route carrier required/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("gh pr create with pending_spawn route is refused", () => {
+
+  const dir = mkdtempSync(path.join(tmpdir(), "gate-pr-pending-"));
+  process.env.RAILYARD_ROUTE_STATE_DIR = dir;
+  const route = rs.createRoute({});
+  // Route is in pending_spawn — no SubagentStart has fired
+  const r = spawnSync(process.execPath, [script], {
+    input: JSON.stringify({ tool_name: "exec_command", tool_input: { cmd: "gh pr create --title x" } }),
+    encoding: "utf8",
+    env: { ...process.env, RAILYARD_ROUTE_STATE_DIR: dir, CODEX_THREAD_ID: route.parent_session_id || "none" },
+  });
+  assert.equal(r.status, 2);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("spawn_agent naming lfg creates an authoritative route (not just a log line)", () => {
+
+  const dir = mkdtempSync(path.join(tmpdir(), "gate-route-"));
+  process.env.RAILYARD_ROUTE_STATE_DIR = dir;
+  const logs = mkdtempSync(path.join(tmpdir(), "gate-log-"));
+  const home = fixtureCodexHome(null);
+  const r = run(
+    { tool_name: "agents__spawn_agent", tool_input: { model: "gpt-5.6-sol", reasoning_effort: "high", task_name: "lfg_delivery_worker", message: "Run LFG pipeline" } },
+    home, logs
+  );
+  assert.equal(r.code, 0);
+  var files = readdirSync(dir).filter(f => f.endsWith(".json") && !f.startsWith("candidate-"));
+  assert.ok(files.length > 0, "expected a route file to be created");
+  var route = JSON.parse(readFileSync(path.join(dir, files[0]), "utf8"));
+  assert.equal(route.state, "pending_spawn");
+  assert.equal(route.protocol, "railyard.route-carrier/v1");
+  rmSync(home, { recursive: true, force: true });
+  rmSync(logs, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("TOCTOU guard refuses commit+push+pr create in one shell call", () => {
+  process.env.RAILYARD_ROUTE_STATE_DIR = mkdtempSync(path.join(tmpdir(), "gate-toc-"));
+  const r = run({ tool_name: "exec_command", tool_input: { cmd: "git add -A && git commit -m x && git push && gh pr create" } });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /TOCTOU guard/);
+});
+
+test("echo of git push text does not trigger the gate", () => {
+  const r = run({ tool_name: "exec_command", tool_input: { cmd: "echo 'remember to git push later'" } });
+  assert.equal(r.code, 0);
+});
+
+test("env-wrapped git push is detected", () => {
+  const r = run({ tool_name: "exec_command", tool_input: { cmd: "GIT_AUTHOR_NAME=x env git push origin main" } });
+  assert.equal(r.code, 0); // Passes because no route/candidate exists
+});
+
+test("bash -lc 'git push' via shell tokens is not falsely gated when no candidate", () => {
+  // bash -lc wraps it but shellTokens won't see the inner command as top-level
+  const r = run({ tool_name: "exec_command", tool_input: { cmd: "bash -lc 'git push origin main'" } });
+  assert.equal(r.code, 0); // Passes because no route/candidate exists
 });
