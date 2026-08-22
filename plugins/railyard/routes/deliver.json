@@ -1,0 +1,44 @@
+{
+  "protocol": "railyard.route/v1",
+  "route": "implementation",
+  "provider": "compound-engineering",
+  "procedure": "lfg",
+  "call_adapter": "railyard.skill-frame/v1",
+  "carrier_label": "railyard:route:lfg:v1",
+  "terminal": ["lfg_complete", "blocked"],
+  "boundaries": {
+    "git_push": {
+      "requires": "carrier_started",
+      "gate": "PreToolUse dispatch-gate.js"
+    },
+    "gh_pr_create": {
+      "requires": ["carrier_started", "pr_create_ready"],
+      "receipt_binding": ["head_sha", "branch"],
+      "toctou_guard": true,
+      "gate": "PreToolUse dispatch-gate.js"
+    },
+    "gh_pr_merge": {
+      "requires": "lfg_complete",
+      "gate": "PreToolUse dispatch-gate.js"
+    },
+    "subagent_stop": {
+      "allow_when": ["lfg_complete", "blocked", "failed"],
+      "continue_otherwise": true,
+      "max_continuations": 10,
+      "gate": "SubagentStop route-lifecycle.js"
+    }
+  },
+  "states": [
+    "pending_spawn",
+    "carrier_started",
+    "plan_complete",
+    "work_complete",
+    "review_complete",
+    "browser_complete_or_not_applicable",
+    "pr_create_ready",
+    "pr_open",
+    "babysit_settled",
+    "lfg_complete"
+  ],
+  "alternative_terminals": ["blocked", "failed"]
+}
