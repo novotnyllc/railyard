@@ -1189,6 +1189,7 @@ function handleInput({ final = false } = {}) {
             " with model + modelProvider, or `codex exec -m " + child +
             " -c model_provider=<provider>`).",
         );
+        return;
       }
     }
     // Route-carrier receipt: when a subagent dispatch names a delivery
