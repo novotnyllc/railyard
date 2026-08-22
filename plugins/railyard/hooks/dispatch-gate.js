@@ -10,6 +10,7 @@
 // half of railyard:audit. Recording is best-effort and never affects the
 // verdict: a missing or broken recorder leaves the gate exactly as it was.
 let record = () => {};
+let hasEntry = () => false;
 let clip = (value, max = 120) => {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
@@ -17,7 +18,7 @@ let clip = (value, max = 120) => {
   return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
 };
 try {
-  ({ record, clip } = require("./run-log.js"));
+  ({ record, clip, hasEntry } = require("./run-log.js"));
 } catch {}
 
 function shellTokens(command) {
@@ -1079,6 +1080,13 @@ function handleInput({ final = false } = {}) {
         return;
       }
     }
+    // Route-carrier receipt for Claude Code subagent dispatches
+    const ccDispatchText = [args.prompt, args.description, args.subagent_type]
+      .filter((v) => typeof v === "string").join(" ");
+    if (/\\blfg\\b|deliver|babysit|resolve.*pr|ce-resolve/i.test(ccDispatchText)) {
+      record({ event: "route_carrier", tool, model: args.model ? args.model.trim() : "",
+        label: clip(args.description || ""), session_id: clip(input.session_id) });
+    }
     record({
       event: "dispatch",
       harness: "claude-code",
@@ -1146,6 +1154,15 @@ function handleInput({ final = false } = {}) {
         );
       }
     }
+    // Route-carrier receipt: when a subagent dispatch names a delivery
+    // pipeline skill (LFG, babysit-pr, etc.), record it so the route gate
+    // can verify that delivery was actually dispatched before push/PR.
+    const dispatchText = [args.task_name, args.message, args.prompt]
+      .filter((v) => typeof v === "string").join(" ");
+    if (/\\blfg\\b|deliver|babysit|resolve.*pr|ce-resolve/i.test(dispatchText)) {
+      record({ event: "route_carrier", tool, model: args.model ? args.model.trim() : "",
+        label: clip(args.task_name || args.description || ""), session_id: clip(input.session_id) });
+    }
     if (!refused) {
       record({
         event: "dispatch",
@@ -1161,6 +1178,28 @@ function handleInput({ final = false } = {}) {
   }
 
   if (["Bash", "shell", "local_shell", "exec_command", "unified_exec"].includes(tool)) {
+    // Route-carrier gate: before any mutation surface (git push, gh pr create),
+    // verify that a delivery pipeline was dispatched via a run-log entry. This
+    // catches the repeated failure where agents implement directly and skip
+    // LFG/babysit-pr entirely. The run-log entry is written by spawn_agent
+    // dispatches whose task_name or message mentions lfg, deliver, or babysit.
+    const text = typeof args.command === "string" ? args.command
+      : typeof args.cmd === "string" ? args.cmd
+      : Array.isArray(args.input) ? args.input.join(" ")
+      : "";
+    if (/\bgit\s+push\b|\bgh\s+pr\s+create\b/.test(text)) {
+      if (!hasEntry("route_carrier")) {
+        block(
+          "[railyard] Route carrier missing: no delivery pipeline was dispatched"
+          + " in this session before attempting to push or open a PR. If you are"
+          + " running railyard:deliver, invoke compound-engineering:lfg (or the"
+          + " appropriate CE skill) as a subagent first. Direct implementation"
+          + " bypasses review, feedback resolution, and merge settlement. If this"
+          + " is an explicit local-only edit, commit without pushing."
+        );
+        return;
+      }
+    }
     try {
       for (const dispatch of codexExecDispatches(args)) {
         if (dispatch.missing.length) {

@@ -775,3 +775,34 @@ test("garbage stdin fails open", () => {
 test("missing tool_input fails safe by refusing dispatch tools", () => {
   assert.equal(run({ tool_name: "Agent" }).code, 2);
 });
+
+test("git push without a route_carrier entry is refused", () => {
+  const r = run({ tool_name: "exec_command", tool_input: { cmd: "git push origin main" } });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /Route carrier missing/);
+});
+
+test("gh pr create without a route_carrier entry is refused", () => {
+  const r = run({ tool_name: "exec_command", tool_input: { cmd: "gh pr create --title x" } });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /Route carrier missing/);
+});
+
+test("non-mutation shell commands pass the route gate", () => {
+  const r = run({ tool_name: "exec_command", tool_input: { cmd: "ls -la && git status" } });
+  assert.equal(r.code, 0);
+});
+
+test("spawn_agent with lfg in task records route_carrier entry", () => {
+  const logs = mkdtempSync(path.join(tmpdir(), "gate-rc-"));
+  const home = fixtureCodexHome(null);
+  const r = run(
+    { tool_name: "agents__spawn_agent", tool_input: { model: "gpt-5.6-sol", reasoning_effort: "high", task_name: "lfg_delivery_worker", message: "Run the LFG pipeline for feature X. Use ce-babysit-pr after push." } },
+    home, logs
+  );
+  assert.equal(r.code, 0);
+  const rc = readLog(logs).filter((e) => e.event === "route_carrier");
+  assert.ok(rc.length > 0, "expected at least one route_carrier entry");
+  rmSync(home, { recursive: true, force: true });
+  rmSync(logs, { recursive: true, force: true });
+});
