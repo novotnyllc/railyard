@@ -784,6 +784,7 @@ test("non-mutation shell commands pass the route gate", () => {
 });
 
 test("spawn_agent with lfg in task records route_carrier entry", () => {
+  process.env.RAILYARD_ROUTE_STATE_DIR = mkdtempSync(path.join(tmpdir(), "gate-route-fresh-"));
   const logs = mkdtempSync(path.join(tmpdir(), "gate-rc-"));
   const home = fixtureCodexHome(null);
   const r = run(
