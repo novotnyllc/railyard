@@ -58,6 +58,15 @@ function handleStop(payload) {
       if (route.receipts[ri].event === "feedback_resolved") { hasFeedbackResolved = true; break; }
     }
     if (!hasFeedbackResolved) {
+      var fbRoute = rs.readRoute(route.route_id);
+      if (fbRoute) {
+        fbRoute.continuations = (fbRoute.continuations || 0) + 1;
+        if (fbRoute.continuations > MAX_CONTINUATIONS) {
+          rs.transition(route.route_id, "failed", { failure_reason: "feedback_continuation_cap_exhausted" });
+          return {};
+        }
+        rs.writeRoute(fbRoute);
+      }
       return { decision: "block", reason: "[railyard] lfg_complete requires a feedback_resolved receipt. Dispatch ce-resolve-pr-feedback and record feedback_resolved before completing." };
     }
   }
