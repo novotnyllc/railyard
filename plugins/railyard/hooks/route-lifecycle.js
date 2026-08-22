@@ -44,10 +44,11 @@ function handleStart(payload) {
   };
 }
 
+// handleStop: enforce lifecycle on subagent termination.
 function handleStop(payload) {
   var agentId = payload.agent_id || payload.session_id || null;
   if (!agentId) return {};
-  var route = rs.findByAgent(agentId);
+  var route = rs.findByAgent(agentId) || findByAgentAnyState(agentId);
   if (!route) return {};
 
   // lfg_complete requires feedback_resolved receipt
@@ -85,6 +86,20 @@ function handleStop(payload) {
     "Then include the reason in your final message.";
   return { decision: "block", reason: reason };
 }
+
+// Find a route by agent_id including terminal states.
+function findByAgentAnyState(agentId) {
+  try {
+    var dir = rs.stateDir();
+    var files = require('fs').readdirSync(dir).filter(function(f) { return f.endsWith('.json') && !f.startsWith('candidate-'); });
+    for (var i = 0; i < files.length; i++) {
+      var r = rs.readRoute(files[i].replace('.json', ''));
+      if (r && r.agent_id === agentId) return r;
+    }
+  } catch {}
+  return null;
+}
+
 
 var input = "";
 process.stdin.setEncoding("utf8");

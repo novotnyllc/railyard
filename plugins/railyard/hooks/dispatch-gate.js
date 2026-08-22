@@ -1190,8 +1190,6 @@ function handleInput({ final = false } = {}) {
             " -c model_provider=<provider>`).",
         );
       }
-        return;
-        return;
     }
     // Route-carrier receipt: when a subagent dispatch names a delivery
     // pipeline skill (LFG, babysit-pr, etc.), record it so the route gate
