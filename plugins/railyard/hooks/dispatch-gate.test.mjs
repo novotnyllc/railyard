@@ -161,6 +161,22 @@ test("spawn_agent with model and effort passes", () => {
   assert.equal(r.code, 0);
 });
 
+test("agents__spawn_agent alias is gated exactly like spawn_agent", () => {
+  // Codex Desktop multi-agent v2 renames the spawn tool; the gate must not
+  // let a missing model/effort through under the namespaced spelling.
+  const missing = run({
+    tool_name: "agents__spawn_agent",
+    tool_input: { message: "x" },
+  });
+  assert.equal(missing.code, 2);
+  assert.match(missing.err, /model and reasoning_effort/);
+  const complete = run({
+    tool_name: "agents__spawn_agent",
+    tool_input: { model: "gpt-5.6-luna", reasoning_effort: "medium", message: "x", task_name: "t" },
+  });
+  assert.equal(complete.code, 0);
+});
+
 const spawnGlm = {
   tool_name: "spawn_agent",
   tool_input: { model: "glm-5.2", reasoning_effort: "high", message: "x", task_name: "t" },

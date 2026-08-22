@@ -1091,7 +1091,10 @@ function handleInput({ final = false } = {}) {
     return;
   }
 
-  if (tool === "spawn_agent") {
+  // Codex Desktop's multi-agent v2 surface exposes the spawn tool as
+  // agents__spawn_agent; the CLI uses the bare name. Accept both spellings so
+  // the explicit-model rule cannot be bypassed by a harness alias.
+  if (tool === "spawn_agent" || tool === "agents__spawn_agent") {
     // Codex subagent dispatch: model + reasoning_effort both required.
     const missing = [];
     if (typeof args.model !== "string" || !args.model.trim()) missing.push("model");
