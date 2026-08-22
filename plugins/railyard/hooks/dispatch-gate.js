@@ -1020,6 +1020,14 @@ process.stdin.on("data", (c) => {
   raw += c;
   armInputTimer();
 });
+// Build the carrier kernel text injected into the spawn prompt.
+function buildCarrierKernel(routeId) {
+  return "[railyard] Route-carrier protocol active (route " + routeId.slice(0, 8) + ")."
+    + " You are the LFG delivery carrier. Execute compound-engineering:lfg through its full pipeline."
+    + " Record stage receipts: node " + __dirname + "/route-state.js receipt <route-id> <event>"
+    + " Terminal states: lfg_complete | blocked. Do NOT return early at checkpoints.";
+}
+
 function handleInput({ final = false } = {}) {
   if (inputHandled) return;
   if (inputTimer) clearTimeout(inputTimer);
@@ -1087,9 +1095,21 @@ function handleInput({ final = false } = {}) {
       .filter((v) => typeof v === "string").join(" ");
     if (/\blfg\b|deliver|babysit|railyard:route:lfg/i.test(ccDispatchText)) {
       var ccSid = input.session_id || process.env.CLAUDE_CODE_SESSION_ID || null;
+      if (rs && rs.getActiveRoute(ccSid)) {
+        block("[railyard] An active LFG carrier already exists for this lane.");
+        return;
+      }
       var ccRoute = rs ? rs.createRoute({ session_id: ccSid, label: clip(args.description) }) : null;
       record({ event: "route_carrier", tool, model: args.model ? args.model.trim() : "",
-        label: clip(args.description || ""), session_id: clip(input.session_id) });
+        label: clip(args.description || ""), session_id: clip(input.session_id),
+        route_id: ccRoute ? ccRoute.route_id : undefined });
+      if (ccRoute && typeof args.prompt === "string") {
+        process.stdout.write(JSON.stringify({ updatedInput: {
+          model: args.model, description: args.description, subagent_type: args.subagent_type,
+          prompt: args.prompt + "\\n\\n" + buildCarrierKernel(ccRoute.route_id),
+        }}) + "\\n");
+        return;
+      }
     }
     record({
       event: "dispatch",
@@ -1165,9 +1185,21 @@ function handleInput({ final = false } = {}) {
       .filter((v) => typeof v === "string").join(" ");
     if (/\blfg\b|deliver|babysit|railyard:route:lfg/i.test(dispatchText)) {
       var codexSid = input.session_id || process.env.CODEX_THREAD_ID || null;
+      if (rs && rs.getActiveRoute(codexSid)) {
+        block("[railyard] An active LFG carrier already exists for this lane.");
+        return;
+      }
       var codexRoute = rs ? rs.createRoute({ session_id: codexSid, label: clip(args.task_name) }) : null;
       record({ event: "route_carrier", tool, model: args.model ? args.model.trim() : "",
-        label: clip(args.task_name || args.description || ""), session_id: clip(input.session_id) });
+        label: clip(args.task_name || args.description || ""), session_id: clip(input.session_id),
+        route_id: codexRoute ? codexRoute.route_id : undefined });
+      if (codexRoute && typeof args.message === "string") {
+        process.stdout.write(JSON.stringify({ updatedInput: {
+          model: args.model, reasoning_effort: args.reasoning_effort, task_name: args.task_name,
+          message: args.message + "\\n\\n" + buildCarrierKernel(codexRoute.route_id),
+        }}) + "\\n");
+        return;
+      }
     }
     if (!refused) {
       record({

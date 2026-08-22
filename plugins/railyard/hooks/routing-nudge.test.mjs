@@ -124,3 +124,24 @@ test("malformed input is silently tolerated", () => {
   assert.equal(run.status, 0);
   assert.equal(run.stdout.trim(), "");
 });
+
+
+// === Route-carrier candidate marker tests ===
+
+test("delivery prompt records a delivery-candidate marker", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nudge-cand-"));
+  process.env.RAILYARD_ROUTE_STATE_DIR = dir;
+  nudge("implement the new feature");
+  const files = fs.readdirSync(dir).filter(f => f.startsWith("candidate-"));
+  assert.ok(files.length > 0, "expected a candidate marker file");
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("non-delivery prompt does not record a candidate marker", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nudge-nocand-"));
+  process.env.RAILYARD_ROUTE_STATE_DIR = dir;
+  nudge("what is the weather like today");
+  const files = fs.readdirSync(dir).filter(f => f.startsWith("candidate-"));
+  assert.equal(files.length, 0, "no candidate for non-delivery prompt");
+  fs.rmSync(dir, { recursive: true, force: true });
+});
