@@ -51,9 +51,22 @@ test("SubagentStop at terminal lfg_complete allows return", () => {
   process.env.RAILYARD_ROUTE_STATE_DIR = dir;
   const route = rs.createRoute({});
   rs.transition(route.route_id, "carrier_started", { agent_id: "a1" });
+  rs.recordReceipt(route.route_id, { event: "feedback_resolved" });
   rs.transition(route.route_id, "lfg_complete");
   const r = runLifecycle("stop", { agent_id: "a1" }, dir);
   assert.deepEqual(r.output, {});
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("SubagentStop at lfg_complete without feedback_resolved blocks", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "lc-nofb-"));
+  process.env.RAILYARD_ROUTE_STATE_DIR = dir;
+  const route = rs.createRoute({});
+  rs.transition(route.route_id, "carrier_started", { agent_id: "a1" });
+  rs.transition(route.route_id, "lfg_complete");
+  const r = runLifecycle("stop", { agent_id: "a1" }, dir);
+  assert.equal(r.output.decision, "block");
+  assert.match(r.output.reason, /feedback_resolved/);
   rmSync(dir, { recursive: true, force: true });
 });
 
