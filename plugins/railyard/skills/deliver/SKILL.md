@@ -3,6 +3,29 @@ name: deliver
 description: "Route one host-local software change or pull-request task through the correct Compound Engineering workflow, with LFG-first implementation delivery, Thermos review gates, React Doctor, PR babysitting, merge proof, and durable learnings. Use whenever the user says to implement, fix, ship, deliver, or \"go do\" a software change — and equally when they ask to brainstorm, design, plan, spec, or debug one: those route to the matching CE stage (ce-brainstorm, ce-plan, ce-debug) and stop at that artifact. Applies including when they name this skill directly, for a feature, bug fix, risky refactor, long-running implementation, or existing PR. Use railyard:orchestrate instead for multiple independently resumable tasks or cross-host placement."
 ---
 
+# Delivery routing kernel
+
+For implementation delivery, DO NOT implement in this coordinator.
+
+The required next execution boundary is an LFG route carrier:
+
+1. Resolve model/effort via railyard:model-routing.
+2. Dispatch exactly one subagent with task_name or description containing
+   railyard:route:lfg:v1 (or naming lfg/deliver/babysit).
+3. Wait for its terminal receipt (lfg_complete or blocked).
+4. On lfg_complete, run the merge + post-merge tail below.
+5. On blocked, report the blocker. Do not bypass it.
+
+Forbidden: implementing directly in this coordinator; treating a SKILL.md
+read as dispatch; returning from the carrier at an intermediate checkpoint;
+creating a PR without the route receipt; pushing without carrier_started.
+
+The hooks enforce shipping boundaries mechanically. A blocked push/PR-create
+means repair the route state; never work around the gate.
+
+Full protocol: [carrier-protocol.md](references/carrier-protocol.md)
+CE call semantics: [ce-call-adapter.md](references/ce-call-adapter.md)
+
 # Deliver
 
 Choose the delivery route and invoke the right existing skills. Do not replace

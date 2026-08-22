@@ -1,5 +1,5 @@
 {
-  "description": "Lightweight routing nudges plus two PreToolUse gates: ambient charter at session start, one-line just-in-time hint on delivery/planning/orchestration prompts, a gate refusing subagent dispatches that omit an explicit model, a gate refusing a pull-request merge issued before review settlement (unresolved threads, or a fresh head no reviewer has seen yet), a SubagentStop marker so railyard:audit can tell a drained fan-out from an abandoned one, and a Stop reminder to run the retrospective when a substantial run would end without one. The dispatch gate and the charter also append their run-log lines. The Codex-only SessionEnd cleanup hook lives separately in codex/hooks.json and must never load here.",
+  "description": "Lightweight routing nudges plus PreToolUse gates: ambient charter, one-line hint on delivery prompts, a gate refusing subagent dispatches that omit explicit model, the route-carrier gate (git push / gh pr create / gh pr merge gated on delivery-route state), merge settlement, SubagentStart/SubagentStop lifecycle enforcement for LFG carriers, and Stop retrospective reminder.",
   "hooks": {
     "PreToolUse": [
       {
@@ -48,7 +48,29 @@
         ]
       }
     ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/route-lifecycle.js\" start",
+            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\route-lifecycle.js\" start }",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/route-lifecycle.js\" stop",
+            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\route-lifecycle.js\" stop }",
+            "timeout": 5
+          }
+        ]
+      },
       {
         "hooks": [
           {

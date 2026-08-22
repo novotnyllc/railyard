@@ -93,7 +93,32 @@ function record(entry) {
   }
 }
 
-module.exports = { record, clip, logPath, logDir };
+// Read today's entries and return true when at least one carries the given
+// event type and session id. Used by the route-carrier gate to verify that
+// a delivery pipeline (LFG etc.) was actually dispatched before allowing
+// mutation surfaces (git push, gh pr create).
+// Read today entries; return true when at least one matches the event type
+// AND the current session. Fails closed: no session identity or a malformed
+// log line means no authorization.
+function hasEntry(eventType) {
+  try {
+    const file = logPath();
+    if (!fs.existsSync(file)) return false;
+    const sid = sessionId();
+    if (!sid) return false;
+    const lines = fs.readFileSync(file, "utf8").split("\n").filter(Boolean);
+    let allParsed = true;
+    let found = false;
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line);
+        if (entry.event === eventType && entry.session_id === sid) found = true;
+      } catch { allParsed = false; }
+    }
+    return allParsed && found;
+  } catch { return false; }
+}
+module.exports = { record, clip, logPath, logDir, hasEntry };
 
 if (require.main === module) {
   const [mode, arg] = process.argv.slice(2);
