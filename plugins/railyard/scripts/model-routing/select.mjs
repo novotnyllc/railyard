@@ -351,6 +351,13 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         output.push({ ok: false, alias, tierIndex, position, reason: missingSelection ? "effort_selection_required" : "effort_unsupported" });
         continue;
       }
+      if (adapterResult.adapterId === "native-subagent-create") {
+        const selection = validateNativeModelEffort(model.requestedModel, effort);
+        if (!selection.ok) {
+          output.push({ ok: false, alias, tierIndex, position, reason: selection.reason });
+          continue;
+        }
+      }
       if (!shapeMatches(model.workShape, request.workShape)) {
         output.push({ ok: false, alias, tierIndex, position, reason: "work_shape_ineligible" });
         continue;

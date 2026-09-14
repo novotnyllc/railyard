@@ -742,6 +742,123 @@ test("an explicitly configured fallback is disclosed and cannot replace an expli
   assert.equal(topup.response.actionReceipt.fallbackReason, "configured_model_substitute");
 });
 
+test("omitted native adapter fields select and admit a subagent without configuration", () => {
+  // Construct the public request directly: the shared factory supplies the
+  // very adapter and dispatch fields whose omission this regression covers.
+  const fields = { contractVersion: CONTRACT_VERSION, role: "implementation", model: "gpt-6-astra", effort: "max" };
+  const state = createEmptyState();
+  const resolved = handleRequest({ ...fields, command: "resolve" }, { state, now: NOW });
+  assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
+  assert.equal(resolved.response.decision.binding.adapterId, "native-subagent-create");
+  assert.equal(resolved.response.decision.binding.dispatchKind, "subagent_create");
+  assert.equal(resolved.response.decision.binding.contextFork, "none");
+  assert.deepEqual(resolved.response.decision.binding.controls, { model: "model", effort: "reasoning_effort" });
+  const admitted = handleRequest({ ...fields, command: "admit", requestId: "default-native" }, { state, now: NOW });
+  assert.equal(admitted.response.reason, "default_route_no_state", JSON.stringify(admitted.response));
+  assert.equal(admitted.response.decision.binding.adapterId, "native-subagent-create");
+  assert.equal(admitted.response.claimRequired, false);
+  assert.equal(admitted.changed, false);
+
+  const visible = { ...fields, adapterId: "codex-task-create", dispatchKind: "task_create" };
+  const explicit = handleRequest({ ...visible, command: "resolve" }, { state, now: NOW });
+  assert.equal(explicit.response.decision.binding.adapterId, "codex-task-create");
+  const blocked = handleRequest({ ...visible, command: "admit", requestId: "explicit-visible" }, { state, now: NOW });
+  assert.equal(blocked.response.reason, "visible_task_authority_required");
+});
+
+test("omitted native adapter fields select and admit a subagent for supported configured Codex carriers", () => {
+  const cases = [
+    ["codex-astra", "gpt-6-astra", "implementation", "max"],
+    ["codex-terra", "gpt-5.6-terra", "implementation", "max"],
+    ["codex-grok", "combo/grok-unified-4.6", "implementation", "xhigh"],
+    ["codex-luna", "gpt-5.6-luna", "implementation", "max"],
+    ["codex-daybreak-blue", "gpt-daybreak-blue-latest", "implementation", "max"],
+    ["codex-terra-runtime", "gpt-5.6-terra", "implementation", "max"],
+  ];
+  for (const [carrierId, model, role, effort] of cases) {
+    const policy = {
+      schemaVersion: 1,
+      providers: { codex: { carrierId, executionSurface: "codex", account: "local" } },
+      models: { selected: { provider: "codex", carrierId, requestedModel: model, effort } },
+      roles: { [role]: { tiers: [["selected"]] } },
+    };
+    const state = carrierId === "codex-terra-runtime"
+      ? attestedCapability(policy, { carrierId, adapterId: "native-subagent-create", accountScope: "local", observedModel: model })
+      : createEmptyState();
+    if (carrierId === "codex-daybreak-blue") {
+      state.daybreakAvailability = { available: true, checkedAt: new Date(NOW).toISOString() };
+      state.daybreakCatalogDigest = policyDigest(policy);
+    }
+    const context = { catalog: policy, state, now: NOW };
+    if (carrierId === "codex-terra-runtime") context.trustedRuntimeAttestor = ({ hostScope, accountScope }) => ({
+      attestorId: "railyard-runtime-attestor-v1", attestationDigest: DIGEST_A,
+      lunaAvailability: "unavailable", terra: { verified: true, model, effort }, hostScope, accountScope,
+    });
+    const fields = { contractVersion: CONTRACT_VERSION, role, model, effort };
+    const resolved = handleRequest({ ...fields, command: "resolve" }, context);
+    assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
+    assert.equal(resolved.response.decision.selected.carrierId, carrierId);
+    assert.equal(resolved.response.decision.binding.adapterId, "native-subagent-create", carrierId);
+    assert.equal(resolved.response.decision.binding.dispatchKind, "subagent_create", carrierId);
+    const admitted = handleRequest({
+      ...fields, command: "admit", requestId: "configured-native", frozenInputDigest: DIGEST_A, scopes: { task: "native-task" }, forecast: {},
+    }, context);
+    assert.equal(admitted.response.reason, "admitted", JSON.stringify(admitted.response));
+    assert.equal(admitted.response.reservation.binding.adapterId, "native-subagent-create", carrierId);
+    assert.equal(admitted.response.reservation.binding.dispatchKind, "subagent_create", carrierId);
+    if (carrierId === "codex-astra") {
+      const visible = { ...fields, adapterId: "codex-task-create", dispatchKind: "task_create" };
+      assert.equal(handleRequest({ ...visible, command: "resolve" }, context).response.decision.binding.adapterId, "codex-task-create");
+      const blocked = handleRequest({
+        ...visible, command: "admit", requestId: "configured-visible", frozenInputDigest: DIGEST_A, scopes: { task: "visible-task" }, forecast: {},
+      }, context);
+      assert.equal(blocked.response.reason, "visible_task_authority_required");
+    }
+  }
+});
+
+test("configured native creation refuses unsupported model and effort pairs before admission", () => {
+  for (const [carrierId, model, role, effort, reason] of [
+    ["codex-sol", "gpt-5.6-sol", "implementation.hard", "max", "native_model_unsupported"],
+    ["codex-luna", "gpt-5.6-luna", "implementation", "ultra", "effort_unsupported"],
+  ]) {
+    const policy = {
+      schemaVersion: 1,
+      providers: { codex: { carrierId, executionSurface: "codex", account: "local" } },
+      models: { selected: { provider: "codex", carrierId, requestedModel: model, effort: "max" } },
+      roles: { [role]: { tiers: [["selected"]] } },
+    };
+    const state = createEmptyState();
+    const before = structuredClone(state);
+    const context = { catalog: policy, state, now: NOW };
+    const fields = { contractVersion: CONTRACT_VERSION, role, model, effort };
+    for (const adapter of [{}, { adapterId: "native-subagent-create", dispatchKind: "subagent_create" }]) {
+      for (const command of ["resolve", "admit"]) {
+        const refused = handleRequest({
+          ...fields, ...adapter, command, requestId: "unsupported-native", frozenInputDigest: DIGEST_A, scopes: { task: "native-task" }, forecast: {},
+        }, context);
+        assert.equal(refused.response.reason, "no_eligible_route", JSON.stringify(refused.response));
+        assert.deepEqual(refused.response.rejectedAlternatives, [{ modelAlias: "selected", reason }]);
+        assert.equal(refused.changed, false);
+        assert.deepEqual(state, before);
+      }
+    }
+    if (carrierId === "codex-sol") {
+      const visible = { ...fields, adapterId: "codex-task-create", dispatchKind: "task_create" };
+      const resolved = handleRequest({ ...visible, command: "resolve" }, context);
+      assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
+      assert.equal(resolved.response.decision.selected.model, model);
+      assert.equal(resolved.response.decision.binding.adapterId, "codex-task-create");
+      const blocked = handleRequest({
+        ...visible, command: "admit", requestId: "legacy-visible", frozenInputDigest: DIGEST_A, scopes: { task: "visible-task" }, forecast: {},
+      }, context);
+      assert.equal(blocked.response.reason, "visible_task_authority_required");
+      assert.equal(blocked.changed, false);
+      assert.deepEqual(state, before);
+    }
+  }
+});
+
 test("the built-in route proposes Astra Max, and no-config task messages fail closed without a resolver-owned prior route", () => {
   const state = createEmptyState();
   const resolved = handleRequest(request("resolve"), { state, now: NOW });
@@ -857,7 +974,7 @@ test("the configured legacy catalog selects Fable for hard Claude work and recor
   assert.equal(crossHarnessWithoutReason.response.rejectedAlternatives.length > 0, true);
   assert.equal(crossHarnessWithoutReason.response.rejectedAlternatives.every((item) => item.reason === "cross_harness_reason_required"), true);
 
-  const review = handleRequest(request("resolve", { role: "review.code", harness: "codex" }), {
+  const review = handleRequest(request("resolve", { role: "review.code", harness: "codex", adapterId: "codex-task-create", dispatchKind: "task_create" }), {
     catalog: policy,
     state: createEmptyState(),
     now: NOW,
@@ -866,7 +983,7 @@ test("the configured legacy catalog selects Fable for hard Claude work and recor
   assert.equal(review.response.decision.selected.modelAlias, "sol");
   assert.equal(review.response.decision.selected.effort, "high");
   assert.equal(validBinding(review.response.decision.binding), true);
-  const crossFamily = handleRequest(request("resolve", { role: "review.cross_family", harness: "codex" }), {
+  const crossFamily = handleRequest(request("resolve", { role: "review.cross_family", harness: "codex", adapterId: "codex-task-create", dispatchKind: "task_create" }), {
     catalog: policy,
     state: createEmptyState(),
     now: NOW,
@@ -906,7 +1023,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
       home,
       now: NOW,
     };
-    const securityRequest = request("resolve", { role: "security.review", harness: "codex" });
+    const securityRequest = request("resolve", { role: "security.review", harness: "codex", adapterId: "codex-task-create", dispatchKind: "task_create" });
     let probeCalls = 0;
     const available = await runCliAsync(securityRequest, {
       ...options,
@@ -966,6 +1083,8 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
     const remoteScope = await runCliAsync(request("resolve", {
       role: "security.review",
       harness: "codex",
+      adapterId: "codex-task-create",
+      dispatchKind: "task_create",
       hostScope: "remote-runner",
     }), {
       ...options,
@@ -980,6 +1099,8 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
     const differentAccount = await runCliAsync(request("resolve", {
       role: "security.review",
       harness: "codex",
+      adapterId: "codex-task-create",
+      dispatchKind: "task_create",
       accountScope: "different-account",
     }), {
       ...options,
@@ -1123,6 +1244,8 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
     const nonSecurity = await runCliAsync(request("resolve", {
       role: "implementation.hard",
       harness: "codex",
+      adapterId: "codex-task-create",
+      dispatchKind: "task_create",
     }), {
       ...options,
       daybreakProbe: async () => {
@@ -1280,6 +1403,8 @@ test("an explicit catalog role exclusion is enforced without inventing a model c
   const resolved = handleRequest(request("resolve", {
     role: "orchestration",
     harness: "codex",
+    adapterId: "codex-task-create",
+    dispatchKind: "task_create",
   }), { catalog: policy, state: createEmptyState(), now: NOW });
   assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
   assert.equal(resolved.response.decision.selected.modelAlias, "sol");

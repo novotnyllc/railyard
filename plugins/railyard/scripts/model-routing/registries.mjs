@@ -350,7 +350,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     requestedModel: "gpt-6-astra",
     executionSurface: "codex",
     efforts: NATIVE_MODEL_EFFORTS["gpt-6-astra"],
-    adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
+    adapters: ["native-subagent-create", "codex-task-create", "codex-task-message", "native-subagent-message", "native-subagent-followup"],
     roles: NATIVE_WORK_ROLES,
   }),
   "codex-terra": freeze({
@@ -359,7 +359,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     requestedModel: "gpt-5.6-terra",
     executionSurface: "codex",
     efforts: NATIVE_MODEL_EFFORTS["gpt-5.6-terra"],
-    adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
+    adapters: ["native-subagent-create", "codex-task-create", "codex-task-message", "native-subagent-message", "native-subagent-followup"],
     roles: NATIVE_WORK_ROLES,
   }),
   "codex-grok": freeze({
@@ -368,7 +368,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     requestedModel: "combo/grok-unified-4.6",
     executionSurface: "codex",
     efforts: NATIVE_MODEL_EFFORTS["combo/grok-unified-4.6"],
-    adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
+    adapters: ["native-subagent-create", "codex-task-create", "codex-task-message", "native-subagent-message", "native-subagent-followup"],
     roles: NATIVE_WORK_ROLES,
   }),
   "codex-luna": freeze({
@@ -376,7 +376,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     transport: "selector-native",
     requestedModel: "gpt-5.6-luna",
     efforts: ["low", "medium", "high", "xhigh", "max"],
-    adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
+    adapters: ["native-subagent-create", "codex-task-create", "codex-task-message", "native-subagent-message", "native-subagent-followup"],
     roles: NATIVE_WORK_ROLES,
   }),
   "codex-sol": freeze({
@@ -384,7 +384,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     transport: "selector-native",
     requestedModel: "gpt-5.6-sol",
     efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
-    adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
+    adapters: ["native-subagent-create", "codex-task-create", "codex-task-message", "native-subagent-message", "native-subagent-followup"],
     roles: ["investigation", "research", "orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family", "review.deep", "review.architecture", "review.long_context", "review.adversarial", "implementation.hard", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
   }),
   "codex-daybreak-blue": freeze({
@@ -393,7 +393,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     requestedModel: "gpt-daybreak-blue-latest",
     executionSurface: "codex",
     efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
-    adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
+    adapters: ["native-subagent-create", "codex-task-create", "codex-task-message", "native-subagent-message", "native-subagent-followup"],
     // The review.deep family is Oracle's specialty, but Oracle is a browser
     // carrier behind a callable attestation and a cross-harness opt-in.  Without
     // an in-harness fallback those roles resolve to nothing whenever Oracle is
@@ -406,7 +406,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     transport: "selector-native",
     requestedModel: null,
     efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
-    adapters: ["codex-task-create", "codex-task-message", "native-subagent-create", "native-subagent-message", "native-subagent-followup"],
+    adapters: ["native-subagent-create", "codex-task-create", "codex-task-message", "native-subagent-message", "native-subagent-followup"],
     roles: ["implementation", "implementation.fix", "implementation.mechanical", "implementation.medium", "implementation.long-running"],
     runtimeVerifiedOnly: true,
   }),
