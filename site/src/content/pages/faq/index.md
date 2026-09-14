@@ -30,10 +30,14 @@ Railyard itself is free and open source (MIT); you pay only your own Claude/Code
 
 ## What else gets installed?
 
-Railyard depends on [Compound Engineering (EveryInc)](https://github.com/EveryInc/compound-engineering-plugin) for the workflow engine and [ponytail (DietrichGebert)](https://github.com/DietrichGebert/ponytail) for the efficiency discipline used in implementation and verification. The grouped marketplace install is the consent step for those dependencies.
+Railyard uses [Compound Engineering (EveryInc)](https://github.com/EveryInc/compound-engineering-plugin) for selected workflow stages. Resolve CE when a stage needs it; startup does not bootstrap workflow dependencies. [Ponytail (DietrichGebert)](https://github.com/DietrichGebert/ponytail) and Superpowers are not Railyard prerequisites.
+
+## Does every request need a delivery workflow?
+
+Routine work runs natively, and useful CE workflows are selected automatically. Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or pushing user-requested commits to an existing PR. CE owns one review settlement and CI loop. Fleet or account orchestration requires explicit scope; native child agents are the default for parallel work, and visible Codex tasks require an explicit user request.
 
 ## What is a receipt, a run log, or Thermos?
 
 - A [receipt](/delivery/lifecycle/) is the evidence chain from intent through merge and post-merge proof.
-- A [run log](/delivery/audit/) is the decision chain that explains how the result arrived.
-- [Thermos](/skills/thermos/) is the paired review skill invoked during delivery.
+- A [run log](/delivery/audit/) records decisions when an audit is useful; audit and retrospective are optional.
+- [Thermos](/skills/thermos/) supplies optional bounded review lenses alongside CE's review settlement.

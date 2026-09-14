@@ -7,7 +7,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 
-const rs = await import("./route-state.js");
 const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "dispatch-gate.js");
 
 // Hermetic CODEX_HOME: never read the developer's real ~/.codex/config.toml.
@@ -41,7 +40,7 @@ function run(input, codexHome, logDir) {
   if (!codexHome) rmSync(home, { recursive: true, force: true });
   const log = readLog(logs);
   if (!logDir) rmSync(logs, { recursive: true, force: true });
-  return { code: r.status, err: r.stderr, log };
+  return { code: r.status, err: r.stderr, out: r.stdout, log };
 }
 
 function runWithOpenStdin(input) {
@@ -92,237 +91,337 @@ function runWithChunkedOpenStdin(input, delayMs = 10) {
   });
 }
 
-test("Agent with explicit model passes", () => {
-  const r = run({ tool_name: "Agent", tool_input: { model: "opus", prompt: "x" } });
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
+const native = (changes = {}, envelope = {}) => ({
+  hook_event_name: "PreToolUse",
+  tool_name: "agentsspawn_agent",
+  tool_input: {
+    task_name: "parser_review",
+    message: "Review the parser for correctness and report actionable findings.",
+    fork_turns: "none",
+    model: "gpt-6-astra",
+    reasoning_effort: "max",
+    ...changes,
+  },
+  ...envelope,
+});
+const inheritBrief = "Allocation: inherit model and reasoning effort; the parent settings fit this review.\nReview the parser and report findings.";
+const roleBrief = "Allocation: role configuration; use this specialist's fixed controls and inherit any unset controls.\nReview the parser and report findings.";
+
+function inherited(changes = {}, envelope = {}) {
+  const input = native({ message: inheritBrief, fork_turns: "all", ...changes }, envelope);
+  delete input.tool_input.model;
+  delete input.tool_input.reasoning_effort;
+  return input;
+}
+
+test("captured Codex 0.154.0 PreToolUse envelope validates child controls", () => {
+  // Sanitized from the isolated installed-binary canary on 2026-09-14.
+  // The model-facing agents.spawn_agent name is not serialized with a dot.
+  const payload = {
+    session_id: "fixture-parent",
+    turn_id: "fixture-turn",
+    transcript_path: null,
+    cwd: tmpdir(),
+    hook_event_name: "PreToolUse",
+    model: "gpt-6-astra",
+    permission_mode: "bypassPermissions",
+    tool_name: "agentsspawn_agent",
+    tool_input: {
+      task_name: "contract_probe",
+      message: "Read-only synthetic contract canary. Reply with CHILD_FIXTURE_COMPLETE; perform no tools.",
+      model: "gpt-5.6-terra",
+      reasoning_effort: "high",
+      fork_turns: "none",
+    },
+    tool_use_id: "fixture_spawn_call",
+  };
+  const result = run(payload);
+  assert.equal(result.code, 0, result.err);
+  assert.equal(result.log[0].model, "gpt-5.6-terra");
+  assert.equal(result.log[0].effort, "high");
+  assert.equal(result.log[0].phase, "pre_tool_use");
+  assert.equal(result.out, "");
 });
 
-test("Agent with explicit session-tier model passes (named escalation)", () => {
-  assert.equal(run({ tool_name: "Agent", tool_input: { model: "fable" } }).code, 0);
+test("native explicit pair passes with no-history and limited-history task briefs", () => {
+  for (const fork_turns of ["none", "1", "3"]) {
+    const r = run(native({ fork_turns }));
+    assert.equal(r.code, 0, r.err);
+    assert.equal(r.out, "");
+    assert.equal(r.log[0].model, "gpt-6-astra");
+    assert.equal(r.log[0].effort, "max");
+    assert.equal(r.log[0].allocation, "explicit");
+  }
 });
 
-test("Agent without model is refused with guidance", () => {
-  const r = run({ tool_name: "Agent", tool_input: { prompt: "x" } });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /explicit model/);
-  assert.match(r.err, /opus/);
+test("native model and effort validation uses this tool's capability pairs", () => {
+  for (const [model, reasoning_effort] of [
+    ["gpt-6-astra", "ultra"], ["gpt-daybreak-blue-latest", "ultra"],
+    ["gpt-5.6-terra", "max"], ["gpt-5.6-luna", "max"], ["combo/grok-unified-4.6", "xhigh"],
+  ]) assert.equal(run(native({ model, reasoning_effort })).code, 0, model);
+  for (const [model, reasoning_effort] of [
+    ["gpt-5.6-luna", "ultra"], ["combo/grok-unified-4.6", "max"],
+    ["gpt-6-astra", "turbo"], ["gpt-6-astra", 7], ["gpt-6-astra", {}],
+    ["gpt-6-astra", " max "], ["gpt-5.6-sol", "max"], ["glm-5.2", "high"],
+  ]) {
+    const r = run(native({ model, reasoning_effort }));
+    assert.equal(r.code, 2, `${model} ${JSON.stringify(reasoning_effort)}`);
+    assert.match(r.err, /reasoning_effort|model/);
+    assert.equal(r.log.length, 0);
+  }
 });
 
-test("Task without model is refused", () => {
-  assert.equal(run({ tool_name: "Task", tool_input: {} }).code, 2);
+test("unsupported pair gives the supported effort choices without downgrading", () => {
+  const r = run(native({ model: "combo/grok-unified-4.6", reasoning_effort: "max" }));
+  assert.match(r.err, /low, medium, high, xhigh/);
+  assert.match(r.err, /no fallback was applied/);
+  assert.equal(r.out, "");
 });
 
-test("Agent with empty model string is refused", () => {
-  assert.equal(run({ tool_name: "Agent", tool_input: { model: "  " } }).code, 2);
-});
-
-test("Agent onto an OpenAI/Codex-family model is refused without an opt-in marker", () => {
-  const r = run({ tool_name: "Agent", tool_input: { model: "gpt-5.6-luna", prompt: "do the thing" } });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /cross-harness/i);
-  assert.match(r.err, /'gpt-5\.6-luna'/);
-});
-
-test("Agent onto a codex/o-series model is refused without opt-in", () => {
-  assert.equal(run({ tool_name: "Agent", tool_input: { model: "o3", prompt: "x" } }).code, 2);
-  assert.equal(run({ tool_name: "Agent", tool_input: { model: "codex-mini", prompt: "x" } }).code, 2);
-});
-
-test("Agent cross-harness dispatch passes when the prompt opts in", () => {
-  const r = run({
-    tool_name: "Agent",
-    tool_input: { model: "gpt-5.6-luna", prompt: "cross-harness: needs the Codex-only importer" },
-  });
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-});
-
-test("Agent cross-harness opt-in is honored from the description too", () => {
-  assert.equal(
-    run({
-      tool_name: "Agent",
-      tool_input: { model: "gpt-5.6-luna", description: "cross-harness scout", prompt: "x" },
-    }).code,
-    0,
-  );
-});
-
-test("refused cross-harness dispatch is never recorded", () => {
-  assert.deepEqual(
-    run({ tool_name: "Agent", tool_input: { model: "gpt-5.6-luna", prompt: "x" } }).log,
-    [],
-  );
-});
-
-test("spawn_agent with model and effort passes", () => {
-  const r = run({
-    tool_name: "spawn_agent",
-    tool_input: { model: "gpt-5.6-luna", reasoning_effort: "high", message: "x", task_name: "t" },
-  });
-  assert.equal(r.code, 0);
-});
-
-test("agents__spawn_agent alias is gated exactly like spawn_agent", () => {
-  // Codex Desktop multi-agent v2 renames the spawn tool; the gate must not
-  // let a missing model/effort through under the namespaced spelling.
-  const missing = run({
-    tool_name: "agents__spawn_agent",
-    tool_input: { message: "x" },
-  });
-  assert.equal(missing.code, 2);
-  assert.match(missing.err, /model and reasoning_effort/);
-  const complete = run({
-    tool_name: "agents__spawn_agent",
-    tool_input: { model: "gpt-5.6-luna", reasoning_effort: "medium", message: "x", task_name: "t" },
-  });
-  assert.equal(complete.code, 0);
-});
-
-const spawnGlm = {
-  tool_name: "spawn_agent",
-  tool_input: { model: "glm-5.2", reasoning_effort: "high", message: "x", task_name: "t" },
-};
-
-test("spawn_agent non-OpenAI child is refused when no [model_providers.*] exists", () => {
-  const home = fixtureCodexHome('model = "gpt-5.6-luna"\n# [model_providers.zai_litellm] chezmoi\n');
-  const r = run(spawnGlm, home);
-  assert.equal(r.code, 2);
-  assert.match(r.err, /cannot switch providers/);
-  assert.match(r.err, /modelProvider/);
-  rmSync(home, { recursive: true, force: true });
-});
-
-test("spawn_agent non-OpenAI child passes when a provider section exists under any id", () => {
-  // Provider ids are unrelated to model families: zai_litellm serves glm-*.
-  // The gate must not claim "no provider for glm" from a model-string grep.
-  const home = fixtureCodexHome(
-    '[model_providers.zai_litellm]\nname = "Z.ai"\nbase_url = "http://127.0.0.1:4000"\n',
-  );
-  assert.equal(run(spawnGlm, home).code, 0);
-  rmSync(home, { recursive: true, force: true });
-});
-
-test("spawn_agent refusal is well-formed with no session model field in the payload", () => {
-  const home = fixtureCodexHome("model = \"gpt-5.6-luna\"\n");
-  const r = run(spawnGlm, home);
-  assert.equal(r.code, 2);
-  assert.doesNotMatch(r.err, /''/); // never renders an empty quoted model
-  assert.doesNotMatch(r.err, /This session runs/);
-  assert.match(r.err, /'glm-5\.2'/);
-  rmSync(home, { recursive: true, force: true });
-});
-
-test("spawn_agent non-OpenAI child fails open when config.toml is unreadable", () => {
-  assert.equal(run(spawnGlm).code, 0);
-});
-
-test("spawn_agent missing reasoning_effort is refused naming the field", () => {
-  const r = run({ tool_name: "spawn_agent", tool_input: { model: "gpt-5.6-luna" } });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /reasoning_effort/);
-});
-
-test("spawn_agent missing both names both", () => {
-  const r = run({ tool_name: "spawn_agent", tool_input: { message: "x" } });
+test("both fields are deliberately chosen rather than silently omitted", () => {
+  for (const field of ["model", "reasoning_effort"]) {
+    const input = native();
+    delete input.tool_input[field];
+    const r = run(input);
+    assert.equal(r.code, 2);
+    assert.match(r.err, new RegExp(field));
+    assert.deepEqual(r.log, []);
+  }
+  const input = inherited({ message: "Review the parser." });
+  const r = run(input);
   assert.equal(r.code, 2);
   assert.match(r.err, /model and reasoning_effort/);
 });
 
-test("unrelated tools pass untouched", () => {
-  assert.equal(run({ tool_name: "Bash", tool_input: { command: "ls" } }).code, 0);
+test("full-history native forks reject any explicit model or effort override", () => {
+  for (const fork_turns of ["all", undefined]) {
+    for (const fields of [{ model: "gpt-6-astra" }, { reasoning_effort: "max" }, { model: null }]) {
+      const input = inherited({ fork_turns });
+      Object.assign(input.tool_input, fields);
+      const r = run(input);
+      assert.equal(r.code, 2);
+      assert.match(r.err, /full-history/);
+      assert.match(r.err, /none/);
+      assert.match(r.err, /Allocation: inherit model and reasoning effort/);
+      assert.deepEqual(r.log, []);
+    }
+  }
 });
 
-test("allowed dispatch records one metadata line, no prompt", () => {
-  const r = run({
-    tool_name: "Agent",
-    session_id: "sess-1",
-    tool_input: {
-      model: "opus",
-      subagent_type: "general-purpose",
-      description: "extract the parser",
-      prompt: "SECRET PROMPT BODY",
-    },
-  });
-  assert.equal(r.code, 0);
+test("deliberate native inheritance is supported without invented resolved effort", () => {
+  for (const fork_turns of ["all", undefined, "none", "2"]) {
+    const r = run(inherited({ fork_turns }, { model: "gpt-6-astra", session_id: "parent-session" }));
+    assert.equal(r.code, 0, r.err);
+    assert.equal(r.log[0].allocation, "inherit");
+    assert.equal(r.log[0].model, "gpt-6-astra");
+    assert.equal(r.log[0].effort, undefined);
+    assert.equal(r.log[0].reasoning_effort, undefined);
+    assert.equal(r.log[0].phase, "pre_tool_use");
+    assert.doesNotMatch(JSON.stringify(r.log), /parent settings fit/);
+  }
+});
+
+test("inheritance declaration requires a reason and cannot conflict with explicit controls", () => {
+  assert.equal(run(inherited({ message: "Allocation: inherit model and reasoning effort;\n" })).code, 2);
+  assert.equal(run(inherited({ message: "Allocation: inherit model and reasoning effort;\nReview the parser." })).code, 2);
+  const r = run(native({ message: inheritBrief }));
+  assert.equal(r.code, 2);
+  assert.match(r.err, /inheritance conflicts/);
+});
+
+test("native fork values and task brief match the exposed schema", () => {
+  for (const fork_turns of ["0", "-1", 3, "1.5", "everything", "01", true]) {
+    const r = run(native({ fork_turns }));
+    assert.equal(r.code, 2, JSON.stringify(fork_turns));
+    assert.match(r.err, /fork_turns/);
+  }
+  for (const message of ["", " \n", null]) assert.equal(run(native({ message })).code, 2);
+  assert.equal(run(native({ task_name: "" })).code, 2);
+  for (const key of ["agent_type", "fork_context", "items", "service_tier", "model_provider", "plugins"]) {
+    const r = run(native({ [key]: "unsupported" }));
+    assert.equal(r.code, 2, key);
+    assert.match(r.err, /has no/);
+  }
+});
+
+test("bare and historical names enforce the same V2 payload rather than rewriting it", () => {
+  for (const tool_name of ["spawn_agent", "agentsspawn_agent", "agents__spawn_agent"]) {
+    const passed = run(native({}, { tool_name }));
+    assert.equal(passed.code, 0, passed.err);
+    const refused = run(native({ reasoning_effort: "invalid" }, { tool_name }));
+    assert.equal(refused.code, 2, tool_name);
+  }
+});
+
+test("CLI V1 without a named role deliberately chooses or inherits its pair", () => {
+  const input = { tool_name: "spawn_agent", tool_input: { message: "Review the parser and report findings.", model: "gpt-6-astra", reasoning_effort: "max", fork_context: false } };
+  assert.equal(run(input).code, 0);
+  delete input.tool_input.model;
+  delete input.tool_input.reasoning_effort;
+  assert.equal(run(input).code, 2);
+  input.tool_input.message = inheritBrief;
+  assert.equal(run(input).code, 0);
+});
+
+test("even built-in CLI role names may resolve owner-defined fixed settings", () => {
+  for (const agent_type of ["default", "worker", "explorer"]) {
+    const input = { tool_name: "spawn_agent", tool_input: { agent_type, message: roleBrief, fork_context: false } };
+    assert.equal(run(input).code, 0);
+    input.tool_input.model = "gpt-6-astra";
+    input.tool_input.reasoning_effort = "max";
+    assert.equal(run(input).code, 2);
+  }
+});
+
+test("custom CLI role owns fixed controls and explicitly inherits any unset controls", () => {
+  const input = { tool_name: "spawn_agent", tool_input: { agent_type: "specialist", message: roleBrief, fork_context: false } };
+  const r = run(input);
+  assert.equal(r.code, 0, r.err);
+  assert.equal(r.log[0].allocation, "role");
+  assert.equal(r.log[0].role, "specialist");
+  assert.equal(r.log[0].model, undefined);
+  assert.equal(r.log[0].effort, undefined);
+  assert.equal(r.log[0].capability, "runtime_unverified");
+  for (const controls of [{ model: "gpt-6-astra" }, { reasoning_effort: "max" }, { model: "gpt-6-astra", reasoning_effort: "max" }]) {
+    const refused = run({ ...input, tool_input: { ...input.tool_input, ...controls } });
+    assert.equal(refused.code, 2);
+    assert.match(refused.err, /Omit both overrides/);
+  }
+  assert.equal(run({ ...input, tool_input: { ...input.tool_input, message: "Review this task." } }).code, 2);
+  assert.equal(run({ ...input, tool_input: { ...input.tool_input, fork_context: true } }).code, 2);
+});
+
+test("Claude allocation uses only its exposed model control", () => {
+  for (const model of ["opus", "sonnet", "haiku", "fable", "claude-opus-5"]) {
+    const r = run({ tool_name: "Agent", tool_input: { model, prompt: "Review this task." } });
+    assert.equal(r.code, 0, r.err);
+    assert.equal(r.log[0].model, model);
+    assert.equal(r.log[0].effort, undefined);
+  }
+  for (const tool_name of ["Agent", "Task"]) {
+    assert.equal(run({ tool_name, tool_input: {} }).code, 2);
+    assert.equal(run({ tool_name, tool_input: { prompt: inheritBrief } }).code, 0);
+    const invalid = run({ tool_name, tool_input: { model: "gpt-6-astra", prompt: "cross-harness requested" } });
+    assert.equal(invalid.code, 2);
+    assert.match(invalid.err, /supported CLI or adapter/);
+    assert.equal(run({ tool_name, tool_input: { model: "opus", reasoning_effort: "max" } }).code, 2);
+  }
+});
+
+test("Claude fixed role selection does not require forbidden overrides", () => {
+  const input = { tool_name: "Agent", tool_input: { subagent_type: "configured-reviewer", prompt: roleBrief } };
+  const r = run(input);
+  assert.equal(r.code, 0, r.err);
+  assert.equal(r.log[0].allocation, "role");
+  assert.equal(r.log[0].model, undefined);
+  assert.equal(run({ ...input, tool_input: { ...input.tool_input, model: "opus" } }).code, 2);
+});
+
+test("allowed native requests log bounded metadata, never a prompt or completion claim", () => {
+  const r = run(native({ task_name: "x".repeat(500), message: "SECRET PROMPT BODY" }, { session_id: "sess-1" }));
+  assert.equal(r.code, 0, r.err);
+  assert.equal(r.out, "");
   assert.equal(r.log.length, 1);
-  assert.deepEqual(
-    { ...r.log[0], ts: undefined },
-    {
-      ts: undefined,
-      event: "dispatch",
-      harness: "claude-code",
-      tool: "Agent",
-      model: "opus",
-      role: "general-purpose",
-      label: "extract the parser",
-      session_id: "sess-1",
-    },
-  );
-  assert.doesNotMatch(JSON.stringify(r.log), /SECRET PROMPT BODY/);
-});
-
-test("labels are truncated, never unbounded", () => {
-  const r = run({
-    tool_name: "Agent",
-    tool_input: { model: "opus", description: "x".repeat(500) },
-  });
   assert.equal(r.log[0].label.length, 120);
+  assert.equal(r.log[0].session_id, "sess-1");
+  assert.equal(r.log[0].phase, "pre_tool_use");
+  assert.equal(r.log[0].capability, "known_pair");
+  assert.doesNotMatch(JSON.stringify(r.log), /SECRET PROMPT BODY|started|completed/);
 });
 
-test("spawn_agent records model and effort", () => {
-  const r = run({
-    tool_name: "spawn_agent",
-    tool_input: { model: "gpt-5.6-luna", reasoning_effort: "high", task_name: "importer" },
+test("unrelated tool calls and malformed envelopes pass without dispatch records", () => {
+  for (const input of [null, [], {}, { tool_name: "Read" }, { tool_name: "something_spawn_agent" }, { hook_event_name: "PostToolUse", tool_name: "agentsspawn_agent" }, { tool_name: "Bash", tool_input: { command: "ls" } }]) {
+    const r = run(input);
+    assert.equal(r.code, 0);
+    assert.deepEqual(r.log, []);
+    assert.equal(r.out, "");
+  }
+});
+
+test("CLI dispatch records explicit controls and separates unverified external capability", () => {
+  const local = run({ tool_name: "Bash", session_id: "cli-parent", tool_input: { command: "codex exec -m gpt-6-astra -c model_reasoning_effort=max 'review parser'" } });
+  assert.equal(local.code, 0, local.err);
+  assert.deepEqual({ ...local.log[0], ts: undefined }, {
+    ts: undefined, event: "dispatch", phase: "pre_tool_use", tool: "Bash", session_id: "cli-parent",
+    harness: "codex", allocation: "explicit", model: "gpt-6-astra", effort: "max", reasoning_effort: "max", capability: "known_pair",
   });
-  assert.deepEqual(
-    { model: r.log[0].model, effort: r.log[0].effort, label: r.log[0].label, harness: r.log[0].harness },
-    { model: "gpt-5.6-luna", effort: "high", label: "importer", harness: "codex" },
-  );
+  const external = run({ tool_name: "Bash", tool_input: { command: "codex exec -m glm-5.2 -c model_reasoning_effort=xhigh -c model_provider=example" } });
+  assert.equal(external.code, 0, external.err);
+  assert.equal(external.log[0].capability, "runtime_unverified");
+  assert.equal(external.log[0].provider, "example");
+  assert.equal(external.log[0].model, "glm-5.2");
+  const missingProvider = run({ tool_name: "Bash", tool_input: { command: "codex exec -m glm-5.2 -c model_reasoning_effort=xhigh" } });
+  assert.equal(missingProvider.code, 2);
+  assert.match(missingProvider.err, /model_provider/);
+  assert.deepEqual(missingProvider.log, []);
 });
 
-test("refused dispatches are never recorded", () => {
-  assert.deepEqual(run({ tool_name: "Agent", tool_input: { prompt: "x" } }).log, []);
-  assert.deepEqual(run({ tool_name: "spawn_agent", tool_input: { model: "gpt-5.6-luna" } }).log, []);
-  const home = fixtureCodexHome('model = "gpt-5.6-luna"\n');
-  assert.deepEqual(run(spawnGlm, home).log, []);
-  rmSync(home, { recursive: true, force: true });
+test("CLI known effort mismatch blocks, including with an external provider selected", () => {
+  for (const extra of ["", " -c model_provider=example"]) {
+    const r = run({ tool_name: "Bash", tool_input: { command: "codex exec -m gpt-5.6-luna -c model_reasoning_effort=ultra" + extra } });
+    assert.equal(r.code, 2);
+    assert.match(r.err, /low, medium, high, xhigh, max/);
+  }
 });
 
-test("unrelated tools are not recorded", () => {
-  assert.deepEqual(run({ tool_name: "Bash", tool_input: { command: "ls" } }).log, []);
+test("CLI model flag wins over config.model in either order and across exec", () => {
+  for (const command of [
+    'codex exec -m gpt-5.6-luna -c model="gpt-6-astra" -c model_reasoning_effort="ultra"',
+    'codex exec -c model="gpt-6-astra" --model=gpt-5.6-luna -c model_reasoning_effort="ultra"',
+    "codex -m gpt-5.6-luna exec -c model=gpt-6-astra -c model_reasoning_effort=ultra",
+    "codex -c model=gpt-6-astra exec -m gpt-5.6-luna -c model_reasoning_effort=ultra",
+    "codex -m gpt-5.6-luna -c model=gpt-6-astra exec -c model_reasoning_effort=ultra",
+    "codex -c model=gpt-6-astra --model=gpt-5.6-luna exec -c model_reasoning_effort=ultra",
+    "codex -m gpt-6-astra exec -m gpt-5.6-luna -c model=gpt-6-astra -c model_reasoning_effort=ultra",
+  ]) {
+    const result = run({ tool_name: "Bash", tool_input: { command } });
+    assert.equal(result.code, 2, command);
+    assert.match(result.err, /reasoning_effort for 'gpt-5\.6-luna'/, command);
+    assert.match(result.err, /low, medium, high, xhigh, max/, command);
+    assert.deepEqual(result.log, [], command);
+  }
 });
 
-test("Bash-launched codex exec records the actual model, reasoning effort, and label", () => {
-  const r = run({
-    tool_name: "Bash",
-    session_id: "sess-codex-exec",
-    tool_input: {
-      command: "codex exec -m gpt-5.6-luna -c model_reasoning_effort=max --label lane-railyard-cycle 'bounded work'",
-    },
-  });
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-  assert.deepEqual(
-    { ...r.log[0], ts: undefined },
-    {
-      ts: undefined,
-      event: "dispatch",
-      harness: "codex",
-      tool: "Bash",
-      model: "gpt-5.6-luna",
-      effort: "max",
-      reasoning_effort: "max",
-      label: "lane-railyard-cycle",
-      session_id: "sess-codex-exec",
-    },
-  );
+test("CLI logs the effective model flag rather than a later config.model", () => {
+  for (const command of [
+    "codex exec --model=gpt-6-astra -c model=gpt-5.6-luna -c model_reasoning_effort=ultra",
+    "codex exec -c model=gpt-5.6-luna -m gpt-6-astra -c model_reasoning_effort=ultra",
+    "codex -m gpt-6-astra exec -c model=gpt-5.6-luna -c model_reasoning_effort=ultra",
+    "codex -c model=gpt-5.6-luna exec -m gpt-6-astra -c model_reasoning_effort=ultra",
+    "codex -m gpt-5.6-luna exec -m gpt-6-astra -c model=gpt-5.6-luna -c model_reasoning_effort=ultra",
+  ]) {
+    const result = run({ tool_name: "Bash", tool_input: { command } });
+    assert.equal(result.code, 0, `${command}: ${result.err}`);
+    assert.equal(result.log[0].model, "gpt-6-astra", command);
+    assert.equal(result.log[0].effort, "ultra", command);
+  }
+});
+
+test("CLI uses real config flags before or after exec and does not accept invented effort flags", () => {
+  for (const command of [
+    "codex --config=model=gpt-6-astra --config=model_reasoning_effort=max exec",
+    "codex exec --config=model=gpt-6-astra --config=model_reasoning_effort=max",
+    "codex -c model_provider=example exec -m custom-model -c model_reasoning_effort=high",
+    "codex exec -m custom-model --local-provider=ollama -c model_reasoning_effort=high",
+    "codex --local-provider=ollama exec -m custom-model -c model_reasoning_effort=high",
+  ]) assert.equal(run({ tool_name: "Bash", tool_input: { command } }).code, 0, command);
+  for (const flag of ["--reasoning-effort=max", "--reasoning_effort=max"]) {
+    const r = run({ tool_name: "Bash", tool_input: { command: "codex exec -m gpt-6-astra " + flag } });
+    assert.equal(r.code, 2);
+    assert.match(r.err, /-c model_reasoning_effort/);
+  }
+});
+
+test("a refused compound CLI invocation records no allowed dispatches", () => {
+  const r = run({ tool_name: "Bash", tool_input: { command: "codex exec -m gpt-6-astra -c model_reasoning_effort=max; codex exec 'missing controls'" } });
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.log, []);
 });
 
 test("codex exec parsing requires explicit model and effort", () => {
   const parsed = run({
     tool_name: "exec_command",
-    tool_input: { cmd: "/usr/local/bin/codex exec --model=glm-5.2 --reasoning_effort=high" },
+    tool_input: { cmd: "/usr/local/bin/codex exec --model=glm-5.2 -c model_reasoning_effort=high -c model_provider=test-provider" },
   });
   assert.equal(parsed.code, 0);
   assert.equal(parsed.log[0].model, "glm-5.2");
@@ -370,10 +469,10 @@ test("codex exec parsing recognizes environment and command wrappers", () => {
 
   const commandWrapper = run({
     tool_name: "Bash",
-    tool_input: { command: "command codex exec --model=gpt-5.6-sol --reasoning-effort=high" },
+    tool_input: { command: "command codex exec --model=gpt-6-astra -c model_reasoning_effort=high" },
   });
   assert.equal(commandWrapper.code, 0);
-  assert.equal(commandWrapper.log[0].model, "gpt-5.6-sol");
+  assert.equal(commandWrapper.log[0].model, "gpt-6-astra");
   assert.equal(commandWrapper.log[0].reasoning_effort, "high");
 
   const windowsPath = run({
@@ -498,7 +597,7 @@ test("codex exec parsing recognizes argv shell payloads", () => {
 
   const allowed = run({
     tool_name: "shell",
-    tool_input: { command: ["codex", "exec", "--model=gpt-5.6-luna", "--reasoning-effort=max"] },
+    tool_input: { command: ["codex", "exec", "--model=gpt-5.6-luna", "-c", "model_reasoning_effort=max"] },
   });
   assert.equal(allowed.code, 0);
   assert.equal(allowed.log[0].model, "gpt-5.6-luna");
@@ -718,11 +817,11 @@ test("codex exec parsing ignores comments, prose, and later shell commands", () 
   const parsed = run({
     tool_name: "Bash",
     tool_input: {
-      command: "codex exec -m gpt-5.6-sol -c 'model_reasoning_effort=\"high\"' && echo codex exec -m stale",
+      command: "codex exec -m gpt-6-astra -c 'model_reasoning_effort=\"high\"' && echo codex exec -m stale",
     },
   });
   assert.equal(parsed.log.length, 1);
-  assert.equal(parsed.log[0].model, "gpt-5.6-sol");
+  assert.equal(parsed.log[0].model, "gpt-6-astra");
   assert.equal(parsed.log[0].reasoning_effort, "high");
 });
 
@@ -778,103 +877,49 @@ test("missing tool_input fails safe by refusing dispatch tools", () => {
   assert.equal(run({ tool_name: "Agent" }).code, 2);
 });
 
-test("non-mutation shell commands pass the route gate", () => {
-  const r = run({ tool_name: "exec_command", tool_input: { cmd: "ls -la && git status" } });
-  assert.equal(r.code, 0);
+
+test("ordinary delegation never injects LFG or creates delivery receipts", () => {
+  const routeDir = mkdtempSync(path.join(tmpdir(), "gate-no-routes-"));
+  const prior = process.env.RAILYARD_ROUTE_STATE_DIR;
+  process.env.RAILYARD_ROUTE_STATE_DIR = routeDir;
+  try {
+    const r = run(native({ task_name: "lfg_delivery", message: "Run ce-babysit-pr and ce-resolve-pr-feedback for the requested PR." }));
+    assert.equal(r.code, 0, r.err);
+    assert.equal(r.out, "");
+    assert.deepEqual(readdirSync(routeDir), []);
+    assert.equal(r.log.length, 1);
+    assert.equal(r.log[0].event, "dispatch");
+  } finally {
+    if (prior === undefined) delete process.env.RAILYARD_ROUTE_STATE_DIR;
+    else process.env.RAILYARD_ROUTE_STATE_DIR = prior;
+    rmSync(routeDir, { recursive: true, force: true });
+  }
 });
 
-test("spawn_agent with lfg in task records route_carrier entry", () => {
-  process.env.RAILYARD_ROUTE_STATE_DIR = mkdtempSync(path.join(tmpdir(), "gate-route-fresh-"));
-  const logs = mkdtempSync(path.join(tmpdir(), "gate-rc-"));
-  const home = fixtureCodexHome(null);
-  const r = run(
-    { tool_name: "agents__spawn_agent", tool_input: { model: "gpt-5.6-sol", reasoning_effort: "high", task_name: "lfg_delivery_worker", message: "Run the LFG pipeline for feature X. Use ce-babysit-pr after push." } },
-    home, logs
-  );
-  assert.equal(r.code, 0);
-  const rc = readLog(logs).filter((e) => e.event === "route_carrier");
-  assert.ok(rc.length > 0, "expected at least one route_carrier entry");
-  rmSync(home, { recursive: true, force: true });
-  rmSync(logs, { recursive: true, force: true });
+test("git and PR commands do not require a parallel delivery settlement protocol", () => {
+  for (const command of [
+    "git push origin feature", "gh pr create --title change", "gh pr merge 10 --squash",
+    "gh pr comment 10 --body reviewed", "git commit -m fix && git push && gh pr create",
+    "echo 'gh pr merge later'", "bash -lc 'git push origin feature'",
+  ]) {
+    const r = run({ tool_name: "Bash", tool_input: { command } });
+    assert.equal(r.code, 0, r.err);
+    assert.deepEqual(r.log, []);
+  }
 });
 
-// === Route-carrier gate tests (route-state based, not run-log) ===
-
-test("git push without any delivery candidate or route passes", () => {
-  process.env.RAILYARD_ROUTE_STATE_DIR = mkdtempSync(path.join(tmpdir(), "gate-clean-"));
-  const r = run({ tool_name: "exec_command", tool_input: { cmd: "git push origin main" } });
-  assert.equal(r.code, 0);
-});
-
-test("gh pr create with no active route is refused", () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "gate-pr-"));
-  process.env.RAILYARD_ROUTE_STATE_DIR = dir;
-  // No route created
-  const r = spawnSync(process.execPath, [script], {
-    input: JSON.stringify({ tool_name: "exec_command", tool_input: { cmd: "cd /tmp && gh pr create --title x" } }),
-    encoding: "utf8",
-    env: { ...process.env, RAILYARD_ROUTE_STATE_DIR: dir },
-  });
-  assert.equal(r.status, 2);
-  assert.match(r.stderr, /Route carrier required/);
-  rmSync(dir, { recursive: true, force: true });
-});
-
-test("gh pr create with pending_spawn route is refused", () => {
-
-  const dir = mkdtempSync(path.join(tmpdir(), "gate-pr-pending-"));
-  process.env.RAILYARD_ROUTE_STATE_DIR = dir;
-  const route = rs.createRoute({});
-  // Route is in pending_spawn — no SubagentStart has fired
-  const r = spawnSync(process.execPath, [script], {
-    input: JSON.stringify({ tool_name: "exec_command", tool_input: { cmd: "gh pr create --title x" } }),
-    encoding: "utf8",
-    env: { ...process.env, RAILYARD_ROUTE_STATE_DIR: dir, CODEX_THREAD_ID: route.parent_session_id || "none" },
-  });
-  assert.equal(r.status, 2);
-  rmSync(dir, { recursive: true, force: true });
-});
-
-test("spawn_agent naming lfg creates an authoritative route (not just a log line)", () => {
-
-  const dir = mkdtempSync(path.join(tmpdir(), "gate-route-"));
-  process.env.RAILYARD_ROUTE_STATE_DIR = dir;
-  const logs = mkdtempSync(path.join(tmpdir(), "gate-log-"));
-  const home = fixtureCodexHome(null);
-  const r = run(
-    { tool_name: "agents__spawn_agent", tool_input: { model: "gpt-5.6-sol", reasoning_effort: "high", task_name: "lfg_delivery_worker", message: "Run LFG pipeline" } },
-    home, logs
-  );
-  assert.equal(r.code, 0);
-  var files = readdirSync(dir).filter(f => f.endsWith(".json") && !f.startsWith("candidate-"));
-  assert.ok(files.length > 0, "expected a route file to be created");
-  var route = JSON.parse(readFileSync(path.join(dir, files[0]), "utf8"));
-  assert.equal(route.state, "pending_spawn");
-  assert.equal(route.protocol, "railyard.route-carrier/v1");
-  rmSync(home, { recursive: true, force: true });
-  rmSync(logs, { recursive: true, force: true });
-  rmSync(dir, { recursive: true, force: true });
-});
-
-test("TOCTOU guard refuses commit+push+pr create in one shell call", () => {
-  process.env.RAILYARD_ROUTE_STATE_DIR = mkdtempSync(path.join(tmpdir(), "gate-toc-"));
-  const r = run({ tool_name: "exec_command", tool_input: { cmd: "git add -A && git commit -m x && git push && gh pr create" } });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /TOCTOU guard/);
-});
-
-test("echo of git push text does not trigger the gate", () => {
-  const r = run({ tool_name: "exec_command", tool_input: { cmd: "echo 'remember to git push later'" } });
-  assert.equal(r.code, 0);
-});
-
-test("env-wrapped git push is detected", () => {
-  const r = run({ tool_name: "exec_command", tool_input: { cmd: "GIT_AUTHOR_NAME=x env git push origin main" } });
-  assert.equal(r.code, 0); // Passes because no route/candidate exists
-});
-
-test("bash -lc 'git push' via shell tokens is not falsely gated when no candidate", () => {
-  // bash -lc wraps it but shellTokens won't see the inner command as top-level
-  const r = run({ tool_name: "exec_command", tool_input: { cmd: "bash -lc 'git push origin main'" } });
-  assert.equal(r.code, 0); // Passes because no route/candidate exists
+test("default hook manifests keep only startup and targeted dispatch checks", () => {
+  for (const file of ["../codex/hooks.json", "./claude-hooks.json"]) {
+    const manifest = JSON.parse(readFileSync(new URL(file, import.meta.url), "utf8"));
+    assert.deepEqual(Object.keys(manifest.hooks).sort(), ["PreToolUse", "SessionStart"]);
+    assert.equal(manifest.hooks.PreToolUse.length, 2);
+    for (const rule of manifest.hooks.PreToolUse) assert.match(rule.hooks[0].command, /dispatch-gate\.js/);
+    assert.match(manifest.hooks.SessionStart[0].hooks[0].command, /routing-charter\.js/);
+    assert.doesNotMatch(JSON.stringify(manifest), /cleanup-codex|railyard-retro|routing-nudge|route-lifecycle|merge-settlement-gate/);
+  }
+  const codex = JSON.parse(readFileSync(new URL("../codex/hooks.json", import.meta.url), "utf8"));
+  const nativeMatcher = new RegExp(codex.hooks.PreToolUse[0].matcher);
+  assert.ok(nativeMatcher.test("agentsspawn_agent"));
+  assert.ok(nativeMatcher.test("spawn_agent"));
+  assert.ok(new RegExp(codex.hooks.PreToolUse[1].matcher).test("Bash"));
 });

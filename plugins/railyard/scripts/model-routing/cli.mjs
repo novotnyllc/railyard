@@ -255,7 +255,7 @@ function daybreakRefreshRequired(response) {
 
 /**
  * The stdin CLI can make one fixed, local availability observation before a
- * Daybreak-eligible security resolve. The synchronous export remains useful
+ * Daybreak-eligible resolve. The synchronous export remains useful
  * for trusted in-process consumers and deliberately does not start a process.
  */
 export async function runCliAsync(input, options = {}) {

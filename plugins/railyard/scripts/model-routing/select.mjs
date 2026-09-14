@@ -38,6 +38,7 @@ import {
 import {
   daybreakAvailable,
 } from "./daybreak-availability.mjs";
+import { validateNativeModelEffort } from "./native.mjs";
 
 export function adapterFor(request, carrier) {
   const adapterId = request.adapterId || carrier.adapters[0];
@@ -186,7 +187,8 @@ export function providerAvailabilityIssue(provider, request = {}) {
 }
 
 export function effortFor(request, model, carrier) {
-  const effort = request.effort || model.effort || model.efforts?.[0] || carrier.efforts[0];
+  const supportedEfforts = model.efforts || carrier.efforts;
+  const effort = request.effort ?? model.effort ?? (supportedEfforts.length === 1 ? supportedEfforts[0] : undefined);
   if (!validEffort(effort) || !carrier.efforts.includes(effort) || (model.efforts && !model.efforts.includes(effort))) return null;
   return effort;
 }
@@ -222,8 +224,16 @@ export function claudeIdentitySatisfied(model, observed) {
 }
 
 export function configuredCandidates(catalog, request, state, now, policyDigest, { trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers } = {}) {
-  const roleRule = catalog.roles[request.role];
+  let roleRule = catalog.roles[request.role];
   if (!roleRule) return [{ ok: false, reason: "role_unconfigured", alias: null }];
+  if (request.model !== undefined) {
+    const aliases = Object.keys(catalog.models).filter((alias) => catalog.models[alias].requestedModel === request.model);
+    if (aliases.length === 0) return [{ ok: false, reason: "explicit_model_unconfigured", alias: null }];
+    // Explicit requirements outrank default role tiers and cost ordering. The
+    // selected entry still has to satisfy its declared capabilities, privacy,
+    // harness, and supported efforts; none of those checks may substitute it.
+    roleRule = { tiers: [aliases] };
+  }
   const runtimeDecisions = new Map();
   const output = [];
   for (let tierIndex = 0; tierIndex < roleRule.tiers.length; tierIndex += 1) {
@@ -249,6 +259,12 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         continue;
       }
       const model = catalog.models[alias];
+      // An explicit model is a requirement, not a hint to the ranking policy.
+      // An unavailable pair stays unavailable; other tiers cannot replace it.
+      if (request.model !== undefined && model.requestedModel !== request.model) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "explicit_model_mismatch" });
+        continue;
+      }
       const provider = catalog.providers[model.provider];
       const carrier = CARRIER_DESCRIPTORS[model.carrierId];
       let runtime = null;
@@ -331,7 +347,8 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
       }
       const effort = effortFor(request, model, carrier);
       if (!effort) {
-        output.push({ ok: false, alias, tierIndex, position, reason: "effort_unsupported" });
+        const missingSelection = request.effort === undefined && model.effort === undefined && (model.efforts || carrier.efforts).length > 1;
+        output.push({ ok: false, alias, tierIndex, position, reason: missingSelection ? "effort_selection_required" : "effort_unsupported" });
         continue;
       }
       if (!shapeMatches(model.workShape, request.workShape)) {
@@ -365,6 +382,11 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         continue;
       }
       const observedModel = capability?.observedModel || model.resolvedModel;
+      if (carrier.transport === "selector-native" && carrier.modelFamily !== "claude"
+        && observedModel && observedModel !== "unknown" && observedModel !== model.requestedModel) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "observed_model_mismatch" });
+        continue;
+      }
       if (model.identityMode === "provider_latest_family" && !observedModel) {
         output.push({ ok: false, alias, tierIndex, position, reason: "current_family_unattested" });
         continue;
@@ -447,6 +469,12 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
       output[output.length - 1].learning = learningHintForCandidate(state, request, output[output.length - 1]);
     }
   }
+  for (const candidate of output.filter((item) => item.ok && !item.substitute)) {
+    const bypassedPreferredModel = output.some((item) => !item.ok
+      && catalog.models[item.alias]?.requestedModel !== candidate.model.requestedModel
+      && (item.tierIndex < candidate.tierIndex || (item.tierIndex === candidate.tierIndex && item.position < candidate.position)));
+    if (bypassedPreferredModel) candidate.substitute = "configured_model_substitute";
+  }
   return output;
 }
 
@@ -501,9 +529,8 @@ export function candidateSort(left, right) {
 export function fixedRuntimeDecision(trustedRuntimeAttestor, request = {}, provider = {}) {
   const hostScope = effectiveHostScope(request);
   const accountScope = effectiveAccountScope(request, provider);
-  // Luna's default identity is a fixed router-owned runtime fact.  The caller
-  // cannot supply a runtime object; Terra is accepted only from the separate
-  // fixed host-attestor path below.
+  // Legacy configured Luna/Terra adapters retain this policy baseline. It is
+  // not availability evidence and is never used by the native default route.
   if (typeof trustedRuntimeAttestor !== "function") return {
     lunaAvailability: "available",
     hostScope,
@@ -516,38 +543,30 @@ export function fixedRuntimeDecision(trustedRuntimeAttestor, request = {}, provi
   try { attestation = trustedRuntimeAttestor(Object.freeze({ contractVersion: CONTRACT_VERSION, runtime: "codex", hostScope, accountScope })); }
   catch { return null; }
   if (!isObject(attestation) || !onlyFields(attestation, new Set(["attestorId", "attestationDigest", "lunaAvailability", "terra", "hostScope", "accountScope"])) || attestation.attestorId !== RUNTIME_ATTESTOR || !validDigest(attestation.attestationDigest) || attestation.hostScope !== hostScope || attestation.accountScope !== accountScope || !["available", "unavailable", "unselectable"].includes(attestation.lunaAvailability)) return null;
-  // Terra ships the same effort range as Sol and Luna (low..ultra).  Pinning
-  // this to "max" rejected every legitimate attestation at any other effort,
-  // so a Terra route could only ever be admitted at max - which is not how the
-  // carrier is declared.  Gate on the carrier's own effort list instead.
+  // Validate the legacy Terra adapter against its own effort range; Luna's
+  // native range ends at max, while Terra also exposes ultra.
   if (attestation.terra !== undefined && (!onlyFields(attestation.terra, new Set(["verified", "model", "effort"])) || attestation.terra.verified !== true || !validModel(attestation.terra.model) || !CARRIER_DESCRIPTORS["codex-terra-runtime"].efforts.includes(attestation.terra.effort))) return null;
   return { ...attestation, provenance: "measured_fact" };
 }
 
-export function defaultRoute(request, { trustedRuntimeAttestor, trustedTransportAttestor } = {}) {
-  const implementation = request.role === "implementation" || request.role?.startsWith("implementation.");
-  const complex = request.risk === "high" || request.risk === "critical" || request.complex === true;
-  let carrierId = implementation ? "codex-luna" : "codex-sol";
-  let effort = implementation ? "max" : complex ? "max" : "high";
-  let substitute = null;
-  const runtime = fixedRuntimeDecision(trustedRuntimeAttestor, request, { account: "codex-sub" });
-  if (!runtime) return { ok: false, reason: "invalid_runtime_attestation" };
-  if (implementation && ["unavailable", "unselectable"].includes(runtime.lunaAvailability) && !request.explicitModelRequirement) {
-    const terra = runtime.terra;
-    if (!isObject(terra) || terra.verified !== true || !validModel(terra.model) || terra.effort !== "max") {
-      return { ok: false, reason: "preferred_unavailable" };
-    }
-    carrierId = "codex-terra-runtime";
-    effort = "max";
-    substitute = "implementation_model_substitute";
-  }
+export function defaultRoute(request, { trustedTransportAttestor } = {}) {
+  // Astra Max is the candidate baseline for substantial engineering. This is
+  // a selection policy, not a universal cost claim or availability evidence.
+  // Both user controls are preserved exactly; there is no fallback model or
+  // lowered effort when a requested pair cannot be selected.
+  const model = request.model || "gpt-6-astra";
+  const effort = request.effort || "max";
+  const selection = validateNativeModelEffort(model, effort);
+  if (!selection.ok) return selection;
+  const carrierId = Object.keys(CARRIER_DESCRIPTORS).find((id) => CARRIER_DESCRIPTORS[id].requestedModel === model);
   const carrier = CARRIER_DESCRIPTORS[carrierId];
+  if (!carrier) return { ok: false, reason: "native_model_unsupported" };
   const adapterResult = adapterFor(request, carrier);
   if (!adapterResult.ok) return { ok: false, reason: adapterResult.reason };
-  const provider = { executionSurface: "codex", carrierId, account: "codex-sub" };
+  const provider = { executionSurface: "codex", carrierId, account: "codex-sub", harness: "codex" };
+  if (request.harness !== undefined && request.harness !== "codex") return { ok: false, reason: "cross_harness_adapter_required" };
   const transport = transportDecision(request, adapterResult.adapter, trustedTransportAttestor, provider);
   if (!transport.ok) return { ok: false, reason: transport.reason };
-  const model = carrierId === "codex-terra-runtime" ? runtime.terra.model : carrier.requestedModel;
   return {
     ok: true,
     alias: carrierId,
@@ -559,10 +578,10 @@ export function defaultRoute(request, { trustedRuntimeAttestor, trustedTransport
     effort,
     transport,
     observedModel: "unknown",
-    substitute,
+    substitute: null,
     capability: null,
     tierIndex: 0,
     priorities: [],
-    runtime,
+    runtime: null,
   };
 }

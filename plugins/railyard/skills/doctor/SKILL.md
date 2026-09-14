@@ -5,15 +5,15 @@ description: "Diagnose and fix the delivery system: plugin and skill version syn
 
 # Railyard Doctor
 
-Diagnose first, fix second. The diagnostic pass is strictly read-only; every
-fix is proposed with the exact command and applied only on consent, routed to
-the skill that owns it. Run any time — a healthy system produces a short
-all-green table, not noise.
+Diagnose first, then apply fixes already authorized by the task. Start with the
+reported failure and affected host; expand only when evidence requires it. Use
+the owning manager or skill for each fix and verify the affected behavior. A
+healthy requested surface produces a short result, not a fleet-wide sweep.
 
 ## Diagnostic sweep
 
-Run every check that applies; skip only what the host provably lacks (no
-Codex installed → skip Codex-side checks, and say so).
+Run checks relevant to the reported failure or requested health scope. An
+existing fleet configuration alone does not authorize cross-host work.
 
 **Sync and versions**
 
@@ -21,15 +21,15 @@ Codex installed → skip Codex-side checks, and say so).
   `codex plugin list --json` — the same plugin at different versions across
   harnesses is a finding.
 - Marketplace freshness: installed versions vs the current catalogs
-  (`novotnyllc`, `compound-engineering-plugin`, `ponytail`); a stale
+  (`novotnyllc`, `compound-engineering-plugin`, when selected); a stale
   marketplace snapshot is itself a finding.
-- Compound Engineering: present, 3.20.0+, `ce-babysit-pr` exposed.
-- ponytail: present (required, auto-installed alongside Compound Engineering);
-  absence is a fixable finding routed back to setup's grouped install.
-- Codex hook trust: every installed plugin's hooks trusted with current
-  hashes — an untrusted or hash-stale hook is an auto-fixable finding (run
-  roundhouse's `codex-plugin-hooks.mjs approve` for that plugin).
-- Fleet-wide parity: when a fleet config exists, delegate the cross-host
+- Compound Engineering: required selected skills exposed, including
+  `ce-babysit-pr` when watching a PR. No unrelated behavior plugin is required.
+- Codex hook trust: verify current hashes for intentionally enabled hooks.
+  Disabled optional hooks are healthy. Preserve user choices; never approve
+  every hook as a generic repair. Test the installed startup/dispatch path
+  before enabling updated commands.
+- Fleet-wide parity: only when requested, delegate the cross-host
   skill/plugin/runtime comparison to `roundhouse:fleet-agents` (inventory
   mode) and fold its drift report into the findings.
 
@@ -84,7 +84,7 @@ came from, **agent-computed** rows name what they were derived from.
   (`fleet-doctor`'s `head-signature` and `ratchet-replay` rows; every gated
   command refuses on a failed verification).
 - Last successful run within 2× that host's cadence — agent-computed from
-  each host's journal. The interactive-session-only `iris-windows` entry's
+  each host's journal. An interactive-session-only Windows entry's
   staleness is *expected* and is reported as such, by name — never a silent
   pass, never a broken row.
 - No enabled-but-untrusted hook (`fleet-doctor`'s `hooks` row, which reports
@@ -121,7 +121,7 @@ and for every non-ok row the minimal fix and its owner:
   scheduler entry → `railyard:setup` §3a;
 - missing prerequisites or first-run gaps → `railyard:setup`.
 
-Apply fixes only after consent, grouped like setup's consent groups, and
-re-run the affected checks afterward — a fix without a green re-check is not
-a fix. Never mutate during diagnosis, never use sudo, and never touch
-enrolled/privileged state outside the owning skill's own ceremony.
+Apply authorized fixes and re-run affected checks afterward. If additional
+authority is necessary, prepare the exact operation before asking. Never
+mutate unrelated state, and handle enrolled/privileged state through its
+owning skill within the user's authorized scope.

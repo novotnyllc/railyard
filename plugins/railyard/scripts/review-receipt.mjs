@@ -2,16 +2,16 @@
 
 // Attests a Claude-family review: the private `claude -p --output-format
 // stream-json` JSONL stream plus the process exit status. The expected review
-// model is supplied by the caller (`--expect-model`) and is whatever
-// railyard:model-routing selected — Fable, Opus, or a later Claude review
-// model. Nothing here is model-specific.
+// model is supplied by the caller (`--expect-model`) after deliberate reviewer
+// allocation. Nothing here selects a reviewer or proves its reasoning effort.
 //
 // This parser only understands Claude Code's stream format. Other review
 // carriers carry their own native evidence and must NOT be piped through it:
-// Codex-native review models (Sol today, successors later) validate through
-// Codex's own task/thread metadata, and Oracle/ChatGPT Pro review validates
-// through the oracle route's receipts. Equivalents exist per carrier; none is
-// privileged.
+// Codex-native reviews use whatever dispatch/task metadata the runtime exposes;
+// missing serving-model or effort evidence must remain unknown. Oracle's route
+// receipts validate its observed browser controls, not native Codex effort or
+// backend model identity. This helper never establishes review independence,
+// coverage, or settlement; those remain with the selected workflow owner.
 
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";

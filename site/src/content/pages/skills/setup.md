@@ -11,7 +11,7 @@ Establish a delivery baseline by observing the machine first, proposing the exac
 
 ## What it adds
 
-Setup runs the machine from inventory to a validated delivery-ready baseline. It inventories installed plugins, marketplaces, tools, configuration, and credential presence, then proposes the missing pieces and writes only the answers you provide.
+Setup inspects installed plugins, marketplaces, relevant tools, and user configuration, then applies the authorized missing pieces through their supported owners. CE capability is resolved when a selected workflow needs it. Ponytail and Superpowers are not prerequisites, and session startup performs no dependency bootstrap.
 
 ## How it works
 

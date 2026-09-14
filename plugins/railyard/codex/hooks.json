@@ -1,9 +1,9 @@
 {
-  "description": "Codex hooks: bounded exact-process SessionEnd cleanup, retrospective reminder, routing charter and nudge with delivery-candidate marking, PreToolUse dispatch gate (explicit model + route carrier), PreToolUse merge-settlement gate, and lifecycle hooks for subagent start/stop when available.",
+  "description": "Startup allocation guidance and targeted dispatch checks. Native model and effort choices are deliberate; the selected delivery workflow owns review and CI settlement.",
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "spawn_agent|agents__spawn_agent",
+        "matcher": "agentsspawn_agent|spawn_agent",
         "hooks": [
           {
             "type": "command",
@@ -23,59 +23,6 @@
             "timeout": 5
           }
         ]
-      },
-      {
-        "matcher": "shell|local_shell|exec_command|unified_exec",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/merge-settlement-gate.js\"",
-            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\merge-settlement-gate.js\" }",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "SubagentStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/route-lifecycle.js\" start",
-            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\route-lifecycle.js\" start }",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/route-lifecycle.js\" stop",
-            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\route-lifecycle.js\" stop }",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/cleanup-codex/scripts/cleanup-codex.mjs\" cleanup --hook",
-            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\skills\\cleanup-codex\\scripts\\cleanup-codex.mjs\" cleanup --hook }",
-            "timeout": 3
-          },
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/railyard-retro.js\"",
-            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\railyard-retro.js\" }",
-            "timeout": 3
-          }
-        ]
       }
     ],
     "SessionStart": [
@@ -85,18 +32,6 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/routing-charter.js\"",
             "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\routing-charter.js\" }",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/routing-nudge.js\"",
-            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\routing-nudge.js\" }",
             "timeout": 5
           }
         ]

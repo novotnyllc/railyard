@@ -5,9 +5,9 @@ parent: Delivery
 nav_order: 4
 ---
 
-# Let the router learn locally
+# Optional local routing learning
 
-Use observed delivery outcomes to improve estimates while policy remains operator-owned. Railyard learns from bounded route metadata on the local machine, uses base-demand evidence to refine forecasts within budget safety, and uses route-effect evidence as a tier-zero tiebreak when the operator lists `learnedEstimate`. Eligibility, privacy, hard budget floors, and declared tier order remain under operator control.
+Use observed delivery outcomes to improve estimates when you explicitly enable configured local learning. Routine native work does not need this store or a retrospective artifact. Railyard can use bounded metadata to refine forecasts within the existing policy, including a tier-zero tiebreak when the operator lists `learnedEstimate`. Eligibility, privacy, hard budget floors, and declared tier order remain under operator control.
 
 ## The run
 
@@ -30,10 +30,12 @@ railyard:model-routing learning clear
 
 `inspect` reports bounded counts and aggregates. `disable` pauses new collection while preserving and continuing to apply existing aggregates. `enable` resumes collection. `clear` removes learning samples and aggregates while leaving settled accounting evidence intact.
 
+The following is an illustrative inspection result, not a measured model comparison:
+
 ```text
 learning=enabled outcomes=37 aggregates=9
 work_class=implementation.mechanical samples=8
-route=codex-luna effort=max adjustment=-12%
+route=codex-astra effort=max adjustment=-12%
 eligibility=unchanged privacy=unchanged budget_floor=unchanged
 ```
 

@@ -7,15 +7,11 @@ nav_order: 3
 
 # Own your routing policy
 
-Start with the shipped defaults, then make account, privacy, and budget choices explicit when the work outgrows them. A routing catalog is an operator-owned statement of eligible carriers and ordered roles. Fixed Railyard adapters continue to own commands, endpoints, credentials, and transport.
+A user-owned catalog is useful when explicit account, fleet, privacy, or budget choices need to be repeatable. Routine native execution does not require one. The shipped starting point uses Astra Max as the substantial-work candidate and keeps specialist routes explicit.
 
-## The run
+A catalog describes eligible choices. Fixed Railyard adapters own executable commands, transport boundaries, and receipt validation. Catalog data cannot make an unsupported model callable or authorize a new visible task.
 
-The operator copies the shipped example, adds the providers already available in the two harnesses, validates it, and resolves one bounded work class. Railyard freezes the catalog digest before selection and carries the chosen model, effort, carrier, privacy, and meter provenance into the route disclosure. The turn is installing a validated catalog at the user boundary. The run closes when a normal `resolve` names that catalog digest and the expected model alias.
-
-Spend security judgment on a model built for it. Put Daybreak Blue first in a configured `security.*` role, and Railyard prefers it when the local Codex account exposes it for defensive-security work—review lenses, threat modeling, trust surfaces, redaction and signing, attack-shape analysis, and audits—before the general hard tier. The native model list is checked only when this configured security work needs it, remembered for 24 hours, and quietly leaves the established route in place wherever Daybreak is not available.
-
-## Install the shipped starting point
+## Install and validate a starting point
 
 From a Railyard source checkout:
 
@@ -25,61 +21,33 @@ install -m 600 plugins/railyard/references/model-routing.example.json \
   "${XDG_CONFIG_HOME:-$HOME/.config}/railyard/model-routing.json"
 ```
 
-Run the `validate` verb through `railyard:model-routing` before using an edited catalog. Validation is offline and content-free; it checks the closed schema and source-owned carrier bindings without starting provider work.
+Validate an edited catalog through `railyard:model-routing validate` before using it. Offline validation checks the schema and source-owned bindings; it does not establish live account or adapter availability. Startup does not install or overwrite a catalog automatically.
 
 ## Author the policy surface
 
-| Key | Operator decision | Evidence Railyard preserves |
-| --- | --- | --- |
-| `providers` | Account alias, fixed carrier, execution surface, harness, locality, retention, and supported availability source | Configured account and privacy provenance |
-| `models` | Provider, fixed carrier, requested family/model, efforts, roles, fallbacks, rates, and `relativeCostIndex` | Exact selected alias, effort, rate freshness, and rejected alternatives |
-| `roles` | Ordered tier ladders; tier zero may use `cost`, `latency`, `quality`, `reliability`, or `learnedEstimate` | The selected alias and every hard constraint that kept another candidate out |
-| `security.*` roles | Put Daybreak Blue before the general hard tier for review lenses, threat modeling, trust surfaces, redaction and signing, attack-shape analysis, and audits | Fresh local detection of `gpt-daybreak-blue-latest` at `high` or `max`, plus the configured fallback |
-| `privacy` | Provider, locality, retention, and egress restrictions | Tighten-only request handling; the root catalog remains the widest allowed boundary |
-| `budgets` | Task, run, and project meters using `soft`, `hardAdmission`, or `strict` | Forecast, reservation, actual, and charged facets kept in their native meter |
-| `discovery` | Bounded negative-evidence freshness | Transient 60 seconds, auth 5 minutes, and missing binary 1 hour by default; unsupported evidence records a 24-hour window and stays held until the policy or adapter digest changes |
-| `learning` | Whether bounded local learning is active | Content-free outcome and aggregate counts; prompts and files remain outside the store |
+| Key | Operator decision |
+| --- | --- |
+| `providers` | Opaque account alias, fixed carrier, execution surface, harness, locality, and retention |
+| `models` | Model identity, supported efforts, roles, explicitly allowed alternatives, and any sourced rates |
+| `roles` | Ordered choices that reflect task needs; soft priorities cannot override hard constraints |
+| `privacy` | Provider, locality, retention, and egress boundaries |
+| `budgets` | Optional task, run, and project meters using `soft`, `hardAdmission`, or `strict` |
+| `discovery` | Bounded capability freshness; unavailable or unsupported evidence remains distinct |
+| `learning` | Optional local, content-free outcome aggregates |
 
-```json
-{
-  "schemaVersion": 1,
-  "providers": {
-    "codex_luna": {
-      "carrierId": "codex-luna",
-      "executionSurface": "codex",
-      "account": "codex-sub",
-      "locality": "external",
-      "retention": "provider_default",
-      "harness": "codex"
-    }
-  },
-  "models": {
-    "luna": {
-      "provider": "codex_luna",
-      "carrierId": "codex-luna",
-      "requestedModel": "gpt-5.6-luna",
-      "efforts": ["max"],
-      "roles": ["implementation", "implementation.mechanical"],
-      "relativeCostIndex": 20
-    }
-  },
-  "roles": {"implementation": {"tiers": [["luna"]]}},
-  "learning": {"enabled": true}
-}
+An illustrative native role uses the same baseline candidate as the source example:
+
+```text
+role=implementation
+model=gpt-6-astra effort=max carrier=codex-astra
 ```
 
-The catalog names only fixed carrier aliases. Railyard owns the executable adapters, dispatch controls, bridge rules, and receipts that make those aliases real.
+Select a specialist such as Daybreak Blue only when the task and current harness support it. Do not treat a catalog row or a cached discovery record as current live dispatch evidence. Any permitted alternative is disclosed; an unavailable requested selection is never silently replaced.
 
 ## Select an explicit policy path
 
-`RAILYARD_MODEL_POLICY_PATH` selects one absolute catalog path for a bounded environment. Selection is exact: an absent file returns `selected_policy_missing` instead of silently falling back to the normal user catalog. That behavior makes a CI or alternate-account policy reproducible.
+`RAILYARD_MODEL_POLICY_PATH` selects one absolute catalog path. An absent selected file returns `selected_policy_missing` rather than silently using another catalog. Keep policy and private state outside repositories, worktrees, and plugin caches.
 
-```text
-policy_source=user_configuration
-policy_digest=sha256:7c1a...
-role=implementation alias=luna
-privacy=tightened carrier=codex-luna
-result=resolved
-```
+The catalog must not contain credentials, arbitrary commands, prompts, source code, or host inventory. Its privacy and budget boundaries remain authoritative even when optional learning suggests a different estimate.
 
-Continue with [roles, tiers, and carriers](/delivery/model-routing/tiers/), [budgets and receipts](/delivery/model-routing/budgets/), and [local learning](/delivery/model-routing/learning/).
+Continue with [models, effort, and carriers](/delivery/model-routing/tiers/), [budgets and receipts](/delivery/model-routing/budgets/), and [optional learning](/delivery/model-routing/learning/).

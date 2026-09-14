@@ -1,10 +1,10 @@
 flowchart TD
     accTitle: M5 model routing sequence
-    accDescr: A work request is resolved, selected, admitted against budget, claimed once, executed by its carrier, reconciled from an imported receipt, and recorded. A hard constraint discloses a substitute; a blocked admission stops before carrier work.
+    accDescr: Optional configured routing resolves model and effort, admits applicable budget, claims one action, and reconciles its receipt. Only policy-authorized alternatives may be selected; unsupported routes or blocked admission stop before work.
     A["1 · Request<br/>Work arrives"] --> B["2 · Resolve<br/>Role → tier ladder"]
     B --> C{3 · Select<br/>Tier eligible?}
     C -->|yes| D["4 · Route<br/>Model + effort + transport"]
-    C -->|hard constraint| E["Disclose next tier / substitute"]
+    C -->|authorized alternative| E["Disclose allowed alternative"]
     E --> D
     D --> F["5 · Admit<br/>Forecast vs meters"]
     F -->|blocked| G["HOLD<br/>Blocked before carrier work"]

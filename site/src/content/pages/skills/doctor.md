@@ -11,7 +11,7 @@ Diagnose the delivery system as an ownership map: observe each surface, attach e
 
 ## What it adds
 
-Doctor reports a read-only health table. It checks harness parity, plugin and skill state, marketplaces, routing policy, credential presence, fleet readiness, store state, and runtime health.
+Doctor reports a read-only health table for the requested surface: installed plugins, relevant tools, model policy, or a concrete runtime problem. Fleet readiness, account checks, and store health are inspected when that scope is requested. An absent optional catalog or unselected specialist is not a routine delivery failure.
 
 ## How it works
 

@@ -93,7 +93,7 @@ export function validateRequest(input, command) {
   if (bounded) return error(bounded);
   const commands = new Set(["validate", "resolve", "admit", "claim-dispatch", "reconcile", "status", "inspect-claim", "refresh", "mint-task-authority", "issue-lease", "accept-lease", "claim-slot", "release-lease", "seal-epoch", "build-work-contract", "learning.inspect", "learning.clear", "learning.disable", "learning.enable"]);
   if (!commands.has(command)) return error("unknown_command");
-  const allowed = new Set(["contractVersion", "command", "operation", "callerKind", "role", "adapterId", "dispatchKind", "budgetEffect", "effort", "workShape", "workClassDigest", "priorWorkClassDigest", "contextFork", "r52", "requestId", "actionId", "privacy", "runtime", "risk", "contextClass", "complex", "explicitModelRequirement", "transport", "scope", "scopes", "forecast", "activeReservationId", "bridgeLifecycleId", "taskAuthorityId", "objectiveEpoch", "objectiveDigest", "instructionDigest", "senderOwner", "hostScope", "accountScope", "dispatchIdentity", "destinationScope", "destinationClass", "currentTurn", "postLifecycleRequirementId", "frozenInputDigest", "reservationId", "claimId", "receipt", "remoteProbe", "capability", "ceSeam", "priorRoute", "authority", "lease", "epochId", "workContract", "harness", "crossHarnessReason", "refusedAliases"]);
+  const allowed = new Set(["contractVersion", "command", "operation", "callerKind", "role", "adapterId", "dispatchKind", "budgetEffect", "model", "effort", "workShape", "workClassDigest", "priorWorkClassDigest", "contextFork", "r52", "requestId", "actionId", "privacy", "runtime", "risk", "contextClass", "complex", "explicitModelRequirement", "transport", "scope", "scopes", "forecast", "activeReservationId", "bridgeLifecycleId", "taskAuthorityId", "objectiveEpoch", "objectiveDigest", "instructionDigest", "senderOwner", "hostScope", "accountScope", "dispatchIdentity", "destinationScope", "destinationClass", "currentTurn", "postLifecycleRequirementId", "frozenInputDigest", "reservationId", "claimId", "receipt", "remoteProbe", "capability", "ceSeam", "priorRoute", "authority", "lease", "epochId", "workContract", "harness", "crossHarnessReason", "refusedAliases"]);
   if (!onlyFields(input, allowed)) return error("unknown_request_field");
   if (input.role !== undefined && !validRole(input.role)) return error("invalid_role");
   if (input.callerKind !== undefined && !CALLER_KINDS.has(input.callerKind)) return error("invalid_caller_kind");
@@ -112,6 +112,10 @@ export function validateRequest(input, command) {
   if (input.dispatchKind !== undefined && !DISPATCH_KINDS.has(input.dispatchKind)) return error("invalid_dispatch_kind");
   if (input.budgetEffect !== undefined && !BUDGET_EFFECTS.has(input.budgetEffect)) return error("invalid_budget_effect");
   if (input.effort !== undefined && !validEffort(input.effort)) return error("invalid_effort");
+  if (input.model !== undefined && !validModel(input.model)) return error("invalid_model");
+  if (input.model !== undefined && input.effort === undefined) return error("effort_required");
+  if (input.explicitModelRequirement !== undefined && typeof input.explicitModelRequirement !== "boolean") return error("invalid_model_requirement");
+  if (input.explicitModelRequirement === true && input.model === undefined) return error("explicit_model_required");
   if (!validContextFork(input.contextFork)) return error("invalid_context_fork");
   if (input.contextFork !== undefined && (input.adapterId !== "native-subagent-create" || (input.dispatchKind !== undefined && input.dispatchKind !== "subagent_create"))) return error("invalid_context_fork");
   if (input.r52 !== undefined && !validR52Readiness(input.r52)) return error("invalid_r52_readiness");

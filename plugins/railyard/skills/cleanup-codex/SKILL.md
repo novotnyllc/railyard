@@ -25,11 +25,16 @@ node plugins/railyard/skills/cleanup-codex/scripts/cleanup-codex.mjs inspect --j
 
 The stable JSON result always includes `action`, `selected`, `skipped`, `warnings`, and `verification`. A detached entry in `selected` is an inspection candidate only; `authorizesMutation` remains false. GUI and ambiguous entries are skipped with reasons.
 
-### Root SessionEnd hook
+### Optional root SessionEnd hook
 
-Codex invokes `cleanup --hook` only at root `SessionEnd`. It accepts only a bounded JSON payload naming `SessionEnd` and a UUID `session_id`, then takes paired plain and environment-expanded macOS process snapshots. It considers only same-user PIDs carrying that exact `CODEX_THREAD_ID`; process groups are used for exclusion and reporting, never group signaling. Mixed-thread, cross-user, hook/app-server, proxy/daemon, incomplete, or oversized groups are refused.
+Automatic cleanup is off: the default plugin manifest does not register a
+SessionEnd cleanup hook. Use manual inspection for an observed resource
+problem. If the user explicitly selects automatic cleanup, validate the
+current harness payload and trust only that reviewed command.
 
-Under the shared mutation lock, the hook revalidates each exact PID, UID, start time, absolute executable, and process group, signals exact PIDs deepest-first with `TERM`, waits about 200 ms, then revalidates and sends `KILL` only to exact survivors. It verifies the old birth identities are absent or reused. The hook stays within the three-second manifest timeout, remains silent during normal invocation, never restarts or signals the shared app-server, and never writes raw commands or environment values to its private receipt.
+The retained `cleanup --hook` implementation accepts only a bounded JSON payload naming `SessionEnd` and a UUID `session_id`, then takes paired plain and environment-expanded macOS process snapshots. It considers only same-user PIDs carrying that exact `CODEX_THREAD_ID`; process groups are used for exclusion and reporting, never group signaling. Mixed-thread, cross-user, hook/app-server, proxy/daemon, incomplete, or oversized groups are refused.
+
+Under the shared mutation lock, the hook revalidates each exact PID, UID, start time, absolute executable, and process group, signals exact PIDs deepest-first with `TERM`, waits about 200 ms, then revalidates and sends `KILL` only to exact survivors. It verifies the old birth identities are absent or reused. The hook is designed for a three-second timeout, remains silent during normal invocation, never restarts or signals the shared app-server, and never writes raw commands or environment values to its private receipt.
 
 The hook atomically replaces one mode-`0600` latest receipt for the exact app-server identity under `${XDG_STATE_HOME}/railyard/cleanup-codex` when `XDG_STATE_HOME` is set, otherwise under `~/Library/Application Support/railyard/cleanup-codex`. A later complete manual inspection prunes only private receipts whose exact identities are proven absent or reused. Set `RAILYARD_CLEANUP_CODEX_HOOK_DISABLED=1` to disable hook cleanup. Claude Code exposes this skill for explicit use but does not install the Codex hook.
 

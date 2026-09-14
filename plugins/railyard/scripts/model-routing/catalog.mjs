@@ -70,7 +70,7 @@ export function presentationOverlayFor({ carrierId, model, effort }) {
   const carrier = CARRIER_DESCRIPTORS[carrierId];
   if (!carrier || !carrier.efforts.includes(effort)) return null;
   let family;
-  if (["codex-luna", "codex-sol", "codex-terra-runtime", "codex-daybreak-blue"].includes(carrierId)) {
+  if (["codex-astra", "codex-terra", "codex-grok", "codex-luna", "codex-sol", "codex-terra-runtime", "codex-daybreak-blue"].includes(carrierId)) {
     if (carrier.requestedModel && model !== carrier.requestedModel) return null;
     family = "gpt_sol";
   } else if (CARRIER_DESCRIPTORS[carrierId]?.modelFamily === "claude") {
@@ -219,6 +219,8 @@ export function validateCatalog(catalog) {
     if (model.rates !== undefined && (!Array.isArray(model.rates) || model.rates.some(validateRate))) return error("invalid_model", { alias });
     for (const field of ["latency", "quality", "reliability"]) if (model[field] !== undefined && (!Number.isFinite(model[field]) || model[field] < 0)) return error("invalid_model", { alias });
     const carrier = CARRIER_DESCRIPTORS[model.carrierId];
+    if (carrier && ((model.effort !== undefined && !carrier.efforts.includes(model.effort)) || model.efforts?.some((effort) => !carrier.efforts.includes(effort)))) return error("effort_unsupported", { alias });
+    if (model.effort !== undefined && model.efforts !== undefined && !model.efforts.includes(model.effort)) return error("effort_unsupported", { alias });
     if (catalog.providers[model.provider].carrierId !== model.carrierId) return error("provider_carrier_mismatch", { alias });
     if (carrier?.requestedModel && carrier.requestedModel !== model.requestedModel) return error("fixed_carrier_mismatch", { alias });
     if (carrier?.executionSurface && carrier.executionSurface !== catalog.providers[model.provider].executionSurface) return error("fixed_carrier_mismatch", { alias });

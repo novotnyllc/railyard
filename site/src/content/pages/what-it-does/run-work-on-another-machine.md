@@ -7,23 +7,23 @@ nav_order: 8
 
 # Run work on another machine
 
-A delivery needs Linux tooling while the current workstation is a Mac. Ask the candidate machine to prove project, agent, and transport readiness, then bind the selected destination to the delivery contract. Work starts where the prerequisites are current, and the same delivery gates travel with it.
+A delivery needs Linux tooling while the current workstation is a Mac. Explicitly select remote placement, verify the required project, agent, and transport readiness, and preserve the requested acceptance boundary on that host. A local request stays local even when a fleet catalog exists.
 
 ## Easy path
 
 ```text
-> Run this delivery on the machine that is ready for it.
+> Create a new task for this delivery on the Linux machine, and get the change merged there.
 ```
 
-`railyard:orchestrate` combines the delivery contract with `roundhouse:fleet-readiness` before placement.
+`railyard:orchestrate` uses `roundhouse:fleet-readiness` before placement. This example explicitly authorizes a new visible task. Native subagents remain the default for bounded work inside an existing task; remote placement does not independently authorize visible-task creation.
 
 ## The run
 
-The operator asks for a Linux-bound delivery to run where its project, agent surface, and transport are ready. Roundhouse produces host, task, and transport readiness evidence; Railyard binds the selected destination to the unchanged delivery contract. The turn is placement after proof: the remote lane starts only when the candidate can receive the work. The run closes when the placed lane returns the same review, settlement, merge, and post-merge receipts as a local delivery.
+The operator asks for a Linux-bound delivery. Roundhouse verifies that the chosen host can receive it, and Railyard carries the objective, constraints, and acceptance checks into the supported destination surface. The selected CE workflow owns PR review settlement and CI there. Because this example authorizes merge, completion includes merge confirmation and post-merge proof.
 
 ## What happens
 
-The destination produces host, task, and transport readiness evidence. The dispatcher binds the selected destination to the task, starts dependency-ready lanes, and keeps the same delivery gates inside the placed lane.
+The destination must expose the required task or worker capability; a checkout on disk or a working SSH command alone does not establish a remote agent. If the required placement surface is unavailable, report the limitation without silently changing host, account, provider, or model.
 
 ## Proof point
 
