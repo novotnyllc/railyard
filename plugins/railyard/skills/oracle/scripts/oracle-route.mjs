@@ -341,7 +341,10 @@ function assertTrustedExecutableAncestors(file) {
       || !trustedOwners.has(uid)
       || (worldWritable && !stickyRootDirectory)
       || (groupWritable && !stickyRootDirectory && !homebrewOwnedGroupWrite)) fail("unsafe_oracle_executable");
-    identities.push({ path: current, ...executableIdentity(info) });
+    // Directory size/mtime describe sibling churn, not executable drift. Bind
+    // the ancestor's identity and trust attributes; keep file timestamps in
+    // executableIdentity for the executable and private-state race checks.
+    identities.push({ path: current, dev: String(info.dev), ino: String(info.ino), mode, uid, gid });
   }
   return identities;
 }
@@ -365,7 +368,9 @@ export function bindExecutable(candidate, repoRoot = process.cwd()) {
 
 export function revalidateExecutable(binding) {
   const current = bindExecutable(binding.binary, binding.repoRoot);
-  if (stable(current.identity) !== stable(binding.identity) || stable(current.ancestors) !== stable(binding.ancestors)) fail("oracle_executable_changed");
+  if (current.binary !== binding.binary
+    || stable(current.identity) !== stable(binding.identity)
+    || stable(current.ancestors) !== stable(binding.ancestors)) fail("oracle_executable_changed");
   return current.binary;
 }
 

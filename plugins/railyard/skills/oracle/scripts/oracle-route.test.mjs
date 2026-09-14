@@ -847,6 +847,59 @@ test("Homebrew-style executable symlinks canonicalize and identity drift blocks"
   assert.throws(() => bindExecutable(arbitraryBinary), /unsafe_oracle_executable/);
 });
 
+test("executable revalidation tolerates sibling churn in a trusted ancestor", () => {
+  const value = fixture();
+  const directory = path.join(value.root, "trusted-bin");
+  fs.mkdirSync(directory, { mode: 0o755 });
+  const actual = path.join(directory, "oracle");
+  fs.writeFileSync(actual, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  // Make the subsequent directory mtime change deterministic without waiting
+  // for the filesystem clock's timestamp resolution.
+  fs.utimesSync(directory, 0, 0);
+  const before = fs.statSync(directory, { bigint: true });
+  const binding = bindExecutable(actual);
+  const sibling = path.join(directory, "unrelated-command");
+  fs.writeFileSync(sibling, "unrelated data\n");
+  assert.notEqual(fs.statSync(directory, { bigint: true }).mtimeNs, before.mtimeNs);
+  assert.deepEqual(bindExecutable(actual).identity, binding.identity);
+  assert.equal(revalidateExecutable(binding), actual);
+  fs.unlinkSync(sibling);
+  assert.equal(revalidateExecutable(binding), actual);
+});
+
+test("replacing a trusted ancestor blocks even when the executable inode is preserved", () => {
+  const value = fixture();
+  const directory = path.join(value.root, "trusted-bin");
+  const retired = path.join(value.root, "retired-bin");
+  fs.mkdirSync(directory, { mode: 0o755 });
+  const actual = path.join(directory, "oracle");
+  fs.writeFileSync(actual, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  const binding = bindExecutable(actual);
+  fs.renameSync(directory, retired);
+  // Keep the retired directory allocated so its inode cannot be reused.
+  fs.mkdirSync(directory, { mode: 0o755 });
+  fs.renameSync(path.join(retired, "oracle"), actual);
+  assert.notEqual(fs.statSync(directory, { bigint: true }).ino, fs.statSync(retired, { bigint: true }).ino);
+  assert.deepEqual(bindExecutable(actual).identity, binding.identity);
+  assert.throws(() => revalidateExecutable(binding), /oracle_executable_changed/);
+});
+
+test("executable relocation behind a sibling symlink changes the bound canonical path", () => {
+  const value = fixture();
+  const directory = path.join(value.root, "trusted-bin");
+  fs.mkdirSync(directory, { mode: 0o755 });
+  const actual = path.join(directory, "oracle");
+  const relocated = path.join(directory, "oracle-moved");
+  fs.writeFileSync(actual, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  const binding = bindExecutable(actual);
+  fs.renameSync(actual, relocated);
+  fs.symlinkSync(relocated, actual);
+  const replacement = bindExecutable(actual);
+  assert.notEqual(replacement.binary, binding.binary);
+  assert.deepEqual(replacement.identity, binding.identity);
+  assert.throws(() => revalidateExecutable(binding), /oracle_executable_changed/);
+});
+
 test("the installed canonical Homebrew brew executable satisfies the fixed attestation", {
   skip: !fs.existsSync("/opt/homebrew/bin/brew"),
 }, () => {
