@@ -3,7 +3,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "agentsspawn_agent|spawn_agent",
+        "matcher": "agentsspawn_agent|spawn_agent|agents__spawn_agent",
         "hooks": [
           {
             "type": "command",

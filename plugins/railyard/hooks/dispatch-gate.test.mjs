@@ -918,8 +918,20 @@ test("default hook manifests keep only startup and targeted dispatch checks", ()
     assert.doesNotMatch(JSON.stringify(manifest), /cleanup-codex|railyard-retro|routing-nudge|route-lifecycle|merge-settlement-gate/);
   }
   const codex = JSON.parse(readFileSync(new URL("../codex/hooks.json", import.meta.url), "utf8"));
-  const nativeMatcher = new RegExp(codex.hooks.PreToolUse[0].matcher);
-  assert.ok(nativeMatcher.test("agentsspawn_agent"));
-  assert.ok(nativeMatcher.test("spawn_agent"));
   assert.ok(new RegExp(codex.hooks.PreToolUse[1].matcher).test("Bash"));
+});
+
+test("Codex manifest routes every supported native spelling through the gate", () => {
+  const codex = JSON.parse(readFileSync(new URL("../codex/hooks.json", import.meta.url), "utf8"));
+  // Require an explicit whole-name alternative, including the compatibility
+  // alias; only agentsspawn_agent was observed in the current V2 binary.
+  for (const tool_name of ["agentsspawn_agent", "spawn_agent", "agents__spawn_agent"]) {
+    const matchedRule = codex.hooks.PreToolUse.find(({ matcher }) => new RegExp(`^(?:${matcher})$`).test(tool_name));
+    assert.ok(matchedRule, `No dispatch hook registered for ${tool_name}`);
+    assert.equal(matchedRule.hooks[0].command, 'node "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-gate.js"');
+    const result = run(native({ reasoning_effort: "invalid" }, { tool_name }));
+    assert.equal(result.code, 2, tool_name);
+    assert.match(result.err, /reasoning_effort/, tool_name);
+    assert.deepEqual(result.log, [], tool_name);
+  }
 });
