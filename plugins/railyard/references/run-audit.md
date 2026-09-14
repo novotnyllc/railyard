@@ -5,28 +5,17 @@ per-dispatch self-ID *inside* a transcript; this is the aggregate
 reconstruction *across* one — which survives compaction, because it is written
 to disk as the run happens.
 
-Three depths, each opt-in deeper than the last:
+Use the depth that answers the question:
 
 | Depth | When | What it is |
 | --- | --- | --- |
-| **Recap** | automatic, every deliver/orchestrate completion | 3–6 plain lines ending the final user-facing message |
-| **Audit** | on request (`railyard:audit`, "how did that run work?") | the decision chain, reconstructed from the run log |
-| **Retrospective** | closing step of a substantial run, or on request | self-generated questions about that run, answered against the evidence and graded against the kickoff `approach` line, ending in learnings and suggestions |
+| **Completion report** | at task completion | result, relevant checks, and remaining limitations |
+| **Audit** | on request or to investigate a concrete repeated failure | the decision chain reconstructed from available evidence |
+| **Retrospective** | explicitly selected for improvement | a few run-specific questions answered from that evidence |
 
-The retrospective is no longer only on-request: a substantial run runs it as
-its closing step, and a **Stop** hook (Claude Code) / **SessionEnd** hook
-(Codex) reminds when a substantial run would end without a recorded
-`retrospective` or `recap` marker. The hook only surfaces the reminder
-(metadata-only, never blocks the stop, no prompt/secret capture); the session
-runs the loop.
-
-**Substantial is by cost, not by route.** The hook fires on either signal: a
-small fan-out of dispatches, *or* this session's own `what:"approach"` line
-with no closing marker. The second signal is what covers a run that spends
-hours without dispatching anything — a fleet or release run — which the
-dispatch count alone reads as trivial. Only `what:"approach"` counts, not the
-other `decision` kinds, and only when the line carries this session's
-`session_id`: an unscoped approach line arms nobody's reminder.
+No automatic retrospective or cleanup is registered in the default hook set.
+The optional reminder script remains a manual diagnostic facility; a run does
+not need a recap marker or approach artifact to finish.
 
 ## Run log
 
@@ -48,9 +37,11 @@ finding, not a daemon's job.
 | --- | --- | --- |
 | `session` | SessionStart charter (both harnesses) | `ts`, `harness`, `cwd` |
 | `dispatch` | PreToolUse dispatch gate, on every **allowed** dispatch | `ts`, `harness`, `tool`, `model`, `effort` (Codex), `role`, `label`, `session_id` |
-| `subagent_stop` | Claude Code `SubagentStop` | `ts`, `harness`, `session_id` |
+| `subagent_stop` | Optional lifecycle hook (not enabled by default) | `ts`, `harness`, `session_id` |
 
-A refused dispatch is never recorded — the log holds dispatches that happened.
+A refused dispatch is not recorded as allowed. PreToolUse records permission
+for an attempt; it cannot prove the runtime accepted, started, or completed it.
+Corroborate actual model/effort and completion from native runtime evidence.
 
 The PreToolUse position is deliberate: it fires on both harnesses from a
 subscription that already exists, and it records a dispatch even when the
@@ -59,8 +50,9 @@ PostToolUse recorder would miss it.
 
 `subagent_stop` carries no tool payload, so it pairs with dispatches only by
 count and time: it answers "did the fan-out drain, and when" — not per-worker
-duration. Codex exposes no equivalent event; there, worker completion comes
-from `outcome` lines.
+duration. Completion coverage depends on the active harness. Default startup/dispatch
+hooks do not subscribe to lifecycle events; use native child outcomes and
+optional `outcome` lines, and name gaps rather than inferring completion.
 
 Deliberately **not** subscribed: `UserPromptSubmit` (fires on every prompt,
 records nothing about routing that the `session` anchor does not) and
@@ -91,23 +83,10 @@ Three event kinds, no more:
 | `outcome` | `what`, `result`, `fed_by` | a worker finished, a gate passed or failed, a round closed |
 | `deviation` | `what`, `because` | actual shape diverged from the planned shape |
 
-Every substantial run opens with one of these, whatever routed it. A run that
-is substantial **by cost** — multi-host, multi-repo, or multi-hour — MUST open
-an `approach` line before it executes, even when nothing will ever dispatch:
-that single `note` call is the entire audit spine for an ops or release run,
-and it is also what arms the Stop/SessionEnd reminder.
-
-The run's **first** `decision` line is its `approach`: `what:"approach"`,
-`because:` the one-paragraph "how would an excellent engineer run *this* run?"
-— the loop, the isolation boundary, the evidence that proves done, and the long
-pole, derived from first principles before the route executes. It is the
-baseline the retrospective grades the run against; its absence is itself a
-finding.
-
-A completed retrospective (or the closing recap) records a marker line —
-`{"event":"retrospective", ...}` or `{"event":"recap", ...}` — so the Stop/
-SessionEnd reminder knows the loop already ran and stays quiet. Marker lines
-are metadata only, like every other line.
+An `approach` note can preserve the reason for a consequential allocation or
+execution choice. It is optional. Record one when it helps diagnose the run;
+do not create a process stage solely to produce it. Completion and optional
+retrospective markers are metadata, not delivery gates.
 
 `fed_by` and `led_to` reference other lines **by label, in plain words** —
 "piece 2 review", "intake". No ID scheme, no schema; the chain is meant to be
@@ -126,54 +105,26 @@ plain label `/list-agents` shows. Launch named children (`--name`) so that
 label, the ledger, and the agent list agree; the session UUID remains the
 resume identity that `dispatch` and `subagent_stop` lines carry.
 
-## Recap format
+## Completion report
 
-End the final user-facing message of every deliver/orchestrate completion with
-3–6 plain lines. Text, not ceremony — no heading, no table, no version
-framing:
-
-```text
-Route: railyard:deliver → ce-plan → LFG → thermos → merge
-Chain: intake chose local delivery (one lane) → thermos found 2 real findings
-  → one fix batch → clean re-review
-Dispatches: 4 (3 opus implementation, 1 sonnet extraction), 1 review round
-Ran as expected.
-```
-
-The last line is the verdict: `Ran as expected.` or one plain sentence naming
-the divergence. Counts are one line; the chain is the content.
+Lead with the requested result and its verification. Add model/effort,
+dispatch count, retries, or timing only when relevant to the user's question.
+No fixed route chain, recap block, heading, or audit verdict is required.
 
 ## Retrospective
 
-Not a checklist. Read the audit report plus the session history and **generate
-3–7 pointed questions about this specific run**, then answer each against the
-evidence. Good questions are concrete and come from something the audit
-actually shows:
+When selected, read the audit report and relevant session history. Ask only
+questions grounded in observed uncertainty or waste: unnecessary serial work,
+context rereads, repeated unchanged checks, duplicated review ownership,
+model/effort changes, failed starts, retries, and repairs. Compare total cost
+and elapsed time at the same acceptance boundary; missing usage data stays
+unknown. Higher effort can reduce actions, but a benchmark does not prove the
+best allocation for every coding task.
 
-> Phase 3 dispatched 4 workers sequentially with no data dependency between
-> them — why not parallel?
-
-> Two reviewers each re-read the same 9k-line file — could one have briefed
-> the other?
-
-> The intake picked Opus for a mechanical rename. What did the extra tier buy?
-
-Alongside the run-specific questions, six standing **discipline lenses** run
-every time — the charter's default triggers, asked in the past tense. Each is
-pass/fail against the evidence, and a fail is a finding that must land in a
-sink:
-
-| Lens | The question |
-| --- | --- |
-| Greenfield-disposable | Was migration/production caution spent on state nobody depends on? Was "who depends on this?" asked before preserving it? |
-| Scope→plan threshold | Did scope cross multi-host / multi-repo / multi-hour with no plan artifact produced before execution continued? |
-| Never override a guard | Was a tripped safety guard bypassed instead of fixed or routed through the sanctioned path? |
-| Bytes, not version | Where a fix shipped under an unchanged version, were installed bytes (resolved SHA) verified rather than the version string? |
-| Completeness | Was the plan/handoff/retrospective built by sweeping the primary record, mapping every flagged item and every mid-run workaround to captured/not-captured — never re-summarizing a summary? Every workaround (shim, alias, hand-edit) is an open defect to capture. |
-| Owning skill named | Did a dispatch brief inline a workflow another skill owns instead of naming that skill and passing a frozen contract? Diff the inlined copy against the real skill: the dropped gate, not the inlining, is what ships. |
-
-Answer honestly, including "nothing was wasteful here". An answer that yields
-an improvement goes to one of exactly two sinks:
+There are no mandatory discipline lenses, grades, sink entries, or artifacts.
+Explain useful findings in the answer. The formats below are available only
+when a durable learning or suggestion is requested or needed for an authorized
+repair.
 
 **Local learning.** A learning about *this repository's* work is
 `compound-engineering:ce-compound` — it already owns that surface and writes

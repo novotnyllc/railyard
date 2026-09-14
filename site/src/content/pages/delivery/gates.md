@@ -7,98 +7,63 @@ nav_order: 3
 
 # Delivery gates
 
-Put each quality decision beside the stage that can act on it. Focused gates turn review, merge authority, and post-merge proof into observable delivery facts, so agents can move quickly while operators retain a trustworthy finish line.
+Use verification that can reveal a meaningful failure in the change. Repository requirements remain authoritative. A docs edit may need links and a build; a behavior change needs checks for that behavior; a UI change may need browser verification. Repeat checks for relevant changes, failures, or unresolved concerns.
 
-## Thermos
+## One review and CI owner
 
-Review a coherent change while its reasoning is still local. Thermos runs two lenses against one frozen packet:
+When a CE workflow is selected, it owns review settlement, feedback resolution, CI, and the watch loop. Use `ce-commit-push-pr` for PR creation and user-requested commits pushed to an existing PR. Railyard preserves the requested completion boundary and checks the returned evidence without adding a second watcher.
 
-- `thermo-nuclear-review` covers correctness, security, breakage, developer experience, and feature-leak risk.
-- `thermo-nuclear-code-quality-review` covers structure, duplication, maintainability, and complexity.
+Unresolved feedback and stale checks must be handled before an authorized merge. A local check passing does not settle a PR, and a green PR does not establish post-merge or deployment success.
 
-The synthesis deduplicates findings into one actionable list. Real findings are fixed before the chunk commits, and affected checks run again.
+## Optional specialist review
 
-Each lens is also independently invocable when one question deserves its own packet. `railyard:thermo-nuclear-review` is the correctness, security, breakage, developer-experience, and feature-leak skill. `railyard:thermo-nuclear-code-quality-review` is the structure, duplication, maintainability, and complexity skill. Thermos is the paired orchestration that gives both the same frozen input and synthesizes their results.
+Thermos runs two lenses against the same bounded packet:
 
-![Review gate sequence from a ready diff through parallel Thermos review, synthesis, merge settlement, independent review, merge, post-merge proof, and focused quality gates.](/diagrams/m6-review-gates.svg)
+- `thermo-nuclear-review`: correctness, security, breakage, developer experience, and feature-leak risk.
+- `thermo-nuclear-code-quality-review`: structure, duplication, maintainability, and complexity.
+
+Choose the pair or a single lens when it adds a useful perspective. Findings return to the implementation owner and the existing CE review loop. Oracle is another optional advisor when its current transport and authentication evidence support the selected route. None of these is a blanket pre-commit requirement.
+
+The following is an example with Thermos explicitly selected. Its final review step checks existing evidence; it does not automatically dispatch another reviewer.
+
+![A selected Thermos review feeds findings into one CE settlement loop before an authorized merge and post-merge proof.](/diagrams/m6-review-gates.svg)
 
 ### Sequence
 
-1. **Ready.** Freeze the diff and run the focused quality preflight.
-2. **Gates.** Keep only evidence for the current implementation head in the packet.
-3. **Thermos.** Run parallel correctness/security and code-quality reviews against that packet.
-4. **Return.** Synthesize real findings and send fixes back to the owning implementation lane.
-5. **Settle.** Require resolved threads and current review authority, using the bounded signal-aware wait when applicable.
-6. **Review.** Run the independent review that confirms the settled packet.
-7. **Merge.** Merge only after the current gates authorize the branch.
-8. **Prove.** Verify merge ancestry and the focused post-merge result.
+1. **Ready.** Prepare a bounded diff and the evidence the selected review needs.
+2. **Gates.** Keep required and relevant checks tied to the current implementation.
+3. **Thermos.** Run the selected correctness/security and quality lenses against the same packet.
+4. **Return.** Synthesize actionable findings and send fixes to the implementation owner.
+5. **Settle.** Let CE own feedback resolution, review settlement, and CI.
+6. **Review.** Confirm the current evidence satisfies the repository's requirements.
+7. **Merge.** Merge only within the user's authorized scope.
+8. **Prove.** Verify the merged state and the applicable post-merge result.
 
-Findings return to the implementation lane, so the diagram describes a loop whose success path stays short.
+## UI checks
 
-The dispatch gate keeps the worker identity explicit. A Codex child missing both fields returns:
+Use the project's existing browser and accessibility checks for the changed surface. React Doctor remains available when its analysis is useful for React work. Resolve its current invocation when selecting it; installing or running an additional scanner is not a universal docs, backend, or UI prerequisite.
 
-```text
-[railyard] Dispatch refused: spawn_agent must set model and reasoning_effort explicitly (no silent inheritance of the session tier). Retry with the fields set.
-```
+## Dispatch enforcement
 
-## React Doctor
+The narrow dispatch gate checks deliberate model and reasoning-effort allocation against supported native controls. Explicit suitable inheritance is allowed. A full-history native fork cannot carry model or effort overrides; use a supported limited-history or no-history fork when changing either. Fixed specialist roles use their authoritative settings.
 
-Run React Doctor at the UI boundary where its findings can still change the chunk. It scans React code for state-and-effect, performance, architecture, security, accessibility, and maintainability issues, then returns the focused findings to the implementation lane before commit. It works across React frameworks and React-enabled sites; Railyard scopes the gate to the staged UI change.
+Unsupported or unavailable selections are disclosed. An offline resolver or gate test is not evidence that the live harness emits the expected hook event or can run a selected adapter.
 
-```sh
-npx react-doctor@latest --staged --no-score
-```
+<span id="merge-settlement"></span>
 
-Use `--diff` while the branch is still unstaged. The gate applies to browser-visible React work; backend, schema, script, and docs-only changes keep their smaller native checks. A passing invocation becomes one runnable receipt beside focused tests and the later independent review.
+## Optional merge guard
 
-```text
-react_doctor scope=staged findings=0 exit=0
-focused_tests=passed
-gate=ready-for-review
-```
+The merge-settlement hook remains an opt-in backstop for a workflow that needs it. It checks unresolved threads and review signals on the current head; it does not own a second review or CI watch loop. A degraded or incomplete check is reported as such, never treated as proof of settled review.
 
-The [React Doctor repository](https://github.com/millionco/react-doctor) carries the rule categories and current CLI behavior.
-
-## Merge settlement
-
-Tie merge authority to the latest branch head and its settled review evidence. The merge-settlement hook waits on reviewer *signals* rather than a flat clock — a review already on the head allows immediately, silence past a short registration window allows, and a registered-but-unposted reviewer holds the merge until it lands — and carries unresolved threads in the settlement state.
-
-An unresolved thread returns:
-
-```text
-[railyard] Merge refused: PR #42 has 1 unresolved review thread(s). Reviews that arrive after CI turns green are still real findings. Address each one — fix it, or reply on the thread with the rationale for declining — then resolve the threads (resolveReviewThread via gh api graphql) and retry this merge. A tripped guard is waited out or fixed, never bypassed.
-```
-
-A fresh head with no review and nobody registered on it is held for the three-minute registration window:
-
-```text
-[railyard] Merge refused: the head commit 4e1d... of PR #42 has no review and no reviewer has registered on it, and it is only 60s old. Bot reviewers (Copilot, the Codex connector, CodeRabbit) register within ~1-3 minutes of a push — a 👀 reaction on the PR — so this is too early to tell silence from a reviewer that has not woken up yet. Wait 2m more (registration window 3m from the head commit), then retry.
-```
-
-The signals that cross accounts are the PR's 👀 reactions and reviews posted on an earlier head; an unsubmitted review is visible only to its own author, so it guards the merging account against its own pending review rather than another reviewer's. When a reviewer *has* registered but has not posted, the wait follows that signal instead of a clock: the merge is held until the review lands, capped at 20 minutes from the head push, after which the gate allows the merge and names the stale signal in a `WARNING` stderr line.
-
-The [merge-settlement hook](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.js) and its [proof tests](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.test.mjs) are public implementation evidence.
-
-## Independent review
-
-Reserve an independent perspective for the final decision. The delivery tail checks for a separate review pass at the required tier, giving the implementation author and merge authority distinct evidence surfaces.
+The [merge-settlement implementation](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.js) and [tests](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.test.mjs) document that optional guard.
 
 ## Post-merge proof
 
-Prove the state users and downstream systems will receive. The merge commit is checked for ancestry on the base branch, then the smallest applicable test or verification command runs against the merged state. The report names the commit and command.
+When merge is authorized, verify the reported merge commit is reachable from the fetched base branch and run or verify the focused check for the merged result. If the user requested a live deployment, verify the live surface as well.
 
 ```text
-merge=4e1d... ancestry=verified
-post_merge_check=node --test test/retry.test.mjs exit=0
-result=proven
+merge=<reported-merge-commit> ancestry=verified
+post_merge_check=<repository-check> exit=0
 ```
 
-## Focused quality gates
-
-Spend verification effort where the change can fail. Docs-only changes use link and content scans. UI changes use the project's browser-visible quality gate. Native app work uses the isolated test integration when selected. Fleet work uses per-host readiness, trust, canary, and journal evidence.
-
-```text
-dispatch_gate=explicit-model pass
-merge_settlement=threads-resolved window-passed
-post_merge=ancestry+focused-check pass
-```
+This is an illustrative receipt shape, not evidence of a live run.

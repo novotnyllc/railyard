@@ -21,7 +21,7 @@ The useful evidence came from concrete breaks in the path:
 - Version metadata advanced while Codex still pointed at an older marketplace source SHA; the source pin joined the release ledger and installed-state verification.
 - Four POSIX results initially looked like five-host completion; native Windows remained open until its own PowerShell and harness evidence arrived.
 
-The closing ledger kept installed version, pinned source, operating-system boundary, and provider result distinct:
+Illustrative summary of the reported closing ledger, keeping installed version, pinned source, operating-system boundary, and provider result distinct:
 
 ```text
 os=macOS          count=3 claude=enabled codex=enabled version=verified executor=verified result=ready
@@ -30,17 +30,17 @@ os=Windows-native count=1 claude=enabled codex=enabled version=verified executor
 fleet=5 providers=2 source-pin=verified outcome=converged
 ```
 
-The proof is intentionally anonymized to count and OS mix; machine identity is irrelevant to the operating lesson.
+This summary omits machine identities. Current readiness still requires actual evidence from each manager and harness.
 
 ## The mechanism in one screen
 
-Railyard keeps one chain visible:
+For an orchestrated delivery, the useful evidence can follow this sequence:
 
 ```text
-route decision → review gates → merge settlement → receipt → audit
+requested outcome → useful CE workflow → CE review settlement and CI → result evidence
 ```
 
-The route prices the work, the gates challenge the risk, settlement waits for current evidence, the receipt proves arrival, and the audit reconstructs the decisions afterward. [Delivery lifecycle](/delivery/lifecycle/) carries the full sequence; [Sync](/sync/) and [Roundhouse](/roundhouse/) show how the same receipt habit reaches machines and agent items.
+Routine work runs natively. Selected CE workflows own one review settlement and CI loop, and the result includes the evidence needed to assess what completed. [Audit and retrospective](/delivery/audit/) are optional when reconstructing decisions would help. [Delivery lifecycle](/delivery/lifecycle/) explains delivery evidence; [Sync](/sync/) and [Roundhouse](/roundhouse/) cover explicitly requested fleet work.
 
 ## Start with a real change
 

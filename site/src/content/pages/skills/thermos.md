@@ -7,7 +7,7 @@ nav_order: 4
 
 # Thermos
 
-Thermos is a review skill invoked during delivery. It reviews a frozen change through two distinct practitioner lenses, then synthesizes one actionable packet before commit. Correctness gets the same serious attention as code health, and the implementation lane receives a clear gate it can settle.
+Thermos is an optional review skill for a change that benefits from two practitioner lenses. It reviews a frozen diff and synthesizes one actionable findings packet for the existing review owner.
 
 ## What it adds
 
@@ -15,19 +15,21 @@ Thermos runs this paired review. Its correctness lens covers breakage, security,
 
 ## How it works
 
-Both lenses receive the same frozen diff, source context, and requirement. They run in parallel when the carrier supports it; synthesis deduplicates findings, and the implementation lane fixes real findings before the chunk continues.
+Both lenses receive the same frozen diff, source context, and requirement. They run in parallel when the carrier supports it; synthesis deduplicates findings for the existing workflow owner. When used in Compound Engineering (CE) delivery, the implementation lane fixes accepted findings through its existing review loop.
+
+Illustrative review outline:
 
 ```text
 > Run the two Thermos lenses on this frozen diff and return one deduplicated findings packet.
-correctness=started  quality=started  packet=sha256:7c1a...
-correctness_findings=1  quality_findings=2
-synthesis=deduplicated actionable=2
-gate=fix-before-commit
+packet=<frozen diff and source context>
+lenses=correctness,code-quality
+output=deduplicated findings with evidence
+owner=existing-workflow
 ```
 
 ## Scope
 
-Thermos reviews and synthesizes. The implementation lane fixes findings, and the delivery owner decides the terminal merge state.
+Thermos reviews and synthesizes. When CE owns delivery, it retains review settlement and CI/PR monitoring, and the delivery owner continues to the authorized endpoint. Selecting Thermos does not add a second watcher or a mandatory pre-commit gate.
 
 ## Use one lens deliberately
 
@@ -39,8 +41,4 @@ Ships in the `railyard` plugin.
 
 ## Proof point
 
-```text
-packet=sha256:7c1a... findings=2
-fixes=2 checks_rerun=2
-review=thermos-synthesis result=pass
-```
+The findings packet identifies the reviewed diff, affected source, and actionable evidence. The existing owner records the disposition of accepted findings and the checks needed after fixes.

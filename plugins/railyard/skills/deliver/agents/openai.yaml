@@ -1,4 +1,4 @@
 interface:
   display_name: "Deliver"
-  short_description: "Route and complete one change lane."
-  default_prompt: "Use $deliver to route this single lane, defaulting implementation delivery to LFG through merge and post-merge proof unless a narrower stop is explicit."
+  short_description: "Complete a change with native work and selected CE."
+  default_prompt: "Use $deliver to complete this change through the requested endpoint. Select useful CE stages automatically, preserve local or plan-only stops, and continue authorized shipping through CE-owned settlement, merge, and post-merge proof."

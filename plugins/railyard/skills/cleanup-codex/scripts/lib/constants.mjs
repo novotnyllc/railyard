@@ -44,7 +44,7 @@ export const MAX_HOOK_RECEIPT_BYTES = 64 * 1024;
 
 export const MAX_HOOK_INPUT_BYTES = 16 * 1024;
 
-// ponytail: one bounded SessionEnd pass; chunk only if real residue exceeds the three-second cap.
+// One bounded opt-in SessionEnd pass; chunk only if real residue exceeds the three-second cap.
 export const MAX_HOOK_TARGETS = 24;
 
 export const MAX_HOOK_ANCESTORS = 8;

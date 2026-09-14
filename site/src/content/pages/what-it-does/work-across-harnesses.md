@@ -15,32 +15,27 @@ A delivery begins in Claude Code, sends a bounded implementation unit to Codex, 
 > Route this work to the best available harness and show the dispatch decision.
 ```
 
-`railyard:model-routing` resolves the work class before the workflow starts.
+`railyard:model-routing` helps choose model and effort together and resolve any configured provider or transport controls the requested handoff needs.
 
-## The run
+## Illustrative workflow
 
-The operator asks one delivery to use the execution surface that fits each bounded work unit. Railyard classifies the work before dispatch, freezes harness, model, effort, carrier, and transport, and returns evidence to the same owning delivery. The turn is the explicit seam: crossing harnesses is a recorded route decision rather than an invisible handoff. The run closes when the route receipt and the owning delivery receipt preserve the same outcome across both surfaces.
+The operator asks one delivery to use an eligible execution surface for a bounded work unit. Choose model, effort, and supported transport deliberately, then return evidence to the same owning workflow. Cross-harness movement is an explicit opt-in seam. Report unsupported selections without silently changing model, effort, or provider.
 
 ## What happens
 
-The router derives a bounded work class from ambiguity, novelty, repetition, decomposability, volume, semantic risk, and verification strength. A selected route freezes model and effort; cross-harness movement is an explicit opt-in seam with its own carrier and receipt.
+Native children are the default for internal subtasks. The optional strict resolver adds configured budget, privacy, provider, and adapter controls when the handoff needs them. Its selected route binds model and effort to a supported carrier and receipt.
 
 ## Session tier and delegated route are different
 
 Choose the interactive session for the conversation and the delegated route for the bounded work unit. A model name without effort is incomplete.
 
-| Work tier | Codex session | Claude Code session |
-| --- | --- | --- |
-| Hard implementation | Sol `max` | Fable `high` or `max` |
-| Medium or long-running implementation | Terra `max` | Sonnet `medium` |
-| Mechanical implementation | Luna `max` | Haiku `low` |
-| Delegated implementation default | Luna `max` | The same router-owned Luna route |
+Astra Max (`codex-astra`, `gpt-6-astra`, `max`) is the baseline candidate for substantive engineering. Choose another supported pair when accepted task outcomes, a specialist capability, constraints, or an explicit latency preference support it. Deterministic tools can handle mechanical work directly; there is no default cheap-model ladder.
 
-Orchestration and independent review use Sol `high`, with `max` reserved for high, critical, or explicitly complex work. A premium session hands a mechanical unit to the routed worker tier instead of silently inheriting its own model.
+Deliberate inheritance of both model and effort is valid when the active tool supports it. Current native Codex full-history forks inherit and reject overrides; changing either setting requires a supported limited-history or no-history fork with a sufficient brief. Check the actual tool schema before dispatch, and distinguish the intended selection from runtime metadata that verifies execution.
 
 ## Handoffs keep one owner
 
-Claude Code reaches Codex models through the supported rescue forwarder or a direct `codex exec` worker. Codex reaches Claude subscription review through the maintained Compound Engineering `claude -p` adapter. Either harness reaches a ChatGPT Pro second opinion through the admitted Oracle route. When collaboration transport cannot cross the provider boundary directly, a visible provider-owned task carries the bounded, secret-free contract and returns an identity-bound receipt.
+Claude Code reaches Codex models through the supported rescue forwarder or a direct `codex exec` worker. Codex reaches Claude subscription review through the maintained Compound Engineering `claude -p` adapter. Either harness reaches a ChatGPT Pro second opinion through the admitted Oracle route. A visible provider-owned task is available only when the user explicitly requests task creation; an unavailable transport does not authorize creating one as a fallback. Supported task handoffs retain their bounded contract and identity-bound receipt.
 
 GLM-5.2 is a Codex-only route through `zai_litellm`:
 
@@ -59,7 +54,7 @@ A supported Claude subscription review verifies Claude Code 2.1.220 or newer, `a
 
 ## Proof point
 
-The [Model routing reference](/delivery/model-routing/) identifies the contract as `railyard/model-routing/v1` and requires explicit model and effort on every dispatch. [Own your routing policy](/delivery/model-routing/policy/) shows how the operator declares eligible providers without defining a second transport.
+The [Model routing reference](/delivery/model-routing/) covers deliberate native allocation and the optional `railyard/model-routing/v1` contract for configured controls. Record the intended model and effort or supported inheritance; use runtime metadata for the observed pair when available, otherwise label it unverified. [Own your routing policy](/delivery/model-routing/policy/) describes provider eligibility and transport constraints.
 
 ## Next
 

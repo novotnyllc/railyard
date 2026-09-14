@@ -137,7 +137,7 @@ function admitRoute(state, { role, adapterId, dispatchKind, frozenInputDigest, a
     dispatchKind,
     sessionId,
     toolId: adapterId,
-    toolVersion: "v1",
+    toolVersion: "v2",
   };
   const claimed = handleRequest(routerRequest("claim-dispatch", {
     reservationId: admitted.response.reservation.reservationId,
@@ -226,7 +226,7 @@ function lifecycleInspector(input) {
   return inspect;
 }
 
-const fakeCarrier = { binary: "/fixed/oracle", version: "0.17.3", identity: {} };
+const fakeCarrier = { binary: "/fixed/oracle", version: "0.20.3", identity: {} };
 
 function privateClaimPath(value, claim = value.input.claimed.id) {
   const digest = crypto.createHash("sha256").update(claim).digest("hex");
@@ -234,14 +234,15 @@ function privateClaimPath(value, claim = value.input.claimed.id) {
 }
 
 function writeBrowserSession(value, sessionId, {
-  desiredModel = "GPT-5.6 Sol",
+  desiredModel = "Latest",
   modelStrategy = "select",
   thinkingTime = "pro",
-  requestedModel = "GPT-5.6 Sol",
-  resolvedLabel = "GPT-5.6 Sol",
+  requestedModel = "Latest",
+  resolvedLabel = "Latest",
   status = "switched",
   verified = true,
   source = "chatgpt-model-picker",
+  thinkingSelection = { requestedLevel: "pro", status: "switched", resolvedLabel: "Pro", verified: true, strictFailClosed: true, source: "chatgpt-thinking-picker", targetModelKind: null, observedModelKind: null },
   output = "[browser] Thinking time: Pro (already selected)\nAnswer:\nFinding: keep this private.\n",
 } = {}) {
   const sessions = path.join(value.stateRoot, "oracle-home", "sessions");
@@ -250,10 +251,11 @@ function writeBrowserSession(value, sessionId, {
   fs.chmodSync(sessions, 0o700);
   fs.chmodSync(directory, 0o700);
   fs.writeFileSync(path.join(directory, "meta.json"), JSON.stringify({
-    model: "gpt-5.6-sol",
+    model: "gpt-6-pro",
     browser: {
       config: { desiredModel, modelStrategy, thinkingTime },
       modelSelection: { requestedModel, resolvedLabel, strategy: modelStrategy, status, verified, source },
+      thinkingSelection,
     },
   }), { mode: 0o600 });
   fs.writeFileSync(path.join(directory, "output.log"), output, { mode: 0o600 });
@@ -262,17 +264,64 @@ function writeBrowserSession(value, sessionId, {
 test("browser observation evaluator accepts only one pre-answer Pro control record", () => {
   const metadata = {
     browser: {
-      config: { desiredModel: "GPT-5.6 Sol", modelStrategy: "select", thinkingTime: "pro" },
-      modelSelection: { requestedModel: "GPT-5.6 Sol", resolvedLabel: "GPT-5.6 Sol", strategy: "select", status: "switched", verified: true, source: "chatgpt-model-picker" },
+      config: { desiredModel: "Latest", modelStrategy: "select", thinkingTime: "pro" },
+      modelSelection: { requestedModel: "Latest", resolvedLabel: "Latest", strategy: "select", status: "switched", verified: true, source: "chatgpt-model-picker" },
     },
   };
   const cases = [
-    ["one record", "[browser] Thinking time: Pro (already selected)\nAnswer:\n", { observedModel: "gpt-5.6-sol", reason: null }],
-    ["duplicate record", "[browser] Thinking time: Pro\n[browser] Thinking time: Pro\nAnswer:\n", { observedModel: "gpt-5.6-sol", reason: "oracle_observed_pro_effort_unavailable" }],
-    ["answer-only record", "Answer:\n[browser] Thinking time: Pro\n", { observedModel: "gpt-5.6-sol", reason: "oracle_observed_pro_effort_unavailable" }],
+    ["one record", "[browser] Thinking time: Pro (already selected)\nAnswer:\n", { observedModel: "gpt-6-pro", reason: null }],
+    ["duplicate record", "[browser] Thinking time: Pro\n[browser] Thinking time: Pro\nAnswer:\n", { observedModel: "gpt-6-pro", reason: "oracle_observed_pro_effort_unavailable" }],
+    ["conflicting record", "[browser] Thinking time: High\n[browser] Thinking time: Pro\nAnswer:\n", { observedModel: "gpt-6-pro", reason: "oracle_observed_pro_effort_unavailable" }],
+    ["answer-only record", "Answer:\n[browser] Thinking time: Pro\n", { observedModel: "gpt-6-pro", reason: "oracle_observed_pro_effort_unavailable" }],
     ["missing metadata", "[browser] Thinking time: Pro\nAnswer:\n", { observedModel: "unknown", reason: "oracle_observed_model_unavailable" }],
   ];
   for (const [name, output, expected] of cases) assert.deepEqual(evaluateBrowserSession(name === "missing metadata" ? null : metadata, output), expected, name);
+});
+
+test("Latest accepts only the exact supported picker labels and does not accept Sol evidence", () => {
+  const metadata = {
+    browser: {
+      config: { desiredModel: "Latest", modelStrategy: "select", thinkingTime: "pro" },
+      modelSelection: { requestedModel: "Latest", strategy: "select", status: "switched", verified: true, source: "chatgpt-model-picker" },
+    },
+  };
+  for (const label of ["Latest", "最新", "최신"]) {
+    metadata.browser.modelSelection.resolvedLabel = label;
+    assert.deepEqual(evaluateBrowserSession(metadata, "[browser] Thinking time: Pro\nAnswer:\n"), { observedModel: "gpt-6-pro", reason: null }, label);
+  }
+  for (const [label, model] of [["GPT-5.6 Sol", "gpt-5.6-sol"], ["Latest GPT-6", "unknown"], ["GPT-6 Pro", "unknown"]]) {
+    metadata.browser.modelSelection.resolvedLabel = label;
+    assert.deepEqual(evaluateBrowserSession(metadata, "[browser] Thinking time: Pro\nAnswer:\n"), { observedModel: model, reason: "oracle_observed_model_mismatch" }, label);
+  }
+});
+
+test("thinking metadata must confirm Pro when present and cannot be rescued by answer or log claims", () => {
+  const selection = { requestedLevel: "pro", status: "switched", resolvedLabel: "Pro", verified: true, strictFailClosed: true, source: "chatgpt-thinking-picker", targetModelKind: null, observedModelKind: null };
+  const metadata = {
+    browser: {
+      config: { desiredModel: "Latest", modelStrategy: "select", thinkingTime: "pro" },
+      modelSelection: { requestedModel: "Latest", resolvedLabel: "Latest", strategy: "select", status: "switched", verified: true, source: "chatgpt-model-picker" },
+      thinkingSelection: selection,
+    },
+  };
+  const output = "[browser] Thinking time: Pro\nAnswer:\nPro was selected.\n";
+  for (const label of ["Pro", "6 Pro", "6Pro"]) {
+    metadata.browser.thinkingSelection = { ...selection, resolvedLabel: label };
+    assert.deepEqual(evaluateBrowserSession(metadata, `[browser] Thinking time: ${label}\nAnswer:\n`), { observedModel: "gpt-6-pro", reason: null }, label);
+  }
+  for (const mismatch of [
+    null,
+    { ...selection, requestedLevel: "high" },
+    { ...selection, status: "unverified" },
+    { ...selection, verified: false },
+    { ...selection, strictFailClosed: false },
+    { ...selection, resolvedLabel: "5.6 Pro" },
+    { ...selection, resolvedLabel: "Pro Extended" },
+    { ...selection, source: "answer" },
+  ]) {
+    metadata.browser.thinkingSelection = mismatch;
+    assert.deepEqual(evaluateBrowserSession(metadata, output), { observedModel: "gpt-6-pro", reason: "oracle_observed_pro_effort_unavailable" }, JSON.stringify(mismatch));
+  }
 });
 
 test("CLI receipt writer prints a mismatch receipt before exiting nonzero", () => {
@@ -317,6 +366,28 @@ test("dispatch requires an exact private resolver claim binding before carrier w
   assert.equal(calls, 0);
 });
 
+test("a valid legacy Sol bundle is rejected before claiming or invoking the carrier", () => {
+  const value = fixture();
+  const prepared = claimPrepared(value);
+  const manifestPath = path.join(value.stateRoot, "bundles", prepared.sessionId, "manifest.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  manifest.arguments.model = "gpt-5.6-sol";
+  delete manifest.inputDigest;
+  manifest.inputDigest = stableDigest(manifest);
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest), { mode: 0o600 });
+  value.input.frozenInputDigest = manifest.inputDigest;
+  let calls = 0;
+  assert.throws(() => dispatch(value.input, {
+    root: value.stateRoot,
+    inspectClaim: () => { calls += 1; },
+    resolveCarrier: () => { calls += 1; return fakeCarrier; },
+    run: () => { calls += 1; },
+  }), /frozen_model_binding_unsupported/);
+  assert.equal(calls, 0);
+  assert.equal(fs.existsSync(privateClaimPath(value)), false);
+  assert.equal(JSON.parse(fs.readFileSync(manifestPath, "utf8")).arguments.model, "gpt-5.6-sol");
+});
+
 test("settled review writes a private bounded finding artifact and router receipt, then removes the bundle", () => {
   const value = fixture();
   const prepared = claimPrepared(value);
@@ -338,10 +409,10 @@ test("settled review writes a private bounded finding artifact and router receip
   });
   assert.equal(result.status, "settled");
   assert.equal(result.producer, "oracle-browser");
-  assert.equal(result.adapterVersion, "v1");
+  assert.equal(result.adapterVersion, "v2");
   assert.equal(result.claimId, value.input.claimed.id);
   assert.equal(result.frozenInputDigest, prepared.frozenInputDigest);
-  assert.equal(result.observedModel, "gpt-5.6-sol");
+  assert.equal(result.observedModel, "gpt-6-pro");
   assert.equal(routeExitCode(result), 0);
   assert.equal(result.resultArtifact.sha256, crypto.createHash("sha256").update("Finding: keep this private.\n").digest("hex"));
   assert.equal(fs.readFileSync(result.resultArtifact.path, "utf8"), "Finding: keep this private.\n");
@@ -349,7 +420,7 @@ test("settled review writes a private bounded finding artifact and router receip
   assert.equal(fs.existsSync(path.join(value.stateRoot, "bundles", prepared.sessionId)), false);
   assert.equal(calls.length, 2);
   assert.equal(revalidations, 2);
-  assert.deepEqual(calls[1].args.slice(0, 8), ["--engine", "browser", "--model", "gpt-5.6-sol", "--browser-model-strategy", "select", "--browser-thinking-time", "pro"]);
+  assert.deepEqual(calls[1].args.slice(0, 8), ["--engine", "browser", "--model", "gpt-6-pro", "--browser-model-strategy", "select", "--browser-thinking-time", "pro"]);
   assert.match(calls[1].args[calls[1].args.indexOf("--slug") + 1], /^oracle-route-[a-f0-9]{10}-[a-f0-9]{10}$/);
   const forged = handleRequest({
     contractVersion: "railyard/model-routing/v1",
@@ -644,6 +715,10 @@ test("reattach uses the same verified claim and stores findings without a new di
   });
   assert.equal(started.status, "started");
   writeBrowserSession(value, prepared.sessionId, { output: "[browser] Thinking time: Pro (already selected)\nAnswer:\nReattached finding.\n" });
+  const metaPath = path.join(value.stateRoot, "oracle-home", "sessions", oracleSessionSlug(prepared.sessionId), "meta.json");
+  const metadata = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+  delete metadata.browser.thinkingSelection;
+  fs.writeFileSync(metaPath, JSON.stringify(metadata), { mode: 0o600 });
   const result = reattach(value.input, {
     root: value.stateRoot,
     inspectClaim,
@@ -660,6 +735,34 @@ test("reattach uses the same verified claim and stores findings without a new di
   assert.equal(fs.readFileSync(result.resultArtifact.path, "utf8"), "Reattached finding.\n");
   assert.equal(fs.existsSync(path.join(value.stateRoot, "bundles", prepared.sessionId)), false);
   assert.equal(calls, 3);
+});
+
+test("a detached Sol receipt is preserved and cannot be relabeled by the current carrier", () => {
+  const value = fixture();
+  claimPrepared(value);
+  const inspectClaim = privateInspector(value);
+  const started = dispatch(value.input, {
+    root: value.stateRoot,
+    inspectClaim,
+    resolveCarrier: () => fakeCarrier,
+    revalidateCarrier: () => {},
+    run: (_binary, args) => args[0] === "--dry-run"
+      ? { status: 0, stdout: "dry", stderr: "" }
+      : { status: null, stdout: "", stderr: "", error: { code: "ETIMEDOUT" } },
+  });
+  const receiptPath = path.join(value.stateRoot, "receipts", `${started.receiptId}.json`);
+  const legacy = { ...started, adapterVersion: "v1", toolVersion: "v1", adapterModelControl: "gpt-5.6-sol", documentedProductLabel: "GPT-5.6 Sol + Pro thinking" };
+  fs.writeFileSync(receiptPath, JSON.stringify(legacy), { mode: 0o600 });
+  let calls = 0;
+  assert.throws(() => reattach(value.input, {
+    root: value.stateRoot,
+    inspectClaim: () => { calls += 1; },
+    resolveCarrier: () => { calls += 1; return fakeCarrier; },
+    run: () => { calls += 1; },
+  }), /session_model_binding_unsupported/);
+  assert.equal(calls, 0);
+  assert.deepEqual(JSON.parse(fs.readFileSync(receiptPath, "utf8")), legacy);
+  assert.equal(fs.existsSync(`${privateClaimPath(value)}.reattach`), false);
 });
 
 test("reattach fails closed when its session lacks durable Pro evidence", () => {
@@ -744,6 +847,59 @@ test("Homebrew-style executable symlinks canonicalize and identity drift blocks"
   assert.throws(() => bindExecutable(arbitraryBinary), /unsafe_oracle_executable/);
 });
 
+test("executable revalidation tolerates sibling churn in a trusted ancestor", () => {
+  const value = fixture();
+  const directory = path.join(value.root, "trusted-bin");
+  fs.mkdirSync(directory, { mode: 0o755 });
+  const actual = path.join(directory, "oracle");
+  fs.writeFileSync(actual, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  // Make the subsequent directory mtime change deterministic without waiting
+  // for the filesystem clock's timestamp resolution.
+  fs.utimesSync(directory, 0, 0);
+  const before = fs.statSync(directory, { bigint: true });
+  const binding = bindExecutable(actual);
+  const sibling = path.join(directory, "unrelated-command");
+  fs.writeFileSync(sibling, "unrelated data\n");
+  assert.notEqual(fs.statSync(directory, { bigint: true }).mtimeNs, before.mtimeNs);
+  assert.deepEqual(bindExecutable(actual).identity, binding.identity);
+  assert.equal(revalidateExecutable(binding), actual);
+  fs.unlinkSync(sibling);
+  assert.equal(revalidateExecutable(binding), actual);
+});
+
+test("replacing a trusted ancestor blocks even when the executable inode is preserved", () => {
+  const value = fixture();
+  const directory = path.join(value.root, "trusted-bin");
+  const retired = path.join(value.root, "retired-bin");
+  fs.mkdirSync(directory, { mode: 0o755 });
+  const actual = path.join(directory, "oracle");
+  fs.writeFileSync(actual, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  const binding = bindExecutable(actual);
+  fs.renameSync(directory, retired);
+  // Keep the retired directory allocated so its inode cannot be reused.
+  fs.mkdirSync(directory, { mode: 0o755 });
+  fs.renameSync(path.join(retired, "oracle"), actual);
+  assert.notEqual(fs.statSync(directory, { bigint: true }).ino, fs.statSync(retired, { bigint: true }).ino);
+  assert.deepEqual(bindExecutable(actual).identity, binding.identity);
+  assert.throws(() => revalidateExecutable(binding), /oracle_executable_changed/);
+});
+
+test("executable relocation behind a sibling symlink changes the bound canonical path", () => {
+  const value = fixture();
+  const directory = path.join(value.root, "trusted-bin");
+  fs.mkdirSync(directory, { mode: 0o755 });
+  const actual = path.join(directory, "oracle");
+  const relocated = path.join(directory, "oracle-moved");
+  fs.writeFileSync(actual, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  const binding = bindExecutable(actual);
+  fs.renameSync(actual, relocated);
+  fs.symlinkSync(relocated, actual);
+  const replacement = bindExecutable(actual);
+  assert.notEqual(replacement.binary, binding.binary);
+  assert.deepEqual(replacement.identity, binding.identity);
+  assert.throws(() => revalidateExecutable(binding), /oracle_executable_changed/);
+});
+
 test("the installed canonical Homebrew brew executable satisfies the fixed attestation", {
   skip: !fs.existsSync("/opt/homebrew/bin/brew"),
 }, () => {
@@ -813,7 +969,7 @@ test("claimed Homebrew lifecycle is fixed, idempotent, and requires a fresh revi
     inspectClaim,
     resolveCarrier: () => {
       carrierCalls += 1;
-      return { ...fakeCarrier, version: carrierCalls === 1 ? "0.17.0" : "0.18.0" };
+      return { ...fakeCarrier, version: carrierCalls === 1 ? "0.17.0" : "0.21.0" };
     },
     resolveBrew: () => ({ binary: "/fixed/brew", identity: {} }),
     revalidateCarrier: () => { revalidations += 1; },
@@ -834,7 +990,7 @@ test("claimed Homebrew lifecycle is fixed, idempotent, and requires a fresh revi
   assert.equal(result.dispatchKind, "lifecycle_action");
   assert.equal(result.sessionId, "lifecycle_session");
   assert.equal(result.beforeVersion, "0.17.0");
-  assert.equal(result.afterVersion, "0.18.0");
+  assert.equal(result.afterVersion, "0.21.0");
   assert.equal(result.formula, "steipete/tap/oracle");
   assert.equal(result.freshReviewRequired, true);
   assert.deepEqual(result.chargedMeters, { marginalUsd: 0, codexCredits: 0, openaiApiSpend: 0 });
@@ -876,7 +1032,7 @@ test("claimed Homebrew lifecycle is fixed, idempotent, and requires a fresh revi
     dispatchKind: "subagent_create",
     sessionId: "review_session",
     toolId: "oracle-browser",
-    toolVersion: "v1",
+    toolVersion: "v2",
   };
   const withoutRequirement = handleRequest({
     contractVersion: "railyard/model-routing/v1",
@@ -920,7 +1076,7 @@ test("claimed lifecycle upgrades a securely resolved outdated Oracle", () => {
         error.installedVersion = "0.16.9";
         throw error;
       }
-      return { ...fakeCarrier, version: "0.18.0" };
+      return { ...fakeCarrier, version: "0.21.0" };
     },
     resolveBrew: () => ({ binary: "/fixed/brew", identity: {} }),
     revalidateCarrier: () => {},
@@ -931,7 +1087,7 @@ test("claimed lifecycle upgrades a securely resolved outdated Oracle", () => {
   });
   assert.equal(result.status, "settled");
   assert.equal(result.beforeVersion, "0.16.9");
-  assert.equal(result.afterVersion, "0.18.0");
+  assert.equal(result.afterVersion, "0.21.0");
   assert.equal(result.freshReviewRequired, true);
 });
 

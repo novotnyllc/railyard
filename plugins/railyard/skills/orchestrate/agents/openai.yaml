@@ -1,4 +1,4 @@
 interface:
   display_name: "Task Orchestrator"
-  short_description: "Orchestrate tasks to verified completion"
-  default_prompt: "Use $orchestrate to decompose this objective into owned tasks, route each task to the right execution skill, and verify the combined result without executing child work."
+  short_description: "Coordinate requested fleet/account or remote-agent work."
+  default_prompt: "Use $orchestrate for this explicitly requested allocation or remote-agent objective. Keep ordinary local work on native tools and subagents, give each scope one owner, and verify the requested result. Create visible user-owned tasks only on explicit user direction; CE owns any review settlement and CI monitoring."

@@ -1,11 +1,11 @@
 flowchart LR
     accTitle: M6 review gate sequence
-    accDescr: A ready diff enters focused gates, parallel Thermos review, a finding-return loop, settlement, independent review, merge, and post-merge proof.
+    accDescr: An explicitly selected Thermos pair returns findings to one CE review and CI loop. Existing review evidence supports an authorized merge and post-merge proof; no additional reviewer is implied.
     A["1 · Ready<br/>Diff + focused gates"] --> B["2 · Gates<br/>Quality preflight"]
-    B --> C["3 · Thermos<br/>Parallel bug/security + quality"]
+    B --> C["3 · Thermos<br/>Selected review pair"]
     C --> D["4 · Return<br/>Synthesis sends fixes back"]
-    D --> E["5 · Settle<br/>Threads + review signals"]
-    E --> F["6 · Review<br/>Independent review"]
+    D --> E["5 · Settle<br/>CE review + CI"]
+    E --> F["6 · Review<br/>Existing evidence"]
     F --> G["7 · Merge<br/>Current authority"]
     G --> H["8 · Prove<br/>Post-merge check"]
     D -->|real findings| A

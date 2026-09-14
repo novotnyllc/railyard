@@ -15,22 +15,22 @@ An orchestrator change touches many mechanical call sites and one gnarly concurr
 > Review this change deeply, settle findings, and merge it.
 ```
 
-The delivery route uses the Thermos pair against the same frozen diff and relevant source context.
+Compound Engineering (CE) owns review settlement and CI monitoring. Select the optional Thermos pair when its correctness and code-quality lenses help answer the review question.
 
-## The run
+## Illustrative workflow
 
-The operator asks whether a wide migration and its concurrency seam deserve merge authority. Railyard freezes one review packet, sends that same evidence through correctness and code-health lenses, and returns the synthesized findings to the owning implementation lane. The turn is the return loop: review creates work, the lane fixes it, and affected checks establish the new evidence floor. The run closes when every real finding is settled against the corrected head and the merge gate reports current authority.
+The operator asks whether a wide migration and its concurrency seam are ready to merge. The selected review receives a frozen diff and relevant source context. Thermos can contribute a deduplicated findings packet to the CE owner; accepted findings return to implementation, and affected checks run after fixes. CE settles that evidence against the corrected head before the authorized merge proceeds.
 
 ## What happens
 
 - The correctness lens traces breakage, security, developer experience, and feature-leak risks.
 - The code-quality lens looks for duplicate helpers, structural drift, and avoidable complexity.
-- Synthesis deduplicates findings, the route fixes real findings, and affected checks run again.
-- The merge-settlement hook keeps merge authority aligned with the latest review evidence.
+- Synthesis deduplicates findings, the implementation owner fixes accepted findings, and affected checks run again.
+- The existing CE owner handles review settlement and CI monitoring without another Railyard watcher or mandatory review pass.
 
 ## Proof point
 
-`plugins/railyard/hooks/merge-settlement-gate.js` is the observable merge gate, with companion tests in `plugins/railyard/hooks/merge-settlement-gate.test.mjs`.
+The review result identifies the diff, findings, dispositions, and affected checks. Use CE's current PR/CI result to continue the requested delivery; the [delivery gates](/delivery/gates/) describe that ownership boundary.
 
 ## Next
 

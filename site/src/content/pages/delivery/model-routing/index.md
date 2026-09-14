@@ -6,83 +6,51 @@ nav_order: 2
 has_children: true
 ---
 
-# Every dispatch gets a priced, recorded route
+# Model routing
 
-Use the right model for the job, spend where the hardness lives, and treat budget as an engineering constraint. That is the economic foundation of agentic delivery: routine volume earns an efficient route, difficult seams earn deeper reasoning, and every choice arrives with a receipt. Railyard resolves model, effort, transport, and budget into one decision before the carrier starts.
+Choose model and reasoning effort together for each assignment. Astra Max (`gpt-6-astra`, `max`) is the baseline candidate for substantive engineering. Use deterministic tools directly for mechanical operations, and choose another model or effort when comparable successful work, a specialist need, or a user preference supports the tradeoff.
 
-## The run
+This is an allocation policy, not a claim that Max is always cheaper or faster. Compare the complete assignment, including children, retries, repairs, and verification. Per-token prices and quota consumed per minute cannot establish cost per correctly completed task.
 
-The operator asks for one delivery whose work ranges from repetitive edits to a subtle async seam. Railyard resolves model, effort, carrier, transport, privacy, and budget before each bounded dispatch, then binds the result to the owning delivery. The turn is admission: a suitable priced route starts work, while a route that cannot satisfy policy stops before the carrier spends. The run closes when route disclosures, imported receipts, review findings, and the proven delivery outcome reconcile in one ledger.
+## Native allocation
 
-## Four verbs, one accountable path
+Routine work uses native tools and bounded subagents. Explicit suitable inheritance is allowed: state why the parent's model and reasoning effort fit the child. Native full-history forks inherit their settings; an override requires a supported limited-history or no-history fork with sufficient context. A fixed specialist role uses its authoritative settings without forbidden overrides.
 
-Make the spending decision once, then carry it through four verbs. `resolve` reads the immutable policy snapshot and selects an eligible role, tier, carrier, effort, and transport. `admit` checks the forecast against task, run, and project meters. `claim-dispatch` makes the selected action a one-way claim immediately before the carrier runs. `reconcile` accepts the imported fixed-adapter receipt and settles the route.
+The built-in substantial-work candidate is:
 
-![Model routing decision flow from work request through tier selection, admission, one-way claim, carrier work, and imported receipt reconciliation.](/diagrams/m5-model-routing.svg)
+```text
+model=gpt-6-astra effort=max carrier=codex-astra
+```
+
+This names the requested candidate, not an observed live dispatch. The current harness must expose the required controls and capability. An unsupported or unavailable model, effort, role, fork combination, or adapter is disclosed without a silent fallback.
+
+## Optional configured routing
+
+Use `railyard/model-routing/v1` when an explicit account, fleet, privacy, or budget policy needs the full route lifecycle. A configured catalog supplies constraints; it does not automatically create fleet work, visible tasks, live adapters, or permission to send data elsewhere.
+
+The advanced path retains four operations: `resolve` selects an eligible route, `admit` checks applicable forecasts, `claim-dispatch` binds one carrier action, and `reconcile` accepts an identity-bound adapter receipt. Routine native work does not require that stateful ledger.
+
+![Optional configured routing from policy resolution through admission, one-way claim, carrier work, and receipt reconciliation.](/diagrams/m5-model-routing.svg)
 
 ### Sequence
 
-1. **Request.** A bounded work request enters with a role and verification shape.
-2. **Resolve.** The router derives the tier ladder and freezes the route inputs.
-3. **Select.** The eligible tier is chosen; hard constraints stay explicit.
-4. **Route.** The decision records model, effort, transport, and any disclosed substitute.
-5. **Admit.** Forecasted demand is compared with the applicable meters; a refusal stops before carrier work.
-6. **Claim.** One-way dispatch claim binds the work to the selected carrier.
-7. **Carrier.** The implementation runs through that bounded carrier surface.
-8. **Reconcile.** Only an imported, identity-bound receipt can settle the carrier result.
-9. **Receipt.** The run log records route, tier, cost, and outcome for the owning delivery.
+1. **Request.** An explicitly configured route receives the role, constraints, and verification shape.
+2. **Resolve.** The router reads the selected policy and freezes the route inputs.
+3. **Select.** Eligible model and effort choices must satisfy the hard requirements.
+4. **Route.** Record the selected model, effort, transport, and any explicitly authorized alternative.
+5. **Admit.** Compare applicable forecasts with configured meters; a refusal stops before carrier work.
+6. **Claim.** Bind a one-way dispatch claim to the selected carrier action.
+7. **Carrier.** Execute only through the supported, verified carrier surface.
+8. **Reconcile.** Settle the result from the required imported, identity-bound receipt.
+9. **Receipt.** Preserve selected settings, observed evidence, usage provenance, and outcome separately.
 
-The flow makes the spend boundary visible: a blocked forecast refuses before carrier work, while an admitted route leaves a costed outcome in the run log.
-
-Keep routing small and accountable. Model selection feeds the same record that carries review, merge, and post-merge evidence. Railyard's routed model selection is one stage of a delivery pipeline: the per-tier decision that picks a model also feeds the audit record showing what ran, at what tier, at what cost, from first dispatch through merged, proven outcome.
-
-## A no-config decision
-
-```json
-{
-  "contractVersion": "railyard/model-routing/v1",
-  "ok": true,
-  "reason": "default_route_no_state",
-  "decision": {
-    "role": "implementation",
-    "selected": {
-      "modelAlias": "codex-luna",
-      "model": "gpt-5.6-luna",
-      "effort": "max",
-      "carrierId": "codex-luna",
-      "carrierVersion": "v1",
-      "executionSurface": "codex",
-      "transport": "selector-native",
-      "adapterId": "native-subagent-create",
-      "adapterVersion": "v1",
-      "completionState": "offline_implementation_ready",
-      "observedModel": "unknown"
-    },
-    "implementationEngine": {
-      "mode": "prefer",
-      "target": "codex",
-      "model": "gpt-5.6-luna",
-      "source": "deliver"
-    },
-    "disclosure": {
-      "meters": {
-        "forecast": { "value": "unknown", "provenance": "unknown" },
-        "reservation": { "value": "unknown", "provenance": "unknown" }
-      }
-    }
-  },
-  "reservation": "not_applicable",
-  "claimRequired": false
-}
-```
-
-This receipt is the mechanism behind the practice. `prefer` records the no-config assumption: the route favors Codex when its own preflight proves it callable and preserves a native fallback when the host cannot make that proof. A configured route or a trusted runtime attestation can make the Codex binding `require`. No-config admission writes no reservation state.
+A resolver result or passing adapter fixture is offline evidence. Live adapter availability, actual model and effort, and billed usage require their own evidence; unknown values remain unknown.
 
 ## Go deeper
 
-- [Roles, tiers, and carriers](/delivery/model-routing/tiers/)
+- [Models, effort, and carriers](/delivery/model-routing/tiers/)
+- [Own your routing policy](/delivery/model-routing/policy/)
 - [Budgets, admission, and receipts](/delivery/model-routing/budgets/)
-- [Forty mechanical sites, one hard seam](/delivery/model-routing/worked-runs/)
+- [A worked allocation example](/delivery/model-routing/worked-runs/)
+- [Optional local learning](/delivery/model-routing/learning/)
 - [Model routing skill](/skills/model-routing/)
-
-The [Railyard source repository](https://github.com/novotnyllc/railyard), [releases](https://github.com/novotnyllc/railyard/releases), and [pull-request proof trail](https://github.com/novotnyllc/railyard/pulls) are public companions to this contract.

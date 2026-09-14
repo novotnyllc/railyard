@@ -309,6 +309,7 @@ export function reconcileInternal(request, context) {
   if (!reservation) return error("reservation_unknown");
   const adapter = ADAPTER_DESCRIPTORS[reservation.binding.adapterId];
   if (!adapter) return error("untrusted_receipt");
+  if (adapter.version !== reservation.binding.adapterVersion || CARRIER_DESCRIPTORS[reservation.selected.carrierId]?.version !== reservation.selected.carrierVersion) return error("adapter_version_changed");
   if (request.frozenInputDigest !== reservation.frozenInputDigest || reservation.claimed?.frozenInputDigest !== reservation.frozenInputDigest) return error("receipt_input_mismatch");
   const imported = importTrustedReceipt(request.receipt, reservation, adapter, trustedReceiptImporter, now);
   if (!imported.ok) return error(imported.reason);
@@ -414,9 +415,9 @@ export function defaultTerminalInternal(request, state, now) {
   const pseudoReservation = {
     decision: { role: validRole(receipt.role) ? receipt.role : "implementation" },
     selected: {
-      carrierId: "codex-luna",
-      carrierVersion: CARRIER_DESCRIPTORS["codex-luna"].version,
-      model: "gpt-5.6-luna",
+      carrierId: "codex-astra",
+      carrierVersion: CARRIER_DESCRIPTORS["codex-astra"].version,
+      model: "gpt-6-astra",
       effort: "max",
       executionSurface: "codex",
     },

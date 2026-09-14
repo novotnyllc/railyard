@@ -7,7 +7,7 @@ nav_order: 2
 
 # First delivery
 
-Prerequisite: [install Railyard first →](/start/install/). Roundhouse is optional until fleet placement earns its place.
+Prerequisite: [install Railyard first →](/start/install/). Add Roundhouse when you explicitly request fleet placement.
 
 Start with a real change and carry it to observable proof. One sentence on the machine you already use can produce a reviewed, merged result plus a post-merge receipt, giving you a complete delivery loop before you add fleet complexity.
 
@@ -17,27 +17,29 @@ Start with a real change and carry it to observable proof. One sentence on the m
 > Fix the retry path in the webhook worker and get it merged.
 ```
 
-This request names the outcome; `railyard:deliver` is the working front door that carries it.
+This request names the outcome. Routine implementation runs natively; `railyard:deliver` can coordinate the useful Compound Engineering (CE) stages and the requested delivery boundary.
 
 ## What happens
 
-1. The request is classified and [model routing](/delivery/model-routing/) freezes a model and effort for the work unit.
-2. The implementation workflow plans and changes the source in its own working boundary.
-3. [Thermos](/skills/thermos/) runs correctness and code-quality review lenses against the same packet.
-4. The branch, pull request, checks, independent review, and merge are settled.
+1. Use native tools for routine work and automatically select CE stages when they help. Resolve CE only when a selected stage needs it.
+2. For delegated work, choose model and reasoning effort together. Astra Max is the baseline candidate for substantive engineering; deliberate inheritance is supported. Use native children unless the user explicitly requests a visible task.
+3. Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR.
+4. CE owns the review settlement and CI loop. Optional specialist reviews, including [Thermos](/skills/thermos/), feed findings to that owner before the authorized merge.
 5. The merged commit is checked for reachability from the base branch and the smallest applicable post-merge check runs.
 
+Illustrative evidence fields for a native Codex run; fill them from actual observations:
+
 ```text
-route=implementation model=gpt-5.6-luna effort=max
-claim=settled review=thermos-synthesis
-merge=4e1d... ancestry=verified
-post_merge_check=node --test test/retry.test.mjs exit=0
-result=verified
+allocation=codex-astra model=gpt-6-astra effort=max
+observed_allocation=<runtime evidence or unverified>
+review_and_ci=<CE disposition>
+merge=<observed merge commit> ancestry=<check result>
+post_merge_check=<focused command and result>
 ```
 
-The first example stays same-harness by default. Dispatching to Codex is opt-in and requires the Codex CLI already set up separately.
+Same-harness execution is the default. Crossing from another harness to Codex is opt-in and requires a separately configured Codex CLI.
 
-The post-merge check is stack-specific and comes from the repository's existing tooling. A Python service might use `pytest -q` instead of the Node example above.
+The post-merge check is stack-specific and comes from the repository's existing tooling, such as `node --test test/retry.test.mjs` or `pytest -q`.
 
 ## Proof point
 
@@ -45,7 +47,7 @@ The [delivery lifecycle](/delivery/lifecycle/) documents the observable terminal
 
 ## Scope
 
-The first delivery is a complete one-machine path. Add fleet placement when another host provides real leverage through [run work on another machine](/what-it-does/run-work-on-another-machine/).
+The first delivery is a complete one-machine path. Request fleet placement explicitly when another host is needed through [run work on another machine](/what-it-does/run-work-on-another-machine/).
 
 ## Troubleshooting
 
@@ -61,5 +63,5 @@ The first delivery is a complete one-machine path. Add fleet placement when anot
 - [Adapter](/delivery/model-routing/) — the bridge that turns the route decision into a harness invocation.
 - [Work class](/delivery/model-routing/) — the role that determines the route and evidence required.
 - [Budget](/what-it-does/control-model-cost/) — the spend constraint recorded with the dispatch.
-- [Thermos](/skills/thermos/) — the paired review skill used during delivery.
+- [Thermos](/skills/thermos/) — an optional paired review that contributes findings to the CE owner.
 - [React Doctor](/delivery/gates/) — the project-appropriate browser-visible quality check for React surfaces.

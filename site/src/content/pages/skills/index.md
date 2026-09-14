@@ -7,7 +7,7 @@ has_children: true
 
 # Skills
 
-Start with the operating job, learn the practice that makes it reliable, and use the interface only when the work is clear. This reference groups the public skills by practitioner intent; every page names the shipping plugin and pairs a worked invocation with an anonymized receipt.
+Select a skill when its expertise helps the requested work. This reference groups the public skills by purpose, names the shipping plugin, and describes invocation and evidence expectations. Illustrative examples are not proof of a live run.
 
 ## Deliver work
 

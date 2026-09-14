@@ -1,51 +1,81 @@
 ---
 name: thermos
-description: "Launch both thermo-nuclear review subagents in parallel, then synthesize their findings. Use for thermos, double thermo review, or combined bug/security and code-quality branch audits."
+description: "Combine targeted correctness/security and maintainability reviews when explicitly requested or justified by substantial risk. Optional deep review; not a routine delivery gate."
 ---
 
 # Thermos
 
-Run the two thermo review passes as async background subagents in parallel, then synthesize their results.
+Use Thermos for a requested combined deep review or a change whose risks need
+both correctness/security and maintainability expertise. For a single concern,
+use the relevant sibling skill directly. Ordinary work does not require
+Thermos, a second model, or an additional review after the selected delivery
+workflow has covered the relevant concerns.
 
-## Model routing
+## Reviewer allocation
 
-Before each reviewer edge, invoke `railyard:model-routing` with exact
-contract `railyard/model-routing/v1`. It is the only public model,
-effort, budget, and transport router and internally applies
-`../../references/provider-task-routing.md`; do not invoke that reference as a
-second router. Standalone Thermos admits its two reviewer actions. When Goal
-Driven Delivery invokes Thermos, consume its exact pre-reserved reviewer slots
-and never resolve or charge the same edge twice.
+Choose each reviewer's model **and** reasoning effort for its bounded scope
+before dispatch. Use `railyard:model-routing` when an active Railyard route
+owns that assignment; consume any already-reserved slot once. Otherwise make
+the choice through the current native tool's supported fields. Astra `max` is
+a baseline candidate for substantive Codex review, not a claim that it is
+cheapest for every review. Use another supported pair when the task, evidence,
+or user preference warrants it. Deliberate inheritance is valid when the
+inherited pair is known and suitable; record that choice rather than silently
+omitting allocation.
 
-When a frozen decision selects a Claude Fable/Opus reviewer, override only the
-normal optional cross-model review executor through CE's existing attested
-read-only Claude adapter; Railyard never starts a parallel raw
-`claude -p` runner. Pass the frozen binding to that CE-owned seam, then feed its
-receipt-bound findings into the ordinary Thermos disposition. Until that seam
-attests the binding, the route is `transport_unsupported`. Preserve the
-reviewer concern, persona, input digest, output schema, and Thermos synthesis
-authority. Never modify Compound Engineering, pass Claude through a Codex
-selector, or claim a review without the fixed adapter receipt.
+Use the available native subagent tool and roles. On Codex, explicit model or
+effort overrides require a supported limited/no-history fork; full-history
+forks inherit both settings. Give a reviewer without history a self-contained
+brief. If the runtime offers a role with fixed model/effort, use its
+authoritative binding and omit forbidden overrides. A persona is prompt
+content, not proof that a named `explorer` or custom agent type exists. Native
+spawn does not provide arbitrary per-child plugin enablement.
+
+For a selected cross-model pass, use the owning workflow's supported adapter.
+Compound Engineering owns its configured cross-model review mechanism; do not
+launch an additional raw provider runner alongside it. Railyard's fixed
+adapter contract applies only when that exact seam and receipt binding are
+available. Otherwise report `transport_unsupported` for the routed request,
+and let the owner select an available route. A requested model, provider
+receipt, and verified serving model/effort are distinct facts; disclose any
+missing evidence. Oracle browser Pro is a separate transport from native
+Astra `max`.
 
 ## Workflow
 
-1. Determine the review scope from the user request, PR, current branch, or relevant changed files.
-2. Freeze one deterministic review packet: objective and stop condition, exact diff/file digests, relevant source excerpts, requirement map, changed runtime-artifact chain, simplification receipt when applicable, and reusable hash-bound validation receipts. Reviewers do not rerun unchanged broad suites.
-3. Map concern coverage before launching. Require one correctness/security disposition and one code-quality disposition with distinct scopes. A matching independent CE or Sol review may satisfy a disposition only when independence, frozen input digest, concern scope, disposition schema, and authority all match. Launch only uncovered concerns or unresolved disagreements, normally both passes in parallel:
-   - Cursor: launch both subagents in the same message with `run_in_background: true`:
-     - `subagent_type: "thermo-nuclear-review-subagent"` for bugs, breakages, security, devex regressions, feature-flag leaks, and other branch-audit risks.
-     - `subagent_type: "thermo-nuclear-code-quality-review-subagent"` for maintainability, structure, file-size growth, spaghetti, abstractions, and codebase-health risks.
-   - Claude Code: launch both reviewers as two `Agent` tool calls in one
-     message (fresh-context subagents). Give each the frozen packet plus the
-     full instructions of its sibling skill — read
-     `../thermo-nuclear-review/SKILL.md` for the correctness/security agent
-     and `../thermo-nuclear-code-quality-review/SKILL.md` for the
-     maintainability agent — since no predefined subagent types exist here.
-   - Codex: spawn two `explorer` subagents in parallel.
-     - For the correctness/security agent, attach or pass the `thermo-nuclear-review` skill. If structured skill attachments are unavailable, read `../thermo-nuclear-review/SKILL.md` relative to this skill and include its instructions in the subagent prompt.
-     - For the maintainability agent, attach or pass the `thermo-nuclear-code-quality-review` skill. If structured skill attachments are unavailable, read `../thermo-nuclear-code-quality-review/SKILL.md` relative to this skill and include its instructions in the subagent prompt.
-     - Codex spawn calls are background work; wait for both with the available wait tool, then synthesize.
-4. Pass each reviewer the same frozen packet and ask for prioritized findings plus an explicit disposition for its assigned concern. A runtime artifact lacking producer/package/install/consumer proof and a material complexity increase lacking a simplification receipt are mandatory findings, not optional observations.
-5. After the required dispositions finish or are validly reused, synthesize findings, deduplicate overlaps, and resolve disagreements. Add another model only for a unique unresolved question after routing preflight; review is a concern-coverage portfolio, not an additive swarm.
+1. Establish the reviewed base/head or changed file set, objective, relevant
+   requirements, and the two concerns. Keep a stable review snapshot while
+   reviewers run. Include useful existing test results and known limitations.
+   Use a frozen digest or formal packet when the caller's contract needs one;
+   routine review does not require a new artifact ledger.
+2. Reuse a completed review when it covers the same inputs and concern with
+   the independence the caller needs. Launch only uncovered concerns or an
+   unresolved question. Independent passes can run concurrently:
+   - Correctness/security: read `../thermo-nuclear-review/SKILL.md` and its
+     applicable references, then pass that guidance with the scoped brief.
+   - Maintainability: read
+     `../thermo-nuclear-code-quality-review/SKILL.md` and pass that guidance
+     with the scoped brief.
+   On Codex and Claude Code, use the current generic subagent facility and
+   include the needed instructions when structured skill attachments are not
+   supported. On a harness with registered review agents, use a registered
+   type only after confirming it exists.
+3. Ask for prioritized, evidence-backed findings and an explicit disposition
+   of the assigned concern. Reviewers inspect the changed behavior and its
+   relevant dependencies without editing the shared tree. Validate an actual
+   delivery/packaging risk where it exists; a missing formal receipt alone is
+   not a defect. Reuse unchanged test results and run further checks only to
+   resolve a concrete gap.
+4. Collect every launched review through the available native wait/result
+   mechanism. Launch acknowledgement and progress are not completed review.
+   Synthesize findings, deduplicate overlaps, and resolve disagreements. A
+   further reviewer needs a specific unanswered question and a deliberate
+   model/effort choice.
+5. Return the unified verdict, actionable findings, coverage, and remaining
+   uncertainty to the existing workflow owner. When CE owns delivery, it is
+   the single owner of feedback resolution, review settlement, and CI
+   monitoring. Thermos supplies findings; it does not start a competing
+   watcher, re-review loop, or merge gate.
 
-If individual background summaries are already visible to the user, do not restate them wholesale. Surface the unified verdict, the highest-signal findings, and any remaining uncertainty.
+Do not restate individual background summaries wholesale when they are
+already visible. Report what the combined review changes about the decision.

@@ -7,22 +7,25 @@ nav_order: 6
 
 # Audit
 
-Treat every delivery run as a decision record: start with the intended approach, follow each consequential turn, and finish with evidence that another operator can inspect. That discipline makes a run explainable, resumable, and honest about anything still unresolved.
+Use Audit when reconstructing a run would help explain a decision, resume work, or investigate an unresolved result. Routine completion needs a proportionate result and verification report; an audit or retrospective is optional.
 
 ## What it adds
 
-Audit reports route decisions, dispatches, checks, review rounds, retries, Git state, pull-request state, merge state, and retrospective outcomes in one place.
+Audit brings available route decisions, dispatches, checks, review rounds, retries, Git state, PR state, and merge evidence into one report. Include retrospective findings when they add useful learning.
 
 ## How it works
 
-The skill reads the primary run log, maps planned items and workarounds to captured evidence, and marks the boundary between observed fact and unresolved state. Metadata events preserve the reason for each deviation.
+The skill reads available run logs and workflow evidence, maps planned items and workarounds to captured observations, and marks the boundary between observed fact and unresolved state. Include the recorded reason for each material deviation.
+
+Illustrative audit fields, populated from observed evidence:
 
 ```text
 > Reconstruct this delivery run and show the decision chain, checks, review rounds, and terminal proof.
-route=codex-luna/max
-dispatches=3  parallel_rounds=1  retries=0
-checks=content-audit(exit=0), diff-check(exit=0)
-terminal=local-verified  merge=owner-action-required
+allocation=<selected model and effort or deliberate inheritance>
+observed_allocation=<runtime metadata or unverified>
+dispatches=<count> retries=<count>
+checks=<commands and results>
+terminal=<observed delivery boundary>
 ```
 
 ## Scope
@@ -35,9 +38,4 @@ Ships in the `railyard` plugin.
 
 ## Proof point
 
-```text
-decision approach captured=true
-outcome=delivery-terminal-proof captured=true
-deviations=0 captured=true
-retrospective questions=5 sink=local-learning
-```
+Tie each material conclusion to captured evidence and name missing observations. A retrospective can use the run's actual outcomes; no fixed question count or learning artifact is required for ordinary delivery.

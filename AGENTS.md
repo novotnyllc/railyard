@@ -6,9 +6,10 @@ source lives under `plugins/railyard/`; everything else is documentation.
 
 ## Always
 
-- Run the read-only `railyard:model-routing` intake on every software
-  delivery turn. `railyard/model-routing/v1` is the only operational
-  model/effort, budget, and transport policy —
+- Choose model and reasoning effort deliberately for each assignment;
+  use `railyard:model-routing` when resolving or changing an allocation.
+  Routine work runs natively; select CE workflows when they help, and use
+  explicit fleet/account orchestration only when requested —
   [delivery routing](docs/agents/routing.md).
 - Any change under `plugins/` bumps both plugin manifests and repins the
   marketplace; docs-only changes do neither —
