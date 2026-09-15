@@ -278,6 +278,84 @@ gated("REST head proof refuses missing, duplicate, dynamic or file-based sha", (
   }
 });
 
+gated("GraphQL request files expose merges in JSON input and typed query fields", () => {
+  const mutation = 'mutation { mergePullRequest(input:{pullRequestId:"PR_fixture"}) { clientMutationId } }';
+  for (const shape of ["input", "field", "attached-field"]) {
+    const result = run((snapshotPath) => {
+      const directory = path.dirname(snapshotPath);
+      const option = shape === "input" ? `--input '${directory}/request.json'`
+        : shape === "field" ? `-F 'query=@${directory}/request.graphql'`
+        : `--field='query=@${directory}/request.graphql'`;
+      return bash(`gh api graphql ${option}`);
+    }, { noPath: true, prepareFiles: ({ snapshotPath }) => {
+      const directory = path.dirname(snapshotPath);
+      writeFileSync(path.join(directory, "request.json"), JSON.stringify({ query: mutation }));
+      writeFileSync(path.join(directory, "request.graphql"), mutation);
+    } });
+    refused(result, /mergePullRequest is unsupported/);
+    assert.deepEqual(result.calls, []);
+  }
+});
+
+gated("GraphQL request files preserve known read-only and non-merge mutations", () => {
+  for (const query of [
+    'query($owner:String!) { repository(owner:$owner,name:"fixture") { name } }',
+    'mutation { addComment(input:{subjectId:"PR_fixture",body:"mergePullRequest"}) { clientMutationId } }',
+  ]) {
+    for (const shape of ["json", "query"]) {
+      allowed(run((snapshotPath) => {
+        const directory = path.dirname(snapshotPath);
+        return bash(shape === "json" ? `gh api graphql --input '${directory}/request.json'`
+          : `gh api graphql -F 'query=@${directory}/request.graphql'`);
+      }, { noPath: true, prepareFiles: ({ snapshotPath }) => {
+        const directory = path.dirname(snapshotPath);
+        writeFileSync(path.join(directory, "request.json"), JSON.stringify({ query }));
+        writeFileSync(path.join(directory, "request.graphql"), query);
+      } }), []);
+    }
+  }
+});
+
+gated("literal GraphQL fragments may precede read-only or merge operations", () => {
+  allowed(run(bash("gh api graphql -f 'query=fragment ViewerFields on User { login } query { viewer { ...ViewerFields } }'"), { noPath: true }), []);
+  const result = run(bash('gh api graphql -f \'query=fragment MergeFields on Mutation { mergePullRequest(input:{pullRequestId:"PR_fixture"}) { clientMutationId } } mutation { ...MergeFields }\''), { noPath: true });
+  refused(result, /mergePullRequest is unsupported/);
+  assert.deepEqual(result.calls, []);
+});
+
+gated("unresolved API query and PUT endpoint content refuses without shell evaluation", () => {
+  for (const command of [
+    'gh api graphql -f "query=$QUERY"',
+    "gh api graphql --input -",
+    'gh api graphql --input "$REQUEST_FILE"',
+    'gh api graphql -F "query=@${QUERY_FILE}"',
+    'gh api "$ENDPOINT" -X PUT',
+    'gh api -X PUT "repos/novotnyllc/railyard/pulls/$PR/merge"',
+  ]) {
+    const result = run(bash(command), { noPath: true });
+    refused(result, /unresolved/);
+    assert.deepEqual(result.calls, []);
+  }
+  allowed(run(bash("gh api -X PUT repos/novotnyllc/railyard/contents/file.txt -f content=fixture"), { noPath: true }), []);
+});
+
+gated("GraphQL missing, oversized and FIFO inputs refuse before any request", () => {
+  for (const shape of ["missing", "oversized", "fifo"]) {
+    const started = Date.now();
+    const result = run((snapshotPath) => bash(`gh api graphql -F 'query=@${path.dirname(snapshotPath)}/query.graphql'`), {
+      noPath: true,
+      prepareFiles: ({ snapshotPath }) => {
+        const filename = path.join(path.dirname(snapshotPath), "query.graphql");
+        if (shape === "oversized") { writeFileSync(filename, ""); truncateSync(filename, 8 * 1024 * 1024 + 1); }
+        else if (shape === "fifo") assert.equal(spawnSync("mkfifo", [filename]).status, 0);
+      },
+    });
+    refused(result, /GraphQL query file is unreadable/);
+    assert.ok(Date.now() - started < 2000);
+    assert.deepEqual(result.calls, []);
+  }
+});
+
 // Preserve the mature shell parser's command, quote, wrapper, grouping and
 // selector regressions. These valid pinned commands must reach live identity.
 const parserCommands = [
@@ -445,6 +523,39 @@ gated("env unsets remove the snapshot and mode from the command's environment", 
   refused(run(bash(`env -u RAILYARD_CE_SNAPSHOT ${fullMerge}`)), /RAILYARD_CE_SNAPSHOT/);
   refused(run(bash(`env -i ${fullMerge}`)), /RAILYARD_CE_SNAPSHOT/);
   allowed(run(bash(`env -u RAILYARD_CE_MODE ${fullMerge}`), { mode: "unknown" }));
+});
+
+gated("nested shell wrappers retain snapshot overrides, unsets and ignored environment", () => {
+  for (const prefix of ["env -u RAILYARD_CE_SNAPSHOT", "env -i", "RAILYARD_CE_SNAPSHOT=/missing/ce.json"]) {
+    const result = run(bash(`${prefix} bash -lc '${fullMerge}'`));
+    refused(result, /RAILYARD_CE_SNAPSHOT|CE snapshot is missing/);
+    assert.deepEqual(result.calls, []);
+  }
+  allowed(run((filename) => bash(`RAILYARD_CE_SNAPSHOT='${filename}' bash -lc '${fullMerge}'`), { noPath: true }));
+  refused(run((filename) => bash(`RAILYARD_CE_SNAPSHOT='${filename}' env -u RAILYARD_CE_SNAPSHOT bash -lc '${fullMerge}'`)), /RAILYARD_CE_SNAPSHOT/);
+  allowed(run((filename) => bash(`env -u RAILYARD_CE_SNAPSHOT env RAILYARD_CE_SNAPSHOT='${filename}' bash -lc '${fullMerge}'`), { noPath: true }));
+});
+
+gated("nested shell wrappers retain cwd for PR resolution and relative query files", () => {
+  const result = run((filename) => bash(`env -C '${path.dirname(filename)}' bash -lc 'gh pr merge 7 ${PIN}'`));
+  allowed(result, ["pr view", "api graphql"]);
+  assert.ok(result.cwds.every((cwd) => path.basename(cwd).startsWith("ce-merge-gate-")));
+  const queryResult = run((filename) => bash(`env -C '${path.dirname(filename)}' bash -lc 'gh api graphql -F query=@request.graphql'`), {
+    noPath: true,
+    prepareFiles: ({ snapshotPath }) => writeFileSync(path.join(path.dirname(snapshotPath), "request.graphql"),
+      'mutation { mergePullRequest(input:{pullRequestId:"PR_fixture"}) { clientMutationId } }'),
+  });
+  refused(queryResult, /mergePullRequest is unsupported/);
+  assert.deepEqual(queryResult.calls, []);
+});
+
+gated("nested shell wrapper context stays scoped to that child shell", () => {
+  allowed(run(bash(`RAILYARD_CE_MODE=unknown bash -lc 'echo ready'; ${fullMerge}`)));
+  const result = run(bash(`RAILYARD_CE_MODE=unknown bash -lc '${fullMerge}'`));
+  refused(result, /pipeline or interactive/);
+  const credentialResult = run(bash(`GH_TOKEN=wrapper-token bash -lc '${fullMerge}'`));
+  allowed(credentialResult);
+  assert.equal(credentialResult.tokens.at(-1), "wrapper-token");
 });
 
 gated("unconditional cwd and shell workdir are preserved; pipeline/subshell cwd does not leak", () => {

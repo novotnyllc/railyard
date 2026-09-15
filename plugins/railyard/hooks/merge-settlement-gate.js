@@ -279,40 +279,47 @@ function dropWrapperFlags(tokens) {
   return { rest, chdir, unset, splitString, ignoreEnv };
 }
 
-function ghArgs(segmentTokens) {
+// Peel only the known env/shell wrappers. Keep their context with an extracted
+// script instead of re-parsing it later against the hook's ambient settings.
+function commandPrefix(segmentTokens, baseCwd, inherited = {}) {
   let tokens = segmentTokens.map((t) => t.replace(/^!+/, "")).filter(Boolean);
-  const env = {};
-  const unset = [];
-  let chdir = null;
-  let ignoreEnv = false;
+  const context = {
+    env: { ...inherited.env }, unset: [...(inherited.unset || [])],
+    ignoreEnv: inherited.ignoreEnv || false, cwd: baseCwd,
+    cwdUnknown: inherited.cwdUnknown || false,
+  };
   for (;;) {
     const head = tokens[0];
-    if (!head) return null;
-    if (CONTROL_WORDS.has(head)) {
-      tokens = tokens.slice(1);
-      continue;
-    }
-    // Keep the assignment, don't just skip it: `GH_REPO=o/r gh pr merge 7`
-    // retargets the merge, and discarding it verifies PR 7 in the WRONG repo.
-    const assignment = head.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+    if (!head) return { ...context, tokens };
+    if (CONTROL_WORDS.has(head)) { tokens = tokens.slice(1); continue; }
+    const assignment = head.match(/^([A-Za-z_][A-Za-z0-9_]*)=([\s\S]*)$/);
     if (assignment) {
-      env[assignment[1]] = assignment[2];
+      context.env[assignment[1]] = assignment[2];
+      context.unset = context.unset.filter((name) => name !== assignment[1]);
       tokens = tokens.slice(1);
       continue;
     }
-    if (SHELL_WRAPPERS.has(basename(head))) {
-      const dropped = dropWrapperFlags(tokens);
-      if (dropped.chdir) chdir = dropped.chdir;
-      if (dropped.ignoreEnv) ignoreEnv = true;
-      for (const name of dropped.unset) unset.push(name);
-      tokens = dropped.rest;
-      continue;
+    if (!SHELL_WRAPPERS.has(basename(head))) return { ...context, tokens };
+    const dropped = dropWrapperFlags(tokens);
+    if (dropped.ignoreEnv) {
+      context.env = {};
+      context.unset = [];
+      context.ignoreEnv = true;
     }
-    break;
+    for (const name of dropped.unset) {
+      delete context.env[name];
+      if (!context.unset.includes(name)) context.unset.push(name);
+    }
+    if (dropped.chdir) {
+      if (/[\$`]/.test(dropped.chdir)) context.cwdUnknown = true;
+      else context.cwd = path.resolve(context.cwd || process.cwd(), dropped.chdir);
+    }
+    if (dropped.splitString) return { ...context, script: dropped.splitString };
+    tokens = dropped.rest;
+    if (basename(head) !== "env" && tokens[0] && /\s/.test(tokens[0])) {
+      return { ...context, script: tokens[0] };
+    }
   }
-  return basename(tokens[0]) === "gh"
-    ? { tokens: tokens.slice(1), env, chdir, unset, ignoreEnv }
-    : null;
 }
 
 // gh accepts `[HOST/]OWNER/REPO`. Keep the HOST: dropping it makes the gate
@@ -387,23 +394,8 @@ function parseArgs(tokens) {
 // moment PR 5 is settled. `--help` is not a merge.
 // `bash -lc "gh pr merge 7"` carries its whole script as one quoted token, so
 // the wrapper's payload has to be parsed as command text in its own right.
-// (Codex's argv form joins to separate tokens and is handled by ghArgs.)
-function wrapperScript(tokens) {
-  let rest = tokens;
-  // Wrappers stack: `env bash -lc '…'`, `env -C dir bash -lc '…'`. Peel each
-  // layer until a script payload appears or there is no wrapper left.
-  for (let depth = 0; depth < 8; depth += 1) {
-    while (rest.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[0])) rest = rest.slice(1);
-    if (!rest.length || !SHELL_WRAPPERS.has(basename(rest[0]))) return null;
-    const dropped = dropWrapperFlags(rest);
-    if (dropped.splitString) return dropped.splitString; // env -S 'gh pr merge 7'
-    rest = dropped.rest;
-    if (rest[0] && /\s/.test(rest[0])) return rest[0];
-  }
-  return null;
-}
-
-function mergeCommands(text, baseCwd) {
+// (Codex's argv form joins to separate tokens and is handled by commandPrefix.)
+function mergeCommands(text, baseCwd, inherited = {}, depth = 0) {
   const found = [];
   const queue = tokenizeSegments(text);
   // `cd ../other && gh pr merge 7` resolves PR 7 in ../other, so the gate's own
@@ -414,13 +406,15 @@ function mergeCommands(text, baseCwd) {
   const cwdStack = [];
   let conditional = false; // the previous separator was && or ||
   let pipeline = false; // the previous separator was a single |
-  let cwdUnknown = false;
+  let cwdUnknown = inherited.cwdUnknown || false;
   // Bounded: a pathological nest cannot spin the hook inside its budget.
   for (let i = 0; i < queue.length && i < 64; i += 1) {
     const segment = queue[i];
-    const script = wrapperScript(segment);
-    if (script) {
-      for (const sub of tokenizeSegments(script)) queue.push(sub);
+    const prefix = commandPrefix(segment, cwd, { ...inherited, cwdUnknown });
+    if (prefix.script && depth < 8) {
+      found.push(...mergeCommands(prefix.script, prefix.cwd, prefix, depth + 1));
+      conditional = false;
+      pipeline = false;
       continue;
     }
     if (segment.length === 1 && (segment[0] === "&&" || segment[0] === "||")) {
@@ -463,22 +457,20 @@ function mergeCommands(text, baseCwd) {
       pipeline = false;
       continue;
     }
-    const gh = ghArgs(segment);
     conditional = false;
     pipeline = false;
-    if (!gh) continue;
-    const { tokens, env } = gh;
-    const unset = gh.unset;
-    const ignoreEnv = gh.ignoreEnv;
-    // `env -C DIR gh …` runs the merge from DIR.
-    const at = gh.chdir ? path.resolve(cwd || process.cwd(), gh.chdir) : cwd;
+    if (!prefix.tokens || basename(prefix.tokens[0] || "") !== "gh") continue;
+    const { env, unset, ignoreEnv } = prefix;
+    const tokens = prefix.tokens.slice(1);
+    const at = prefix.cwd;
+    const commandCwdUnknown = prefix.cwdUnknown;
     const { words, flags } = parseArgs(tokens);
     // `--help` prints usage; `--disable-auto` TURNS OFF auto-merge, which is
     // the mitigation to reach for during a settlement window. Refusing either
     // blocks a command that merges nothing. Checked against real options only.
     if ([...NON_MERGE_FLAGS].some((f) => flagEnabled(flags.get(f)))) continue;
     if (words[0] === "pr" && words[1] === "merge") {
-      found.push({ kind: "pr", tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown, ref: words[2] || null });
+      found.push({ kind: "pr", tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown: commandCwdUnknown, ref: words[2] || null });
     } else if (words[0] === "api") {
       // Only the endpoint positional — a `-H 'X-Test: repos/x/y/pulls/5/merge'`
       // header value must not be mistaken for the endpoint being called.
@@ -486,22 +478,25 @@ function mergeCommands(text, baseCwd) {
         .toUpperCase();
       // gh api defaults to GET; only PUT actually merges. Refusing a
       // merge-status check would block a read-only call.
-      const path = method === "PUT" ? words.join(" ").match(REST_MERGE_RE) : null;
-      if (path) {
+      const endpoint = words[1];
+      const path = typeof endpoint === "string" ? endpoint.match(REST_MERGE_RE) : null;
+      if (path && method === "PUT") {
         // Placeholders expand from the current repo, exactly as `gh pr view N`
         // resolves, so hand the number to that path rather than querying a
         // literal `{owner}`.
         found.push({
-          kind: "api", tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown, endpoint: path, ref: path[3],
+          kind: "api", tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown: commandCwdUnknown, endpoint: path, ref: path[3],
         });
-      } else if (words[1] === "graphql" && requestFields(tokens, "query").some(
-        (query) => /\bmutation\b[\s\S]*\bmergePullRequest\s*\(/.test(query),
-      )) {
-        // A raw GraphQL merge mutation carries a PR node id, not owner/repo/
-        // number, so the gate cannot verify it. ponytail: report it loudly
-        // instead of passing it in silence — upgrade to resolving the node id
-        // if this form ever shows up in real use.
-        found.push({ kind: "graphql", tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown, ref: null });
+      } else if ((method === "PUT" && (!endpoint || /[$`]/.test(endpoint))) ||
+          (path && /[$`]/.test(method))) {
+        found.push({ kind: "unsupported", why: "the gh api merge endpoint or method is unresolved; use a literal REST PUT endpoint or gh pr merge with --match-head-commit" });
+      } else if (endpoint === "graphql") {
+        const command = { tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown: commandCwdUnknown };
+        try {
+          if (graphqlMerges(command)) found.push({ ...command, kind: "graphql", ref: null });
+        } catch (error) {
+          found.push({ kind: "unsupported", why: String(error.message) });
+        }
       }
     }
   }
@@ -654,13 +649,15 @@ function commandSetting(command, name) {
   return process.env[name];
 }
 
+function readRegularText(filename) {
+  const info = statSync(filename);
+  if (!info.isFile() || info.size > MAX_EVIDENCE_BYTES) throw new Error("unsupported input file");
+  return readFileSync(filename, "utf8");
+}
+
 function readObject(filename, label) {
   let value;
-  try {
-    const info = statSync(filename);
-    if (!info.isFile() || info.size > MAX_EVIDENCE_BYTES) throw new Error("unsupported evidence file");
-    value = JSON.parse(readFileSync(filename, "utf8"));
-  }
+  try { value = JSON.parse(readRegularText(filename)); }
   catch { throw new Error(`${label} is missing, unreadable or invalid JSON; use a regular JSON file no larger than 8 MiB`); }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${label} must be a JSON object`);
@@ -762,19 +759,66 @@ function ceEvidence(command) {
   return { snapshot, identity };
 }
 
-function requestFields(tokens, name) {
+function requestFieldEntries(tokens, name) {
   const values = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
     let value;
-    if (["-f", "-F", "--raw-field", "--field"].includes(token)) value = tokens[++index];
-    else {
-      const attached = token.match(/^(?:-[fF]=?|--(?:raw-field|field)=)(.+)$/);
-      if (attached) value = attached[1];
+    let typed = false;
+    if (["-f", "-F", "--raw-field", "--field"].includes(token)) {
+      value = tokens[++index];
+      typed = token === "-F" || token === "--field";
     }
-    if (typeof value === "string" && value.startsWith(`${name}=`)) values.push(value.slice(name.length + 1));
+    else {
+      const attached = token.match(/^(-[fF]=?|--(?:raw-field|field)=)(.+)$/);
+      if (attached) {
+        value = attached[2];
+        typed = attached[1].startsWith("-F") || attached[1] === "--field=";
+      }
+    }
+    if (typeof value === "string" && value.startsWith(`${name}=`)) values.push({ value: value.slice(name.length + 1), typed });
   }
   return values;
+}
+
+function requestFields(tokens, name) {
+  return requestFieldEntries(tokens, name).map((entry) => entry.value);
+}
+
+function requestFile(value, cwd) {
+  if (!nonempty(value) || value === "-" || /[$`]/.test(value)) {
+    throw new Error("GraphQL request content is unresolved; supply a literal query or an existing regular input file, without shell evaluation");
+  }
+  return path.resolve(cwd || process.cwd(), value);
+}
+
+function graphqlMerges(command) {
+  if (command.cwdUnknown) throw new Error("the GraphQL request's working directory is unresolved; use an explicit workdir and literal query or input file");
+  const queries = requestFieldEntries(command.tokens, "query");
+  if (command.flags.has("--input")) {
+    const body = readObject(requestFile(command.flags.get("--input"), command.cwd), "GraphQL input request");
+    if (!nonempty(body.query)) throw new Error("GraphQL input request has no literal query; supply a readable JSON request with its query field");
+    queries.push({ value: body.query, typed: false });
+  }
+  if (!queries.length) throw new Error("GraphQL request content is unresolved; supply a literal query or an existing regular input file");
+  return queries.map(({ value, typed }) => {
+    let source = value;
+    if (typed && source.startsWith("@")) {
+      try { source = readRegularText(requestFile(source.slice(1), command.cwd)); }
+      catch (error) {
+        throw new Error("GraphQL query file is unreadable or unresolved; use a literal path to a regular file no larger than 8 MiB: " + error.message);
+      }
+    }
+    // GraphQL variables inside a literal operation are protocol data. An
+    // entire shell variable/query expression is not evaluated by this hook.
+    const syntax = source.replace(/"(?:\\.|[^"\\])*"|#[^\n]*/g, "").trim();
+    if (!/^(?:query\b|mutation\b|subscription\b|fragment\b|\{)/.test(syntax)) {
+      throw new Error("GraphQL query content is unresolved; pass the literal operation or an existing regular query file");
+    }
+    // Fragments may precede the operation that uses them, so the mutation
+    // and merge field need not appear in that order within the document.
+    return /\bmutation\b/.test(syntax) && /\bmergePullRequest\s*\(/.test(syntax);
+  }).some(Boolean);
 }
 
 function restSha(command) {
@@ -798,6 +842,7 @@ function currentIdentity(target, command) {
 }
 
 function verifyMerge(command) {
+  if (command.kind === "unsupported") throw new Error(command.why);
   if (command.cwdUnknown) {
     throw new Error("a conditional `cd` makes the merge's repository unknown; run the merge as its own command in an explicit workdir");
   }
