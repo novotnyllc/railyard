@@ -75,8 +75,10 @@ or merge work, continue after CE's settled result:
 1. Confirm the requested merge is still authorized and no user or repository
    hold remains. CE supplies the review and CI disposition; this step checks
    the delivery boundary, not a second settlement process.
-2. Merge using the repository's configured strategy, or use `gh-stack` in
-   dependency order for a stack.
+2. Hand CE's final snapshot to the [merge guard](references/ce-merge-guard.md)
+   and merge the exact reviewed head using the repository's configured
+   strategy. For a stack, follow `gh-stack` in dependency order and use its
+   supported landing route; the shell guard covers the documented `gh` route.
 3. Observe the merged state and merge commit, fetch the base, and verify that
    the merge is on the intended base. Run the smallest applicable post-merge
    or deployed-behavior check that proves the requested outcome.

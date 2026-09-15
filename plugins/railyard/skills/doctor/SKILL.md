@@ -28,7 +28,7 @@ existing fleet configuration alone does not authorize cross-host work.
 - Codex hook trust: verify current hashes for intentionally enabled hooks.
   Disabled optional hooks are healthy. Preserve user choices; never approve
   every hook as a generic repair. Test the installed startup/dispatch path
-  before enabling updated commands.
+  and CE snapshot handoff for a selected merge guard before activation.
 - Fleet-wide parity: only when requested, delegate the cross-host
   skill/plugin/runtime comparison to `roundhouse:fleet-agents` (inventory
   mode) and fold its drift report into the findings.

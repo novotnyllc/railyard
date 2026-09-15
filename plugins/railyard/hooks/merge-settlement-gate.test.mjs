@@ -1,1310 +1,532 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-const script = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "merge-settlement-gate.js",
-);
-
-// The gh boundary is mocked with a PATH shim rather than a seam in the hook:
-// the production path stays completely real (the hook still spawns `gh` and
-// parses real JSON) and no production code exists only for testability.
-// ponytail: POSIX sh, so these cases are skipped on Windows — validate.yml's
-// matrix is ubuntu + macOS. The gate itself is cross-platform.
-const SKIP_WIN = process.platform === "win32"
-  ? "gh shim is POSIX sh; the gate itself is cross-platform"
-  : false;
+const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "merge-settlement-gate.js");
+const SKIP_WIN = process.platform === "win32" ? "gh shim uses POSIX sh" : false;
 const gated = (name, fn) => test(name, { skip: SKIP_WIN }, fn);
+const HEAD = "a36a1cf89334911b243c7e9e3d368ce21598394a";
+const BASE = "1111111111111111111111111111111111111111";
+const OTHER = "2222222222222222222222222222222222222222";
+const URL = "https://github.com/novotnyllc/railyard/pull/7";
+const PIN = `--match-head-commit ${HEAD}`;
+const bash = (command) => ({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } });
+const fullMerge = `gh pr merge ${URL} --squash ${PIN}`;
+
+// CE 3.25 snapshot stdout and its sibling persisted state have different
+// schemas. Only stdout carries computed readiness flags. No invented receipt.
+function evidence(url = URL) {
+  const target = new globalThis.URL(url);
+  const [, owner, repo, , number] = target.pathname.split("/");
+  const now = Date.now() - 100;
+  const startedAt = new Date(now - 20_000).toISOString();
+  const base = { host: target.host, repository: `${owner}/${repo}`, ref: "main", oid: BASE, identity: "current" };
+  const snapshot = {
+    url, head_sha: HEAD, invocation_id: "ce-fixture-invocation", tick: 3,
+    invocation_started_at: startedAt, invocation_wall_elapsed_seconds: 20,
+    base: { ...base }, pr_state: "OPEN", pr_is_draft: false,
+    mergeability_certain: true, mergeable: "MERGEABLE", merge_state_status: "CLEAN",
+    checks_terminal: true, has_failing_checks: false, checks_present: true,
+    all_checks_ok: true, checks_awaiting_approval: 0, blocked_external: false,
+    base_ref_blocker: null, stack_blocker: null, branch_currency_blocker: null,
+    unrequested_base_merge: null, unrequested_base_merge_pending: false,
+    open_needs_human: 0, needs_human_residuals: [], needs_human_ids: [],
+    counts: { ci: 0, threads: 0, comments: 0, needs_human: 0 },
+    actionable: { ci: [], threads: [], comments: [] },
+    // The consumer never implements CE's quiet-window or review judgment.
+    quiet_seconds: 0,
+  };
+  const state = {
+    pr: { owner, repo, number: Number(number), url },
+    head_sha: HEAD, invocation_id: snapshot.invocation_id, tick: snapshot.tick,
+    started_at: startedAt, last_activity_at: new Date(now).toISOString(),
+    base: { ...base }, mergeable: "MERGEABLE", merge_state_status: "CLEAN",
+    awaiting_approval: 0, stop_reason: null,
+  };
+  const live = {
+    url, state: "OPEN", isDraft: false, headRefOid: HEAD,
+    baseRefName: "main", baseRef: { target: { oid: BASE } },
+    mergeable: "MERGEABLE", mergeStateStatus: "CLEAN",
+  };
+  return { snapshot, state, live, number: Number(number) };
+}
 
 const SHIM = `#!/bin/sh
-echo "$1 $2" >> "$GH_CALL_LOG"
-echo "$GH_HOST" >> "$GH_HOST_LOG"
-echo "$GH_TOKEN" >> "$GH_TOKEN_LOG"
-echo "$XDG_CONFIG_HOME" >> "$GH_XDG_LOG"
+printf '%s\\n' "$1 $2" >> "$GH_CALL_LOG"
+printf '%s\\n' "$GH_HOST" >> "$GH_HOST_LOG"
+printf '%s\\n' "$GH_TOKEN" >> "$GH_TOKEN_LOG"
+printf '%s\\n' "$XDG_CONFIG_HOME" >> "$GH_XDG_LOG"
+printf '%s\\n' "$@" >> "$GH_ARG_LOG"
 pwd >> "$GH_CWD_LOG"
 if [ -n "$GH_FIXTURE_SLEEP" ]; then sleep "$GH_FIXTURE_SLEEP"; fi
-if [ -n "$GH_FIXTURE_FAIL" ]; then echo "gh: could not authenticate" >&2; exit 1; fi
+if [ -n "$GH_FIXTURE_FAIL" ]; then echo "fixture authentication failed" >&2; exit 1; fi
 case "$1 $2" in
   "pr view") printf '%s' "$GH_FIXTURE_VIEW" ;;
   "api graphql") printf '%s' "$GH_FIXTURE_GRAPHQL" ;;
-  *) echo "unexpected gh invocation: $*" >&2; exit 3 ;;
+  *) echo "unexpected gh invocation" >&2; exit 3 ;;
 esac
 `;
 
-const HEAD = "a36a1cf89334911b243c7e9e3d368ce21598394a";
-const OLD_SHA = "1111111111111111111111111111111111111111";
-
-const BOT = "copilot-pull-request-reviewer";
-
-// Mirrors the shape the real query returns (verified live against a real PR).
-function settlement({
-  head = HEAD,
-  reviewedHeads = [],
-  reviews,
-  reviewedAgoMs = 0,
-  eyesAgoMs,
-  eyesBy = BOT,
-  threads = [],
-  threadTotal,
-  headAgeMs = 30 * 1000,
-  committedDate,
-} = {}) {
-  const reviewNodes = reviews ?? reviewedHeads.map((oid) => ({
-    state: "APPROVED",
-    submittedAt: new Date(Date.now() - reviewedAgoMs).toISOString(),
-    author: { login: BOT },
-    commit: { oid },
-  }));
-  const reactionNodes = eyesAgoMs === undefined ? [] : [{
-    createdAt: new Date(Date.now() - eyesAgoMs).toISOString(),
-    user: { login: eyesBy },
-  }];
-  return JSON.stringify({
-    data: {
-      repository: {
-        pullRequest: {
-          headRefOid: head,
-          reviews: { nodes: reviewNodes },
-          reactions: { nodes: reactionNodes },
-          reviewThreads: {
-            totalCount: threadTotal ?? threads.length,
-            nodes: threads.map((isResolved) => ({ isResolved })),
-          },
-          commits: {
-            nodes: [{
-              commit: {
-                committedDate: committedDate === undefined
-                  ? new Date(Date.now() - headAgeMs).toISOString()
-                  : committedDate,
-              },
-            }],
-          },
-        },
-      },
-    },
-  });
-}
-
-const VIEW_OK = JSON.stringify({
-  number: 7,
-  url: "https://github.com/novotnyllc/railyard/pull/7",
-});
-
-// Bash-tool payload (Claude Code): tool_input.command is a string.
-const bash = (command) => ({ tool_name: "Bash", tool_input: { command } });
-
-function run(input, fixtures = {}) {
-  const dir = mkdtempSync(path.join(tmpdir(), "merge-gate-"));
+function prepare(fixtures = {}) {
+  const dir = mkdtempSync(path.join(tmpdir(), "ce-merge-gate-"));
   const shim = path.join(dir, "gh");
   writeFileSync(shim, SHIM);
   chmodSync(shim, 0o755);
-  const callLog = path.join(dir, "calls.log");
-  writeFileSync(callLog, "");
-  const hostLog = path.join(dir, "hosts.log");
-  writeFileSync(hostLog, "");
-  const tokenLog = path.join(dir, "tokens.log");
-  writeFileSync(tokenLog, "");
-  const xdgLog = path.join(dir, "xdg.log");
-  writeFileSync(xdgLog, "");
-  const cwdLog = path.join(dir, "cwd.log");
-  writeFileSync(cwdLog, "");
-
-  const result = spawnSync(process.execPath, [script], {
-    input: typeof input === "string" ? input : JSON.stringify(input),
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      PATH: `${dir}${path.delimiter}${process.env.PATH}`,
-      GH_CALL_LOG: callLog,
-      GH_HOST_LOG: hostLog,
-      GH_TOKEN_LOG: tokenLog,
-      GH_XDG_LOG: xdgLog,
-      GH_CWD_LOG: cwdLog,
-      XDG_CONFIG_HOME: "",
-      GH_HOST: fixtures.ambientHost ?? "",
-      GH_TOKEN: "",
-      GH_FIXTURE_VIEW: fixtures.view ?? VIEW_OK,
-      GH_FIXTURE_GRAPHQL: fixtures.graphql ?? settlement(),
-      GH_FIXTURE_FAIL: fixtures.fail ? "1" : "",
-      GH_FIXTURE_SLEEP: fixtures.sleep ?? "",
-    },
-  });
-  const calls = readFileSync(callLog, "utf8").split("\n").filter(Boolean);
-  // Trailing "" entries matter (no host override), so do not filter these.
-  const hosts = readFileSync(hostLog, "utf8").split("\n").slice(0, calls.length);
-  const tokens = readFileSync(tokenLog, "utf8").split("\n").slice(0, calls.length);
-  const xdg = readFileSync(xdgLog, "utf8").split("\n").slice(0, calls.length);
-  const cwds = readFileSync(cwdLog, "utf8").split("\n").slice(0, calls.length);
-  rmSync(dir, { recursive: true, force: true });
-  return { code: result.status, err: result.stderr, calls, hosts, tokens, xdg, cwds };
+  const logs = Object.fromEntries(["calls", "hosts", "tokens", "xdg", "cwds", "args"].map((name) => [name, path.join(dir, `${name}.log`)]));
+  for (const filename of Object.values(logs)) writeFileSync(filename, "");
+  const data = evidence(fixtures.url);
+  fixtures.mutate?.(data);
+  const snapshotPath = path.join(dir, "snapshot.json");
+  if (!fixtures.noSnapshot) writeFileSync(snapshotPath, fixtures.snapshotText ?? JSON.stringify(data.snapshot));
+  if (!fixtures.noState) writeFileSync(path.join(dir, "state.json"), fixtures.stateText ?? JSON.stringify(data.state));
+  fixtures.prepareFiles?.({ snapshotPath, statePath: path.join(dir, "state.json") });
+  const env = {
+    ...process.env,
+    PATH: `${dir}${path.delimiter}${process.env.PATH}`,
+    RAILYARD_CE_SNAPSHOT: fixtures.noPath ? "" : snapshotPath,
+    RAILYARD_CE_MODE: fixtures.mode ?? "",
+    GH_CALL_LOG: logs.calls, GH_HOST_LOG: logs.hosts, GH_TOKEN_LOG: logs.tokens,
+    GH_XDG_LOG: logs.xdg, GH_CWD_LOG: logs.cwds, GH_ARG_LOG: logs.args,
+    GH_HOST: fixtures.ambientHost ?? "", GH_REPO: "", GH_TOKEN: "", XDG_CONFIG_HOME: "",
+    GH_FIXTURE_VIEW: fixtures.view ?? JSON.stringify({ number: data.number, url: data.snapshot.url }),
+    GH_FIXTURE_GRAPHQL: fixtures.graphql ?? JSON.stringify({ data: { repository: { pullRequest: data.live } } }),
+    GH_FIXTURE_FAIL: fixtures.fail ? "1" : "", GH_FIXTURE_SLEEP: fixtures.sleep ?? "",
+  };
+  const finish = (result) => {
+    const calls = readFileSync(logs.calls, "utf8").trim().split("\n").filter(Boolean);
+    const lines = (name) => readFileSync(logs[name], "utf8").split("\n").slice(0, calls.length);
+    const output = { code: result.status, err: result.stderr, calls,
+      hosts: lines("hosts"), tokens: lines("tokens"), xdg: lines("xdg"), cwds: lines("cwds"),
+      args: readFileSync(logs.args, "utf8") };
+    rmSync(dir, { recursive: true, force: true });
+    return output;
+  };
+  return { env, snapshotPath, finish };
 }
 
-// --- refusals (determinable violations only) ------------------------------
-
-gated("unresolved threads are refused, naming the count and the remedy", () => {
-  const r = run(bash("gh pr merge 7 --squash"), {
-    graphql: settlement({ threads: [true, false, false, false] }),
+function run(input, fixtures = {}) {
+  const setup = prepare(fixtures);
+  const payload = typeof input === "function" ? input(setup.snapshotPath) : input;
+  const result = spawnSync(process.execPath, [script], {
+    input: typeof payload === "string" ? payload : JSON.stringify(payload),
+    encoding: "utf8", env: setup.env, timeout: 6000,
   });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /3 unresolved review thread/);
-  assert.match(r.err, /resolveReviewThread/);
-  assert.match(r.err, /never\s+bypassed/);
-});
-
-gated("no review and no signal inside the registration window is refused", () => {
-  const r = run(bash("gh pr merge 7 --squash"), {
-    graphql: settlement({ reviewedHeads: [], headAgeMs: 60 * 1000 }),
-  });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /no reviewer has registered/);
-  assert.match(r.err, /Wait 2m more/);
-  assert.match(r.err, /registration window 3m/);
-  assert.match(r.err, /a36a1cf/); // names the head it judged
-  // The message is the whole remedy: it must never offer an escape hatch.
-  // (`gh pr merge --admin` is the real bypass, so name it explicitly.)
-  assert.doesNotMatch(r.err, /--no-verify|--admin|skip the gate|disable the (gate|hook)/i);
-  // Waiting must be stated as always sufficient, or the model will hunt for
-  // another route around the guard.
-  assert.match(r.err, /waiting is always sufficient/);
-});
-
-gated("a 👀 reaction after the push holds the merge until the review posts", () => {
-  // The whole point of the signal-aware wait: a reviewer that registered is a
-  // reviewer whose findings are still coming, so this waits past 3 minutes.
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({ headAgeMs: 5 * 60 * 1000, eyesAgoMs: 4 * 60 * 1000 }),
-  });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /👀 reaction from copilot-pull-request-reviewer/);
-  assert.match(r.err, /hard cap 20m/);
-  assert.match(r.err, /Wait 15m more|at most 15m more/);
-  assert.match(r.err, /waiting is always sufficient/);
-  assert.doesNotMatch(r.err, /--no-verify|--admin|skip the gate|disable the (gate|hook)/i);
-});
-
-gated("a pending (unsubmitted) review is an in-progress signal", () => {
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({
-      headAgeMs: 6 * 60 * 1000,
-      reviews: [{ state: "PENDING", submittedAt: null, author: { login: "coderabbitai" }, commit: null }],
-    }),
-  });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /pending \(unsubmitted\) review from coderabbitai/);
-});
-
-gated("one reviewer finishing does not discharge another reviewer's 👀", () => {
-  // Copilot posted on the head while CodeRabbit is still explicitly looking.
-  // Allowing here merges out from under the reviewer that announced itself,
-  // and its findings arrive after the merge — the whole race this gate closes.
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({
-      reviewedHeads: [HEAD],
-      headAgeMs: 5 * 60 * 1000,
-      eyesAgoMs: 4 * 60 * 1000,
-      eyesBy: "coderabbitai",
-    }),
-  });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /👀 reaction from coderabbitai/);
-  assert.match(r.err, /hard cap 20m/);
-});
-
-gated("a 👀 added AFTER a completed review is a fresh pass, not discharged", () => {
-  // Same reviewer, same head, no new push: it reviewed, then reacted again to
-  // start a second pass. Discharging by identity alone dropped that signal and
-  // merged out from under the pass in flight.
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({
-      reviewedHeads: [HEAD],
-      headAgeMs: 10 * 60 * 1000,
-      reviewedAgoMs: 6 * 60 * 1000,
-      eyesAgoMs: 2 * 60 * 1000,
-    }),
-  });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /👀 reaction from copilot-pull-request-reviewer/);
-});
-
-gated("a pending review is never discharged by a completed one", () => {
-  // The completed review is a previous pass; the unsubmitted one is current.
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({
-      headAgeMs: 6 * 60 * 1000,
-      reviews: [
-        { state: "APPROVED", submittedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(), author: { login: BOT }, commit: { oid: HEAD } },
-        { state: "PENDING", submittedAt: null, author: { login: BOT }, commit: null },
-      ],
-    }),
-  });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /pending \(unsubmitted\) review/);
-});
-
-gated("a reviewer that reviewed an earlier head is still expected on this one", () => {
-  // Inside the 7m inference cap: the measured re-review lands here (median
-  // 3m58s on the PR that motivated the split), so this is worth waiting for.
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({ reviewedHeads: [OLD_SHA], headAgeMs: 5 * 60 * 1000 }),
-  });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /reviewed an earlier head/);
-  assert.match(r.err, /inferred, not claimed/); // names the signal CLASS
-  assert.match(r.err, /copilot-pull-request-reviewer/);
-  assert.match(r.err, /hard cap 7m/);
-  assert.match(r.err, /at most 2m more/);
-  assert.match(r.err, /waiting is always sufficient/);
-});
-
-gated("an earlier-head signal discharges at 7m, naming who never came back", () => {
-  // The measured failure mode: a quota-limited bot reviewed one early head and
-  // never returned, so holding this inference to the 20m claim cap burned the
-  // full cap on every push for a reviewer that was never coming.
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({ reviewedHeads: [OLD_SHA], headAgeMs: 8 * 60 * 1000 }),
-  });
-  assert.equal(r.code, 0);
-  assert.match(r.err, /WARNING/);
-  assert.match(r.err, /allowing the merge/);
-  assert.match(r.err, /copilot-pull-request-reviewer/); // who did not return
-  assert.match(r.err, /hard cap 7m/);
-  assert.match(r.err, /stale/);
-});
-
-gated("a 👀 still holds to 20m where an earlier-head signal would be spent", () => {
-  // Same 8m head age as the discharge case above: the CLASS is what differs,
-  // because a 👀 is somebody affirmatively saying they are on it.
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({ headAgeMs: 8 * 60 * 1000, eyesAgoMs: 7 * 60 * 1000 }),
-  });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /👀 reaction from copilot-pull-request-reviewer/);
-  assert.match(r.err, /explicit claim/);
-  assert.match(r.err, /hard cap 20m/);
-});
-
-gated("a mixed set holds to the longest cap still applying", () => {
-  // coderabbitai claimed the head with a 👀 (20m); the Copilot bot only
-  // reviewed an earlier one (7m) and is spent at 8m. The merge waits out the
-  // claim, and the refusal still names the discharged inference.
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({
-      reviewedHeads: [OLD_SHA],
-      headAgeMs: 8 * 60 * 1000,
-      eyesAgoMs: 7 * 60 * 1000,
-      eyesBy: "coderabbitai",
-    }),
-  });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /👀 reaction from coderabbitai/);
-  assert.match(r.err, /hard cap 20m/);
-  assert.match(r.err, /at most 12m more/);
-  assert.match(r.err, /Already discharged/);
-  assert.match(r.err, /copilot-pull-request-reviewer reviewed an earlier head/);
-});
-
-gated("each holding signal reports its OWN remaining time and cap", () => {
-  // Both classes live at a 5m head age. Reporting only the longest cap hides
-  // that the inference expires in 2m while the claim still has 15m to run.
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({
-      reviewedHeads: [OLD_SHA],
-      headAgeMs: 5 * 60 * 1000,
-      eyesAgoMs: 4 * 60 * 1000,
-      eyesBy: "coderabbitai",
-    }),
-  });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /reviewed an earlier head.*2m left of its 7m cap/);
-  assert.match(r.err, /👀 reaction from coderabbitai.*15m left of its 20m cap/);
-  assert.match(r.err, /at most 15m more \(hard cap 20m/); // aggregate unchanged
-  assert.doesNotMatch(r.err, /Already discharged/); // nothing spent yet
-});
-
-gated("a spent 👀 does not shorten to the inference cap in a mixed set", () => {
-  // The inverse mix: the claim is the SHORT-lived one only because it is older
-  // than its own cap. Past 20m both classes are spent, so the merge proceeds
-  // and both are named.
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({
-      reviewedHeads: [OLD_SHA],
-      headAgeMs: 25 * 60 * 1000,
-      eyesAgoMs: 24 * 60 * 1000,
-      eyesBy: "coderabbitai",
-    }),
-  });
-  assert.equal(r.code, 0);
-  assert.match(r.err, /WARNING/);
-  assert.match(r.err, /👀 reaction from coderabbitai/);
-  assert.match(r.err, /reviewed an earlier head/);
-});
-
-gated("a late review recorded on an older oid is a signal, never settlement", () => {
-  // A review of the PREVIOUS head can be submitted after the new head's
-  // timestamp. Reading that as settlement would allow merging a head nobody
-  // has looked at — the exact stale-review race this gate closes. Only
-  // commit-OID equality settles; the late review makes the gate WAIT.
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({
-      headAgeMs: 60 * 1000,
-      reviews: [{
-        state: "COMMENTED",
-        author: { login: BOT },
-        commit: { oid: OLD_SHA },
-      }],
-    }),
-  });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /reviewed an earlier head/);
-});
-
-gated("unresolved threads outrank every allow path", () => {
-  // Reviewed head, stale signal, long past the cap: threads still block.
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({
-      reviewedHeads: [HEAD],
-      threads: [true, false],
-      headAgeMs: 3 * 60 * 60 * 1000,
-      eyesAgoMs: 2 * 60 * 60 * 1000,
-    }),
-  });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /1 unresolved review thread/);
-});
-
-// --- allows ---------------------------------------------------------------
-
-gated("a review on the head allows immediately, with no residual clock", () => {
-  // The head is 30s old — far inside every window. A completed review with
-  // nothing unresolved is settlement, so there is nothing left to wait for.
-  const r = run(bash("gh pr merge 7 --squash"), {
-    graphql: settlement({ reviewedHeads: [HEAD], threads: [true, true] }),
-  });
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-});
-
-gated("a reviewer's own 👀 does not outlive their review on the head", () => {
-  // The bot reacted at t+1m, then posted at t+2m. Counting its own discharged
-  // reaction as outstanding would hold every merge for the full cap after a
-  // complete review.
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({
-      reviewedHeads: [HEAD],
-      headAgeMs: 5 * 60 * 1000,
-      eyesAgoMs: 4 * 60 * 1000,
-      reviewedAgoMs: 3 * 60 * 1000,
-    }),
-  });
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-});
-
-gated("a reviewer that reviewed BOTH an earlier head and this one is done", () => {
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({ reviewedHeads: [OLD_SHA, HEAD], headAgeMs: 5 * 60 * 1000 }),
-  });
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-});
-
-gated("no signal past the 3-minute registration window is allowed", () => {
-  // The flat 10-minute clock burned seven more minutes here for nothing: bots
-  // that intend to review register within ~1-3 minutes, so silence is an
-  // answer.
-  const r = run(bash("gh pr merge 7 --squash"), {
-    graphql: settlement({ reviewedHeads: [], threads: [], headAgeMs: 4 * 60 * 1000 }),
-  });
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-});
-
-gated("a stale head with zero reviews is allowed (repo has no reviewers)", () => {
-  const r = run(bash("gh pr merge 7 --squash"), {
-    graphql: settlement({ reviewedHeads: [], threads: [], headAgeMs: 3 * 60 * 60 * 1000 }),
-  });
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-});
-
-gated("a signal that never produced a review is capped, allowed, and named", () => {
-  // A flaky 👀 must not lock merges in the repository forever.
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({ headAgeMs: 25 * 60 * 1000, eyesAgoMs: 24 * 60 * 1000 }),
-  });
-  assert.equal(r.code, 0);
-  assert.match(r.err, /WARNING/);
-  assert.match(r.err, /allowing the merge/);
-  assert.match(r.err, /👀 reaction from copilot-pull-request-reviewer/);
-  assert.match(r.err, /stale/);
-});
-
-gated("a 👀 reaction from BEFORE the head push is not a signal for it", () => {
-  // It belongs to the previous head; treating it as current would hold every
-  // subsequent push for the full cap.
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({ headAgeMs: 4 * 60 * 1000, eyesAgoMs: 9 * 60 * 1000 }),
-  });
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-});
-
-// --- fail open (never block every merge in the repo) ----------------------
-
-gated("gh failure allows with a degradation notice", () => {
-  const r = run(bash("gh pr merge 7 --squash"), { fail: true });
-  assert.equal(r.code, 0);
-  assert.match(r.err, /DEGRADED/);
-  assert.match(r.err, /allowing the merge/);
-});
-
-gated("a hung identity call times out, allows, and reports degradation", () => {
-  // The gh pr view call is bounded at ~1500ms; without its own timeout this
-  // would hang until the harness killed the hook.
-  const r = run(bash("gh pr merge 7 --squash"), { sleep: "3" });
-  assert.equal(r.code, 0);
-  assert.match(r.err, /DEGRADED/);
-});
-
-gated("non-JSON gh output allows with a degradation notice", () => {
-  const r = run(bash("gh pr merge 7 --squash"), { graphql: "<html>rate limited</html>" });
-  assert.equal(r.code, 0);
-  assert.match(r.err, /DEGRADED/);
-});
-
-gated("threads beyond one page are indeterminate, so allowed + degraded", () => {
-  const r = run(bash("gh pr merge 7 --squash"), {
-    graphql: settlement({ threads: Array(100).fill(true), threadTotal: 250 }),
-  });
-  assert.equal(r.code, 0);
-  assert.match(r.err, /DEGRADED/);
-  assert.match(r.err, /250 review threads/);
-});
-
-gated("an unreadable head commit date allows with a degradation notice", () => {
-  const r = run(bash("gh pr merge 7"), {
-    graphql: settlement({ reviewedHeads: [], committedDate: null }),
-  });
-  assert.equal(r.code, 0);
-  assert.match(r.err, /DEGRADED/);
-});
-
-// --- pass-through (must never touch gh) ----------------------------------
-
-gated("a non-merge command passes through silently without calling gh", () => {
-  const r = run(bash("git status"));
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-  assert.deepEqual(r.calls, []);
-});
-
-gated("gh pr view is not a merge", () => {
-  const r = run(bash("gh pr view 7 --json state"));
-  assert.equal(r.code, 0);
-  assert.deepEqual(r.calls, []);
-});
-
-gated("git merge is not a PR merge", () => {
-  const r = run(bash("git merge origin/main"));
-  assert.equal(r.code, 0);
-  assert.deepEqual(r.calls, []);
-});
-
-gated("malformed stdin allows silently", () => {
-  const r = run("not json");
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-  assert.deepEqual(r.calls, []);
-});
-
-gated("a missing tool_input allows silently", () => {
-  const r = run({ tool_name: "Bash" });
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-});
-
-// --- identity resolution -------------------------------------------------
-
-gated("a bare number calls gh pr view (the common path)", () => {
-  const r = run(bash("gh pr merge 7 --squash"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  // A bare number names the PR but not its repo, so identity must be resolved.
-  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
-});
-
-gated("a full PR URL resolves without calling gh pr view", () => {
-  const r = run(bash("gh pr merge https://github.com/novotnyllc/railyard/pull/7 --squash"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.deepEqual(r.calls, ["api graphql"]);
-});
-
-gated("-R owner/repo plus a number resolves without gh pr view", () => {
-  const r = run(bash("gh pr merge -R novotnyllc/railyard 7 --squash"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.deepEqual(r.calls, ["api graphql"]);
-});
-
-gated("--repo=owner/repo form also resolves without gh pr view", () => {
-  const r = run(bash("gh pr merge --repo=novotnyllc/railyard 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.deepEqual(r.calls, ["api graphql"]);
-});
-
-gated("a bare gh pr merge with no ref resolves via gh pr view", () => {
-  const r = run(bash("gh pr merge --squash"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
-});
-
-gated("a value-flag argument is not mistaken for the PR number", () => {
-  const r = run(bash("gh pr merge --match-head-commit 7 --squash"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  // No usable positional, so identity resolution is required.
-  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
-});
-
-gated("gh pr view failing is its own fail-open path", () => {
-  const r = run(bash("gh pr merge 7"), { view: "not json" });
-  assert.equal(r.code, 0);
-  assert.match(r.err, /DEGRADED/);
-  assert.deepEqual(r.calls, ["pr view"]); // never reached graphql
-});
-
-gated("the REST merge endpoint is gated, not skipped", () => {
-  const r = run(
-    bash("gh api --method PUT repos/novotnyllc/railyard/pulls/7/merge"),
-    { graphql: settlement({ threads: [false] }) },
-  );
-  assert.equal(r.code, 2);
-  assert.deepEqual(r.calls, ["api graphql"]); // owner/repo/number came from the path
-});
-
-// --- Codex command shapes ------------------------------------------------
-
-gated("Codex shell argv array is extracted and gated", () => {
-  const r = run({
-    tool_name: "shell",
-    tool_input: {
-      command: ["bash", "-lc", "gh pr merge 7 --squash"],
-      timeout_ms: 120000,
-      working_directory: "/tmp",
-    },
-  }, { graphql: settlement({ threads: [false, false] }) });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /2 unresolved review thread/);
-});
-
-gated("Codex exec_command string cmd is extracted and gated", () => {
-  const r = run({
-    tool_name: "exec_command",
-    tool_input: { cmd: "gh pr merge 7 --squash", yield_time_ms: 250 },
-  }, { graphql: settlement({ reviewedHeads: [], headAgeMs: 60 * 1000 }) });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /no reviewer has registered/);
-});
-
-gated("Codex unified_exec input array is extracted and gated", () => {
-  const r = run({
-    tool_name: "unified_exec",
-    tool_input: { input: ["bash", "-lc", "gh pr merge 7"] },
-  }, { graphql: settlement({ threads: [false] }) });
-  assert.equal(r.code, 2);
-  assert.match(r.err, /1 unresolved review thread/);
-});
-
-gated("Codex local_shell argv array that is not a merge passes through", () => {
-  const r = run({
-    tool_name: "local_shell",
-    tool_input: { command: ["bash", "-lc", "git status --short"] },
-  });
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-  assert.deepEqual(r.calls, []);
-});
-
-// --- parser regressions (each of these once defeated the gate) -----------
-
-gated("a global --repo BEFORE the pr subcommand is still gated", () => {
-  // gh accepts global flags before the subcommand; requiring `pr` immediately
-  // after `gh` let this real, documented form pass through silently.
-  const r = run(bash("gh --repo novotnyllc/railyard pr merge 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.deepEqual(r.calls, ["api graphql"]); // -R supplied owner/repo
-});
-
-gated("a global -R before the pr subcommand is still gated", () => {
-  const r = run(bash("gh -R novotnyllc/railyard pr merge 7 --squash"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.deepEqual(r.calls, ["api graphql"]);
-});
-
-gated("gh at an absolute path is still gated", () => {
-  const r = run(bash("/opt/homebrew/bin/gh pr merge 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-});
-
-gated("an env-prefixed invocation is still gated", () => {
-  const r = run(bash("GH_HOST=github.com gh pr merge 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-});
-
-gated("a decoy phrase in an earlier segment cannot hijack the identity", () => {
-  // The decoy names PR 5; the real merge targets PR 8. Reading the first
-  // textual "gh pr merge" resolved 5 — verifying the wrong PR, whose settled
-  // state could wrongly ALLOW this merge.
-  const r = run(
-    bash('git commit -m "docs: gh pr merge 5 workflow notes" && gh pr merge 8'),
-    { view: JSON.stringify({ number: 8, url: "https://github.com/novotnyllc/railyard/pull/8" }),
-      graphql: settlement({ threads: [false] }) },
-  );
-  assert.equal(r.code, 2);
-  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
-});
-
-gated("a --repo on an unrelated earlier gh command is not borrowed", () => {
-  // `--repo attacker/decoy` belongs to `gh issue list`, not to the merge.
-  const r = run(
-    bash("gh issue list --repo attacker/decoy && gh pr merge 8"),
-    { view: JSON.stringify({ number: 8, url: "https://github.com/novotnyllc/railyard/pull/8" }),
-      graphql: settlement({ threads: [false] }) },
-  );
-  assert.equal(r.code, 2);
-  // No repo on the merge segment, so identity must be resolved, not assumed.
-  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
-});
-
-gated("gh pr merge --help is not a merge", () => {
-  const r = run(bash("gh pr merge --help"));
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-  assert.deepEqual(r.calls, []);
-});
-
-gated("gh pr merge -h is not a merge", () => {
-  const r = run(bash("gh pr merge -h"));
-  assert.equal(r.code, 0);
-  assert.deepEqual(r.calls, []);
-});
-
-gated("a raw GraphQL merge mutation is reported, never silently passed", () => {
-  const r = run(bash(
-    "gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: \"PR_x\"}) { clientMutationId } }'",
-  ));
-  assert.equal(r.code, 0); // fail open: no repo/number to verify
-  assert.match(r.err, /DEGRADED/);
-  assert.match(r.err, /mergePullRequest/);
-  assert.deepEqual(r.calls, []);
-});
-
-gated("a merge inside a bash -lc string wrapper is still gated", () => {
-  const r = run(bash('bash -lc "gh pr merge 7 --squash"'), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-});
-
-gated("GH_REPO on the merge command retargets the check", () => {
-  // Discarding the assignment verified PR 7 in the CURRENT repo, so a settled
-  // local PR #7 could vouch for an unsettled merge in the target repo.
-  const r = run(bash("GH_REPO=other/target gh pr merge 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.deepEqual(r.calls, ["api graphql"]); // GH_REPO supplied owner/repo
-});
-
-gated("env-prefixed GH_REPO through an env wrapper also retargets", () => {
-  const r = run(bash("env GH_REPO=other/target gh pr merge 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.deepEqual(r.calls, ["api graphql"]);
-});
-
-gated("EVERY merge in a chained command is checked, not just the first", () => {
-  // A shell runs both. Checking only the first let `gh pr merge 5 && gh pr
-  // merge 8` merge PR 8 unverified as soon as PR 5 was settled.
-  const r = run(bash("gh pr merge 5 && gh pr merge 8"), {
-    graphql: settlement({ reviewedHeads: [HEAD], threads: [true] }),
-  });
-  assert.equal(r.code, 0);
-  assert.equal(r.calls.filter((c) => c === "api graphql").length, 2);
-});
-
-gated("an unsettled second merge condemns the whole command", () => {
-  const r = run(bash("gh pr merge 5 && gh pr merge 8"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-});
-
-gated("gh api {owner}/{repo} placeholders resolve, never query literally", () => {
-  // The placeholders expand from the current repo; querying `{owner}` made the
-  // settlement call fail, degrade open, and let the real merge through.
-  const r = run(bash("gh api --method PUT repos/{owner}/{repo}/pulls/7/merge"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
-});
-
-gated("a host-qualified -R HOST/OWNER/REPO selector is honored", () => {
-  const r = run(bash("gh -R github.example.com/owner/repo pr merge 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.deepEqual(r.calls, ["api graphql"]); // selector parsed, not dropped
-});
-
-gated("a host-qualified selector routes the gh calls at that host", () => {
-  // Parsing the selector but discarding its host left the gate querying
-  // github.com while the merge targeted the enterprise host — usually
-  // degrading open on an unsettled merge.
-  const r = run(bash("gh -R github.example.com/owner/repo pr merge 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.equal(r.hosts.at(-1), "github.example.com");
-});
-
-gated("a plain OWNER/REPO selector sets no host override", () => {
-  const r = run(bash("gh -R owner/repo pr merge 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.equal(r.hosts.at(-1), "");
-});
-
-gated("--disable-auto turns auto-merge OFF and is not a merge", () => {
-  // This is the mitigation to reach for during a settlement window; refusing
-  // it blocks the very command that stands the merge down.
-  const r = run(bash("gh pr merge 7 --disable-auto"));
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-  assert.deepEqual(r.calls, []);
-});
-
-gated("--auto is still a merge (it merges once checks pass)", () => {
-  const r = run(bash("gh pr merge 7 --auto --squash"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-});
-
-gated("the documented AGENTS.md verify command lists every CI suite", () => {
-  // AGENTS.md states its list is exactly what validate.yml runs; drift means
-  // the documented local path silently skips a suite.
-  const root = new URL("../../../", import.meta.url);
-  const agents = readFileSync(new URL("AGENTS.md", root), "utf8");
-  const workflow = readFileSync(new URL(".github/workflows/validate.yml", root), "utf8");
-  const suites = (text) =>
-    [...text.matchAll(/plugins\/railyard\/[^\s\\]+\.test\.mjs/g)].map((m) => m[0]).sort();
-  assert.deepEqual(suites(agents), [...new Set(suites(workflow))].sort());
-});
-
-gated("--help as a flag VALUE does not skip the gate", () => {
-  // `gh pr merge 7 --body --help` uses --help as the commit body. A token-wide
-  // scan treated it as the help flag and skipped the gate entirely.
-  const r = run(bash("gh pr merge 7 --body --help"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-});
-
-gated("gh api --hostname routes the settlement query at that host", () => {
-  const r = run(
-    bash("gh api --hostname github.example.com --method PUT repos/owner/repo/pulls/7/merge"),
-    { graphql: settlement({ threads: [false] }) },
-  );
-  assert.equal(r.code, 2);
-  assert.equal(r.hosts.at(-1), "github.example.com");
-});
-
-gated("a batch of merges cannot outlive the whole-process budget", () => {
-  // Per-call limits alone let N sequential merges exceed the harness's 5s cap,
-  // which kills the hook before it returns ANY verdict. The shared budget must
-  // end the run itself, fail-open, well inside the cap.
+  return setup.finish(result);
+}
+
+function refused(result, reason) {
+  assert.equal(result.code, 2, result.err);
+  assert.match(result.err, /Merge refused/);
+  if (reason) assert.match(result.err, reason);
+  assert.match(result.err, /ce-babysit-pr/);
+  assert.doesNotMatch(result.err, /allowing the merge|waiting is always sufficient|hard cap/i);
+}
+
+function allowed(result, calls = ["api graphql"]) {
+  assert.equal(result.code, 0, result.err);
+  assert.equal(result.err, "");
+  assert.deepEqual(result.calls, calls);
+}
+
+gated("CE pipeline result allows a pinned current PR without any reviewer or timing query", () => {
+  const result = run(bash(fullMerge));
+  allowed(result);
+  assert.match(result.args, /baseRef\{target\{oid\}\}/);
+  assert.doesNotMatch(result.args, /reviews|reviewThreads|reactions|committedDate/);
+});
+
+gated("interactive CE settlement accepts no configured checks; pipeline does not", () => {
+  const noChecks = ({ snapshot }) => { snapshot.checks_present = false; snapshot.all_checks_ok = false; };
+  allowed(run(bash(fullMerge), { mode: "interactive", mutate: noChecks }));
+  refused(run(bash(fullMerge), { mutate: noChecks }), /pipeline check conditions/);
+});
+
+gated("inline snapshot selection is honored", () => {
+  allowed(run((filename) => bash(`RAILYARD_CE_SNAPSHOT='${filename}' RAILYARD_CE_MODE=pipeline ${fullMerge}`), { noPath: true }));
+});
+
+for (const [name, fixtures, reason] of [
+  ["missing snapshot path", { noPath: true }, /RAILYARD_CE_SNAPSHOT/],
+  ["missing snapshot file", { noSnapshot: true }, /CE snapshot is missing/],
+  ["malformed snapshot", { snapshotText: "not JSON" }, /invalid JSON/],
+  ["snapshot array", { snapshotText: "[]" }, /JSON object/],
+  ["raw state instead of snapshot stdout", { snapshotText: JSON.stringify(evidence().state) }, /same PR/],
+  ["missing sibling state", { noState: true }, /state.json is missing/],
+  ["malformed sibling state", { stateText: "{" }, /invalid JSON/],
+  ["unknown mode", { mode: "automatic" }, /pipeline or interactive/],
+]) gated(`${name} refuses before any network read`, () => {
+  const result = run(bash(fullMerge), fixtures);
+  refused(result, reason);
+  assert.deepEqual(result.calls, []);
+});
+
+for (const [name, change, reason] of [
+  ["PR identity", ({ state }) => { state.pr.number = 8; }, /same PR/],
+  ["host identity", ({ state }) => { state.pr.url = state.pr.url.replace("github.com", "example.com"); }, /same PR/],
+  ["invocation", ({ state }) => { state.invocation_id = "new-invocation"; }, /latest invocation/],
+  ["tick", ({ state }) => { state.tick++; }, /latest invocation/],
+  ["head", ({ state }) => { state.head_sha = OTHER; }, /latest invocation/],
+  ["base", ({ state }) => { state.base.oid = OTHER; }, /same current base/],
+  ["base ref", ({ state }) => { state.base.ref = "release"; }, /same current base/],
+  ["base repository", ({ snapshot, state }) => { snapshot.base.repository = state.base.repository = "other/repo"; }, /same current base/],
+  ["state stop", ({ state }) => { state.stop_reason = "needs-human"; }, /stop reason/],
+  ["snapshot stop", ({ snapshot }) => { snapshot.stop_reason = "max-runtime"; }, /stop reason/],
+  ["old activity", ({ state }) => { state.last_activity_at = new Date(Date.now() - 301_000).toISOString(); }, /stale/],
+  ["future activity", ({ state }) => { state.last_activity_at = new Date(Date.now() + 60_000).toISOString(); }, /stale/],
+  ["missing activity", ({ state }) => { delete state.last_activity_at; }, /stale/],
+  ["later watch observation with the same tick", ({ snapshot }) => { snapshot.invocation_wall_elapsed_seconds -= 2; }, /predates/],
+  ["mismatched observation anchor", ({ state }) => { state.started_at = new Date(0).toISOString(); }, /predates/],
+]) gated(`CE ${name} mismatch refuses`, () => {
+  refused(run(bash(fullMerge), { mutate: change }), reason);
+});
+
+for (const [field, value] of [
+  ["pr_state", "MERGED"], ["pr_is_draft", true], ["mergeability_certain", false],
+  ["mergeable", "UNKNOWN"], ["merge_state_status", "UNKNOWN"],
+  ["checks_terminal", false], ["has_failing_checks", true], ["checks_awaiting_approval", 1],
+  ["blocked_external", true], ["all_checks_ok", false], ["checks_present", undefined],
+  ["base_ref_blocker", "probe-error"], ["stack_blocker", {}],
+  ["branch_currency_blocker", {}], ["unrequested_base_merge", {}],
+  ["unrequested_base_merge_pending", true], ["open_needs_human", 1],
+  ["needs_human_residuals", [{ type: "choice" }]], ["needs_human_ids", ["id"]],
+]) gated(`CE ${field} stop condition refuses`, () => {
+  refused(run(bash(fullMerge), { mutate: ({ snapshot }) => { snapshot[field] = value; } }));
+});
+
+for (const field of ["ci", "threads", "comments", "needs_human"]) gated(`CE actionable count ${field} refuses`, () => {
+  refused(run(bash(fullMerge), { mutate: ({ snapshot }) => { snapshot.counts[field] = 1; } }), /unresolved work/);
+});
+for (const field of ["ci", "threads", "comments"]) gated(`CE actionable ${field} array cannot be hidden by zero counts`, () => {
+  refused(run(bash(fullMerge), { mutate: ({ snapshot }) => { snapshot.actionable[field] = [{}]; } }), /unresolved work/);
+});
+
+gated("missing computed flags cannot read as successful CE output", () => {
+  for (const field of ["checks_terminal", "blocked_external", "base_ref_blocker", "open_needs_human", "unrequested_base_merge_pending"]) {
+    refused(run(bash(fullMerge), { mutate: ({ snapshot }) => { delete snapshot[field]; } }));
+  }
+});
+
+gated("non-regular or oversized CE files refuse without blocking on a FIFO", () => {
+  for (const kind of ["fifo", "directory", "oversized"]) {
+    const started = Date.now();
+    const result = run(bash(fullMerge), { prepareFiles: ({ snapshotPath }) => {
+      if (kind === "oversized") truncateSync(snapshotPath, 8 * 1024 * 1024 + 1);
+      else {
+        rmSync(snapshotPath);
+        if (kind === "directory") mkdirSync(snapshotPath);
+        else assert.equal(spawnSync("mkfifo", [snapshotPath]).status, 0);
+      }
+    } });
+    refused(result, /regular JSON file/);
+    assert.ok(Date.now() - started < 2000);
+    assert.deepEqual(result.calls, []);
+  }
+});
+
+for (const [name, change] of [
+  ["head", (live) => { live.headRefOid = OTHER; }],
+  ["current base", (live) => { live.baseRef.target.oid = OTHER; }],
+  ["base ref", (live) => { live.baseRefName = "release"; }],
+  ["missing current base even with historical oid", (live) => { live.baseRefOid = BASE; delete live.baseRef; }],
+  ["PR identity", (live) => { live.url = live.url.replace("/7", "/8"); }],
+  ["terminal PR", (live) => { live.state = "MERGED"; }],
+  ["draft PR", (live) => { live.isDraft = true; }],
+  ["unknown mergeability", (live) => { live.mergeable = "UNKNOWN"; }],
+  ["non-clean status", (live) => { live.mergeStateStatus = "BLOCKED"; }],
+]) gated(`live ${name} invalidates CE evidence`, () => {
+  refused(run(bash(fullMerge), { mutate: ({ live }) => change(live) }), /live PR/);
+});
+
+gated("GitHub errors and malformed responses fail closed", () => {
+  for (const fixtures of [{ fail: true }, { graphql: "not JSON" }, { graphql: JSON.stringify({ errors: [{ message: "unavailable" }], data: null }) }]) {
+    refused(run(bash(fullMerge), fixtures));
+  }
+});
+
+gated("a hung identity query refuses within the native five-second hook cap", () => {
   const started = Date.now();
-  const r = run(
-    bash("gh pr merge 5 && gh pr merge 6 && gh pr merge 7 && gh pr merge 8"),
-    { sleep: "2" },
-  );
-  const elapsed = Date.now() - started;
-  assert.equal(r.code, 0); // degraded, never a hang
-  assert.match(r.err, /DEGRADED/);
-  assert.ok(elapsed < 5000, `took ${elapsed}ms, must stay under the 5s cap`);
+  refused(run(bash(fullMerge), { sleep: "4" }));
+  assert.ok(Date.now() - started < 5000);
 });
 
-gated("inline GH_TOKEN is forwarded to the settlement calls", () => {
-  // Without it the settlement query is unauthenticated and degrades open,
-  // while the shell's merge succeeds using the very token we ignored.
-  const r = run(bash("GH_TOKEN=ghp_secret gh pr merge 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.equal(r.tokens.at(-1), "ghp_secret");
+gated("the merge must atomically pin the full CE head", () => {
+  for (const suffix of ["", `--match-head-commit ${OTHER}`, `--match-head-commit ${HEAD.slice(0, 7)}`]) {
+    const result = run(bash(`gh pr merge ${URL} --squash ${suffix}`));
+    refused(result, /must pin CE's head/);
+    assert.deepEqual(result.calls, []);
+  }
 });
 
-gated("an ambient enterprise GH_HOST cannot capture a github.com URL", () => {
-  // The URL names the host; leaving it unset let the ambient enterprise host
-  // decide, so the gate verified an unrelated PR on the wrong GitHub.
-  const r = run(
-    bash("gh pr merge https://github.com/owner/repo/pull/7"),
-    { ambientHost: "github.example.com", graphql: settlement({ threads: [false] }) },
-  );
-  assert.equal(r.code, 2);
-  assert.equal(r.hosts.at(-1), "github.com");
+gated("--auto cannot schedule a future merge against a point-in-time CE result", () => {
+  refused(run(bash(`${fullMerge} --auto`)), /--auto can queue/);
+  allowed(run(bash(`${fullMerge} --auto=false`)));
 });
 
-gated("a merge inside shell grouping is still gated", () => {
-  const r = run(bash("(gh pr merge 7)"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
+gated("REST merge accepts exactly one literal head sha in either field order", () => {
+  for (const flags of [`-f sha=${HEAD} -f merge_method=squash`, `-f merge_method=squash --raw-field=sha=${HEAD}`, `-Fsha=${HEAD}`]) {
+    allowed(run(bash(`gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge ${flags}`)));
+  }
 });
 
-gated("a merge behind an if-condition is still gated", () => {
-  const r = run(bash("if gh pr merge 7; then echo merged; fi"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
+gated("REST head proof refuses missing, duplicate, dynamic or file-based sha", () => {
+  for (const flags of ["", `-f sha=${HEAD} -f sha=${HEAD}`, "-f sha=$HEAD", `--input payload.json -f sha=${HEAD}`]) {
+    refused(run(bash(`gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge ${flags}`)), /literal sha/);
+  }
 });
 
-gated("-A consumes its value and does not become the PR ref", () => {
-  const r = run(bash("gh pr merge -A dev@example.com 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
+// Preserve the mature shell parser's command, quote, wrapper, grouping and
+// selector regressions. These valid pinned commands must reach live identity.
+const parserCommands = [
+  `gh pr merge 7 --squash ${PIN}`,
+  `gh pr merge --squash ${PIN}`,
+  `gh --repo novotnyllc/railyard pr merge 7 ${PIN}`,
+  `gh -R novotnyllc/railyard pr merge 7 ${PIN}`,
+  `gh pr merge --repo=novotnyllc/railyard 7 ${PIN}`,
+  `gh -Rnovotnyllc/railyard pr merge 7 ${PIN}`,
+  `/opt/homebrew/bin/gh pr merge 7 ${PIN}`,
+  `GH_REPO=novotnyllc/railyard gh pr merge 7 ${PIN}`,
+  `env GH_REPO=novotnyllc/railyard gh pr merge 7 ${PIN}`,
+  `bash -lc 'gh pr merge 7 ${PIN}'`,
+  `env bash -lc 'gh pr merge 7 ${PIN}'`,
+  `env -S 'gh pr merge 7 ${PIN}'`,
+  `(gh pr merge 7 ${PIN})`,
+  `{ gh pr merge 7 ${PIN}; }`,
+  `if gh pr merge 7 ${PIN}; then echo merged; fi`,
+  `case yes in yes) gh pr merge 7 ${PIN};; esac`,
+  `echo $(gh pr merge 7 ${PIN})`,
+  `echo "$(gh pr merge 7 ${PIN})"`,
+  `echo \`gh pr merge 7 ${PIN}\``,
+  `gh pr merge 7 --body --help ${PIN}`,
+  `gh pr merge 7 --body "normal text --help" ${PIN}`,
+  `gh pr merge 7 --body "text \\" --help" ${PIN}`,
+  `gh pr merge -A dev@example.com 7 ${PIN}`,
+  `echo preparing\ngh pr merge 7 ${PIN}`,
+  `gh pr merge \\\n7 ${PIN}`,
+  `cat <<<hello\ngh pr merge 7 ${PIN}`,
+  `env -u GH_HOST gh pr merge 7 ${PIN}`,
+  `gh api -iXPUT repos/novotnyllc/railyard/pulls/7/merge -f sha=${HEAD}`,
+  `gh api -X PUT repos/{owner}/{repo}/pulls/7/merge -f sha=${HEAD}`,
+  `gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge --jq --help -f sha=${HEAD}`,
+];
+for (const [index, command] of parserCommands.entries()) gated(`pinned shell parser regression ${index + 1}`, () => {
+  const result = run(bash(command));
+  assert.equal(result.code, 0, `${command}\n${result.err}`);
+  assert.equal(result.err, "");
+  assert.equal(result.calls.at(-1), "api graphql");
 });
 
-gated("a merge inside a case block is still gated", () => {
-  const r = run(bash("case yes in yes) gh pr merge 7;; esac"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
+gated("decoy prose and unrelated repo flags cannot select the merge target", () => {
+  for (const prefix of ['git commit -m "docs: gh pr merge 5 workflow"', 'printf "x && gh pr merge 5"', 'gh issue list --repo attacker/decoy']) {
+    const result = run(bash(`${prefix} && gh pr merge 8 ${PIN}`), { url: URL.replace("/7", "/8") });
+    allowed(result, ["pr view", "api graphql"]);
+    assert.match(result.args, /number=8/);
+  }
 });
 
-gated("a merge inside command substitution is still gated", () => {
-  const r = run(bash("echo $(gh pr merge 7)"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
+gated("an explicit PR target cannot borrow another PR's CE evidence", () => {
+  refused(run(bash(`gh pr merge https://github.com/novotnyllc/railyard/pull/8 ${PIN}`)), /not the selected PR #8/);
 });
 
-gated("an attached -Rowner/repo selector is parsed, not treated as a flag", () => {
-  // Recorded as a boolean flag, the selector was lost and the gate resolved
-  // PR 7 in the CURRENT repo — a settled local PR authorizing a foreign merge.
-  const r = run(bash("gh -Rother/target pr merge 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.deepEqual(r.calls, ["api graphql"]); // resolved without gh pr view
+gated("REST header prose cannot become the endpoint", () => {
+  const result = run(bash(`gh api -H 'X-Test: repos/decoy/settled/pulls/5/merge' -X PUT repos/novotnyllc/railyard/pulls/8/merge -f sha=${HEAD}`), { url: URL.replace("/7", "/8") });
+  allowed(result);
+  assert.match(result.args, /number=8/);
 });
 
-gated("--hostname survives when the repo itself is a placeholder", () => {
-  // Placeholders mean no repo object; the host must still reach the query.
-  const r = run(
-    bash("gh api --hostname github.example.com -X PUT repos/{owner}/{repo}/pulls/7/merge"),
-    {
-      // gh pr view, run at the enterprise host, returns an enterprise URL.
-      view: JSON.stringify({
-        number: 7,
-        url: "https://github.example.com/owner/repo/pull/7",
-      }),
-      graphql: settlement({ threads: [false] }),
-    },
-  );
-  assert.equal(r.code, 2);
-  // Both calls must reach the enterprise host: the identity lookup because the
-  // placeholders expand there, the settlement query because that is where the
-  // PR lives.
-  assert.deepEqual(r.hosts, ["github.example.com", "github.example.com"]);
+gated("one CE snapshot cannot authorize several merge commands", () => {
+  const result = run(bash(`${fullMerge} && ${fullMerge}`));
+  refused(result, /one PR per command/);
+  assert.deepEqual(result.calls, []);
 });
 
-gated("--jq taking --help as its value does not skip the gate", () => {
-  const r = run(
-    bash("gh api -X PUT repos/o/r/pulls/7/merge --jq --help"),
-    { graphql: settlement({ threads: [false] }) },
-  );
-  assert.equal(r.code, 2);
+gated("unknown raw GraphQL merge and conditional cwd refuse actionably", () => {
+  refused(run(bash('gh api graphql -f query=\'mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}\'')), /mergePullRequest is unsupported/);
+  for (const prefix of ["false && cd /tmp", "if true; then cd /tmp; fi"]) {
+    const result = run(bash(`${prefix}; ${fullMerge}`));
+    refused(result, /conditional `cd`/);
+    assert.deepEqual(result.calls, []);
+  }
 });
 
-gated("a quoted multiword --body value cannot smuggle --help", () => {
-  // A whitespace split shredded the quoted value, so `--help` looked like a
-  // real option and the gate skipped a command gh would actually merge.
-  const r = run(bash('gh pr merge 7 --body "normal text --help"'), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
+gated("single-quoted command substitution is literal data", () => {
+  allowed(run(bash("printf '%s\\n' '$(gh pr merge 7)'"), { noPath: true }), []);
 });
 
-gated("a quoted separator cannot manufacture a decoy segment", () => {
-  // Previously an accepted ceiling; quote-aware tokenizing closes it.
-  const r = run(
-    bash('printf "x && gh pr merge 5" && gh pr merge 8'),
-    { view: JSON.stringify({ number: 8, url: "https://github.com/novotnyllc/railyard/pull/8" }),
-      graphql: settlement({ threads: [false] }) },
-  );
-  assert.equal(r.code, 2);
-  // Only the REAL merge is checked — the quoted decoy never becomes a command.
-  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
+gated("quoted heredoc-looking text cannot hide a following merge", () => {
+  for (const literal of ["'<<EOF'", '"<<EOF"']) {
+    refused(run(bash(`printf '%s\\n' ${literal}\ngh pr merge 7`), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+  }
 });
 
-gated("gh api does not take its host from GH_REPO", () => {
-  // GH_REPO fills {owner}/{repo} for gh api; it does not select the host.
-  // Promoting its host queried the enterprise host while the PUT went to
-  // github.com.
-  const r = run(
-    bash("GH_REPO=github.example.com/foo/bar gh api -X PUT repos/owner/repo/pulls/7/merge"),
-    { graphql: settlement({ threads: [false] }) },
-  );
-  assert.equal(r.code, 2);
-  assert.equal(r.hosts.at(-1), "");
+gated("a multiline quoted heredoc-looking literal cannot hide a following merge", () => {
+  for (const quote of ["'", '"']) {
+    const literal = `printf '%s\\n' ${quote}some literal text\n<<EOF\n${quote}`;
+    allowed(run(bash(literal), { noPath: true }), []);
+    refused(run(bash(`${literal}\ngh pr merge 7`), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+  }
 });
 
-gated("inline XDG_CONFIG_HOME reaches the settlement calls", () => {
-  const r = run(bash("XDG_CONFIG_HOME=/tmp/profile gh pr merge 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.equal(r.xdg.at(-1), "/tmp/profile");
+gated("mergePullRequest prose in REST bodies or GraphQL output filters is data", () => {
+  for (const command of [
+    "gh api repos/example/project/issues/7/comments -f body='The mergePullRequest gate is fixed.'",
+    "gh api graphql -f query='query { viewer { login } }' --jq '.mergePullRequest'",
+  ]) allowed(run(bash(command), { noPath: true }), []);
 });
 
-gated("an unquoted newline separates commands", () => {
-  // A multiline script is ordinary; treating the newline as whitespace left
-  // the merge inside an `echo` segment and it ran with no gate at all.
-  const r = run(bash("echo preparing\ngh pr merge 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
+gated("false boolean help and disable-auto flags do not hide a merge", () => {
+  for (const flag of ["--help=false", "--help=0", "-h=false", "--disable-auto=false", "--disable-auto=F"]) {
+    refused(run(bash(`gh pr merge 7 --squash ${flag}`), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+    allowed(run(bash(`${fullMerge} ${flag}`)));
+  }
 });
 
-gated("a cd before the merge moves the identity lookup too", () => {
-  // `cd ../other && gh pr merge 7` resolves PR 7 in ../other; checking PR 7
-  // here instead lets a settled local PR authorize an unsettled foreign one.
-  const target = mkdtempSync(path.join(tmpdir(), "merge-gate-cwd-"));
-  const r = run(bash(`cd ${target} && gh pr merge 7`), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  // macOS reports /private/var for /var, so compare the resolved leaf.
-  assert.ok(
-    r.cwds.every((c) => c.endsWith(path.basename(target))),
-    `gh ran in ${JSON.stringify(r.cwds)}, expected ${target}`,
-  );
-  rmSync(target, { recursive: true, force: true });
+for (const command of [
+  "git status", "gh pr view 7 --json state", "git merge origin/main",
+  "gh pr merge --help", "gh pr merge -h", "gh pr merge 7 --disable-auto",
+  "gh api repos/novotnyllc/railyard/pulls/7/merge", "gh api -X GET repos/novotnyllc/railyard/pulls/7/merge",
+  "cat >release.sh <<'EOF'\ngh pr merge 7\nEOF",
+]) gated(`non-merge command passes without CE evidence: ${command.split("\n")[0]}`, () => {
+  allowed(run(bash(command), { noPath: true }), []);
 });
 
-gated("a header value cannot decoy the gh api endpoint", () => {
-  const r = run(
-    bash("gh api -H 'X-Test: repos/decoy/settled/pulls/5/merge' -X PUT repos/real/unsettled/pulls/8/merge"),
-    { graphql: settlement({ threads: [false] }) },
-  );
-  assert.equal(r.code, 2);
-  assert.match(r.err, /PR #8/); // the real endpoint, not the header decoy
+gated("malformed or unrelated hook envelopes pass silently", () => {
+  for (const input of ["not json", { tool_name: "Bash" }, null, [], { ...bash(fullMerge), hook_event_name: "PostToolUse" }]) {
+    allowed(run(input, { noPath: true }), []);
+  }
 });
 
-gated("a backslash line continuation does not become the PR ref", () => {
-  const r = run(bash("gh pr merge \\\n7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.deepEqual(r.calls, ["pr view", "api graphql"]);
+gated("canonical native Bash and legacy shell argument forms use the same contract", () => {
+  for (const input of [
+    bash(fullMerge),
+    { tool_name: "shell", tool_input: { command: ["bash", "-lc", fullMerge] } },
+    { tool_name: "local_shell", tool_input: { command: ["gh", "pr", "merge", URL, "--body", "normal text --help", "--match-head-commit", HEAD] } },
+    { tool_name: "exec_command", tool_input: { cmd: fullMerge } },
+    { tool_name: "unified_exec", tool_input: { input: ["bash", "-lc", fullMerge] } },
+  ]) allowed(run(input));
 });
 
-gated("the shell tool's working_directory is where the lookup runs", () => {
-  // Codex shell calls carry a per-call directory; the merge runs there.
-  const target = mkdtempSync(path.join(tmpdir(), "merge-gate-wd-"));
-  const r = run({
-    tool_name: "shell",
-    tool_input: { command: ["bash", "-lc", "gh pr merge 7"], working_directory: target },
-  }, { graphql: settlement({ threads: [false] }) });
-  assert.equal(r.code, 2);
-  assert.ok(
-    r.cwds.every((c) => c.endsWith(path.basename(target))),
-    `gh ran in ${JSON.stringify(r.cwds)}, expected ${target}`,
-  );
-  rmSync(target, { recursive: true, force: true });
+gated("literal argv separators do not manufacture a merge command", () => {
+  allowed(run({ tool_name: "shell", tool_input: { command: ["echo", ";", "gh", "pr", "merge", "7"] } }, { noPath: true }), []);
 });
 
-gated("a subshell cd does not leak into the merge that follows it", () => {
-  // `(cd ../other && run-tests); gh pr merge 7` merges in the ORIGINAL repo.
-  const target = mkdtempSync(path.join(tmpdir(), "merge-gate-sub-"));
-  const base = mkdtempSync(path.join(tmpdir(), "merge-gate-base-"));
-  const r = run({
-    tool_name: "Bash",
-    tool_input: {
-      command: `(cd ${target} && echo testing); gh pr merge 7`,
-      working_directory: base,
-    },
-  }, { graphql: settlement({ threads: [false] }) });
-  assert.equal(r.code, 2);
-  assert.ok(
-    r.cwds.every((c) => c.endsWith(path.basename(base))),
-    `gh ran in ${JSON.stringify(r.cwds)}, expected ${base}`,
-  );
-  rmSync(target, { recursive: true, force: true });
-  rmSync(base, { recursive: true, force: true });
+gated("enterprise host selectors and plain github.com URLs bind the correct host", () => {
+  const enterprise = "https://github.example.com/owner/repo/pull/7";
+  for (const command of [
+    `gh -R github.example.com/owner/repo pr merge 7 ${PIN}`,
+    `GH_HOST=github.example.com gh pr merge 7 ${PIN}`,
+    `gh api --hostname github.example.com -X PUT repos/owner/repo/pulls/7/merge -f sha=${HEAD}`,
+    `gh api --hostname github.example.com -X PUT repos/{owner}/{repo}/pulls/7/merge -f sha=${HEAD}`,
+  ]) {
+    const result = run(bash(command), { url: enterprise });
+    assert.equal(result.code, 0, result.err);
+    assert.ok(result.hosts.every((host) => host === "github.example.com"));
+  }
+  const publicResult = run(bash(fullMerge), { ambientHost: "github.example.com" });
+  allowed(publicResult);
+  assert.equal(publicResult.hosts.at(-1), "github.com");
 });
 
-gated("a heredoc body is data, not a command to gate", () => {
-  // Writing a release script that mentions gh pr merge must not be refused.
-  const r = run(bash("cat >release.sh <<'EOF'\ngh pr merge 7\nEOF"));
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-  assert.deepEqual(r.calls, []);
+gated("REST GH_REPO host does not retarget the API", () => {
+  allowed(run(bash(`GH_REPO=github.example.com/foo/bar gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge -f sha=${HEAD}`)));
 });
 
-gated("a conditional cd makes the directory unknown, so the merge degrades", () => {
-  // `false && cd ../other; gh pr merge 7` never runs the cd, so applying it
-  // would verify a repository the merge will not touch.
-  const r = run(bash("false && cd /tmp; gh pr merge 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 0);
-  assert.match(r.err, /DEGRADED/);
-  assert.match(r.err, /conditional `cd`/);
-  assert.deepEqual(r.calls, []);
+gated("inline credentials and config selection reach identity reads", () => {
+  const result = run(bash(`GH_TOKEN=fixture-token XDG_CONFIG_HOME=/tmp/fixture ${fullMerge}`));
+  allowed(result);
+  assert.equal(result.tokens.at(-1), "fixture-token");
+  assert.equal(result.xdg.at(-1), "/tmp/fixture");
 });
 
-gated("an unconditional cd before && still applies", () => {
-  // The legitimate shape must keep working: cd runs, then the merge.
-  const target = mkdtempSync(path.join(tmpdir(), "merge-gate-uncond-"));
-  const r = run(bash(`cd ${target} && gh pr merge 7`), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.ok(r.cwds.every((c) => c.endsWith(path.basename(target))));
-  rmSync(target, { recursive: true, force: true });
+gated("env unsets remove the snapshot and mode from the command's environment", () => {
+  refused(run(bash(`env -u RAILYARD_CE_SNAPSHOT ${fullMerge}`)), /RAILYARD_CE_SNAPSHOT/);
+  refused(run(bash(`env -i ${fullMerge}`)), /RAILYARD_CE_SNAPSHOT/);
+  allowed(run(bash(`env -u RAILYARD_CE_MODE ${fullMerge}`), { mode: "unknown" }));
 });
 
-gated("env -u consumes its variable name before gh is located", () => {
-  const r = run(bash("env -u GH_HOST gh pr merge 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
+gated("unconditional cwd and shell workdir are preserved; pipeline/subshell cwd does not leak", () => {
+  const target = mkdtempSync(path.join(tmpdir(), "ce-merge-cwd-"));
+  const outer = mkdtempSync(path.join(tmpdir(), "ce-merge-outer-"));
+  try {
+    for (const input of [
+      bash(`cd ${target} && gh pr merge 7 ${PIN}`),
+      bash(`env -C ${target} gh pr merge 7 ${PIN}`),
+      bash(`env --chdir=${target} gh pr merge 7 ${PIN}`),
+      { ...bash(`gh pr merge 7 ${PIN}`), cwd: target },
+      { tool_name: "shell", tool_input: { command: ["bash", "-lc", `gh pr merge 7 ${PIN}`], working_directory: target } },
+    ]) {
+      const result = run(input);
+      allowed(result, ["pr view", "api graphql"]);
+      assert.ok(result.cwds.every((cwd) => cwd.endsWith(path.basename(target))));
+    }
+    for (const command of [`(cd ${target} && echo done); gh pr merge 7 ${PIN}`, `cd ${target} | cat; gh pr merge 7 ${PIN}`]) {
+      const result = run({ ...bash(command), cwd: outer });
+      allowed(result, ["pr view", "api graphql"]);
+      assert.ok(result.cwds.every((cwd) => cwd.endsWith(path.basename(outer))));
+    }
+  } finally {
+    rmSync(target, { recursive: true, force: true });
+    rmSync(outer, { recursive: true, force: true });
+  }
 });
 
-gated("env -C runs the lookup in the directory the merge will use", () => {
-  const target = mkdtempSync(path.join(tmpdir(), "merge-gate-envc-"));
-  const r = run(bash(`env -C ${target} gh pr merge 7`), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.ok(
-    r.cwds.every((c) => c.endsWith(path.basename(target))),
-    `gh ran in ${JSON.stringify(r.cwds)}, expected ${target}`,
-  );
-  rmSync(target, { recursive: true, force: true });
+gated("a bad bare-target resolution fails closed before the live identity query", () => {
+  const result = run(bash(`gh pr merge 7 ${PIN}`), { view: "not json" });
+  refused(result);
+  assert.deepEqual(result.calls, ["pr view"]);
 });
 
-gated("a GET on the merge endpoint is a status check, not a merge", () => {
-  // gh api defaults to GET; refusing this would block a read-only check.
-  const r = run(bash("gh api repos/o/r/pulls/7/merge"));
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-  assert.deepEqual(r.calls, []);
+gated("complete native JSON returns a refusal while stdin remains open", async () => {
+  const setup = prepare({ noPath: true });
+  const child = spawn(process.execPath, [script], { env: setup.env, stdio: ["pipe", "pipe", "pipe"] });
+  let stderr = "";
+  child.stderr.on("data", (data) => { stderr += data; });
+  const completed = new Promise((resolve) => child.once("close", resolve));
+  child.stdin.write(JSON.stringify(bash(fullMerge)));
+  const timer = setTimeout(() => child.kill(), 2000);
+  try {
+    const status = await completed;
+    refused(setup.finish({ status, stderr }), /RAILYARD_CE_SNAPSHOT/);
+  } finally {
+    clearTimeout(timer);
+    child.stdin.destroy();
+  }
 });
 
-gated("an explicit -X GET on the merge endpoint is also not a merge", () => {
-  const r = run(bash("gh api -X GET repos/o/r/pulls/7/merge"));
-  assert.equal(r.code, 0);
-  assert.deepEqual(r.calls, []);
+gated("a gap inside partial native JSON does not skip verification", async () => {
+  const setup = prepare({ noPath: true });
+  const child = spawn(process.execPath, [script], { env: setup.env, stdio: ["pipe", "pipe", "pipe"] });
+  let stderr = "";
+  let closed = false;
+  child.stderr.on("data", (data) => { stderr += data; });
+  const completed = new Promise((resolve) => child.once("close", (code) => { closed = true; resolve(code); }));
+  const payload = JSON.stringify(bash(fullMerge));
+  child.stdin.write(payload.slice(0, 30));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(closed, false);
+  child.stdin.write(payload.slice(30));
+  const timer = setTimeout(() => child.kill(), 2000);
+  try {
+    refused(setup.finish({ status: await completed, stderr }), /RAILYARD_CE_SNAPSHOT/);
+  } finally {
+    clearTimeout(timer);
+    child.stdin.destroy();
+  }
 });
 
-gated("env -u removes the variable from the gate's own calls", () => {
-  // With ambient GH_HOST set, the merge defaults to github.com after the
-  // unset; the gate must not keep querying the enterprise host.
-  const r = run(bash("env -u GH_HOST gh pr merge 7"), {
-    ambientHost: "github.example.com",
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  // The identity lookup must run with GH_HOST removed, exactly as the merge
-  // would. (The settlement call then pins whatever host the PR resolved to.)
-  assert.equal(r.hosts[0], "");
-  assert.ok(
-    r.hosts.every((h) => h !== "github.example.com"),
-    `enterprise host leaked into ${JSON.stringify(r.hosts)}`,
-  );
+gated("the two identity read timeouts leave margin under the native hook cap", () => {
+  const source = readFileSync(script, "utf8");
+  const timeout = (name) => Number(source.match(new RegExp(`const ${name} = (\\d+)`))[1]);
+  assert.ok(timeout("VIEW_TIMEOUT_MS") + timeout("GRAPHQL_TIMEOUT_MS") < 4000);
+  assert.ok(timeout("TOTAL_BUDGET_MS") < 4500);
 });
 
-gated("env --chdir=DIR (attached form) is honored", () => {
-  const target = mkdtempSync(path.join(tmpdir(), "merge-gate-attach-"));
-  const r = run(bash(`env --chdir=${target} gh pr merge 7`), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-  assert.ok(
-    r.cwds.every((c) => c.endsWith(path.basename(target))),
-    `gh ran in ${JSON.stringify(r.cwds)}, expected ${target}`,
-  );
-  rmSync(target, { recursive: true, force: true });
-});
-
-gated("a cd behind control words makes the directory indeterminate", () => {
-  // `if true; then cd ../other; fi` — the branch is not evaluable here, so
-  // degrade rather than verify a directory the merge may not use.
-  const r = run(bash("if true; then cd /tmp; fi; gh pr merge 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 0);
-  assert.match(r.err, /DEGRADED/);
-  assert.deepEqual(r.calls, []);
-});
-
-gated("a here-string does not swallow the following commands", () => {
-  // `<<<` is inline data, not a heredoc; matching it as one made every later
-  // line vanish and silently disabled the gate.
-  const r = run(bash("cat <<<EOF\ngh pr merge 7"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-});
-
-gated("a brace command group is still gated", () => {
-  const r = run(bash("{ gh pr merge 7; }"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-});
-
-gated("an escaped quote inside a value does not end the quote", () => {
-  const r = run(bash('gh pr merge 7 --body "text \\" --help"'), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-});
-
-gated("command substitution inside double quotes is still gated", () => {
-  const r = run(bash('echo "$(gh pr merge 7)"'), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-});
-
-gated("clustered short flags are expanded (-iXPUT sends a PUT)", () => {
-  const r = run(bash("gh api -iXPUT repos/o/r/pulls/7/merge"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-});
-
-gated("env -S runs its split string as the command", () => {
-  const r = run(bash("env -S 'gh pr merge 7'"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-});
-
-gated("env -i does not let the gate inherit the ambient environment", () => {
-  const r = run(bash("env -i PATH=$PATH gh pr merge 7"), {
-    ambientHost: "github.example.com",
-    graphql: settlement({ threads: [false] }),
-  });
-  // The command IS detected (a silent skip would leave stderr empty). The gate
-  // then runs gh with the ambient environment stripped, exactly as the merge
-  // would — which here means the shim loses its own logging vars and fails, so
-  // the gate degrades open rather than answering from a richer environment
-  // than the merge gets.
-  assert.equal(r.code, 0);
-  assert.match(r.err, /DEGRADED/);
-});
-
-gated("argv boundaries survive: a spaced --body value stays one argument", () => {
-  // Joining argv on spaces turned the body text into tokens and made --help a
-  // real option again, skipping the gate on a Codex-native payload shape.
-  const r = run({
-    tool_name: "shell",
-    tool_input: { command: ["gh", "pr", "merge", "7", "--body", "normal text --help"] },
-  }, { graphql: settlement({ threads: [false] }) });
-  assert.equal(r.code, 2);
-});
-
-gated("stacked wrappers are peeled to find the merge", () => {
-  const r = run(bash("env bash -lc 'gh pr merge 7'"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-});
-
-gated("a backtick substitution is still gated", () => {
-  const r = run(bash("echo `gh pr merge 7`"), {
-    graphql: settlement({ threads: [false] }),
-  });
-  assert.equal(r.code, 2);
-});
-
-gated("a cd inside a pipeline does not move the later merge", () => {
-  // `cd /tmp | cat` runs in a subshell; the merge stays in the original dir.
-  const base = mkdtempSync(path.join(tmpdir(), "merge-gate-pipe-"));
-  const r = run({
-    tool_name: "Bash",
-    tool_input: { command: "cd /tmp | cat; gh pr merge 7", working_directory: base },
-  }, { graphql: settlement({ threads: [false] }) });
-  assert.equal(r.code, 2);
-  assert.ok(
-    r.cwds.every((c) => c.endsWith(path.basename(base))),
-    `gh ran in ${JSON.stringify(r.cwds)}, expected ${base}`,
-  );
-  rmSync(base, { recursive: true, force: true });
-});
-
-gated("a literal ; in argv is data, not a command separator", () => {
-  // `printf %s ";" gh pr merge 7` runs printf — no merge. Letting the argument
-  // split the command would refuse a harmless call.
-  const r = run({
-    tool_name: "shell",
-    tool_input: { command: ["printf", "%s", ";", "gh", "pr", "merge", "7"] },
-  });
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
-  assert.deepEqual(r.calls, []);
-});
-
-gated("the two gh timeouts leave real margin under the 5s hook cap", () => {
-  // Sequential worst case must clear the harness cap, or the harness kills the
-  // hook before its own fail-open path runs.
-  const source = readFileSync(
-    new URL("./merge-settlement-gate.js", import.meta.url),
-    "utf8",
-  );
-  const view = Number(source.match(/VIEW_TIMEOUT_MS = (\d+)/)[1]);
-  const graphql = Number(source.match(/GRAPHQL_TIMEOUT_MS = (\d+)/)[1]);
-  assert.ok(view + graphql <= 4000, `sum ${view + graphql}ms leaves no margin`);
-});
-
-gated("an argv array allowed after settlement stays silent", () => {
-  const r = run({
-    tool_name: "shell",
-    tool_input: { command: ["bash", "-lc", "gh pr merge 7 --squash"] },
-  }, { graphql: settlement({ reviewedHeads: [HEAD], threads: [true] }) });
-  assert.equal(r.code, 0);
-  assert.equal(r.err, "");
+gated("the documented local verification includes the same suites as CI", () => {
+  const root = new globalThis.URL("../../../", import.meta.url);
+  const suites = (text) => [...text.matchAll(/plugins\/railyard\/[^\s\\]+\.test\.mjs/g)].map((match) => match[0]).sort();
+  assert.deepEqual(suites(readFileSync(new globalThis.URL("AGENTS.md", root), "utf8")),
+    [...new Set(suites(readFileSync(new globalThis.URL(".github/workflows/validate.yml", root), "utf8")))].sort());
 });

@@ -68,9 +68,12 @@ not infer blanket installation consent from installing Railyard.
 After a Codex update, verify the installed plugin version and source bytes,
 then inspect its current hook commands and hashes. Enable/trust only the
 validated SessionStart routing charter and native dispatch gate; include the
-shell dispatch gate only when `codex exec` remains a used route. Keep broad
-prompt nudges, merge-settlement duplication, retrospectives, and process
-cleanup off. A plugin update is not permission to enable all of its hooks.
+shell dispatch gate when `codex exec` remains a used route and the CE merge
+guard when PR delivery is selected. Validate its
+[snapshot handoff](../deliver/references/ce-merge-guard.md) before activation.
+Broad prompt nudges and automatic retrospective hooks are retired. Process
+cleanup remains manual. Preserve existing disabled states unless the user
+authorized activation; a plugin update alone does not enable hooks.
 
 ## 3. Configuration interview (defaults in brackets)
 

@@ -908,14 +908,16 @@ test("git and PR commands do not require a parallel delivery settlement protocol
   }
 });
 
-test("default hook manifests keep only startup and targeted dispatch checks", () => {
+test("default hook manifests keep startup, dispatch, and CE merge enforcement", () => {
   for (const file of ["../codex/hooks.json", "./claude-hooks.json"]) {
     const manifest = JSON.parse(readFileSync(new URL(file, import.meta.url), "utf8"));
     assert.deepEqual(Object.keys(manifest.hooks).sort(), ["PreToolUse", "SessionStart"]);
-    assert.equal(manifest.hooks.PreToolUse.length, 2);
-    for (const rule of manifest.hooks.PreToolUse) assert.match(rule.hooks[0].command, /dispatch-gate\.js/);
+    assert.equal(manifest.hooks.PreToolUse.length, 3);
+    for (const rule of manifest.hooks.PreToolUse.slice(0, 2)) assert.match(rule.hooks[0].command, /dispatch-gate\.js/);
+    assert.match(manifest.hooks.PreToolUse[2].hooks[0].command, /merge-settlement-gate\.js/);
+    assert.ok(new RegExp(`^(?:${manifest.hooks.PreToolUse[2].matcher})$`).test("Bash"));
     assert.match(manifest.hooks.SessionStart[0].hooks[0].command, /routing-charter\.js/);
-    assert.doesNotMatch(JSON.stringify(manifest), /cleanup-codex|railyard-retro|routing-nudge|route-lifecycle|merge-settlement-gate/);
+    assert.doesNotMatch(JSON.stringify(manifest), /cleanup-codex|railyard-retro|routing-nudge|route-lifecycle/);
   }
   const codex = JSON.parse(readFileSync(new URL("../codex/hooks.json", import.meta.url), "utf8"));
   assert.ok(new RegExp(codex.hooks.PreToolUse[1].matcher).test("Bash"));
