@@ -39,6 +39,7 @@ import {
   daybreakAvailable,
 } from "./daybreak-availability.mjs";
 import { validateNativeModelEffort } from "./native.mjs";
+import { CLAUDE_AGENT_MODEL_ALIASES, CLAUDE_REVIEW_SEAM_EFFORTS, validateClaudeModelEffort } from "./claude.mjs";
 
 export function adapterFor(request, carrier) {
   const adapterId = request.adapterId || carrier.adapters[0];
@@ -125,6 +126,8 @@ export function transportDecision(request, adapter, trustedTransportAttestor, pr
 }
 
 export function modelGeneration(value) {
+  const claude = parseClaudeFamily(value);
+  if (claude) return claude.selector === "current" ? null : claude.selector.split(".").map(Number);
   const match = typeof value === "string" ? value.match(/(?:^|[^0-9])(\d+(?:\.\d+){0,3})(?:$|[^0-9])/i) : null;
   return match ? match[1].split(".").map(Number) : null;
 }
@@ -214,11 +217,12 @@ export function freshRate(candidate, now) {
   return eligible[0] || null;
 }
 
-export function claudeIdentitySatisfied(model, observed) {
+export function claudeIdentitySatisfied(model, observed, explicitModel = false) {
   const requested = parseClaudeFamily(model.requestedModel);
   const actual = parseClaudeFamily(observed);
   if (!requested || !actual || requested.family !== actual.family) return false;
-  if (model.identityMode === "exact_pin") return requested.selector === actual.selector;
+  const pinned = requested.selector !== "current" && (explicitModel || model.identityMode !== "provider_latest_family");
+  if ((model.identityMode === "exact_pin" || pinned) && requested.selector !== actual.selector) return false;
   if (model.minimumGeneration && actual.selector === "current") return false;
   return minimumGenerationSatisfied(model, observed);
 }
@@ -309,6 +313,10 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         output.push({ ok: false, alias, tierIndex, position, reason: adapterResult.reason });
         continue;
       }
+      if (adapterResult.adapterId === "claude-session-create" && !CLAUDE_AGENT_MODEL_ALIASES.includes(model.requestedModel)) {
+        output.push({ ok: false, alias, tierIndex, position, reason: "claude_agent_model_unsupported" });
+        continue;
+      }
       if ((request.harness === "codex" && provider.harness === "claude" && !["claude-cli-via-task", "claude-cli-via-worker"].includes(adapterResult.adapterId))
         || (request.harness === "claude" && provider.harness === "codex")) {
         output.push({ ok: false, alias, tierIndex, position, reason: "cross_harness_adapter_required" });
@@ -355,6 +363,17 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         const selection = validateNativeModelEffort(model.requestedModel, effort);
         if (!selection.ok) {
           output.push({ ok: false, alias, tierIndex, position, reason: selection.reason });
+          continue;
+        }
+      }
+      if (model.carrierId === "claude-ce-review") {
+        if (!CLAUDE_REVIEW_SEAM_EFFORTS[request.ceSeam.id]?.includes(effort)) {
+          output.push({ ok: false, alias, tierIndex, position, reason: "ce_effort_unsupported" });
+          continue;
+        }
+        const validation = validateClaudeModelEffort(model.requestedModel, effort);
+        if (!validation.ok) {
+          output.push({ ok: false, alias, tierIndex, position, reason: validation.reason });
           continue;
         }
       }
@@ -413,9 +432,16 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         output.push({ ok: false, alias, tierIndex, position, reason: "ce_model_restricted" });
         continue;
       }
-      if (carrier.modelFamily === "claude" && !claudeIdentitySatisfied(model, claudeIdentity)) {
+      if (carrier.modelFamily === "claude" && !claudeIdentitySatisfied(model, claudeIdentity, request.model !== undefined)) {
         output.push({ ok: false, alias, tierIndex, position, reason: "claude_identity_mismatch" });
         continue;
+      }
+      if (model.carrierId === "claude-ce-review") {
+        const validation = validateClaudeModelEffort(claudeIdentity, effort);
+        if (!validation.ok) {
+          output.push({ ok: false, alias, tierIndex, position, reason: validation.reason });
+          continue;
+        }
       }
       if (carrier.runtimeVerifiedOnly) {
         const terra = runtime?.terra;

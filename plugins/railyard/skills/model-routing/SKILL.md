@@ -15,10 +15,12 @@ CLI intake for every software turn.
 1. Preserve explicit user model/effort choices and applicable repository
    constraints. Identify the work, acceptance condition, and need for parallel
    execution or specialization.
-2. Use **Astra at `max` as the baseline candidate for substantive engineering**.
+2. In Codex, use **Astra at `max` as the baseline candidate for substantive engineering**.
    Choose another supported model or effort when comparable accepted work
    supports it, a specialist fits the assignment, or the user prioritizes
-   latency. Use deterministic tools directly for mechanical work.
+   latency. In Claude Code, consider Fable 5.1 for substantial work and choose
+   its effort deliberately; do not copy Codex's effort defaults across models.
+   Use deterministic tools directly for mechanical work.
 3. Check the active dispatch tool's model selectors, effort values, history
    constraints, and any authoritative fixed-role binding. A provider catalog
    or working CLI route is not proof of a native override.
@@ -51,6 +53,11 @@ if it changes. For current Codex `spawn_agent`:
   never invent a native role selector or conflicting overrides.
 - Native spawn has no arbitrary per-child plugin controls. Narrowing history
   and scoping skills are separate actions.
+
+For Claude Code, use the [Claude allocation controls](../../references/harness-model-invocation.md#claude-code-allocation)
+for Fable 5.1's exact selector, supported efforts, and the distinction between
+session CLI flags and inherited or configured subagent effort. A moving alias
+does not prove a requested model version ran.
 
 If a requested model, effort, history mode, or adapter is unsupported, disclose
 the incompatibility. Do not silently fall back, omit a requested override, or

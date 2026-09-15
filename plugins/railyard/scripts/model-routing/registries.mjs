@@ -438,7 +438,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     version: "v1",
     transport: "claude-cli-via-ce",
     requestedModel: null,
-    efforts: ["high", "xhigh", "max"],
+    efforts: ["low", "medium", "high", "xhigh", "max"],
     adapters: ["claude-cli-via-task", "claude-cli-via-worker"],
     roles: ["review.cross_family", "review.code", "review.plan"],
     requiresCallableAttestation: true,

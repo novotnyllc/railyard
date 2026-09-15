@@ -53,6 +53,8 @@ judgment and late review activity. The head match prevents a concurrent push
 from silently changing the commit being merged; GitHub still enforces its
 configured checks and merge rules.
 
-The adapter is tested against CE 3.25.0's snapshot/state fields. If CE changes
-that contract, an incompatible result fails explicitly; update the adapter
-from the actual installed contract rather than weakening the check.
+The adapter is tested against CE 3.25.0's snapshot/state fields and checked
+against CE 3.22.4 and 3.26.2 producers with green, empty-check, and pending-check
+results. If CE changes that contract, an incompatible result fails explicitly;
+update the adapter from the actual installed contract rather than weakening
+the check.

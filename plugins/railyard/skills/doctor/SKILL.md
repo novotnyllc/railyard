@@ -18,11 +18,13 @@ existing fleet configuration alone does not authorize cross-host work.
 **Sync and versions**
 
 - Harness parity on this host: `claude plugin list` vs
-  `codex plugin list --json` — the same plugin at different versions across
-  harnesses is a finding.
+  `codex plugin list --json`, when both harnesses are in scope. Compare with
+  the user's intended state, including deliberate pins or staged upgrades;
+  a version difference alone does not establish a fault.
 - Marketplace freshness: installed versions vs the current catalogs
-  (`novotnyllc`, `compound-engineering-plugin`, when selected); a stale
-  marketplace snapshot is itself a finding.
+  (`novotnyllc`, `compound-engineering-plugin`, when selected). Distinguish
+  an outdated catalog from an intentionally pinned plugin; report its effect
+  on the requested update or diagnosis.
 - Compound Engineering: required selected skills exposed, including
   `ce-babysit-pr` when watching a PR. No unrelated behavior plugin is required.
 - Codex hook trust: verify current hashes for intentionally enabled hooks.
@@ -35,25 +37,29 @@ existing fleet configuration alone does not authorize cross-host work.
 
 **Configuration and state**
 
-- Fleet config: present, `validate-config` passes, no orphaned hosts
-  (config entries whose SSH alias no longer resolves).
-- Retired plugins still installed (machine-utilities); orphaned config/state
-  dirs from retired names (`~/.config/machine-utilities/`,
-  `~/.config/agent-utilities/`, `~/.local/state/agent-utilities/`) — offer
-  deletion, nothing reads them.
+- Fleet config, when relevant to the requested scope: resolve
+  `ROUNDHOUSE_CONFIG`, else
+  `${XDG_CONFIG_HOME:-$HOME/.config}/roundhouse/config.json`, and run
+  `validate-config` with that same environment. Missing config is valid for
+  local-only operation. Check SSH aliases for affected configured hosts.
+- Suspected retired plugins or orphaned config/state: establish ownership and
+  current consumers through the installed managers, references, and running
+  capabilities before proposing removal. A legacy directory name alone is
+  not evidence that its contents are unused. Preserve it when ownership or
+  use is unresolved; remove it only within authorized cleanup scope.
 - The unattended auto-update schedule, when installed: scheduler entry
   present and its log free of repeated failures.
 - Router state: `railyard:model-routing` `status` succeeds; a configured
   catalog, if any, validates.
-- Credential presence for installed capabilities — existence only, never
-  values: `gh auth status`; `ZAI_API_KEY`/`LITELLM_PROXY_API_KEY` when the
+- Credential presence for capabilities relevant to the diagnosis — existence
+  only, never values: `gh auth status`; `ZAI_API_KEY`/`LITELLM_PROXY_API_KEY` when the
   Codex `zai_litellm` provider is configured (plus the proxy actually
   responding on its port); `op` sign-in when one-password is installed; any
   key an installed skill's docs name. Missing → report where to set it
   (dotfiles env or 1Password via the one-password skill); never solicit a
   secret in chat.
 
-**Hosts** (per configured host, when a fleet exists)
+**Hosts** (only affected hosts within the requested diagnostic scope)
 
 - Reachability through the login shell (`ssh -o BatchMode=yes`).
 - Certificate enrollment state (`enroll-ssh-posix status`/`verify`).
@@ -66,15 +72,15 @@ existing fleet configuration alone does not authorize cross-host work.
   `/proc/sys/fs/binfmt_misc/WSLInterop` on the WSL side to split
   "interop disabled" from "target missing".
 
-**Desired-state sync** (per host enrolled in the fleet store — one with a
-`hosts/<name>.yaml` entry; skip entirely and say so when the store was never
-stood up)
+**Desired-state sync** (only when sync is part of the reported failure or
+requested health scope, for affected hosts with a `hosts/<name>.yaml` entry;
+skip when the store was never stood up)
 
 Resolve `CLI` to the installed roundhouse plugin's `scripts/roundhouse`.
 Run `"$CLI" fleet-doctor` and evaluate the checks under
 `roundhouse:fleet-agents`' Desired-state sync section (its `### Health`
 rollup plus `fleet-doctor`'s own rows). That is the roundhouse-side contract:
-consume it, never keep a second copy of it here. Report every check by name
+consume it, never keep a second copy of it here. Report relevant checks by name
 with its evidence — **CLI-reported** rows name the `fleet-doctor` row they
 came from, **agent-computed** rows name what they were derived from.
 
@@ -92,7 +98,9 @@ came from, **agent-computed** rows name what they were derived from.
 - No conflict commit older than 24 hours (`fleet-doctor`'s `conflicts` row;
   date the reported commit ids from store history).
 - No held flagged item forgotten (`"$CLI" fleet-pending`, which reports
-  fleet-wide pending items, not just this host's).
+  fleet-wide pending items, not just this host's; filter findings to the
+  selected scope and do not treat incidental rows as authority to fix other
+  hosts).
 - Scheduler entry singular and alive (agent-computed from the host). Two
   entries is a finding on its own — that is the racing-runners failure the
   single owned entry exists to prevent.

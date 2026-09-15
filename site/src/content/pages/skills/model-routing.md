@@ -7,7 +7,9 @@ nav_order: 3
 
 # Model routing
 
-Choose model and reasoning effort together for each delegated assignment. Astra Max (`codex-astra`, `gpt-6-astra`, `max`) is the baseline candidate for substantive engineering; use task evidence, constraints, or an explicit latency preference to choose another supported pair. Mechanical work can use deterministic tools directly.
+Choose model and reasoning effort together for each delegated assignment. Astra Max (`codex-astra`, `gpt-6-astra`, `max`) is the baseline candidate for substantive Codex engineering; use task evidence, constraints, or an explicit latency preference to choose another supported pair. Mechanical work can use deterministic tools directly.
+
+In Claude Code, consider Fable 5.1 with a deliberately chosen effort. Its exact model ID is `claude-fable-5-1`, supported by Claude Code 2.1.257 or later. The CLI supports `low`, `medium`, `high`, `xhigh`, and `max` for this model. Native `Agent` calls use the `fable` alias and inherited effort, or an explicitly configured subagent definition for an exact model and effort; a moving alias does not guarantee a model version. Unsupported selections and runtime substitutions must be reported.
 
 ## What it adds
 

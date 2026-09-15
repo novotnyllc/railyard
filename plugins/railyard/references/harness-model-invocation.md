@@ -125,6 +125,51 @@ A follow-up message does not itself change a running agent's model or effort.
 Use a supported new dispatch or an explicitly exposed continuation control for
 a change, and disclose the changed selection. Do not invent a mid-task switch.
 
+## Claude Code allocation
+
+Verified against Claude Code 2.1.270 and the official
+[model configuration](https://code.claude.com/docs/en/model-config) and
+[subagent configuration](https://code.claude.com/docs/en/sub-agents) references
+on 2026-09-15:
+
+- Fable 5.1's exact Anthropic model ID is `claude-fable-5-1`; it requires
+  Claude Code 2.1.257 or later. The `fable` alias usually resolves to 5.1,
+  but provider mappings, user pins, and the Claude apps gateway can resolve
+  it differently. Preserve intentional aliases; use the exact ID when 5.1
+  is required and verify the observed model.
+- Fable 5.1 supports `low`, `medium`, `high`, `xhigh`, and `max`. Choose for
+  the assignment. These names are model-specific; Astra's `ultra` is not a
+  Claude effort, and `ultracode` is a separate workflow setting. Neither a
+  smaller model nor lower effort proves lower total task cost.
+- The CLI selects both controls with `--model claude-fable-5-1 --effort LEVEL`.
+  The installed `Agent` tool's model choices are `sonnet`, `opus`, `haiku`,
+  and `fable`; full model IDs and `[1m]` suffixes are not tool parameters.
+  A subagent definition can set the exact `model` and `effort`; otherwise
+  effort inherits from the session. Select that definition with
+  `subagent_type` and `Allocation: role configuration; <reason>.` in the
+  prompt, omitting model overrides. Do not invent per-call `effort` or
+  `reasoning_effort` fields.
+- `subagent_type:"fork"` inherits the parent and ignores model overrides.
+  Declare deliberate inheritance and omit overrides. When
+  `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` removes the model control, use the
+  authoritative binding rather than claiming a caller override. Check the
+  current tool schema and respect managed policy.
+- For other Claude subagents, omitting `model` uses the definition and
+  configured subagent default before falling back to the parent. A definition
+  with `model: inherit` explicitly selects the parent. An inheritance marker
+  in the prompt records intent; it does not change those controls. The hook's
+  outer effort field belongs to the caller and cannot verify a child's effort.
+- A model ID, allowed dispatch, or prompt banner is not runtime verification.
+  Check native model and effort metadata when available. Managed effort caps,
+  alias mappings, or runtime substitutions can change the requested pair;
+  report a mismatch instead of calling it the selected allocation.
+
+Keep explicit model requirements on the selected route. Where an authorized
+Claude CLI invocation must refuse instead of switching models after a flagged
+request, use `switchModelsOnFlag:false` in that invocation's settings and do
+not supply a fallback chain. Do not overwrite global user settings or bypass
+managed policy. A refusal is not permission to change model or provider.
+
 ## Optional configured and cross-harness routes
 
 Use the strict [`railyard/model-routing/v1` contract](model-routing.md) when a

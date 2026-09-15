@@ -348,9 +348,22 @@ Known cost/latency/quality fields order routes only after hard role, carrier,
 effort, context, work-shape, privacy, family, and transport eligibility.
 Unknown cost is never zero or free. Different meter types are not converted or
 added without explicit user policy. Claude review model identities are limited
-to the Fable/Opus family aliases. Exact, minimum-generation, and `current`
+to the Fable/Opus families, including full model IDs such as
+`claude-fable-5-1`. Hyphenated and dotted generations compare numerically:
+Fable 5.1 satisfies a minimum of 5.1; Fable 5 does not. Exact,
+minimum-generation, and `current`
 checks always preserve the family; a numeric version alone can never cross from
 Fable to Opus or vice versa.
+
+For Fable 5.1 on Claude Code, see the
+[current surface controls](harness-model-invocation.md#claude-code-allocation).
+The configured `claude-session-create` adapter maps to native `Agent`, whose
+per-call model choices are family aliases. An exact model ID needs a supported
+CLI route or authoritative subagent definition; the router must not emit an
+unusable native model argument. Existing CE code/doc review adapters accept
+the exact `claude-fable-5-1` selection and a supported effort through their
+model/effort overrides. Respect each selected seam's controls; a peer-review
+script's capabilities do not establish another workflow's support.
 
 A `provider_latest_family` route additionally needs positive host evidence for
 the observed model, resolved-model digest, required capabilities, and exact
@@ -377,7 +390,7 @@ Catalog fields may reference them; they cannot extend them.
 | --- | --- | --- | --- |
 | `codex-task-create` / `codex-task-message` | visible Codex task | `model`, `thinking` | task create needs one-use task authority |
 | `native-subagent-create` | native subagent | `model`, `reasoning_effort` | `contextFork` is `"none"` or `"1"`-`"999"` only |
-| `claude-session-create` | Claude Code `Agent` session | `model`, effort stated in the dispatch banner only | the Agent tool has no per-dispatch effort parameter |
+| `claude-session-create` | Claude Code `Agent` session | family-alias `model`; effort inherits or comes from the subagent definition | the stored v1 `banner-only` label is legacy metadata, not an effort control or proof |
 | `native-subagent-message` | existing subagent message | none | `none` or `adjust_active`, never a fake spawn claim |
 | `native-subagent-followup` | work-starting follow-up | none today | fresh resolved route/inheritance only |
 | `configured-profile-task-create` | separately callable profile task | carrier-owned fixed profile | GLM only after host attestation |

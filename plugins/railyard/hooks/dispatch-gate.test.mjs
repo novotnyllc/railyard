@@ -29,13 +29,13 @@ function readLog(dir) {
   );
 }
 
-function run(input, codexHome, logDir) {
+function run(input, codexHome, logDir, envOverrides = {}) {
   const home = codexHome ?? fixtureCodexHome(null);
   const logs = logDir ?? mkdtempSync(path.join(tmpdir(), "gate-log-"));
   const r = spawnSync(process.execPath, [script], {
     input: typeof input === "string" ? input : JSON.stringify(input),
     encoding: "utf8",
-    env: { ...process.env, CODEX_HOME: home, RAILYARD_RUN_LOG_DIR: logs, RAILYARD_ROUTE_STATE_DIR: process.env.RAILYARD_ROUTE_STATE_DIR },
+    env: { ...process.env, CODEX_HOME: home, RAILYARD_RUN_LOG_DIR: logs, RAILYARD_ROUTE_STATE_DIR: process.env.RAILYARD_ROUTE_STATE_DIR, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "", ...envOverrides },
   });
   if (!codexHome) rmSync(home, { recursive: true, force: true });
   const log = readLog(logs);
@@ -292,7 +292,7 @@ test("custom CLI role owns fixed controls and explicitly inherits any unset cont
 });
 
 test("Claude allocation uses only its exposed model control", () => {
-  for (const model of ["opus", "sonnet", "haiku", "fable", "claude-opus-5"]) {
+  for (const model of ["opus", "sonnet", "haiku", "fable"]) {
     const r = run({ tool_name: "Agent", tool_input: { model, prompt: "Review this task." } });
     assert.equal(r.code, 0, r.err);
     assert.equal(r.log[0].model, model);
@@ -306,6 +306,66 @@ test("Claude allocation uses only its exposed model control", () => {
     assert.match(invalid.err, /supported CLI or adapter/);
     assert.equal(run({ tool_name, tool_input: { model: "opus", reasoning_effort: "max" } }).code, 2);
   }
+});
+
+test("Claude full model IDs and context aliases require a definition or CLI", () => {
+  for (const model of ["claude-fable-5-1", "claude-fable-5", "claude-opus-5", "fable[1m]", "opus[1m]"]) {
+    const result = run({ tool_name: "Agent", tool_input: { model, prompt: "Review this task." } });
+    assert.equal(result.code, 2, model);
+    assert.match(result.err, /configured subagent definition/);
+    assert.deepEqual(result.log, []);
+  }
+  for (const field of ["effort", "reasoning_effort"]) {
+    const result = run({ tool_name: "Agent", tool_input: { model: "fable", [field]: "max", prompt: "Review this task." } });
+    assert.equal(result.code, 2);
+    assert.match(result.err, /does not expose a per-call effort parameter/);
+  }
+});
+
+test("Claude forks inherit and cannot claim an ignored model override", () => {
+  const input = { tool_name: "Agent", tool_input: { subagent_type: "fork", prompt: inheritBrief } };
+  const inherited = run(input);
+  assert.equal(inherited.code, 0, inherited.err);
+  assert.equal(inherited.log[0].allocation, "inherit");
+  assert.equal(inherited.log[0].model, undefined);
+  for (const overrides of [{ model: "fable" }, { prompt: roleBrief }, { prompt: "Review this task." }]) {
+    const result = run({ ...input, tool_input: { ...input.tool_input, ...overrides } });
+    assert.equal(result.code, 2);
+    assert.match(result.err, /fork subagents/);
+    assert.deepEqual(result.log, []);
+  }
+});
+
+test("a forced Claude model cannot be advertised as a caller override", () => {
+  for (const value of ["1", "true", "yes", "on", " TRUE ", "\tYes\n", "On"]) {
+    const env = { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: value };
+    const explicit = run({ tool_name: "Agent", tool_input: { model: "opus", prompt: "Review this task." } }, undefined, undefined, env);
+    assert.equal(explicit.code, 2, JSON.stringify(value));
+    assert.match(explicit.err, /runtime forces subagent model selection/);
+    assert.deepEqual(explicit.log, []);
+    const inherited = run({ tool_name: "Agent", tool_input: { prompt: inheritBrief } }, undefined, undefined, env);
+    assert.equal(inherited.code, 0, inherited.err);
+    assert.equal(inherited.log[0].allocation, "inherit");
+  }
+});
+
+test("disabled or unrecognized Claude force values preserve the model override", () => {
+  for (const value of [undefined, "", "0", "false", "no", "off", " FALSE ", "\tNo\n", "Off", "fable", "2"]) {
+    const result = run({ tool_name: "Agent", tool_input: { model: "fable", prompt: "Review this task." } }, undefined, undefined,
+      { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: value });
+    assert.equal(result.code, 0, `${JSON.stringify(value)}: ${result.err}`);
+    assert.equal(result.log[0].allocation, "explicit");
+    assert.equal(result.log[0].model, "fable");
+  }
+});
+
+test("Claude caller effort and omitted model do not verify the child's allocation", () => {
+  const result = run({ tool_name: "Agent", model: "claude-fable-5-1", effort: { level: "max" }, tool_input: { subagent_type: "general-purpose", prompt: inheritBrief } });
+  assert.equal(result.code, 0, result.err);
+  assert.equal(result.log[0].allocation, "inherit");
+  assert.equal(result.log[0].capability, "runtime_unverified");
+  assert.equal(result.log[0].model, undefined);
+  assert.equal(result.log[0].effort, undefined);
 });
 
 test("Claude fixed role selection does not require forbidden overrides", () => {
