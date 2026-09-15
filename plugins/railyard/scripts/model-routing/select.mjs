@@ -371,8 +371,9 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
           output.push({ ok: false, alias, tierIndex, position, reason: "ce_effort_unsupported" });
           continue;
         }
-        if (validateClaudeModelEffort(model.requestedModel, effort).reason === "effort_unsupported") {
-          output.push({ ok: false, alias, tierIndex, position, reason: "effort_unsupported" });
+        const validation = validateClaudeModelEffort(model.requestedModel, effort);
+        if (!validation.ok) {
+          output.push({ ok: false, alias, tierIndex, position, reason: validation.reason });
           continue;
         }
       }
@@ -435,9 +436,12 @@ export function configuredCandidates(catalog, request, state, now, policyDigest,
         output.push({ ok: false, alias, tierIndex, position, reason: "claude_identity_mismatch" });
         continue;
       }
-      if (model.carrierId === "claude-ce-review" && validateClaudeModelEffort(claudeIdentity, effort).reason === "effort_unsupported") {
-        output.push({ ok: false, alias, tierIndex, position, reason: "effort_unsupported" });
-        continue;
+      if (model.carrierId === "claude-ce-review") {
+        const validation = validateClaudeModelEffort(claudeIdentity, effort);
+        if (!validation.ok) {
+          output.push({ ok: false, alias, tierIndex, position, reason: validation.reason });
+          continue;
+        }
       }
       if (carrier.runtimeVerifiedOnly) {
         const terra = runtime?.terra;

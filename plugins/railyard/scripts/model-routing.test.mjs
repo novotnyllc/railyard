@@ -794,6 +794,24 @@ test("Claude review efforts cannot exceed the observed model or fixed CE seam co
   }
 });
 
+test("Claude CE review routes reject unverified configured and observed model-effort pairs", () => {
+  const configuredUnknown = claudePolicy("claude-fable-99", { identityMode: "provider_latest_family" });
+  const configuredUnknownResponse = handleRequest(request("resolve", {
+    role: "review.code", callerKind: "compound-engineering", harness: "claude", effort: "max", adapterId: "claude-cli-via-worker",
+    ceSeam: { id: "ce-code-review.execution", skill: "ce-code-review", artifact: { schema: "railyard/ce-code-review-findings/v1", digest: DIGEST_A } },
+  }), { catalog: configuredUnknown, state: claudePeerState(configuredUnknown), now: NOW }).response;
+  assert.equal(configuredUnknownResponse.reason, "no_eligible_route", JSON.stringify(configuredUnknownResponse));
+  assert.deepEqual(configuredUnknownResponse.rejectedAlternatives, [{ modelAlias: "selected", reason: "claude_model_unverified" }]);
+
+  const observedUnknown = claudePolicy("fable", { identityMode: "provider_latest_family" });
+  const observedUnknownResponse = handleRequest(request("resolve", {
+    role: "review.code", callerKind: "compound-engineering", harness: "claude", effort: "max", adapterId: "claude-cli-via-worker",
+    ceSeam: { id: "ce-code-review.execution", skill: "ce-code-review", artifact: { schema: "railyard/ce-code-review-findings/v1", digest: DIGEST_A } },
+  }), { catalog: observedUnknown, state: claudePeerState(observedUnknown, "claude-fable-99"), now: NOW }).response;
+  assert.equal(observedUnknownResponse.reason, "no_eligible_route", JSON.stringify(observedUnknownResponse));
+  assert.deepEqual(observedUnknownResponse.rejectedAlternatives, [{ modelAlias: "selected", reason: "claude_model_unverified" }]);
+});
+
 test("default allocation preserves requested pairs and rejects unsupported choices without substitution", () => {
   for (const [model, effort] of [["gpt-6-astra", "low"], ["gpt-5.6-terra", "ultra"], ["gpt-5.6-luna", "high"], ["combo/grok-unified-4.6", "xhigh"]]) {
     const resolved = handleRequest(request("resolve", { model, effort }), { now: NOW });
