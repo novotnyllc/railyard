@@ -1091,21 +1091,37 @@ function validateNative(args, input, tool) {
 function validateClaude(args) {
   // Claude Agent exposes model but no per-call effort field. Do not invent
   // one or claim to validate an effort the hook cannot observe.
-  if (Object.hasOwn(args, "reasoning_effort")) return { error: "Claude Agent does not expose reasoning_effort. Select its model and use the runtime's inherited effort, or choose an explicit CLI route." };
+  if (Object.hasOwn(args, "reasoning_effort") || Object.hasOwn(args, "effort")) return { error: "Claude Agent does not expose a per-call effort parameter. Deliberately use the session's inherited effort or a configured subagent definition with model and effort; an explicit CLI route uses --effort." };
   const prompt = typeof args.prompt === "string" ? args.prompt : "";
   const inherit = INHERIT_ALLOCATION.test(prompt);
   const useRole = ROLE_ALLOCATION.test(prompt);
+  if (args.subagent_type === "fork") {
+    if (Object.hasOwn(args, "model")) return { error: "Claude fork subagents ignore model overrides and inherit the parent. Omit model and declare 'Allocation: inherit model and reasoning effort; <reason>.' in prompt, or choose a non-fork subagent with sufficient context." };
+    if (!inherit) return { error: "Claude fork subagents inherit the parent: declare 'Allocation: inherit model and reasoning effort; <reason>.' in prompt." };
+    return { allocation: "inherit", capability: "runtime_inherited" };
+  }
+  // Claude 2.1.270 parses this env flag with P.bool -> Ie, not JS truthiness.
+  const forceModel = ["1", "true", "yes", "on"].includes((process.env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE ?? "").toLowerCase().trim());
+  if (forceModel && Object.hasOwn(args, "model")) return { error: "This Claude runtime forces subagent model selection and does not expose a model override. Use deliberate inheritance or the authoritative role configuration; do not silently substitute a requested model." };
   if (useRole) {
     if (!clip(args.subagent_type) || Object.hasOwn(args, "model")) return { error: "role configuration allocation requires subagent_type and no model override; the runtime resolves the role's controls." };
     return { allocation: "role", capability: "runtime_unverified" };
   }
   if (inherit) {
     if (Object.hasOwn(args, "model")) return { error: "inheritance conflicts with the explicit Claude model. Omit the model override when declaring inheritance in prompt." };
-    return { allocation: "inherit", capability: "runtime_inherited" };
+    // A named definition or configured subagent default may take precedence
+    // over the parent. The declaration expresses intent, not a resolved pair.
+    return { allocation: "inherit", capability: "runtime_unverified" };
   }
   if (!clip(args.model)) return { error: "select a Claude model explicitly, declare 'Allocation: inherit model and reasoning effort; <reason>.' in prompt, or declare 'Allocation: role configuration; <reason>.' for a configured subagent_type." };
-  if (!/^(?:opus|sonnet|haiku|fable)(?:\[1m\])?$/.test(args.model) && !/^claude-[a-z0-9.-]+(?:\[1m\])?$/.test(args.model)) {
-    return { error: `'${clip(args.model)}' is not a Claude Agent model. An explicit cross-harness request must use its supported CLI or adapter; a prompt marker cannot change this tool's model family.` };
+  let aliases;
+  try {
+    ({ CLAUDE_AGENT_MODEL_ALIASES: aliases } = require("../scripts/model-routing/claude.mjs"));
+  } catch {
+    return { error: "the Claude allocation validator could not be loaded. Repair the plugin before dispatching; no fallback was applied." };
+  }
+  if (!aliases.includes(args.model)) {
+    return { error: `'${clip(args.model)}' is not exposed by Claude Agent's model control (opus, sonnet, haiku, fable). For exact Fable 5.1, use model claude-fable-5-1 in a configured subagent definition or its supported CLI or adapter; native Codex models require their own harness.` };
   }
   return { allocation: "explicit", model: args.model, capability: "runtime_effort_unobserved" };
 }

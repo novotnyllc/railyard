@@ -92,6 +92,15 @@ function record(entry) {
   }
 }
 
+// Day files are shared by concurrent tasks. A reader must select a confirmed
+// task identity before reconstructing its run; timestamps and cwd cannot bind
+// an unidentified line to that task. SessionStart on resume may repeat the ID.
+function entriesForSession(entries, requestedSessionId) {
+  if (!Array.isArray(entries) || typeof requestedSessionId !== "string" || !requestedSessionId.trim()) return [];
+  return entries.filter((entry) => entry && typeof entry === "object" &&
+    !Array.isArray(entry) && entry.session_id === requestedSessionId);
+}
+
 // Read today's entries and return true when at least one carries the given
 // event type and session id. Retained for optional diagnostic consumers;
 // a session-authored note is not proof that a carrier executed.
@@ -116,7 +125,7 @@ function hasEntry(eventType) {
     return allParsed && found;
   } catch { return false; }
 }
-module.exports = { record, clip, logPath, logDir, hasEntry };
+module.exports = { record, clip, logPath, logDir, hasEntry, entriesForSession };
 
 if (require.main === module) {
   const [mode, arg] = process.argv.slice(2);

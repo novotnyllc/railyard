@@ -102,7 +102,9 @@ export function actionReceiptFor(request, decision, {
 }
 
 export function decisionFromCandidate(candidate, request, policy, now, rejected = []) {
-  const selectedModel = candidate.observedModel === "unknown"
+  // Claude Agent accepts a family alias; keep the resolved release in the
+  // observation fields instead of placing it in an uncallable model control.
+  const selectedModel = candidate.adapterId === "claude-session-create" || candidate.observedModel === "unknown"
     ? candidate.model.requestedModel
     : candidate.observedModel;
   const hostScope = effectiveHostScope(request, candidate.capability?.hostScope);

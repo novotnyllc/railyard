@@ -1,7 +1,12 @@
 # Legacy carrier compatibility
 
-This reference describes the optional receipt-based LFG carrier protocol for
-an explicitly selected legacy integration. Ordinary Deliver and CE stages do
+This reference describes the retained receipt-based LFG carrier protocol for
+existing legacy consumers. New work must use Deliver's native or selected CE
+route. The current dispatch gate does not enforce the historical push, PR,
+or merge boundaries in `routes/deliver.json`; those entries describe the old
+protocol, not active protection. Do not reactivate it as a shipping gate.
+
+Ordinary Deliver and CE stages do
 not require this protocol, a carrier subagent, or route receipts. It is not a
 SessionStart or shipping prerequisite. Do not activate it merely because the
 user asks to implement, fix, ship, or watch a PR.

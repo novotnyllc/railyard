@@ -258,9 +258,11 @@ export function validSourceUrl(value) {
 
 export function parseClaudeFamily(value) {
   if (typeof value !== "string") return null;
-  const match = value.match(/^(?:claude-)?(fable|opus|sonnet|haiku)(?:[-:](current|\d+(?:\.\d+){0,3}))?$/i);
+  const match = value.match(/^(?:claude-)?(fable|opus|sonnet|haiku)(?:[-:](current|\d+(?:\.\d+){0,3}|\d+(?:-\d+){1,3}))?(?:\[1m\])?$/i);
   if (!match) return null;
-  return { family: match[1].toLowerCase(), selector: (match[2] || "current").toLowerCase() };
+  // Claude Code's context suffix is not part of the provider model ID.
+  // Normalize release separators while retaining snapshot dates in the pin.
+  return { family: match[1].toLowerCase(), selector: (match[2] || "current").toLowerCase().replaceAll("-", ".") };
 }
 
 export function validClaudeFamily(value) {

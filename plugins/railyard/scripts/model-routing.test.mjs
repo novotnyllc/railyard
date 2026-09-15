@@ -29,12 +29,14 @@ import {
   scopeAccountingId,
   stableDigest,
   providerAvailabilityIssue,
+  parseClaudeFamily,
   NATIVE_MODEL_EFFORTS,
   validateNativeModelEffort,
   validateCatalog,
   validateState,
 } from "./model-routing.mjs";
-import { fixedRuntimeDecision } from "./model-routing/select.mjs";
+import { claudeIdentitySatisfied, fallbackSetDigest, fixedRuntimeDecision } from "./model-routing/select.mjs";
+import { CLAUDE_AGENT_MODEL_ALIASES, validateClaudeModelEffort } from "./model-routing/claude.mjs";
 import { validBinding } from "./model-routing/state-schema.mjs";
 import { build as buildOracle, dispatch as dispatchOracle, oracleSessionSlug } from "../skills/oracle/scripts/oracle-route.mjs";
 
@@ -436,7 +438,7 @@ function refreshAttestor({ observedModel, capabilities = [], authState = "authen
   };
 }
 
-function attestedCapability(policy, { carrierId = "glm-5-2-engineer", adapterId = "configured-profile-task-create", hostScope = "local", accountScope = "plan", observedModel = "glm-5.2", capabilities = [] } = {}) {
+function attestedCapability(policy, { carrierId = "glm-5-2-engineer", adapterId = "configured-profile-task-create", hostScope = "local", accountScope = "plan", observedModel = "glm-5.2", capabilities = [], fallbackSetDigest } = {}) {
   const state = createEmptyState();
   const record = {
     carrierId,
@@ -456,6 +458,7 @@ function attestedCapability(policy, { carrierId = "glm-5-2-engineer", adapterId 
     attestorId: "railyard-host-attestor-v1",
     attestationDigest: DIGEST_A,
   };
+  if (fallbackSetDigest !== undefined) record.fallbackSetDigest = fallbackSetDigest;
   record.attestedFactsDigest = stableDigest(capabilityFacts(record, record));
   state.capabilities.capability_one = record;
   assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
@@ -610,6 +613,185 @@ test("native model capabilities distinguish exposed overrides from broader provi
   }
   assert.equal(validateNativeModelEffort("gpt-6-astra", undefined).reason, "effort_unsupported");
   assert.throws(() => NATIVE_MODEL_EFFORTS["gpt-5.6-luna"].push("ultra"), TypeError);
+});
+
+test("Claude selectors preserve release pins and compare hyphenated generations numerically", () => {
+  for (const model of ["fable", "fable-current", "fable[1m]"]) {
+    assert.deepEqual(parseClaudeFamily(model), { family: "fable", selector: "current" });
+  }
+  for (const model of ["claude-fable-5-1", "claude-fable-5-1[1m]", "fable:5.1", "fable-5.1"]) {
+    assert.deepEqual(parseClaudeFamily(model), { family: "fable", selector: "5.1" });
+  }
+  assert.deepEqual(parseClaudeFamily("claude-sonnet-4-5-20250929"), { family: "sonnet", selector: "4.5.20250929" });
+  for (const malformed of ["claude-fable-5--1", "claude-fable-5-1-extra", "claude-fable-5-1[2m]", "fable-5.1-2", "__proto__"]) {
+    assert.equal(parseClaudeFamily(malformed), null);
+  }
+  const current = { requestedModel: "fable", minimumGeneration: "5.1" };
+  assert.equal(claudeIdentitySatisfied(current, "claude-fable-5-1"), true);
+  assert.equal(claudeIdentitySatisfied(current, "claude-fable-5-10"), true);
+  assert.equal(claudeIdentitySatisfied(current, "claude-fable-5"), false);
+  assert.equal(claudeIdentitySatisfied(current, "fable[1m]"), false);
+  const snapshot = { requestedModel: "claude-sonnet-4-5-20250929", identityMode: "exact_pin" };
+  assert.equal(claudeIdentitySatisfied(snapshot, "claude-sonnet-4-5-20250929"), true);
+  assert.equal(claudeIdentitySatisfied(snapshot, "claude-sonnet-4-5-20251001"), false);
+});
+
+test("Claude Code effort capabilities are model-specific and do not extend Codex native support", () => {
+  assert.deepEqual(CLAUDE_AGENT_MODEL_ALIASES, ["sonnet", "opus", "haiku", "fable"]);
+  for (const model of ["fable", "claude-fable-5", "claude-fable-5-1", "claude-fable-5-1[1m]", "claude-opus-5", "claude-sonnet-5"]) {
+    for (const effort of ["low", "medium", "high", "xhigh", "max"]) assert.equal(validateClaudeModelEffort(model, effort).ok, true, `${model} ${effort}`);
+    assert.equal(validateClaudeModelEffort(model, "ultra").reason, "effort_unsupported");
+    assert.equal(validateNativeModelEffort(model, "max").reason, "native_model_unsupported");
+  }
+  for (const model of ["claude-opus-4-6", "claude-sonnet-4-6"]) {
+    assert.equal(validateClaudeModelEffort(model, "max").ok, true);
+    assert.equal(validateClaudeModelEffort(model, "xhigh").reason, "effort_unsupported");
+  }
+  assert.equal(validateClaudeModelEffort("claude-haiku-4-5-20251001", "low").reason, "effort_unsupported");
+  assert.equal(validateClaudeModelEffort("provider/custom-model", "high").reason, "claude_model_unverified");
+  assert.equal(validateClaudeModelEffort("claude-fable-99", "max").reason, "claude_model_unverified");
+});
+
+function claudePolicy(model = "claude-fable-5-1", { carrierId = "claude-ce-review", role = "review.code", ...modelFields } = {}) {
+  return {
+    schemaVersion: 1,
+    providers: { claude: { carrierId, executionSurface: "provider_subscription", account: "claude", harness: "claude" } },
+    models: { selected: { provider: "claude", carrierId, requestedModel: model, effort: "high", ...modelFields } },
+    roles: { [role]: { tiers: [["selected"]] } },
+  };
+}
+
+function claudePeerState(policy, observedModel = policy.models.selected.requestedModel) {
+  return attestedCapability(policy, {
+    carrierId: "claude-ce-review", adapterId: "claude-cli-via-worker", accountScope: "claude", observedModel,
+    fallbackSetDigest: fallbackSetDigest(policy.models.selected),
+  });
+}
+
+test("Fable 5.1 code and doc review routes preserve each deliberate effort and unverified applied effort", () => {
+  for (const [id, skill, role, schema] of [
+    ["ce-code-review.execution", "ce-code-review", "review.code", "railyard/ce-code-review-findings/v1"],
+    ["ce-doc-review.execution", "ce-doc-review", "review.plan", "railyard/ce-doc-review-findings/v1"],
+  ]) {
+    for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
+      const policy = claudePolicy("claude-fable-5-1", { role });
+      const state = claudePeerState(policy);
+      const fields = {
+        role, callerKind: "compound-engineering", harness: "claude", model: "claude-fable-5-1", effort, adapterId: "claude-cli-via-worker",
+        ceSeam: { id, skill, artifact: { schema, digest: DIGEST_A } },
+      };
+      const resolved = handleRequest(request("resolve", fields), { catalog: policy, state, now: NOW }).response;
+      assert.equal(resolved.reason, "resolved", JSON.stringify(resolved));
+      assert.equal(resolved.decision.selected.model, "claude-fable-5-1");
+      assert.equal(resolved.decision.selected.effort, effort);
+      assert.equal(resolved.decision.requestedVsActual.effectiveEffort, "unknown");
+      assert.equal(resolved.decision.binding.controls.claudeBinding, "ce-slot");
+      assert.equal(resolved.decision.fallback, undefined);
+      const admission = admit(policy, state, fields);
+      assert.equal(admission.reservation.selected.model, "claude-fable-5-1");
+      assert.equal(admission.reservation.selected.effort, effort);
+    }
+  }
+});
+
+test("Fable release pins and minimum generations refuse mismatched observations without admission or fallback", () => {
+  for (const [model, modelFields, observed, explicitModel, ok] of [
+    ["claude-fable-5-1", {}, "claude-fable-5", false, false],
+    ["claude-fable-5-1", { identityMode: "exact_pin" }, "fable", true, false],
+    ["fable", { identityMode: "provider_latest_family", minimumGeneration: "5.1" }, "claude-fable-5", false, false],
+    ["fable", { identityMode: "provider_latest_family", minimumGeneration: "5.1" }, "claude-fable-5-1", false, true],
+    ["claude-fable-5-1", { identityMode: "provider_latest_family" }, "claude-fable-5", true, false],
+  ]) {
+    const policy = claudePolicy(model, modelFields);
+    const state = claudePeerState(policy, observed);
+    const before = structuredClone(state);
+    const fields = {
+      role: "review.code", callerKind: "compound-engineering", harness: "claude", effort: "max", ...(explicitModel ? { model } : {}),
+      adapterId: "claude-cli-via-worker", ceSeam: { id: "ce-code-review.execution", skill: "ce-code-review", artifact: { schema: "railyard/ce-code-review-findings/v1", digest: DIGEST_A } },
+    };
+    const resolved = handleRequest(request("resolve", fields), { catalog: policy, state, now: NOW }).response;
+    assert.equal(resolved.ok, ok, JSON.stringify(resolved));
+    if (ok) {
+      assert.equal(resolved.decision.selected.model, observed);
+      continue;
+    }
+    assert.deepEqual(resolved.rejectedAlternatives, [{ modelAlias: "selected", reason: "claude_identity_mismatch" }]);
+    const refused = handleRequest(request("admit", { ...fields, requestId: "mismatched-fable", frozenInputDigest: DIGEST_A, scopes: { task: "claude-task" } }), { catalog: policy, state, now: NOW });
+    assert.equal(refused.response.reason, "no_eligible_route");
+    assert.equal(refused.changed, false);
+    assert.deepEqual(state, before);
+  }
+});
+
+test("native Claude Agent routes retain aliases and refuse unmappable full IDs and context suffixes", () => {
+  for (const model of ["fable", "claude-fable-5-1", "fable[1m]"]) {
+    const policy = claudePolicy(model, { carrierId: "claude-session", role: "implementation.hard" });
+    const fields = { role: "implementation.hard", harness: "claude", model, effort: "max", adapterId: "claude-session-create" };
+    const state = createEmptyState();
+    const resolved = handleRequest(request("resolve", fields), { catalog: policy, state, now: NOW }).response;
+    if (model === "fable") {
+      assert.equal(resolved.reason, "resolved", JSON.stringify(resolved));
+      assert.equal(resolved.decision.selected.model, "fable");
+      assert.equal(resolved.decision.requestedVsActual.effectiveEffort, "unknown");
+    } else if (model === "fable[1m]") {
+      assert.equal(resolved.reason, "invalid_model");
+    } else {
+      assert.equal(resolved.reason, "no_eligible_route", JSON.stringify(resolved));
+      assert.deepEqual(resolved.rejectedAlternatives, [{ modelAlias: "selected", reason: "claude_agent_model_unsupported" }]);
+    }
+    assert.equal(handleRequest(request("resolve", { model, effort: "max" }), { now: NOW }).response.reason, model === "fable[1m]" ? "invalid_model" : "native_model_unsupported");
+  }
+});
+
+test("native Claude Agent decisions keep a callable alias after attesting the resolved Fable release", () => {
+  const policy = claudePolicy("fable", { carrierId: "claude-session", role: "implementation.hard" });
+  const state = attestedCapability(policy, {
+    carrierId: "claude-session", adapterId: "claude-session-create", accountScope: "claude", observedModel: "claude-fable-5-1",
+  });
+  const fields = { role: "implementation.hard", harness: "claude", model: "fable", effort: "max", adapterId: "claude-session-create" };
+  const resolved = handleRequest(request("resolve", fields), { catalog: policy, state, now: NOW }).response;
+  assert.equal(resolved.reason, "resolved", JSON.stringify(resolved));
+  const decision = resolved.decision;
+  const agentModel = decision.selected.model;
+  assert.equal(agentModel, "fable");
+  assert.equal(CLAUDE_AGENT_MODEL_ALIASES.includes(agentModel), true);
+  assert.equal(decision.selected.effort, "max");
+  assert.equal(decision.selected.observedModel, "claude-fable-5-1");
+  assert.equal(decision.requestedVsActual.observedModel, "claude-fable-5-1");
+  assert.equal(decision.requestedVsActual.effectiveEffort, "unknown");
+  assert.deepEqual(decision.disclosure.observed.model, { value: "claude-fable-5-1", provenance: "capability_attestation" });
+  const admission = admit(policy, state, fields);
+  assert.equal(admission.reservation.selected.model, "fable");
+  assert.equal(admission.reservation.selected.observedModel, "claude-fable-5-1");
+  assert.equal(validateState(state).ok, true);
+
+  // Records made before the dispatch-alias correction remain readable with
+  // their original selected identity and unchanged adapter control binding.
+  const historical = structuredClone(state);
+  const stored = historical.reservations[admission.reservation.reservationId];
+  stored.selected.model = "claude-fable-5-1";
+  stored.decision.selected.model = "claude-fable-5-1";
+  assert.deepEqual(stored.binding, admission.reservation.binding);
+  assert.equal(validateState(historical).ok, true);
+  assert.equal(handleRequest(request("status"), { catalog: policy, state: historical, now: NOW }).response.ok, true);
+});
+
+test("Claude review efforts cannot exceed the observed model or fixed CE seam controls", () => {
+  for (const [model, observed, effort, seam, reason] of [
+    ["claude-opus-4-6", "claude-opus-4-6", "xhigh", "code", "effort_unsupported"],
+    ["opus", "claude-opus-4-6", "xhigh", "code", "effort_unsupported"],
+    ["claude-fable-5-1", "claude-fable-5-1", "max", "pov", "ce_effort_unsupported"],
+  ]) {
+    const role = seam === "pov" ? "review.cross_family" : "review.code";
+    const policy = claudePolicy(model, { role });
+    const state = claudePeerState(policy, observed);
+    const ceSeam = seam === "pov"
+      ? { id: "ce-pov.execution", skill: "ce-pov", artifact: { schema: "railyard/ce-pov-review/v1", digest: DIGEST_A } }
+      : { id: "ce-code-review.execution", skill: "ce-code-review", artifact: { schema: "railyard/ce-code-review-findings/v1", digest: DIGEST_A } };
+    const resolved = handleRequest(request("resolve", { role, callerKind: "compound-engineering", harness: "claude", effort, adapterId: "claude-cli-via-worker", ceSeam }), { catalog: policy, state, now: NOW }).response;
+    assert.equal(resolved.reason, "no_eligible_route", JSON.stringify(resolved));
+    assert.deepEqual(resolved.rejectedAlternatives, [{ modelAlias: "selected", reason }]);
+  }
 });
 
 test("default allocation preserves requested pairs and rejects unsupported choices without substitution", () => {
@@ -2223,6 +2405,11 @@ test("carrier-neutral invariant work contracts keep seven closed presentation ov
   assert.equal(new Set(built.map((item) => item.contract.invariantDigest)).size, 1);
   assert.equal(new Set(built.map((item) => item.contract.presentationDigest)).size, fixtures.length);
   const invariantDigest = built[0].contract.invariantDigest;
+  const fable51 = buildInvariantWorkContract({ ...invariantInput, carrierId: "claude-ce-review", model: "claude-fable-5-1", effort: "max", expectedInvariantDigest: invariantDigest });
+  assert.equal(fable51.reason, "work_contract_built", JSON.stringify(fable51));
+  assert.equal(fable51.contract.presentation.family, "fable");
+  assert.equal(fable51.contract.presentation.model, "claude-fable-5-1");
+  assert.equal(fable51.contract.invariantDigest, invariantDigest);
   assert.equal(buildInvariantWorkContract({ ...invariantInput, carrierId: "codex-sol", model: "gpt-5.6-sol", effort: "high", expectedInvariantDigest: invariantDigest }).reason, "work_contract_built");
   assert.equal(buildInvariantWorkContract({ ...invariantInput, objectiveDigest: "2".repeat(64), carrierId: "codex-sol", model: "gpt-5.6-sol", effort: "high", expectedInvariantDigest: invariantDigest }).reason, "invariant_contract_mutation");
   assert.equal(buildInvariantWorkContract({ ...invariantInput, carrierId: "codex-sol", model: "unbound-model", effort: "high" }).reason, "presentation_overlay_mismatch");

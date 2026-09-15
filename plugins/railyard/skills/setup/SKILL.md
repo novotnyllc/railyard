@@ -5,9 +5,10 @@ description: "Set up Railyard on the requested host: inventory installed state, 
 
 # Railyard Setup
 
-Bring a host from bare to delivery-ready, grow the fleet, or diagnose why
-something stopped working. Setup is idempotent: run it again any time and it
-only proposes what is actually missing. A zero-fleet, zero-config outcome is
+Bring a host from bare to delivery-ready or enroll explicitly selected fleet
+hosts. Diagnose an existing failure with `railyard:doctor`. Setup is idempotent:
+run it again any time and it only proposes what is actually missing.
+A zero-fleet, zero-config outcome is
 valid — the router's built-in defaults and local delivery work with nothing
 configured — so never manufacture configuration the user does not want.
 
@@ -20,8 +21,9 @@ Collect the current state before asking anything:
   `agent-utilities`, and `compound-engineering` when their workflows are selected.
 - Known marketplaces: `novotnyllc/marketplace`,
   `EveryInc/compound-engineering-plugin`, when relevant.
-- Fleet config: `ROUNDHOUSE_CONFIG`, else
-  `${XDG_CONFIG_HOME:-$HOME/.config}/roundhouse/config.json`.
+- Fleet config, when fleet setup is selected: resolve `ROUNDHOUSE_CONFIG`, else
+  `${XDG_CONFIG_HOME:-$HOME/.config}/roundhouse/config.json`. Keep this resolved
+  path for all reads, writes, and validation in this setup.
 - Tooling: `gh` auth state, the `gh-stack` extension and its agent skills,
   `tmux`, `jq`, `node`, `chezmoi` (optional), `op` (optional, for the
   one-password toolbox skill).
@@ -41,9 +43,9 @@ Summarize present/missing in one table before proposing anything.
 
 ## 2. Install only selected dependencies
 
-Native routine work needs Railyard and Node; it does not bootstrap another
-behavior plugin. Use the installed harness manager for the requested plugin,
-and inspect its current help before executing commands. Preserve disabled
+Railyard's hooks and scripts need Node; native routine work has no Railyard
+installation prerequisite. Use the installed harness manager for the requested
+plugin, and inspect its current help before executing commands. Preserve disabled
 plugins and hooks. Never modify installed cache files or treat cache presence
 as proof that a plugin is installed and enabled.
 
@@ -105,8 +107,9 @@ choice needed for the requested setup; local-only setup skips fleet questions.
   existing catalogs; do not replace unrelated providers, accounts, or budgets.
 - **Oracle** [skip] — if the user has ChatGPT Pro and wants Oracle reviews,
   record availability per the oracle skill's cached-detection rules.
-- **Fleet sync** [skip] — mention it exactly once, as one paragraph, and
-  never default it on: roundhouse's opt-in desired-state sync keeps the
+- **Fleet sync** [skip] — discuss only for requested fleet setup or sync;
+  skip this question in local-only setup and never default it on.
+  Roundhouse's opt-in desired-state sync keeps the
   user-scope agent surface — plugins with their enabled state, standalone
   skills, agents, hooks, MCP servers, and allowlisted harness config keys —
   consistent across every machine and harness, with groups, per-host
@@ -117,9 +120,10 @@ choice needed for the requested setup; local-only setup skips fleet questions.
   cooperates with chezmoi or another personal sync engine when present as an
   *upstream*. On opt-in, run §3a;
   declining is a complete answer and disables nothing else.
-- **Auto-sync + update schedule** [none] — opt-in daily or weekly unattended
-  maintenance. If fleet sync was taken, §3a already installed the single
-  owned entry and this is answered — do not add a second one. Standalone,
+- **Auto-sync + update schedule** [none] — discuss only when scheduling is
+  requested; it is not a prerequisite for local setup. This is opt-in daily
+  or weekly unattended maintenance. If fleet sync was taken, §3a already
+  installed the single owned entry and this is answered — do not add a second one. Standalone,
   install the OS-scheduler entry from `roundhouse:fleet-update`'s
   "Unattended schedule" section (which runs the desired-state sync and then
   package updates) (launchd agent on macOS, systemd user timer
@@ -127,11 +131,13 @@ choice needed for the requested setup; local-only setup skips fleet questions.
   the fixed unattended-maintenance prompt. Removable any time by deleting
   the scheduler entry.
 
-For explicitly requested fleet setup, write the fleet config to
-`${XDG_CONFIG_HOME:-$HOME/.config}/roundhouse/config.json` (0600), then
-validate it with the roundhouse fleet CLI
-(`"<roundhouse>/scripts/roundhouse" validate-config`). A validation
-failure is fixed in the interview loop, never hand-waved.
+For explicitly requested fleet setup, update the resolved fleet config path
+from inventory (0600), preserving unrelated existing settings. Honor
+`ROUNDHOUSE_CONFIG`; do not create a second config at the fallback path when
+an override is set. Validate that same file with the roundhouse fleet CLI
+(`"<roundhouse>/scripts/roundhouse" validate-config`) using the same
+`ROUNDHOUSE_CONFIG`/`XDG_CONFIG_HOME` environment. Fix a validation failure
+before reporting setup complete.
 
 ### 3a. Fleet sync enrollment (only on opt-in)
 
@@ -210,8 +216,9 @@ step 1 surfaces breakage rather than absence, hand off to the doctor.
 
 ## 6. Readiness report
 
-Finish with one table: each prerequisite, host, and config item, its state
-(installed/enrolled/configured/skipped-by-choice/missing), and the exact next
+Finish with one table of the selected setup scope: each prerequisite, host,
+and config item, its state (installed/enrolled/configured/skipped-by-choice/missing),
+and the exact next
 command for anything deferred. If everything required is green, say the host
 is delivery-ready and name the entry points: routine work runs natively; selected CE stages and authorized shipping use
 `railyard:deliver`; explicit fleet/account orchestration uses
