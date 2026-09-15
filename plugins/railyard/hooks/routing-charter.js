@@ -13,6 +13,7 @@ process.stdout.write(
     "- Complete the user's requested scope: preserve plan/local-only stops and",
     "  follow authorized delivery through merge and post-merge proof. CE alone",
     "  owns review settlement and CI/PR monitoring; reuse its active watcher.",
+    "  Before merging, use deliver's CE snapshot handoff for the merge guard.",
     "- Choose model AND reasoning effort for each agent assignment through",
     "  railyard:model-routing. Astra Max is the baseline candidate for substantive",
     "  engineering, not a universal cost claim. Use deterministic tools directly",

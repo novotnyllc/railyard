@@ -1,93 +1,27 @@
 #!/usr/bin/env node
-// PreToolUse: refuse a pull-request merge issued before review settlement.
-//
-// CI green is not merge authority. Repos with bot reviewers (GitHub Copilot,
-// the Codex connector) get their reviews MINUTES after a PR opens and after
-// every push, so every signal a merge decision can read is satisfiable before
-// the findings land: checks pass immediately, reviewDecision is null when no
-// human review is required, and "require conversation resolution" is vacuously
-// true while zero threads exist. This gate closes that latency race the way
-// dispatch-gate.js closes the silent-model-inheritance race — as mechanism,
-// not prose.
-//
-// Refuses only determinable states:
-//   (a) the PR has unresolved review threads, or
-//   (b) the head commit has no review yet AND is inside a bounded wait.
-// The wait is SIGNAL-AWARE rather than a flat clock. Bots that intend to
-// review REGISTER within ~1-3 minutes of a push — a 👀 reaction on the PR, or
-// a review they already posted on an earlier head and owe on this one. So:
-//   - a review already on this head, with nothing unresolved and no OTHER
-//     reviewer still registered, allows immediately (no residual clock);
-//   - no signal at all past the 3-minute registration window means nobody is
-//     coming, so it allows;
-//   - a signal that has not turned into a review yet holds the merge until it
-//     does, capped from the head push so a flaky signal cannot lock the
-//     repository forever. The cap depends on what KIND of signal it is: an
-//     explicit CLAIM (a 👀 after the push, a review left pending) is somebody
-//     affirmatively saying they are on it and gets the long cap; "reviewed an
-//     earlier head" is an INFERENCE the gate drew, not a claim anyone made,
-//     and gets a much shorter one.
-// Everything else allows — a repository that genuinely has no reviewers is
-// never blocked.
-//
-// Cross-platform, dependency-free. Fails OPEN on anything it cannot determine
-// (gh missing, network error, timeout, unparseable output, unrecognized
-// command shape): a broken gate must never block every merge in the repo. It
-// fails CLOSED only on a violation it actually observed.
-
+// PreToolUse: consume CE's final pr-snapshot stdout, selected by the CE owner
+// after its readiness judgment. CE owns review settlement and CI policy.
+// This adapter checks the supplied evidence and current PR identity; it does
+// not watch reviewers, infer settlement from elapsed time, or authorize merges.
+// Missing, stale or unknown evidence refuses a detected merge actionably.
 const { execFileSync } = require("child_process");
+const { readFileSync, statSync } = require("fs");
 const path = require("path");
 
-// Bot reviewers observed posting 3m26s and 4m58s after the head commit on the
-// PR that motivated this gate — but they REGISTERED (👀 on the PR, a review
-// left pending) inside the first minute. Registration is the cheap signal, so
-// the no-signal wait is 3 minutes, not the ~2x-worst-case 10 the flat clock
-// used to burn on every merge in every repository with no reviewers at all.
-const REGISTRATION_WINDOW_MS = 3 * 60 * 1000;
-// A reviewer that CLAIMED this head — a 👀 added after the push, or a review
-// left pending — said affirmatively that it is working. That claim gets the
-// long cap; past it the gate allows with a warning naming the stale signal.
-const SIGNAL_CAP_MS = 20 * 60 * 1000;
-// "Reviewed an earlier head" is an inference, not a claim: nobody promised to
-// come back. Holding it to the claim cap made every push wait 20 minutes on
-// reviewers that were quota-limited and never returned at all.
-//
-// Measured on novotnyllc/agent-utilities#65 (2026-08-21, 31 heads over ~4.5h):
-// chatgpt-codex-connector re-reviewed 15 of them, at a median 3m58s and a mean
-// 4m22s after the head commit (13 of 15 inside 6m; outliers 6m51s and 7m07s) —
-// and those are upper bounds, since the push follows the commit it carries.
-// The other two bots never came back: copilot-pull-request-reviewer reviewed
-// exactly one head (05:56Z) and skipped the following 29; coderabbitai went
-// silent after 08:20Z and skipped the last 13. So 7 minutes covers the
-// re-review that actually happens, and stops paying 20 for the ones that do
-// not. ponytail: one number for every bot; split per-reviewer only if some
-// reviewer's real re-review latency lands outside this.
-const EARLIER_HEAD_CAP_MS = 7 * 60 * 1000;
-// The two calls are sequential in the worst case, so their SUM plus Node
-// startup must clear the harness's 5s PreToolUse cap with room to spare —
-// otherwise the harness kills the hook before its own fail-open path runs, and
-// the gate stops controlling its own verdict. 1200 + 2500 + ~100ms startup
-// leaves ~1.2s of margin. (Measured real-world: ~0.8s for the whole path.)
-// execFileSync has NO default timeout, so an unbounded call would hang.
 const VIEW_TIMEOUT_MS = 1200;
 const GRAPHQL_TIMEOUT_MS = 2500;
-// Per-call limits alone are not enough: one command can carry several merges,
-// and checking them sequentially at the per-call worst case would outlive the
-// harness cap (2 merges x 3.7s = 7.4s), which kills the hook before it
-// returns any verdict. This is the whole-process budget every gh call draws
-// down; running out degrades open with a notice, like any other unknown.
 const TOTAL_BUDGET_MS = 4000;
 const DEADLINE = Date.now() + TOTAL_BUDGET_MS;
-
-const SETTLEMENT_QUERY = `
+// Evidence freshness only: expiry asks CE for a current observation; it never
+// starts a wait or substitutes for CE's review-still-coming judgment.
+const EVIDENCE_MAX_AGE_MS = 5 * 60 * 1000;
+const MAX_EVIDENCE_BYTES = 8 * 1024 * 1024;
+const IDENTITY_QUERY = `
 query($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){
     pullRequest(number:$number){
-      headRefOid
-      reviews(last:100){nodes{state submittedAt author{login} commit{oid}}}
-      reviewThreads(first:100){totalCount nodes{isResolved}}
-      reactions(content:EYES,last:100){nodes{createdAt user{login}}}
-      commits(last:1){nodes{commit{committedDate}}}
+      url state isDraft headRefOid baseRefName mergeable mergeStateStatus
+      baseRef{target{oid}}
     }
   }
 }`;
@@ -139,9 +73,8 @@ const CONTROL_WORDS = new Set([
   // must stay one token.
   "{", "}",
 ]);
-// Authentication the merge command carries inline. Without forwarding it the
-// settlement query is unauthenticated, degrades open, and the shell's merge
-// then succeeds unchecked with the very token we ignored.
+// Forward inline authentication so the identity read uses the same account
+// as the requested merge. Authentication failures refuse the merge.
 const AUTH_ENV = [
   "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN",
   // gh resolves its config dir as GH_CONFIG_DIR, then $XDG_CONFIG_HOME/gh,
@@ -169,6 +102,7 @@ const SHORT_VALUE_FLAGS = new Set(
   [...VALUE_FLAGS].filter((f) => /^-[A-Za-z]$/.test(f)),
 );
 const NON_MERGE_FLAGS = new Set(["--help", "-h", "--disable-auto"]);
+const flagEnabled = (value) => value !== undefined && !/^(?:false|f|0)$/i.test(String(value));
 const REST_MERGE_RE = /repos\/([^\s/]+)\/([^\s/]+)\/pulls\/(\d+)\/merge/;
 
 // Also sheds grouping punctuation, so `(gh` and `7)` tokenize as `gh` and `7`.
@@ -179,13 +113,30 @@ const REST_MERGE_RE = /repos\/([^\s/]+)\/([^\s/]+)\/pulls\/(\d+)\/merge/;
 // open a substitution, all places a merge hides behind a non-gh first token.
 // A heredoc body is data the shell never executes, so a `gh pr merge` line
 // inside one must not be gated — otherwise writing a release script gets
-// refused. ponytail: line-based, delimiter-matched; a `<<` inside quotes is
-// not distinguished, which at worst hides a real command in the same
-// (fail-open) direction as any other unparsed shape.
+// refused. Only an unquoted operator starts a heredoc; quoted `<<EOF` is data
+// and must never hide a later executable merge.
+function heredocDelimiter(line, lexical) {
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === "\\" && lexical.quote !== "'") { index += 1; continue; }
+    if (lexical.quote) {
+      if (char === lexical.quote) lexical.quote = null;
+      continue;
+    }
+    if (char === "'" || char === '"') { lexical.quote = char; continue; }
+    if (char === "#" && (index === 0 || /\s/.test(line[index - 1]))) return null;
+    if (char !== "<" || line[index - 1] === "<" || line[index + 1] !== "<" || line[index + 2] === "<") continue;
+    const match = line.slice(index).match(/^<<-?[ \t]*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/);
+    return match ? match[2] : null;
+  }
+  return null;
+}
+
 function stripHeredocs(text) {
   if (!text.includes("<<")) return text;
   const out = [];
   let delimiter = null;
+  const lexical = { quote: null }; // Shell quotes may span physical lines.
   for (const line of text.split("\n")) {
     if (delimiter !== null) {
       if (line.trim() === delimiter) delimiter = null;
@@ -194,8 +145,7 @@ function stripHeredocs(text) {
     out.push(line);
     // `<<<` is a here-string (inline data, no delimiter). Matching it made
     // every following line vanish, silently disabling the gate.
-    const open = line.match(/(?<!<)<<(?!<)-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/);
-    if (open) delimiter = open[2];
+    delimiter = heredocDelimiter(line, lexical);
   }
   return out.join("\n");
 }
@@ -225,7 +175,7 @@ function tokenizeSegments(text) {
         current += text[i + 1];
         i += 1;
       } else if (char === quote) quote = null;
-      else if (char === "$" && text[i + 1] === "(") {
+      else if (quote === '"' && char === "$" && text[i + 1] === "(") {
         // `"$(gh pr merge 7)"` still runs the command: leave quote mode for
         // the substitution so its contents are parsed as a command.
         endSegment();
@@ -329,45 +279,52 @@ function dropWrapperFlags(tokens) {
   return { rest, chdir, unset, splitString, ignoreEnv };
 }
 
-function ghArgs(segmentTokens) {
+// Peel only the known env/shell wrappers. Keep their context with an extracted
+// script instead of re-parsing it later against the hook's ambient settings.
+function commandPrefix(segmentTokens, baseCwd, inherited = {}) {
   let tokens = segmentTokens.map((t) => t.replace(/^!+/, "")).filter(Boolean);
-  const env = {};
-  const unset = [];
-  let chdir = null;
-  let ignoreEnv = false;
+  const context = {
+    env: { ...inherited.env }, unset: [...(inherited.unset || [])],
+    ignoreEnv: inherited.ignoreEnv || false, cwd: baseCwd,
+    cwdUnknown: inherited.cwdUnknown || false,
+  };
   for (;;) {
     const head = tokens[0];
-    if (!head) return null;
-    if (CONTROL_WORDS.has(head)) {
-      tokens = tokens.slice(1);
-      continue;
-    }
-    // Keep the assignment, don't just skip it: `GH_REPO=o/r gh pr merge 7`
-    // retargets the merge, and discarding it verifies PR 7 in the WRONG repo.
-    const assignment = head.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+    if (!head) return { ...context, tokens };
+    if (CONTROL_WORDS.has(head)) { tokens = tokens.slice(1); continue; }
+    const assignment = head.match(/^([A-Za-z_][A-Za-z0-9_]*)=([\s\S]*)$/);
     if (assignment) {
-      env[assignment[1]] = assignment[2];
+      context.env[assignment[1]] = assignment[2];
+      context.unset = context.unset.filter((name) => name !== assignment[1]);
       tokens = tokens.slice(1);
       continue;
     }
-    if (SHELL_WRAPPERS.has(basename(head))) {
-      const dropped = dropWrapperFlags(tokens);
-      if (dropped.chdir) chdir = dropped.chdir;
-      if (dropped.ignoreEnv) ignoreEnv = true;
-      for (const name of dropped.unset) unset.push(name);
-      tokens = dropped.rest;
-      continue;
+    if (!SHELL_WRAPPERS.has(basename(head))) return { ...context, tokens };
+    const dropped = dropWrapperFlags(tokens);
+    if (dropped.ignoreEnv) {
+      context.env = {};
+      context.unset = [];
+      context.ignoreEnv = true;
     }
-    break;
+    for (const name of dropped.unset) {
+      delete context.env[name];
+      if (!context.unset.includes(name)) context.unset.push(name);
+    }
+    if (dropped.chdir) {
+      if (/[\$`]/.test(dropped.chdir)) context.cwdUnknown = true;
+      else context.cwd = path.resolve(context.cwd || process.cwd(), dropped.chdir);
+    }
+    if (dropped.splitString) return { ...context, script: dropped.splitString };
+    tokens = dropped.rest;
+    if (basename(head) !== "env" && tokens[0] && /\s/.test(tokens[0])) {
+      return { ...context, script: tokens[0] };
+    }
   }
-  return basename(tokens[0]) === "gh"
-    ? { tokens: tokens.slice(1), env, chdir, unset, ignoreEnv }
-    : null;
 }
 
 // gh accepts `[HOST/]OWNER/REPO`. Keep the HOST: dropping it makes the gate
 // query github.com while the merge targets an enterprise host, which usually
-// degrades open and lets an unsettled merge through. An unexpanded
+// fails verification and lets an unsettled merge through. An unexpanded
 // `{owner}`/`{repo}` placeholder means gh will fill it from the current
 // repository, so it is not a usable target — return null and let `gh pr view`
 // resolve the same way gh itself would.
@@ -399,7 +356,7 @@ function parseArgs(tokens) {
     }
     const eq = token.indexOf("=");
     const cluster = token.match(/^-([A-Za-z].*)$/);
-    if (eq > 0 && token.startsWith("--")) {
+    if (eq > 0 && (token.startsWith("--") || /^-[A-Za-z]=/.test(token))) {
       flags.set(token.slice(0, eq), token.slice(eq + 1)); // --flag=value
     } else if (cluster && !token.startsWith("--")) {
       // gh accepts clustered and attached short flags: `-iXPUT` is `-i` plus
@@ -437,40 +394,27 @@ function parseArgs(tokens) {
 // moment PR 5 is settled. `--help` is not a merge.
 // `bash -lc "gh pr merge 7"` carries its whole script as one quoted token, so
 // the wrapper's payload has to be parsed as command text in its own right.
-// (Codex's argv form joins to separate tokens and is handled by ghArgs.)
-function wrapperScript(tokens) {
-  let rest = tokens;
-  // Wrappers stack: `env bash -lc '…'`, `env -C dir bash -lc '…'`. Peel each
-  // layer until a script payload appears or there is no wrapper left.
-  for (let depth = 0; depth < 8; depth += 1) {
-    while (rest.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[0])) rest = rest.slice(1);
-    if (!rest.length || !SHELL_WRAPPERS.has(basename(rest[0]))) return null;
-    const dropped = dropWrapperFlags(rest);
-    if (dropped.splitString) return dropped.splitString; // env -S 'gh pr merge 7'
-    rest = dropped.rest;
-    if (rest[0] && /\s/.test(rest[0])) return rest[0];
-  }
-  return null;
-}
-
-function mergeCommands(text, baseCwd) {
+// (Codex's argv form joins to separate tokens and is handled by commandPrefix.)
+function mergeCommands(text, baseCwd, inherited = {}, depth = 0) {
   const found = [];
   const queue = tokenizeSegments(text);
   // `cd ../other && gh pr merge 7` resolves PR 7 in ../other, so the gate's own
   // lookup has to run there too — otherwise a settled PR 7 here authorizes an
   // unsettled PR 7 there. Tracked across segments, not interpreted deeply: an
-  // unresolvable path just makes gh fail, which degrades open like any unknown.
+  // unresolvable path just makes gh fail, which the gate refuses as unknown.
   let cwd = baseCwd || undefined;
   const cwdStack = [];
   let conditional = false; // the previous separator was && or ||
   let pipeline = false; // the previous separator was a single |
-  let cwdUnknown = false;
+  let cwdUnknown = inherited.cwdUnknown || false;
   // Bounded: a pathological nest cannot spin the hook inside its budget.
   for (let i = 0; i < queue.length && i < 64; i += 1) {
     const segment = queue[i];
-    const script = wrapperScript(segment);
-    if (script) {
-      for (const sub of tokenizeSegments(script)) queue.push(sub);
+    const prefix = commandPrefix(segment, cwd, { ...inherited, cwdUnknown });
+    if (prefix.script && depth < 8) {
+      found.push(...mergeCommands(prefix.script, prefix.cwd, prefix, depth + 1));
+      conditional = false;
+      pipeline = false;
       continue;
     }
     if (segment.length === 1 && (segment[0] === "&&" || segment[0] === "||")) {
@@ -513,22 +457,20 @@ function mergeCommands(text, baseCwd) {
       pipeline = false;
       continue;
     }
-    const gh = ghArgs(segment);
     conditional = false;
     pipeline = false;
-    if (!gh) continue;
-    const { tokens, env } = gh;
-    const unset = gh.unset;
-    const ignoreEnv = gh.ignoreEnv;
-    // `env -C DIR gh …` runs the merge from DIR.
-    const at = gh.chdir ? path.resolve(cwd || process.cwd(), gh.chdir) : cwd;
+    if (!prefix.tokens || basename(prefix.tokens[0] || "") !== "gh") continue;
+    const { env, unset, ignoreEnv } = prefix;
+    const tokens = prefix.tokens.slice(1);
+    const at = prefix.cwd;
+    const commandCwdUnknown = prefix.cwdUnknown;
     const { words, flags } = parseArgs(tokens);
     // `--help` prints usage; `--disable-auto` TURNS OFF auto-merge, which is
     // the mitigation to reach for during a settlement window. Refusing either
     // blocks a command that merges nothing. Checked against real options only.
-    if ([...NON_MERGE_FLAGS].some((f) => flags.has(f))) continue;
+    if ([...NON_MERGE_FLAGS].some((f) => flagEnabled(flags.get(f)))) continue;
     if (words[0] === "pr" && words[1] === "merge") {
-      found.push({ kind: "pr", tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown, ref: words[2] || null });
+      found.push({ kind: "pr", tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown: commandCwdUnknown, ref: words[2] || null });
     } else if (words[0] === "api") {
       // Only the endpoint positional — a `-H 'X-Test: repos/x/y/pulls/5/merge'`
       // header value must not be mistaken for the endpoint being called.
@@ -536,20 +478,25 @@ function mergeCommands(text, baseCwd) {
         .toUpperCase();
       // gh api defaults to GET; only PUT actually merges. Refusing a
       // merge-status check would block a read-only call.
-      const path = method === "PUT" ? words.join(" ").match(REST_MERGE_RE) : null;
-      if (path) {
+      const endpoint = words[1];
+      const path = typeof endpoint === "string" ? endpoint.match(REST_MERGE_RE) : null;
+      if (path && method === "PUT") {
         // Placeholders expand from the current repo, exactly as `gh pr view N`
         // resolves, so hand the number to that path rather than querying a
         // literal `{owner}`.
         found.push({
-          kind: "api", tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown, endpoint: path, ref: path[3],
+          kind: "api", tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown: commandCwdUnknown, endpoint: path, ref: path[3],
         });
-      } else if (tokens.some((t) => t.includes("mergePullRequest"))) {
-        // A raw GraphQL merge mutation carries a PR node id, not owner/repo/
-        // number, so the gate cannot verify it. ponytail: report it loudly
-        // instead of passing it in silence — upgrade to resolving the node id
-        // if this form ever shows up in real use.
-        found.push({ kind: "graphql", tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown, ref: null });
+      } else if ((method === "PUT" && (!endpoint || /[$`]/.test(endpoint))) ||
+          (path && /[$`]/.test(method))) {
+        found.push({ kind: "unsupported", why: "the gh api merge endpoint or method is unresolved; use a literal REST PUT endpoint or gh pr merge with --match-head-commit" });
+      } else if (endpoint === "graphql") {
+        const command = { tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown: commandCwdUnknown };
+        try {
+          if (graphqlMerges(command)) found.push({ ...command, kind: "graphql", ref: null });
+        } catch (error) {
+          found.push({ kind: "unsupported", why: String(error.message) });
+        }
       }
     }
   }
@@ -560,7 +507,7 @@ function mergeCommands(text, baseCwd) {
 // honors for any command that would otherwise use the local repository.
 // The host resolves independently of the repository, because the repo can be
 // unknown (a bare number, or `{owner}` placeholders) while the host is still
-// explicitly selected — and losing it there sends the settlement query to the
+// explicitly selected — and losing it there sends the identity query to the
 // wrong GitHub while the merge goes to the enterprise host.
 function hostFromCommand(command) {
   const { flags, env, kind } = command;
@@ -631,7 +578,7 @@ function ghEnv(host, captured, unset, ignoreEnv) {
   // `env -i` runs the merge with an empty environment, so inheriting the
   // ambient one would let the gate authenticate (or pick a host) in ways the
   // merge cannot. PATH is kept regardless: without it gh cannot be located,
-  // and failing to spawn just degrades open.
+  // and failing to spawn just fails verification.
   // ponytail: PATH-only floor; widen if a real -i case needs more.
   const env = ignoreEnv ? { PATH: process.env.PATH } : { ...process.env };
   for (const name of unset || []) delete env[name];
@@ -693,320 +640,284 @@ function resolveViaGh(command) {
   };
 }
 
-function settlement(target, command) {
-  const raw = gh(
-    [
-      "api", "graphql",
-      "-f", `query=${SETTLEMENT_QUERY}`,
-      // Bound as variables, never concatenated into the query text, so command
-      // text parsed out of an agent-composed string cannot shape the query.
-      "-F", `owner=${target.owner}`,
-      "-F", `name=${target.name}`,
-      "-F", `number=${target.number}`,
-    ],
-    GRAPHQL_TIMEOUT_MS,
-    {
-      host: target.host, env: command.env, cwd: command.cwd,
-      unset: command.unset, ignoreEnv: command.ignoreEnv,
-    },
-  );
-  const pr = JSON.parse(raw)?.data?.repository?.pullRequest;
-  if (!pr || typeof pr.headRefOid !== "string") {
-    throw new Error("settlement query returned no pull request");
+// The snapshot is unchanged CE stdout, beside CE's atomic state.json. Passing
+// its path asserts that CE's owner completed the appropriate readiness judgment;
+// CE 3.25 does not persist that semantic verdict in state.json or BABYSIT_WAKE.
+function commandSetting(command, name) {
+  if (Object.hasOwn(command.env, name)) return command.env[name];
+  if (command.ignoreEnv || command.unset.includes(name)) return undefined;
+  return process.env[name];
+}
+
+function readRegularText(filename) {
+  const info = statSync(filename);
+  if (!info.isFile() || info.size > MAX_EVIDENCE_BYTES) throw new Error("unsupported input file");
+  return readFileSync(filename, "utf8");
+}
+
+function readObject(filename, label) {
+  let value;
+  try { value = JSON.parse(readRegularText(filename)); }
+  catch { throw new Error(`${label} is missing, unreadable or invalid JSON; use a regular JSON file no larger than 8 MiB`); }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be a JSON object`);
   }
-  const threads = pr.reviewThreads?.nodes || [];
-  return {
-    head: pr.headRefOid,
-    threads,
-    threadTotal: pr.reviewThreads?.totalCount ?? threads.length,
-    reviews: pr.reviews?.nodes || [],
-    reactions: pr.reactions?.nodes || [],
-    // pushedDate is null from GitHub today, so committedDate is the available
-    // proxy for "when did this head get its chance?" — seconds apart for a
-    // freshly pushed branch. ponytail: a long-dormant local commit pushed late
-    // reads as stale and skips the wait; upgrade to the PR timeline's
-    // HeadRefForcePushedEvent/PullRequestCommit timestamps if that ever bites.
-    committedDate: pr.commits?.nodes?.[0]?.commit?.committedDate || null,
-  };
+  return value;
 }
 
-function humanDuration(ms) {
-  const seconds = Math.max(0, Math.ceil(ms / 1000));
-  if (seconds < 120) return `${seconds}s`;
-  return `${Math.ceil(seconds / 60)}m`;
+function prIdentity(value) {
+  const match = typeof value === "string" && value.match(
+    /^https?:\/\/([^/]+)\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/,
+  );
+  if (!match) return null;
+  return { host: match[1].toLowerCase(), owner: match[2].toLowerCase(),
+    name: match[3].toLowerCase(), number: Number(match[4]) };
 }
 
-const ALLOW = { kind: "allow" };
-const refuse = (why) => ({ kind: "refuse", why });
-const degrade = (why) => ({ kind: "degrade", why });
-// Allowed, but with something the operator has to know: the merge went ahead
-// past a signal that never produced a review.
-const warn = (why) => ({ kind: "warn", why });
-
-const who = (login) => login || "a reviewer";
-
-// Has a reviewer looked at THIS head? Commit-OID equality ONLY. A review
-// submitted after the head's timestamp but recorded against an older oid is
-// indistinguishable from a review of the PREVIOUS head that happened to land
-// late, so treating it as settlement would reopen the exact stale-review race
-// this gate exists to close. Such a review is an in-progress signal instead:
-// the gate waits for that reviewer to come back to the new head.
-function reviewedHead(state) {
-  return state.reviews.some(
-    (review) => review && review.state !== "PENDING" &&
-      review.commit?.oid === state.head,
+function samePr(left, right) {
+  return left && right && ["host", "owner", "name", "number"].every(
+    (key) => String(left[key]).toLowerCase() === String(right[key]).toLowerCase(),
   );
 }
 
-// Reviewers that have shown intent on this head but have not posted yet. Each
-// entry is `{ why, cap }`: a phrase the refusal names, so the model can see
-// WHAT it is waiting on instead of just a clock, and the cap for that signal's
-// CLASS — an explicit claim holds longer than an inference the gate drew.
-// Signals are matched to reviewer IDENTITY and to TIME, not counted in
-// aggregate: one reviewer landing on the head does not discharge another
-// reviewer's 👀, and a reviewer's own review discharges only the reactions it
-// came AFTER. A 👀 added once a review is already posted (a second pass on the
-// same head, no new push) is a fresh registration and still holds the merge.
-// A PENDING review is never discharged: it is by definition unsubmitted, so a
-// completed review beside it is a previous pass, not that one.
-// A PENDING review is only ever the MERGING ACCOUNT'S OWN: GitHub exposes an
-// unsubmitted review to its author alone, so this query — authenticated as
-// whoever runs the merge — cannot see a bot's pending review. It is kept
-// because "you left a review unsubmitted and are merging anyway" is a real
-// state worth refusing, NOT as cross-user registration evidence. The 👀
-// reaction is the signal that actually crosses accounts.
-// ponytail: reactions and reviews only — an interim "I'm on it" comment is a
-// weaker signal and a human's ordinary comment would read as one, holding the
-// merge for the full cap; a pending review request would hold on every
-// requested human reviewer. Add either if bots stop reacting.
-function inProgressSignals(state, committed) {
-  // login -> when that reviewer's newest review on THIS head was submitted.
-  // NaN means "landed, but the time is unreadable", which discharges owed
-  // reviews but never a reaction, since the ordering cannot be shown.
-  const landed = new Map();
-  for (const review of state.reviews) {
-    if (!review || review.state === "PENDING" || review.commit?.oid !== state.head) continue;
-    const login = who(review.author?.login);
-    const at = review.submittedAt ? Date.parse(review.submittedAt) : NaN;
-    const seen = landed.get(login);
-    landed.set(login, seen === undefined || (!Number.isNaN(at) && at > seen) ? at : seen);
+function nonempty(value) { return typeof value === "string" && value.length > 0; }
+const SHA = /^[a-f0-9]{40}$/i;
+const empty = (value) => Array.isArray(value) && value.length === 0;
+
+function ceEvidence(command) {
+  const filename = commandSetting(command, "RAILYARD_CE_SNAPSHOT");
+  if (!filename || !path.isAbsolute(filename)) {
+    throw new Error("set RAILYARD_CE_SNAPSHOT to the absolute path of CE's final snapshot JSON beside its state.json");
   }
-  const signals = [];
-  const claim = (why) => signals.push({ why: why + " (explicit claim)", cap: SIGNAL_CAP_MS });
-  const earlier = new Set();
-  for (const review of state.reviews) {
-    const login = who(review?.author?.login);
-    if (review?.state === "PENDING") {
-      claim("a pending (unsubmitted) review from " + login);
-    } else if (review?.commit?.oid && review.commit.oid !== state.head &&
-      !landed.has(login)) {
-      earlier.add(login);
+  const mode = commandSetting(command, "RAILYARD_CE_MODE") || "pipeline";
+  if (mode !== "pipeline" && mode !== "interactive") {
+    throw new Error("RAILYARD_CE_MODE must be pipeline or interactive");
+  }
+  const snapshot = readObject(filename, "CE snapshot");
+  const state = readObject(path.join(path.dirname(filename), "state.json"), "CE state.json");
+  const identity = prIdentity(snapshot.url);
+  if (!identity || !samePr(identity, prIdentity(state.pr?.url)) ||
+      state.pr?.number !== identity.number ||
+      String(state.pr?.owner).toLowerCase() !== identity.owner ||
+      String(state.pr?.repo).toLowerCase() !== identity.name) {
+    throw new Error("CE snapshot and state.json do not identify the same PR");
+  }
+  if (!nonempty(snapshot.invocation_id) || snapshot.invocation_id !== state.invocation_id ||
+      !Number.isInteger(snapshot.tick) || snapshot.tick < 1 || snapshot.tick !== state.tick ||
+      !SHA.test(snapshot.head_sha || "") || snapshot.head_sha !== state.head_sha) {
+    throw new Error("CE snapshot is not the latest invocation, tick and head recorded in state.json");
+  }
+  const activityAt = Date.parse(state.last_activity_at);
+  const startedAt = Date.parse(snapshot.invocation_started_at);
+  const elapsed = snapshot.invocation_wall_elapsed_seconds;
+  if (!Number.isFinite(activityAt) || activityAt > Date.now() ||
+      Date.now() - activityAt > EVIDENCE_MAX_AGE_MS) {
+    throw new Error("CE evidence is stale or has an invalid last_activity_at; obtain a current CE snapshot (within five minutes)");
+  }
+  // A watcher poll can change the observed state without advancing tick. Bind
+  // stdout's observation clock too, so a later poll/mark cannot freshen an old
+  // snapshot. CE floors wall elapsed seconds; its timestamp is within that second.
+  const observedAt = startedAt + elapsed * 1000;
+  if (!Number.isFinite(startedAt) || snapshot.invocation_started_at !== state.started_at ||
+      !Number.isInteger(elapsed) || elapsed < 0 ||
+      activityAt - observedAt < -1 || activityAt - observedAt > 1001) {
+    throw new Error("CE snapshot predates the latest state observation; save the latest snapshot stdout again");
+  }
+  const base = snapshot.base;
+  if (!base || !state.base ||
+      !["host", "repository", "ref", "oid", "identity"].every(
+        (key) => nonempty(base[key]) && base[key] === state.base[key]) ||
+      !SHA.test(base.oid) || base.host.toLowerCase() !== identity.host ||
+      base.repository.toLowerCase() !== `${identity.owner}/${identity.name}`) {
+    throw new Error("CE snapshot and state.json do not bind the same current base identity");
+  }
+  if (state.stop_reason != null || snapshot.stop_reason != null) {
+    throw new Error("CE recorded a stop reason; obtain CE's completed readiness result before merging");
+  }
+  if (snapshot.pr_state !== "OPEN" || snapshot.pr_is_draft !== false ||
+      snapshot.mergeability_certain !== true || snapshot.mergeable !== "MERGEABLE" ||
+      snapshot.merge_state_status !== "CLEAN" || state.mergeable !== snapshot.mergeable ||
+      state.merge_state_status !== snapshot.merge_state_status) {
+    throw new Error("CE has not reported an open, non-draft, certain MERGEABLE/CLEAN PR");
+  }
+  if (snapshot.checks_terminal !== true || snapshot.has_failing_checks !== false ||
+      snapshot.checks_awaiting_approval !== 0 || state.awaiting_approval !== 0 ||
+      snapshot.blocked_external !== false || typeof snapshot.checks_present !== "boolean" ||
+      snapshot.all_checks_ok !== snapshot.checks_present ||
+      (mode === "pipeline" && snapshot.all_checks_ok !== true)) {
+    throw new Error(`CE's ${mode} check conditions are not satisfied; return to ce-babysit-pr`);
+  }
+  for (const field of ["base_ref_blocker", "stack_blocker", "branch_currency_blocker", "unrequested_base_merge"]) {
+    if (snapshot[field] !== null) throw new Error(`CE ${field} is present or unknown`);
+  }
+  if (snapshot.unrequested_base_merge_pending !== false || snapshot.open_needs_human !== 0 ||
+      !empty(snapshot.needs_human_residuals) || !empty(snapshot.needs_human_ids) ||
+      !["ci", "threads", "comments", "needs_human"].every((key) => snapshot.counts?.[key] === 0) ||
+      !["ci", "threads", "comments"].every((key) => empty(snapshot.actionable?.[key]))) {
+    throw new Error("CE has unresolved work, a pending base change, or a needs-human residual");
+  }
+  return { snapshot, identity };
+}
+
+function requestFieldEntries(tokens, name) {
+  const values = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    let value;
+    let typed = false;
+    if (["-f", "-F", "--raw-field", "--field"].includes(token)) {
+      value = tokens[++index];
+      typed = token === "-F" || token === "--field";
     }
+    else {
+      const attached = token.match(/^(-[fF]=?|--(?:raw-field|field)=)(.+)$/);
+      if (attached) {
+        value = attached[2];
+        typed = attached[1].startsWith("-F") || attached[1] === "--field=";
+      }
+    }
+    if (typeof value === "string" && value.startsWith(`${name}=`)) values.push({ value: value.slice(name.length + 1), typed });
   }
-  for (const reaction of state.reactions) {
-    const login = who(reaction?.user?.login);
-    const at = reaction?.createdAt ? Date.parse(reaction.createdAt) : NaN;
-    // An unreadable head date leaves "after the push" undecidable, so a
-    // reaction contributes nothing rather than blocking on a guess.
-    if (Number.isNaN(at) || Number.isNaN(committed) || at < committed) continue;
-    const reviewedAt = landed.get(login);
-    // Discharged only by that reviewer's OWN review, submitted at/after the
-    // reaction. A reaction added later is a new pass they have not posted yet.
-    if (reviewedAt !== undefined && !Number.isNaN(reviewedAt) && reviewedAt >= at) continue;
-    claim("a 👀 reaction from " + login + " after the head push");
-  }
-  for (const login of earlier) {
-    signals.push({
-      why: login + " reviewed an earlier head and has not reviewed this one yet" +
-        " (inferred, not claimed)",
-      cap: EARLIER_HEAD_CAP_MS,
-    });
-  }
-  return signals;
+  return values;
 }
 
-// One command's verdict. Pure decision over gathered facts, so the handler
-// below stays a loop over commands rather than a nest of branches.
-function verdictFor(command) {
+function requestFields(tokens, name) {
+  return requestFieldEntries(tokens, name).map((entry) => entry.value);
+}
+
+function requestFile(value, cwd) {
+  if (!nonempty(value) || value === "-" || /[$`]/.test(value)) {
+    throw new Error("GraphQL request content is unresolved; supply a literal query or an existing regular input file, without shell evaluation");
+  }
+  return path.resolve(cwd || process.cwd(), value);
+}
+
+function graphqlMerges(command) {
+  if (command.cwdUnknown) throw new Error("the GraphQL request's working directory is unresolved; use an explicit workdir and literal query or input file");
+  const queries = requestFieldEntries(command.tokens, "query");
+  if (command.flags.has("--input")) {
+    const body = readObject(requestFile(command.flags.get("--input"), command.cwd), "GraphQL input request");
+    if (!nonempty(body.query)) throw new Error("GraphQL input request has no literal query; supply a readable JSON request with its query field");
+    queries.push({ value: body.query, typed: false });
+  }
+  if (!queries.length) throw new Error("GraphQL request content is unresolved; supply a literal query or an existing regular input file");
+  return queries.map(({ value, typed }) => {
+    let source = value;
+    if (typed && source.startsWith("@")) {
+      try { source = readRegularText(requestFile(source.slice(1), command.cwd)); }
+      catch (error) {
+        throw new Error("GraphQL query file is unreadable or unresolved; use a literal path to a regular file no larger than 8 MiB: " + error.message);
+      }
+    }
+    // GraphQL variables inside a literal operation are protocol data. An
+    // entire shell variable/query expression is not evaluated by this hook.
+    const syntax = source.replace(/"(?:\\.|[^"\\])*"|#[^\n]*/g, "").trim();
+    if (!/^(?:query\b|mutation\b|subscription\b|fragment\b|\{)/.test(syntax)) {
+      throw new Error("GraphQL query content is unresolved; pass the literal operation or an existing regular query file");
+    }
+    // Fragments may precede the operation that uses them, so the mutation
+    // and merge field need not appear in that order within the document.
+    return /\bmutation\b/.test(syntax) && /\bmergePullRequest\s*\(/.test(syntax);
+  }).some(Boolean);
+}
+
+function restSha(command) {
+  if (command.flags.has("--input")) return null;
+  const values = requestFields(command.tokens, "sha");
+  return values.length === 1 ? values[0] : null;
+}
+
+function currentIdentity(target, command) {
+  const raw = gh([
+    "api", "graphql", "-f", `query=${IDENTITY_QUERY}`,
+    "-F", `owner=${target.owner}`, "-F", `name=${target.name}`, "-F", `number=${target.number}`,
+  ], GRAPHQL_TIMEOUT_MS, {
+    host: target.host, env: command.env, cwd: command.cwd,
+    unset: command.unset, ignoreEnv: command.ignoreEnv,
+  });
+  const response = JSON.parse(raw);
+  const pr = response?.data?.repository?.pullRequest;
+  if (response.errors?.length || !pr) throw new Error("GitHub returned no certain current PR identity");
+  return pr;
+}
+
+function verifyMerge(command) {
+  if (command.kind === "unsupported") throw new Error(command.why);
   if (command.cwdUnknown) {
-    return degrade(
-      "a conditional `cd` in this command means the merge's working directory" +
-        " is not knowable without running the shell, so the gate cannot tell" +
-        " which repository it would verify. Run the merge as its own command",
-    );
+    throw new Error("a conditional `cd` makes the merge's repository unknown; run the merge as its own command in an explicit workdir");
   }
   if (command.kind === "graphql") {
-    return degrade(
-      "a raw GraphQL mergePullRequest mutation carries a PR node id the gate" +
-        " cannot map to a repo and number. Use `gh pr merge` so review" +
-        " settlement can be checked",
-    );
+    throw new Error("raw GraphQL mergePullRequest is unsupported; use gh pr merge with --match-head-commit and CE's snapshot");
   }
-
-  let target;
-  let state;
-  try {
-    target = explicitTarget(command) || resolveViaGh(command);
-    state = settlement(target, command);
-  } catch (error) {
-    return degrade(String((error && error.message) || error).split("\n")[0]);
+  if (flagEnabled(command.flags.get("--auto"))) {
+    throw new Error("--auto can queue a future merge beyond this evidence; merge immediately after CE settles with --match-head-commit");
   }
-
-  const unresolved = state.threads.filter((thread) => !thread?.isResolved);
-  if (unresolved.length) {
-    return refuse(
-      "PR #" + target.number + " has " + unresolved.length +
-        " unresolved review thread(s). Reviews that arrive after CI turns" +
-        " green are still real findings. Address each one — fix it, or reply" +
-        " on the thread with the rationale for declining — then resolve the" +
-        " threads (resolveReviewThread via gh api graphql) and retry this" +
-        " merge. A tripped guard is waited out or fixed, never bypassed.",
-    );
+  const { snapshot, identity } = ceEvidence(command);
+  const guardedHead = command.kind === "api" ? restSha(command) : command.flags.get("--match-head-commit");
+  if (guardedHead !== snapshot.head_sha) {
+    throw new Error(command.kind === "api"
+      ? "the REST merge must supply exactly one literal sha field matching CE's head (no --input); use gh pr merge --match-head-commit " + snapshot.head_sha
+      : "gh pr merge must pin CE's head with --match-head-commit " + snapshot.head_sha);
   }
-
-  if (state.threadTotal > state.threads.length) {
-    return degrade(
-      "PR #" + target.number + " has " + state.threadTotal +
-        " review threads, more than the gate reads in one page",
-    );
+  const target = explicitTarget(command) || resolveViaGh(command);
+  // A selector without a host follows GH_HOST, just as gh does. A URL or an
+  // enterprise selector has already pinned the host in explicitTarget.
+  target.host ||= ghEnv(null, command.env, command.unset, command.ignoreEnv).GH_HOST || "github.com";
+  if (!samePr(identity, target)) {
+    throw new Error(`CE snapshot is for ${snapshot.url}, not the selected PR #${target.number}`);
   }
-
-  const committed = state.committedDate ? Date.parse(state.committedDate) : NaN;
-  const signals = inProgressSignals(state, committed);
-
-  // Fast path: this head has a review, nothing is unresolved, and no OTHER
-  // reviewer is still registered. Every reviewer that was coming has arrived,
-  // so there is no clock left to run. One reviewer finishing does not speak
-  // for another whose 👀 is still outstanding — that would merge out from
-  // under the reviewer who announced they were looking.
-  if (reviewedHead(state) && !signals.length) return ALLOW;
-
-  if (Number.isNaN(committed)) {
-    return degrade("could not read the head commit date for PR #" + target.number);
+  const current = currentIdentity(target, command);
+  if (!samePr(identity, prIdentity(current.url)) || current.state !== "OPEN" ||
+      current.isDraft !== false || current.headRefOid !== snapshot.head_sha ||
+      current.baseRefName !== snapshot.base.ref || current.baseRef?.target?.oid !== snapshot.base.oid ||
+      current.mergeable !== "MERGEABLE" || current.mergeStateStatus !== "CLEAN") {
+    throw new Error("the live PR head, current base or merge state differs from CE's snapshot; return to CE for a current result");
   }
-
-  const head = state.head.slice(0, 7);
-  const age = Date.now() - committed;
-
-  if (!signals.length) {
-    // Nobody has registered. Inside the registration window that is
-    // indistinguishable from a bot that has not woken up yet; past it, it means
-    // no reviewer is coming — so allow, and never block a repository that
-    // genuinely has no reviewers.
-    if (age >= REGISTRATION_WINDOW_MS) return ALLOW;
-    return refuse(
-      "the head commit " + head + " of PR #" + target.number + " has no review" +
-        " and no reviewer has registered on it, and it is only " +
-        humanDuration(age) + " old. Bot reviewers (Copilot, the Codex" +
-        " connector, CodeRabbit) register within ~1-3 minutes of a push — a 👀" +
-        " reaction on the PR — so this is too early to tell silence" +
-        " from a reviewer that has not woken up yet, and green CI is not merge" +
-        " authority. Wait " + humanDuration(REGISTRATION_WINDOW_MS - age) +
-        " more (registration window " + humanDuration(REGISTRATION_WINDOW_MS) +
-        " from the head commit), then retry — if nothing has registered by" +
-        " then the gate allows the merge, so waiting is always sufficient. Do" +
-        " not bypass this guard.",
-    );
-  }
-
-  // Each signal is capped by its own CLASS, so an inference cannot hold the
-  // merge for as long as a claim. A mixed set holds until the LONGEST cap that
-  // still applies — the reviewer that actually claimed the head is the one
-  // whose findings are still owed.
-  const holding = signals.filter((signal) => age < signal.cap);
-  const dropped = signals.filter((signal) => age >= signal.cap);
-  const named = (list) => list.map((signal) => signal.why).join("; ");
-  // Each holding signal carries its OWN remaining time and cap. The aggregate
-  // below is the longest one, so reporting only that hides that the inference
-  // in a mixed set expires much sooner — which is exactly the wait a caller
-  // would otherwise re-check too late.
-  const namedWithClocks = (list) => list.map((signal) =>
-    signal.why + ", " + humanDuration(signal.cap - age) + " left of its " +
-      humanDuration(signal.cap) + " cap").join("; ");
-  // Whatever was discharged is named wherever the verdict is reported, so the
-  // operator always learns WHO did not come back.
-  const discharged = dropped.length
-    ? " Already discharged (no review after their own cap): " + named(dropped) + "."
-    : "";
-
-  if (holding.length) {
-    const cap = Math.max(...holding.map((signal) => signal.cap));
-    return refuse(
-      "PR #" + target.number + " has a review still in progress on head " +
-        head + " — " + namedWithClocks(holding) + " — so the review evidence for this" +
-        " head is incomplete (head is " + humanDuration(age) +
-        " old). A reviewer that registered is a reviewer" +
-        " whose findings are still coming, and reviews that arrive after CI" +
-        " turns green are still real findings. Wait for the review to post, or" +
-        " at most " + humanDuration(cap - age) + " more (hard cap " +
-        humanDuration(cap) + " from the head commit), after which the" +
-        " gate allows the merge regardless — so waiting is always sufficient." +
-        " Do not bypass this guard." + discharged,
-    );
-  }
-
-  // Past every applicable cap with the signals still unfulfilled: a flaky or
-  // abandoned reviewer must not lock the repository. Allow, but say what was
-  // left behind and who never returned.
-  const cap = Math.max(...signals.map((signal) => signal.cap));
-  return warn(
-    "PR #" + target.number + " still shows " + named(signals) +
-      ", but that never produced a review on head " + head + " in " + humanDuration(age) +
-      " (hard cap " + humanDuration(cap) + " from the head commit)." +
-      " The signal is stale, so the merge proceeds without that review.",
-  );
 }
 
-let raw = "";
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", (chunk) => (raw += chunk));
-process.stdin.on("end", () => {
-  let input;
-  try {
-    input = JSON.parse(raw);
-  } catch {
-    return; // malformed input: allow
-  }
-  const args = input.tool_input && typeof input.tool_input === "object"
-    ? input.tool_input
-    : {};
-
+function handlePayload(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return;
+  if (input.hook_event_name && input.hook_event_name !== "PreToolUse") return;
+  const args = input.tool_input && typeof input.tool_input === "object" ? input.tool_input : {};
   const text = commandText(args);
-  if (!text) return; // nothing to read: silent pass-through
-  // Codex's shell tools carry a per-call directory; the merge runs there, so
-  // the gate's lookup must too. Falls back to the hook payload's own cwd.
+  if (!text) return;
   const requestedCwd = [args.working_directory, args.workdir, args.cwd, input.cwd]
     .find((value) => typeof value === "string" && value);
   const commands = mergeCommands(stripHeredocs(text), requestedCwd);
-  if (!commands.length) return; // not a PR merge: silent pass-through
-
-  // A shell runs every command in the string, so ONE unsettled merge anywhere
-  // condemns the whole call. A determinable violation outranks a degradation.
-  const verdicts = commands.map(verdictFor);
-  const blocked = verdicts.find((v) => v.kind === "refuse");
-  if (blocked) {
-    process.stderr.write("[railyard] Merge refused: " + blocked.why + "\n");
+  if (!commands.length) return;
+  try {
+    if (commands.length !== 1) throw new Error("merge one PR per command with that PR's CE snapshot");
+    verifyMerge(commands[0]);
+  } catch (error) {
+    const why = String(error?.message || error).split("\n")[0];
+    process.stderr.write("[railyard] Merge refused: " + why +
+      ". Have ce-babysit-pr complete readiness and save its final snapshot stdout beside state.json; then retry the pinned merge.\n");
     process.exitCode = 2;
+  }
+}
+
+let raw = "";
+let inputHandled = false;
+let inputTimer;
+function handleInput({ final = false } = {}) {
+  if (inputHandled) return;
+  if (inputTimer) clearTimeout(inputTimer);
+  let input;
+  try { input = JSON.parse(raw); } catch {
+    if (final) inputHandled = true;
     return;
   }
-  for (const v of verdicts) {
-    if (v.kind === "warn") {
-      // Judged, allowed, and not silent: the gate knows exactly what it waived.
-      process.stderr.write(
-        "[railyard] Merge-settlement gate WARNING (allowing the merge): " +
-          v.why + "\n",
-      );
-      continue;
-    }
-    if (v.kind !== "degrade") continue;
-    // Fail open, but say so: the model must know the gate could not judge.
-    process.stderr.write(
-      "[railyard] Merge-settlement gate DEGRADED (allowing the merge): " +
-        v.why + ". Review settlement was not verified — confirm reviews have" +
-        " landed and threads are resolved before relying on this merge.\n",
-    );
-  }
+  inputHandled = true;
+  handlePayload(input);
+}
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  raw += chunk;
+  if (inputTimer) clearTimeout(inputTimer);
+  inputTimer = setTimeout(() => {
+    handleInput();
+    if (inputHandled) process.exit(process.exitCode || 0);
+  }, 50);
 });
-
-// No process.exit(): on Windows, pipe-backed stdout flushes asynchronously and
-// exit() can truncate the write. Natural exit is code 0 anyway.
+process.stdin.on("end", () => handleInput({ final: true }));
+// Native hook runners may leave stdin open; complete JSON still finishes promptly.

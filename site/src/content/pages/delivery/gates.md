@@ -51,11 +51,11 @@ Unsupported or unavailable selections are disclosed. An offline resolver or gate
 
 <span id="merge-settlement"></span>
 
-## Optional merge guard
+## CE merge guard
 
-The merge-settlement hook remains an opt-in backstop for a workflow that needs it. It checks unresolved threads and review signals on the current head; it does not own a second review or CI watch loop. A degraded or incomplete check is reported as such, never treated as proof of settled review.
+The merge guard consumes the completed CE owner's final snapshot, checks that it matches CE's latest state, and verifies the current PR head and base before a recognized `gh` merge. Missing or stale evidence refuses the merge with a recovery message. CE remains the sole review and CI owner; the guard has no reviewer wait timers or separate watcher.
 
-The [merge-settlement implementation](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.js) and [tests](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.test.mjs) document that optional guard.
+Deliver supplies the [CE snapshot handoff](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/skills/deliver/references/ce-merge-guard.md). It requires recent evidence and an explicit head match, and covers the documented shell route rather than arbitrary API clients. The [implementation](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.js) and [tests](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.test.mjs) define its checks. Broad prompt nudges and automatic retrospective hooks are retired; cleanup remains manual.
 
 ## Post-merge proof
 

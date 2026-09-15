@@ -30,6 +30,6 @@ A selected route and an actual dispatch are different facts. A resolver or test 
 
 ## Review ownership
 
-Budget accounting does not create another delivery workflow. CE owns review settlement, feedback, CI, and the watch loop when its PR workflow is selected. Railyard's optional merge guard can supply a narrow backstop; it does not become an additional watcher.
+Budget accounting does not create another delivery workflow. CE owns review settlement, feedback, CI, and the watch loop when its PR workflow is selected. Railyard's merge guard consumes CE's result and verifies the PR identity; it does not become an additional watcher.
 
 See [delivery gates](/delivery/gates/) for required repository checks and authorized post-merge proof, and [optional audit](/delivery/audit/) for comparing outcomes.

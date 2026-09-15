@@ -230,7 +230,7 @@ test("non-macOS SessionEnd hook no-ops with exit 0 before reading stdin", () => 
   }
 });
 
-test("plugin packaging keeps cleanup manual and defaults to startup and dispatch", () => {
+test("plugin packaging keeps cleanup manual alongside startup, dispatch, and CE merge guard", () => {
   const codexManifest = JSON.parse(fs.readFileSync(
     path.join(PLUGIN_DIRECTORY, ".codex-plugin", "plugin.json"), "utf8"));
   const claudeManifest = JSON.parse(fs.readFileSync(
@@ -248,8 +248,9 @@ test("plugin packaging keeps cleanup manual and defaults to startup and dispatch
       entries.flatMap(entry => entry.hooks.map(hook => hook.command)));
     assert.ok(commands.some(command => command.includes("routing-charter.js")));
     assert.ok(commands.some(command => command.includes("dispatch-gate.js")));
+    assert.ok(commands.some(command => command.includes("merge-settlement-gate.js")));
     for (const command of commands) {
-      assert.doesNotMatch(command, /cleanup-codex|railyard-retro|routing-nudge|merge-settlement-gate|route-lifecycle/);
+      assert.doesNotMatch(command, /cleanup-codex|railyard-retro|routing-nudge|route-lifecycle/);
     }
   }
   // Packaging does not remove the manual cleanup implementation.
