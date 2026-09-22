@@ -13,7 +13,7 @@ fleet catalog does not turn an ordinary local edit into fleet work.
 | Planning, debugging, review, or UI work that benefits from a focused workflow | Select the matching CE or specialist skill automatically | The requested artifact or verified behavior |
 | Create a PR or push user-requested commits to an existing PR | `compound-engineering:ce-commit-push-pr` | The requested PR state, with the selected CE workflow owning follow-through |
 | Address PR feedback or watch CI | Applicable CE feedback or babysitting workflow | One owner for review settlement, CI, and the watch loop |
-| Explicit Deliver implementation/fix or authorized ship request | Native or selected CE implementation, then CE settlement | Merge, required release or deployment, and consumer verification |
+| Explicit Deliver implementation/fix request | Native or selected CE implementation, then CE settlement | Merge, required release or deployment, and consumer verification |
 | Explicit fleet/account allocation, remote work, or coordination that needs `orchestrate` | `railyard:orchestrate` | Combined acceptance evidence from the selected lanes |
 | Fleet setup or reconciliation | `roundhouse:fleet-readiness` | Required host, project, tool, and authentication readiness |
 

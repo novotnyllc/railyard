@@ -82,18 +82,18 @@ test("startup keeps native work, selected CE, and explicit orchestration distinc
   assert.match(out, /configured inventory alone does not activate it/);
   assert.match(out, /native subagents for ordinary delegation/);
   assert.match(out, /visible user-owned\n  tasks only on explicit user direction/);
-  assert.match(out, /Prefer child completion notifications; do independent work, then yield\n  only with a verified resume path or use a blocking event wait/);
-  assert.match(out, /Pass this\n  rule to children; avoid repeated status checks and duplicate work/);
+  assert.match(out, /Prefer child completion notifications; do independent work, then yield\s+only with a verified resume path or use a blocking event wait/);
+  assert.match(out, /Pass this\s+rule to children; avoid repeated status checks and duplicate work/);
   assert.ok(Buffer.byteLength(out) < 2250, "SessionStart must stay a small route guide");
 });
 
 test("startup preserves requested delivery scope and a single CE settlement owner", (t) => {
   const { out } = run(fixture(t));
   assert.match(out, /preserve plan\/local-only stops/);
-  assert.match(out, /authorized delivery through merge, required release or deployment,\n  and consumer verification/);
+  assert.match(out, /authorized delivery through merge, required release or deployment,\s+and consumer verification/);
   assert.match(out, /CE alone\n  owns review settlement and CI\/PR monitoring/);
   assert.match(out, /reuse its active watcher/);
-  assert.match(out, /user-invoked Deliver change includes commit, PR, merge, required release\n  or deployment, and consumer verification unless explicitly narrowed/);
+  assert.match(out, /user-invoked Deliver change includes commit, PR, merge, required release\s+or deployment, and consumer verification unless explicitly narrowed/);
   assert.doesNotMatch(out, /independent Sol|Thermos gate|MUST dispatch|lfg_complete|carrier_started/);
 });
 
