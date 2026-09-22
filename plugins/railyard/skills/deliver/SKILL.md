@@ -94,9 +94,8 @@ authorization. Session startup does not install dependencies.
 
 ## Delivery tail
 
-For an explicit PR-only request, report the PR and its known state. For an
-explicit Deliver request or other authorized ship or merge work, continue
-after CE's settled result:
+After CE's settled result, complete the remaining work only through the user's
+selected authorized endpoint:
 
 1. Confirm the requested merge is still authorized and no user or repository
    hold remains. CE supplies the review and CI disposition; this step checks
@@ -107,14 +106,18 @@ after CE's settled result:
    supported landing route; the shell guard covers the documented `gh` route.
 3. Observe the merged state and merge commit, fetch the base, and verify that
    the merge is on the intended base. Run the smallest applicable post-merge
-   or deployed-behavior check that proves the requested outcome.
-4. Complete the repository's required release or deployment steps within the
-   assigned target. For plugins, publish required marketplace pins, update the
-   intended installation through its supported manager, and verify the installed
-   files and relevant runtime behavior. Source, marketplace, and installed state
-   are separate acceptance checks. Do not expand one target into unrelated fleet
-   work or edit installed cache files directly.
-5. Report the result, PR/merge and release links, relevant checks, and any
+   source check.
+4. Complete the repository's release or deployment steps required by the
+   selected endpoint within the assigned target. For plugins, publish required
+   marketplace pins and update the intended installation through its supported
+   manager as required by that endpoint. Do not expand one target into unrelated
+   fleet work or edit installed cache files directly.
+5. When the selected endpoint requires a deployed or installed result, verify
+   the newly deployed result at the actual consumer after completing the required
+   release, deployment, or installation. For plugins, verify the installed files
+   and relevant runtime behavior. Source, marketplace, and installed state are
+   separate acceptance checks.
+6. Report the result, PR/merge and release links, relevant checks, and any
    remaining concrete blocker.
 
 A local test pass, pushed branch, open PR, green CI, merge, and deployed result

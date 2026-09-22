@@ -27,7 +27,7 @@ For delegation, choose model and reasoning effort together. Astra Max is the bas
 Illustrative delivery outline:
 
 ```text
-> Fix the retry path in the webhook worker and get it merged with post-merge proof.
+> Use Deliver to fix the retry path in the webhook worker through consumer verification.
 allocation=codex-astra  model=gpt-6-astra  effort=max
 scope=bounded-change  review_and_ci=CE
 tail=CE-disposition -> merge -> required-release/deployment -> consumer-check

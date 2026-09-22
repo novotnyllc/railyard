@@ -43,7 +43,10 @@ flowchart TD
     pr --> settlement["CE owns review settlement and CI"]
     settlement --> terminal{"Merge authorized?"}
     terminal -- No --> result
-    terminal -- Yes --> proof["Merge, required release/deployment, consumer proof"]
+    terminal -- Yes --> merged["Merge and source proof"]
+    merged --> tail{"Further delivery required by selected endpoint?"}
+    tail -- No --> result
+    tail -- Yes --> proof["Release/deployment, then consumer proof, as required by endpoint"]
     proof --> result
 ```
 

@@ -9,7 +9,7 @@ nav_order: 2
 
 Prerequisite: [install Railyard first →](/start/install/). Add Roundhouse when you explicitly request fleet placement.
 
-Start with a real change and carry it to observable proof. An explicit Deliver request produces a reviewed, merged result, completes required release or deployment, and verifies the actual consumer on the intended machine.
+Start with a real change and carry it to observable proof. When required access is available, an explicit Deliver request works through review, merge, required release or deployment, and verification of the actual consumer on the intended machine. If access blocks a step, Deliver reports the blocker and continues authorized work that can proceed independently.
 
 ## Easy path
 

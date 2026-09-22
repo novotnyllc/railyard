@@ -64,9 +64,12 @@ test("explicit stops and existing authorization define the delivery endpoint", (
   assert.match(delivery, /local edit does not by itself authorize publication or merge/);
   assert.match(delivery, /plan-only, review-only, PR-only, and local-only boundaries stop there/);
   assert.match(orchestrator, /Preserve earlier authorization unless a later instruction changes it/);
-  assert.match(delivery, /explicit Deliver request or other authorized ship or merge work/);
+  assert.match(delivery, /remaining work only through the user's\s+selected authorized endpoint/);
+  assert.match(delivery, /release or deployment steps required by the\s+selected endpoint/);
+  assert.match(delivery, /update the intended installation through its supported\s+manager as required by that endpoint/);
+  assert.match(delivery, /When the selected endpoint requires a deployed or installed result/);
   assert.match(delivery, /merge is on the intended base/);
-  assert.match(delivery, /post-merge\s+or deployed-behavior check/);
+  assert.match(delivery, /post-merge\s+source check/);
 });
 
 test("explicit Deliver requests finish release and consumer verification unless narrowed", () => {
@@ -74,7 +77,17 @@ test("explicit Deliver requests finish release and consumer verification unless 
   assert.match(delivery, /Explicit plan-only,\s+diagnosis-only, review-only, local-only, and PR-only requests override/);
   assert.match(delivery, /Internally selecting this skill does not expand the user's\s+request/);
   assert.match(delivery, /agent-authored child prompt invoking Deliver inherits the caller's already\s+authorized endpoint/);
-  assert.match(delivery, /publish required marketplace pins[\s\S]*supported manager[\s\S]*runtime behavior/);
+  const tail = delivery.match(/## Delivery tail\n([\s\S]*?)\n## /)?.[1] ?? "";
+  const steps = Array.from(tail.matchAll(/^\d+\. (.*(?:\n {3}.+)*)/gm), ([, step]) => step);
+  const sourceIndex = steps.findIndex(step => /post-merge\s+source check/.test(step));
+  const releaseIndex = steps.findIndex(step => /release or deployment steps required by/.test(step));
+  const consumerIndex = steps.findIndex(step => /actual consumer/.test(step));
+  assert.ok(sourceIndex >= 0 && sourceIndex < releaseIndex && releaseIndex < consumerIndex,
+    "merged-source proof must precede release/deployment, then consumer proof");
+  assert.doesNotMatch(steps[sourceIndex], /deployed-behavior|actual consumer|runtime behavior/);
+  assert.match(steps[releaseIndex], /publish required\s+marketplace pins[\s\S]*supported\s+manager/);
+  assert.match(steps[consumerIndex], /newly deployed result at the actual consumer after completing the required\s+release, deployment, or installation/);
+  assert.match(steps[consumerIndex], /installed files\s+and relevant runtime behavior/);
   assert.match(delivery, /Intermediate handoffs and bounded waits do not end the overall delivery/);
   assert.match(deliveryPrompt, /required release or deployment, and consumer verification/);
   assert.match(orchestrator, /Endpoint: <caller's final delivery target and this child's owned handoff>/);

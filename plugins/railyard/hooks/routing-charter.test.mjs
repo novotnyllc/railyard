@@ -90,7 +90,7 @@ test("startup keeps native work, selected CE, and explicit orchestration distinc
 test("startup preserves requested delivery scope and a single CE settlement owner", (t) => {
   const { out } = run(fixture(t));
   assert.match(out, /preserve plan\/local-only stops/);
-  assert.match(out, /authorized delivery through merge and post-merge proof/);
+  assert.match(out, /authorized delivery through merge, required release or deployment,\n  and consumer verification/);
   assert.match(out, /CE alone\n  owns review settlement and CI\/PR monitoring/);
   assert.match(out, /reuse its active watcher/);
   assert.match(out, /user-invoked Deliver change includes commit, PR, merge, required release\n  or deployment, and consumer verification unless explicitly narrowed/);
