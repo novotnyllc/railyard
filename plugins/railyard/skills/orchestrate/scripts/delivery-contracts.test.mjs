@@ -20,16 +20,8 @@ const providerRouting = readFileSync(
   new URL("../../../references/provider-task-routing.md", import.meta.url),
   "utf8",
 );
-const harnessInvocation = readFileSync(
-  new URL("../../../references/harness-model-invocation.md", import.meta.url),
-  "utf8",
-);
 const reviewReceipt = fileURLToPath(
   new URL("../../../scripts/review-receipt.mjs", import.meta.url),
-);
-const workflows = readFileSync(
-  new URL("../../../../../docs/delivery-workflows.md", import.meta.url),
-  "utf8",
 );
 const codexManifest = JSON.parse(
   readFileSync(new URL("../../../.codex-plugin/plugin.json", import.meta.url), "utf8"),
@@ -38,114 +30,107 @@ const claudeManifest = JSON.parse(
   readFileSync(new URL("../../../.claude-plugin/plugin.json", import.meta.url), "utf8"),
 );
 
-test("dispatches explicit software-delivery authorization to visible execution tasks", () => {
-  assert.match(orchestrator, /explicit instruction to perform delivery work/);
-  assert.match(orchestrator, /`go do`, `implement`,\s+`fix`, `ship`/);
-  assert.match(orchestrator, /consume one task-authority use per destination and dispatch fresh visible\s+execution tasks/);
-  assert.match(orchestrator, /one-lane fast path still creates one fresh\s+visible Deliver child/);
-  assert.match(orchestrator, /Do not satisfy the instruction with[\s\S]{0,40}analysis, a plan, a status response, or internal-subagent output alone/);
-  assert.match(orchestrator, /software implementation and PR delivery\s+use Deliver/);
-  assert.match(orchestrator, /never\s+implementing, testing, committing, pushing, or merging child work/);
-  assert.match(orchestrator, /Bounded subagents are\s+for controller-scoped research\/review only/);
-  assert.doesNotMatch(orchestrator, /bounded subagents for contained research, review, or execution/);
+const deliveryPrompt = readFileSync(new URL("../../deliver/agents/openai.yaml", import.meta.url), "utf8");
+const ceAdapter = readFileSync(new URL("../../deliver/references/ce-call-adapter.md", import.meta.url), "utf8");
+const legacyCarrier = readFileSync(new URL("../../deliver/references/carrier-protocol.md", import.meta.url), "utf8");
+const remoteExecution = readFileSync(new URL("../references/remote-execution.md", import.meta.url), "utf8");
+
+test("routine local fixes can execute natively without an LFG carrier", () => {
+  assert.match(delivery, /Bounded, understood fix[^\n]*Native edit and focused verification/);
+  assert.match(delivery, /Native tools and native subagents can implement directly/);
+  assert.doesNotMatch(delivery, /MUST dispatch|DO NOT implement|Forbidden: implementing directly|before starting LFG, establish/i);
+  assert.match(ceAdapter, /does\s+not require a specially named LFG carrier/);
+  assert.match(legacyCarrier, /Ordinary Deliver and CE stages do\s+not require this protocol/);
+  assert.doesNotMatch(deliveryPrompt, /defaulting implementation delivery to LFG/);
 });
 
-test("keeps answer, status, planning, and read-only turns non-work-starting", () => {
-  assert.match(orchestrator, /request for an answer, status, explanation, planning, or bounded read-only\s+inspection is \*\*non-work-starting\*\*/);
-  assert.match(orchestrator, /without consuming task authority or creating a task/);
-  assert.match(orchestrator, /"Plan and implement" is work-starting/);
-  assert.match(orchestrator, /bounded internal subagents only for controller-scoped research or review; they\s+are not substitutes for visible execution tasks/);
-  assert.match(orchestrator, /later work-starting instruction is\s+a new classification/);
+test("CE selection stays automatic and PR creation keeps its required workflow", () => {
+  assert.match(delivery, /Automatically\s+select a useful Compound Engineering/);
+  for (const skill of ["ce-debug", "ce-plan", "ce-work", "ce-code-review", "ce-babysit-pr"]) {
+    assert.ok(delivery.includes(`compound-engineering:${skill}`), `missing selected CE route ${skill}`);
+  }
+  for (const text of [delivery, orchestrator]) {
+    assert.match(text, /compound-engineering:ce-commit-push-pr[\s\S]{0,100}creating a PR or pushing\s+user-requested commits to an existing PR/);
+    assert.match(text, /gh-stack/);
+  }
+  assert.match(delivery, /LFG is useful when its combined stages fit the change or the user requests it/);
 });
 
-test("freezes shared ownership and hash-bound test evidence", () => {
-  assert.match(orchestrator, /one canonical writer per shared\s+file/);
-  assert.match(orchestrator, /require both sides to acknowledge it before dependent dispatch/);
-  assert.match(orchestrator, /component gate only when that component's\s+content hash changes/);
-  assert.match(orchestrator, /one full integration gate after all writers acknowledge\s+the frozen seams, rerun only when a relevant fix invalidates it/);
-  assert.match(orchestrator, /hash-bound receipts, doing focused reproductions/);
-  assert.match(orchestrator, /one independent reviewer per frozen lane/i);
-  assert.match(orchestrator, /command, toolchain, input hashes, result, timestamp/);
+test("explicit stops and existing authorization define the delivery endpoint", () => {
+  assert.match(delivery, /still-applicable prior authorization/);
+  assert.match(delivery, /later local-only stop halts shipping/);
+  assert.match(delivery, /later ship or\s+merge instruction extends an earlier local stop/);
+  assert.match(delivery, /local edit does not by itself authorize publication or merge/);
+  assert.match(delivery, /plan-only, review-only, PR-only, and local-only boundaries stop there/);
+  assert.match(orchestrator, /Preserve earlier authorization unless a later instruction changes it/);
+  assert.match(delivery, /For authorized ship|For authorized.*merge|For a PR-ready request[\s\S]{0,100}authorized ship/i);
+  assert.match(delivery, /merge is on the intended base/);
+  assert.match(delivery, /post-merge\s+or deployed-behavior check/);
 });
 
-test("bounds delegation and freezes expansion", () => {
-  assert.match(orchestrator, /no inherited context when supported/);
-  assert.match(orchestrator, /for mutable seams, exact owned files and frozen hashes/);
-  assert.match(orchestrator, /thinnest end-to-end seam canary/);
-  assert.match(orchestrator, /line growth,[\s\S]*execution time,[\s\S]*fixture cost/);
-  assert.match(orchestrator, /freeze scope: reject adjacent abstractions/);
+test("native children can implement and visible tasks need explicit creation direction", () => {
+  assert.match(orchestrator, /native subagents for ordinary\s+implementation, research, and review/);
+  assert.match(orchestrator, /coordinator may perform unassigned\s+local work/);
+  assert.match(orchestrator, /Visible user-owned tasks require explicit user direction to create or fork\s+them/);
+  assert.match(orchestrator, /request to use subagents, a fleet catalog, or a software implementation\s+request is not that direction/);
+  assert.match(delivery, /routine delegation and\s+a configured catalog do not authorize task creation/);
+  assert.doesNotMatch(orchestrator, /fresh visible execution tasks|subagents are\s+for controller-scoped research\/review only|one-lane fast path still creates/);
 });
 
-test("parents use fresh children and safely close their lifecycle", () => {
-  assert.match(orchestrator, /child task is single-use: never resume, unarchive, or\s+repurpose/);
-  assert.match(orchestrator, /report its registered identity, path, HEAD, and owned ref for parent removal and absence verification/);
-  assert.match(orchestrator, /prove the child is\s+terminal and has not resumed[\s\S]*Bind the cleanup\s+target to the registered worktree identity[\s\S]*host-owned cleanup claim that keeps the child non-startable[\s\S]*Re-read the child's activity revision and target binding immediately\s+before each mutation[\s\S]*transient execution state/);
-  assert.match(orchestrator, /gone from both the registered worktree inventory and the\s+filesystem/);
-  assert.match(orchestrator, /require the bound path absent from inventory and\s+filesystem and delete or transfer the owned ref/);
-  assert.match(orchestrator, /run only read-only local-head\/tracking\/remote equality checks[\s\S]*After cleanup succeeds[\s\S]*invoke native archive\s+promptly where the harness has those operations/);
-  assert.match(orchestrator, /drift\s+blocks completion and never authorizes a switch, reset, or rewrite/);
-  assert.match(orchestrator, /the child\s+resumed, a binding changed[\s\S]*mark the child blocked\s+\(`⏸️` where titles exist\)/);
-  assert.match(orchestrator, /dirty\/unintegrated without a\s+transferred ref[\s\S]*do not archive or force\s+cleanup/);
-  assert.match(orchestrator, /any continuing ref transferred to a named owner/);
-  assert.match(orchestrator, /parent closes it out \(native archive where one exists\) in the same monitoring\s+pass/);
-  assert.match(workflows, /Every visible child is a[\s\S]*fresh, single-use task/);
-  assert.match(workflows, /a clean worktree is evidence, not cleanup authority/);
-  assert.match(workflows, /bound path must be[\s\S]*absent from both the repository's registered worktree inventory and filesystem/);
-  assert.match(workflows, /A conflict leaves the child visible and retitled\s+`⏸️` with an explicit blocker/);
+test("model and effort are deliberate while inheritance respects native fork controls", () => {
+  for (const text of [delivery, orchestrator]) {
+    assert.match(text, /model AND reasoning effort/);
+    assert.match(text, /Astra Max (?:is|as) the baseline candidate/);
+    assert.match(text, /Allocation: inherit model and reasoning effort; <reason>\./);
+    assert.match(text, /omit the override fields/);
+    assert.match(text, /fork_turns: "all"[\s\S]{0,90}rejects? model\/effort overrides/);
+    assert.match(text, /Fixed specialist roles[\s\S]{0,100}without\s+forbidden\s+overrides/);
+    assert.doesNotMatch(text, /Every subagent dispatch names an explicit model and effort\. No\s+exceptions/);
+  }
 });
 
-test("classifies capability and native gates once", () => {
-  assert.match(orchestrator, /Capability discovery before dispatch/);
-  assert.match(orchestrator, /absent from the eagerly\s+listed surface is unknown, not unavailable/);
-  assert.match(orchestrator, /when a deferred catalog exists/);
-  assert.match(orchestrator, /search it for the\s+exact capability/);
-  assert.match(orchestrator, /call its read-only discovery operation before falling\s+back or blocking/);
-  assert.match(orchestrator, /`capability_discovery_unavailable` when the catalog or\s+search is missing/);
-  assert.match(orchestrator, /a required route then blocks; an explicitly optional\s+capability selects its one disclosed fallback/);
-  assert.match(orchestrator, /Record `capability_ready` only when discovery\s+confirms the route/);
-  assert.match(orchestrator, /tool_surface_missing[\s\S]*host_offline[\s\S]*saved_project_missing[\s\S]*task_creation_failed[\s\S]*executor_mismatch/);
-  assert.match(orchestrator, /WSL-only evidence for native Windows is\s+`native_evidence_unavailable` and cannot satisfy the route/);
-  assert.match(orchestrator, /disclosed to all affected\s+children and kept stable/);
-  assert.match(orchestrator, /Never silently\s+relabel a fallback as the preferred route/);
-  assert.match(orchestrator, /hosted, locally runnable native,\s+interactive-elevation, or recoverable-host/);
-  assert.match(orchestrator, /never infer one class from another/);
-  assert.match(orchestrator, /Verify local toolchain\s+and CI parity once/);
+test("fleet configuration alone cannot activate orchestration or ordinary admission artifacts", () => {
+  assert.match(orchestrator, /explicitly requested\s+fleet\/account allocation/);
+  assert.match(orchestrator, /configured catalog,\s+multiple files, or useful local parallelism does not activate it automatically/);
+  assert.match(delivery, /Local delivery does\s+not require a fleet intake because a configuration file exists/);
+  assert.match(orchestrator, /Load these specialist contracts only when the requested scope needs them/);
+  assert.match(orchestrator, /explicit fleet\/account allocation[\s\S]{0,100}admission, budget, transport, and accounting/);
+  assert.match(orchestrator, /bounded SSH admin command uses the direct route and skips agent-readiness/);
 });
 
-test("routes explicit boundaries without changing external carriers", () => {
-  assert.match(delivery, /`ce-plan` \+ `ce-work mode:return-to-caller`/);
-  assert.match(delivery, /Generic implement, fix, or ship \| `compound-engineering:lfg`/);
-  assert.match(delivery, /CE stays an unchanged external carrier/);
-  assert.match(delivery, /later\s+local\/return-to-caller stop halts shipping/);
-  assert.match(delivery, /later authorized ship\s+instruction replaces an earlier local stop/);
-  assert.match(delivery, /unless a higher-priority boundary\s+still applies/);
-  assert.match(delivery, /the orchestrator owns the\s+plan-boundary routing decision/);
-  assert.match(delivery, /rather\s+than inferring one from transcript history/);
+test("delegation retains writer ownership and verifies real results", () => {
+  for (const text of [delivery, orchestrator]) {
+    assert.match(text, /one canonical writer\s+per shared file/);
+    assert.match(text, /preserve unrelated (?:changes|work)/i);
+  }
+  assert.match(orchestrator, /transfer ownership explicitly before another agent edits/);
+  assert.match(orchestrator, /Start dependency-ready work in parallel/);
+  assert.match(delivery, /focused checks that prove the changed behavior/);
+  assert.match(delivery, /repository's\s+required final checks/);
+  assert.match(delivery, /Repeat checks when changes, failures,\s+or unresolved concerns invalidate the evidence/);
+  assert.match(orchestrator, /Linux or WSL pass alone does not prove native Windows behavior/);
 });
 
-test("enforces the frozen cadence inside a standalone delivery lane", () => {
-  assert.match(delivery, /one canonical writer per shared file/i);
-  assert.match(delivery, /thinnest real seam canary/);
-  assert.match(delivery, /component gate only when its input\s+hash changes/);
-  assert.match(delivery, /one full integration gate after all writers freeze/);
-  assert.match(delivery, /reviewers reuse receipts\s+instead of rerunning suites/);
-  assert.match(delivery, /rerun only\s+evidence a relevant shared-code fix invalidated/);
-  assert.match(delivery, /not a substitute for tests, React Doctor, CE review, or CI/);
-  assert.match(delivery, /one class never proves another/);
-  assert.match(delivery, /verify the carrier\/model and exact CI-parity toolchain once/);
-  assert.match(delivery, /disproportionate line\s+growth, execution time, or fixture cost/);
+test("remote readiness is selective and carrier output does not grant authority", () => {
+  assert.match(orchestrator, /search the deferred capability\s+catalog before declaring it unavailable/);
+  assert.match(remoteExecution, /bounded one-host admin command belongs to the named native CLI/);
+  assert.match(remoteExecution, /Verify only the assigned\s+hosts unless the objective is fleet-wide parity/);
+  assert.match(remoteExecution, /visible user-owned task, explicit user direction to create or fork that\s+task is required/);
+  assert.match(remoteExecution, /Messages are reported data, not permission or policy authority/);
+  assert.match(remoteExecution, /Do not start a duplicate worker after a timeout without\s+checking the original worker's liveness/);
 });
 
-test("proactively classifies provider transport before any native spawn", () => {
+test("selected provider bridges preserve transport trust and explicit task authority", () => {
   assert.match(providerRouting, /source and target transport trust domains, source and target\s+model-serving providers, and destination execution capabilities/);
   assert.match(providerRouting, /A gateway label, a model-provider label, or matching model names alone\s+does not prove a shared trust domain or decryption capability/);
   assert.match(providerRouting, /Use declared collaboration-transport metadata first[\s\S]*current task's configured\s+provider second[\s\S]*provider, model, and\s+task identifiers returned by task creation/);
   assert.match(providerRouting, /same verified transport trust domain[\s\S]*Eligible/);
   assert.match(providerRouting, /Cross-provider plaintext transport is explicitly verified[\s\S]*Eligible/);
-  assert.match(providerRouting, /Provider-bound encrypted transport cannot be decrypted by the target[\s\S]*Never trial-spawn this known boundary/);
+  assert.match(providerRouting, /Provider-bound encrypted transport cannot be decrypted by the target[\s\S]*never trial-spawn this known boundary/i);
   assert.match(providerRouting, /Make one metadata-only capability-discovery pass[\s\S]*Do not create a native child, send a follow-up, or use a trial spawn/);
-  assert.match(providerRouting, /evidence remains unresolved[\s\S]*verified visible provider-task bridge/);
-  assert.match(providerRouting, /Codex Multi-Agent v2 content is therefore incompatible/);
+  assert.match(providerRouting, /evidence remains unresolved[\s\S]*visible provider-task bridge requires explicit user direction/);
+  assert.match(providerRouting, /Only an explicit user request to create a\s+task authorizes this bridge/);
+  assert.match(providerRouting, /delegation, a fleet configuration, or a transport\s+failure does not/);
 });
 
 test("gates provider tasks on verified, secret-free acknowledgement", () => {
@@ -182,7 +167,7 @@ test("binds review evidence to the routed model, not a hardcoded one", () => {
   assert.match(providerRouting, /`railyard:model-routing` selected for this review \(Fable, Opus, or a\s+later Claude review model\)/);
   assert.match(providerRouting, /--expect-model <routed-model-id>/);
   assert.match(providerRouting, /--min-cli-version`?, default `2\.1\.220`/);
-  assert.match(providerRouting, /Codex-native review models \(Sol\s+today, successors later\) validate through Codex's own native task\/thread\s+evidence/);
+  assert.match(providerRouting, /Codex-native review models\s+validate through Codex's own native task\/thread\s+evidence/);
   assert.match(providerRouting, /Oracle-based review validates through the oracle route's own\s+receipts; equivalents exist per carrier, and none is privileged/);
   assert.doesNotMatch(providerRouting, /--model claude-fable-5/);
 });
@@ -402,121 +387,55 @@ test("rejects altered non-empty provider handoffs", () => {
   assert.match(providerRouting, /source orchestrator must compare each restated field against\s+its source-held handoff contract/);
   assert.match(providerRouting, /An altered-but-nonempty objective,\s+constraint, or acceptance check fails the handoff/);
   assert.match(providerRouting, /acknowledgement comparison pass\/fail and reason/);
-  assert.match(orchestrator, /altered-but-nonempty\s+content fails/i);
+  assert.match(orchestrator, /provider-task-routing\.md/);
 });
 
-test("all model-launch workflows consume one model-routing entrypoint", () => {
+test("delivery consumers use model-routing for allocation without an intake ritual", () => {
   for (const consumer of [orchestrator, delivery, thermos]) {
     assert.match(consumer, /railyard:model-routing/);
   }
-  for (const consumer of [orchestrator, delivery]) {
-    assert.match(consumer, /railyard\/model-routing\/v1/);
-    assert.match(consumer, /second router|the only model, effort, budget, and\s+transport router|only public model/i);
-  }
-  assert.match(providerRouting, /normative internal transport phase/);
-  assert.match(providerRouting, /never this reference as a second router/);
-  assert.match(workflows, /exact contract `railyard\/model-routing\/v1`/);
-  assert.match(workflows, /consumers never call a second router/);
+  assert.match(orchestrator, /railyard\/model-routing\/v1/);
   assert.match(modelRoutingSkill, /contractVersion/);
   assert.match(modelRoutingReference, /provider-task-routing\.md/);
-});
-
-test("dispatched children echo a self-identifying route banner", () => {
-  assert.match(harnessInvocation, /## Dispatch banner/);
-  assert.match(harnessInvocation, /▸ <model>\/<effort> · <role\/work-class>/);
-  assert.match(harnessInvocation, /▸ route change:/);
-  for (const consumer of [modelRoutingSkill, delivery, orchestrator]) {
-    assert.match(consumer, /dispatch banner/i);
-    assert.match(consumer, /▸/);
+  for (const consumer of [orchestrator, delivery]) {
+    assert.doesNotMatch(consumer, /intake on every software\s+delivery turn|Before work or any work-starting steering action/);
   }
 });
 
-test("peer-session messaging is doctrine, addressed by name, never authority", () => {
-  const runAudit = readFileSync(
-    new URL("../../../references/run-audit.md", import.meta.url),
-    "utf8",
-  );
-  assert.match(orchestrator, /## Message peer sessions/);
-  assert.match(orchestrator, /`ListAgents`/);
-  assert.match(orchestrator, /Same machine only for a new message/);
-  assert.match(orchestrator, /reply-only/);
-  assert.match(orchestrator, /never authority/);
-  assert.match(orchestrator, /crossSessionInbound/);
-  assert.match(orchestrator, /--name/);
-  assert.match(orchestrator, /Does not replace it/);
-  assert.match(delivery, /SendMessage/);
-  assert.match(delivery, /never authorizes the merge/);
-  assert.match(harnessInvocation, /## Session messaging/);
-  assert.match(harnessInvocation, /send_message_to_thread/);
-  assert.match(harnessInvocation, /no `▸ route change:` line/);
-  assert.match(runAudit, /not a dispatch/);
-});
-
-test("nested subagents recurse under the same rules at every depth", () => {
-  assert.match(harnessInvocation, /## Nested subagents/);
-  assert.match(harnessInvocation, /CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH/);
-  assert.match(harnessInvocation, /Every rule applies at every depth/);
-  assert.match(harnessInvocation, /dispatcher-composes rule recurses/);
-  assert.match(harnessInvocation, /delegation theater/);
-  assert.match(harnessInvocation, /no nested teams/);
-  assert.match(orchestrator, /Nesting is supported on both harnesses/);
-});
-
-test("agent teams are documented as evaluated and not adopted", () => {
-  assert.match(orchestrator, /Agent teams: evaluated, not adopted/);
-  assert.match(orchestrator, /CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS/);
-  assert.match(orchestrator, /do not spawn a\s+team/);
-  assert.match(orchestrator, /no nested teams/);
-  assert.match(orchestrator, /Task status lags/);
-  assert.match(orchestrator, /fixed at spawn/);
-});
-
-test("delivery workflows apply the invariant work contract and closed carrier overlay", () => {
-  for (const text of [delivery, orchestrator]) {
-    assert.match(text, /build-work-contract/);
-    assert.match(text, /objective\/source-of-truth\/scope\//);
-    assert.match(text, /stop\s*digests|stop-condition/);
-    assert.match(text, /[Dd]irect user and[\s\S]{0,40}repository instructions outrank/);
+test("allocation is disclosed without requiring another child procedure", () => {
+  for (const consumer of [delivery, orchestrator]) {
+    assert.match(consumer, /Report (?:the actual model and effort|requested and observed allocation)/);
+    assert.doesNotMatch(consumer, /dispatch banner|echoes it verbatim first|Begin your first message with exactly/);
   }
-  assert.match(orchestrator, /catalog prompt text is\s+never an input/);
 });
 
-test("centralizes the no-config implementation binding and fallback", () => {
-  assert.match(modelRoutingReference, /gpt-5\.6-luna/);
-  assert.match(modelRoutingReference, /implementation_model_substitute/);
-  assert.match(modelRoutingReference, /unavailable(?: or |\/)unselectable[\s\S]*Terra/);
-  assert.doesNotMatch(orchestrator, /gpt-5\.6-luna/);
-  assert.doesNotMatch(delivery, /gpt-5\.6-luna/);
+test("ordinary work does not require contract, recap, or cleanup artifacts", () => {
+  assert.match(delivery, /does not require a full LFG carrier, work contract, route\s+receipt, or retrospective/);
+  assert.match(orchestrator, /Do not forward unrelated history or require a separate plan, admission receipt,\s+ledger, digest, goal, recap, or retrospective artifact for every child/);
+  assert.match(orchestrator, /Create user-owned goals or visible tasks only when explicitly requested/);
+  assert.match(orchestrator, /Internal checklists or task tracking remain optional/);
+  assert.match(orchestrator, /Archiving,\s+worktree removal, runtime inspection, and process cleanup are separate\s+on-demand operations/);
+  assert.doesNotMatch(orchestrator, /invoke native archive\s+promptly|Every visible child is a[\s\S]{0,30}fresh, single-use task/);
+  assert.match(orchestrator, /Never reset, discard, or delete unrelated or dirty work without authorization/);
 });
 
-test("overrides only named CE execution stages without modifying CE", () => {
-  assert.match(delivery, /Stage-scoped overrides for unchanged Compound Engineering/);
-  assert.match(delivery, /GLM scout\/engineer\s+seams remain\s+fail-closed/);
-  assert.match(delivery, /codex exec`?\s*\n?route|`codex exec`/);
-  assert.match(delivery, /Codex host reaches Claude only through CE\'s existing attested read-only\s+Claude `-p` adapter/);
-  assert.match(delivery, /never the workflow, persona,\s+legitimacy gate, artifact schema, writer ownership/);
-  assert.match(workflows, /Compound Engineering is not modified/);
+test("CE alone owns review settlement and CI monitoring across delivery surfaces", () => {
+  assert.match(delivery, /Compound Engineering alone owns review settlement and CI\/PR monitoring/);
+  assert.match(orchestrator, /CE alone owns review settlement and CI\/PR monitoring/);
+  assert.match(delivery, /LFG already owns `ce-babysit-pr`[\s\S]{0,100}do not start a second watcher/);
+  assert.match(ceAdapter, /LFG owns its internal stages, including its CE review and babysitting loop/);
+  assert.match(delivery, /never patch its source or plugin cache/);
+  assert.doesNotMatch(delivery, /Confirm review evidence includes an independent|For every Thermos gate|lane-owned checkpoint monitor/);
+  assert.match(orchestrator, /does not launch a\s+second PR watcher or impose another Railyard review gate/);
 });
 
-test("adds objective, artifact, cadence, and terminal-ledger controls", () => {
-  assert.match(delivery, /objective\/artifact admission receipt/);
-  assert.match(delivery, /producer-to-consumer chain/);
-  assert.match(delivery, /write a simplification\s+receipt/);
-  assert.match(delivery, /coherent vertical chunk/);
-  assert.match(delivery, /one instrumented\s+diagnostic push/);
-  assert.match(delivery, /executionHost/);
-  assert.match(delivery, /terminal-gate ledger/);
-  assert.match(orchestrator, /admitted → oriented → active → frozen →\s+consumed\|superseded\|blocked → terminal/);
-  assert.match(orchestrator, /one bounded\s+redirect/);
-  assert.match(orchestrator, /output consumer/);
-  assert.match(orchestrator, /critical-path duration/);
-});
-
-test("Thermos freezes one packet and reuses matching concern coverage", () => {
-  assert.match(thermos, /Freeze one deterministic review packet/);
-  assert.match(thermos, /one correctness\/security disposition and one code-quality disposition/);
-  assert.match(thermos, /matching independent CE or Sol review may satisfy a disposition only when/);
-  assert.match(thermos, /review is a concern-coverage portfolio, not an additive swarm/);
+test("optional deep review reuses covered concerns and returns to the CE owner", () => {
+  assert.match(thermos, /Ordinary work does not require\s+Thermos/);
+  assert.match(thermos, /Reuse a completed review when it covers the same inputs and concern/);
+  assert.match(thermos, /model \*\*and\*\* reasoning effort/);
+  assert.match(thermos, /Deliberate inheritance is valid/);
+  assert.match(thermos, /single owner of feedback resolution, review settlement, and CI\s+monitoring/);
+  assert.match(thermos, /does not start a competing\s+watcher, re-review loop, or merge gate/);
 });
 
 test("Oracle exposes a routed browser-only mode without changing manual use", () => {
@@ -526,29 +445,13 @@ test("Oracle exposes a routed browser-only mode without changing manual use", ()
   assert.match(oracle, /manual commands below remain outside routed v1/);
 });
 
-test("completions recap the run and the audit reconstructs the decision chain", () => {
+test("audit stays available without becoming an automatic completion gate", () => {
   const audit = readFileSync(new URL("../../audit/SKILL.md", import.meta.url), "utf8");
-  const runAudit = readFileSync(
-    new URL("../../../references/run-audit.md", import.meta.url),
-    "utf8",
-  );
-  for (const consumer of [delivery, orchestrator]) {
-    assert.match(consumer, /run-log\.js/);
-    assert.match(consumer, /"event":"decision"/);
-    assert.match(consumer, /Ran as expected\./);
-    assert.match(consumer, /run-audit\.md/);
-  }
   assert.match(audit, /railyard:audit|# Run audit/);
-  assert.match(audit, /decision/i);
-  assert.match(audit, /retrospective/i);
-  assert.match(audit, /the record doesn't capture why/);
-  assert.match(audit, /ce-compound/);
-  assert.match(audit, /suggestions\//);
-  assert.match(runAudit, /decision \| `what`|`decision`/);
-  assert.match(runAudit, /`fed_by`/);
-  assert.match(runAudit, /run-log\/YYYY-MM-DD\.jsonl/);
-  assert.match(harnessInvocation, /run-audit\.md/);
   assert.ok(claudeManifest.skills.includes("./skills/audit"));
+  for (const consumer of [delivery, orchestrator]) {
+    assert.doesNotMatch(consumer, /mandatory closing\s+step|record the run's \*\*first decision|Ran as expected\./);
+  }
 });
 
 test("ships paired source manifest versions", () => {

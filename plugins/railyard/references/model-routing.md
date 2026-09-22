@@ -1,14 +1,20 @@
 # Model routing contract v1
 
-`railyard:model-routing` is the single public decision point for model,
-effort, budget-admission, and dispatch-transport policy. Its exact wire version
-is `railyard/model-routing/v1`.
+Choose model and effort deliberately for ordinary native work using the
+[allocation guide](harness-model-invocation.md). Astra Max is the baseline
+candidate for substantive engineering; explicit user choices and suitable
+inheritance remain authoritative. Native dispatch does not need an admission
+ledger, charter, or routine routing CLI call.
+
+This reference describes the optional strict resolver for configured fleet,
+budget, privacy, and fixed-adapter work. Its exact wire version is
+`railyard/model-routing/v1`.
 
 It is a dependency-free local resolver and private state primitive. It does not
 create tasks, launch subagents, invoke Claude or Oracle, call providers, probe
 remote entitlement, scrape account pages, retain prompts/files/transcripts, or
 read or edit an installed plugin cache. One narrow, source-owned exception is
-a configured `security.*` resolve whose Daybreak cache is stale: the public
+a configured Daybreak-eligible resolve whose cache is stale: the public
 CLI can enumerate the local Codex App Server's fixed model list and retain only
 the resulting bounded availability fact. It is not a provider call, an account
 page scrape, or a carrier execution. Public stdin and `CODEX_*` environment
@@ -49,6 +55,9 @@ An outbound-work request supplies only content-free control data:
   "adapterId": "native-subagent-create",
   "dispatchKind": "subagent_create",
   "budgetEffect": "start",
+  "model": "gpt-6-astra",
+  "effort": "max",
+  "contextFork": "none",
   "workShape": {
     "ambiguity": "low",
     "novelty": "low",
@@ -81,15 +90,21 @@ changed class evidence returns `prior_work_class_unknown` or
 model, effort, or active-budget top-up.
 
 `runtime` and `transport` are reserved input names, not caller-controlled
-facts: caller JSON for either is rejected. Luna's normal availability is a
-fixed router-owned runtime fact; a Terra substitute can come only from the
-fixed trusted host-runtime attestor. Likewise, a fixed trusted transport
-attestor—not a catalog, environment variable, or request boolean—selects a
-native versus visible-task bridge path.
+facts: caller JSON for either is rejected. The legacy configured
+`codex-terra-runtime` substitute requires a fixed trusted host-runtime
+attestor. That legacy Luna/Terra mechanism is not used by the Astra default,
+and its fixed baseline is not measured availability. A trusted transport
+attestor selects any native versus visible-task bridge path; configuration or
+a request boolean cannot manufacture that evidence.
 
 `contextFork`, when present for native creation, is exactly `"none"` or an
 unpadded positive decimal turn count from `"1"` through `"999"`. Values such
 as `all`, `full-history`, `0`, `03`, numbers, and unknown strings are rejected.
+A strict native creation decision defaults an omitted `contextFork` to
+`"none"`; map it to the actual tool's `fork_turns`. Its explicit model/effort
+controls cannot accompany a full-history fork. Deliberate full-history
+inheritance uses the lean native guide and gate, outside this explicit-control
+contract.
 
 A fleet caller (callerKind `fleet`) may supply one closed content-free R52 readiness record:
 
@@ -131,8 +146,9 @@ boundary; and escalation state. Each facet has an explicit provenance and uses
 The three route sections answer three different questions and are expected to
 diverge. `requested` is what the caller asked for and nothing else: the effort
 it named, the single provider its privacy constraint allowed, and
-`"not_requested"` for every facet a request cannot state — a caller never names
-a model, endpoint, execution surface, or billing surface. `configured` is the
+`"not_requested"` for every facet a request did not state. A request may name
+`model` and `effort`; it cannot supply an endpoint, execution surface, or
+billing surface. `configured` is the
 catalog's answer for the selected route, and `observed` is what the adapter
 receipt or capability attestation actually reported.
 The disclosure is content-free and the compact settlement form is retained so
@@ -171,68 +187,66 @@ fabricated carrier/model route effect.
 
 ## Built-in no-config policy
 
-No catalog means no external probes and no optional-route assumption. In
-particular, it never performs Daybreak enumeration.
+No catalog means no provider probe, availability assertion, automatic model
+substitution, or required implementation-harness change. A substantial
+engineering, orchestration, or review request proposes `gpt-6-astra` at `max`.
+The built-in digest is `builtin-model-routing-astra-max-v1`; it deliberately
+changes when the default policy changes so old decisions are not reused as the
+new policy.
 
-| Work role | Frozen default |
-| --- | --- |
-| `implementation` and its bounded subroles | `gpt-5.6-luna` at `max`, including exactly `implementationEngine:{"mode":"prefer","target":"codex","model":"gpt-5.6-luna","source":"deliver"}` — `prefer`, not `require`, because no-config Luna availability is assumed, not proven (see below) |
-| orchestration or independent review | `gpt-5.6-sol` at `high`; `max` only for high/critical or explicitly complex work |
-| unavailable/unselectable Luna implementation | only a runtime-attested Terra model at `max`, disclosed as `implementation_model_substitute`; the resolver never invents a Terra slug, and `implementationEngine` still rides along with `model` set to the attested Terra slug |
+`model` and `effort` preserve caller requirements exactly. Naming a model
+requires a concrete effort (`effort_required` if omitted). A requested effort
+also applies when the model is omitted, using Astra as the candidate. An
+unsupported pair returns `native_model_unsupported` or `effort_unsupported`;
+it does not replace the model or lower effort. The older
+`explicitModelRequirement:true` flag now requires the concrete `model` field.
 
-`implementationEngine` is emitted from the work *role*, not from the carrier: any
-`implementation` role landing on a `codex` execution surface carries
-`{"mode":<strength>,"target":"codex","model":<selected model>,"source":"deliver"}`.
-Terra substitution therefore cannot silently drop the "must go to Codex" signal,
-and no other role ever carries the field.
+This baseline does not emit `implementationEngine`. An explicit model request
+or configured Codex implementation route emits
+`{"mode":"require","target":"codex","model":"<selected model>","source":"deliver"}`.
+That field is binding policy, not proof that the model is available. Preserve
+the decision's effort as well. If the required route is unavailable, surface
+the incompatibility; do not use CE's `prefer` behavior to switch harnesses.
+A no-config request from a Claude harness returns
+`cross_harness_adapter_required` instead of inventing a cross-harness route.
 
-`<strength>` is `require` only when Codex is *proven* present — a measured
-runtime attestation (the Terra substitute path carries one, so it stays
-`require`) or an explicitly configured catalog route. The no-config fixed
-default assumes Luna without proof: the public `model-routing.mjs` CLI passes no
-runtime attestor, so demanding Codex there would dead-end a Claude-Code-only
-host at the `ce-work` `require`-blocker before any code is written. That default
-is therefore `prefer` — deliver routes to Codex when its own preflight proves it
-callable, and falls back to a native Claude implementation when it is not, which
-is what makes "local delivery works with nothing configured" true for
-implementation. A caller that supplies a real runtime attestor proving Codex
-available, or configures a catalog codex route, gets `require` back.
+Astra Max is a candidate, not an assertion that Max always wins. Evaluate cost
+and elapsed time to an accepted result across the whole assignment, including
+children, unsuccessful attempts, repeated reads, retries, and repairs. Use
+existing outcomes; do not substitute a per-token price or quota-per-hour
+ranking for completed-task evidence. Mechanical operations use deterministic
+tools directly. A supported explicit user preference, measured workload
+tradeoff, or relevant specialist can justify another model and effort.
 
-An unavailable Luna with no attested Terra substitute returns
-`preferred_unavailable`. Explicit user/repository model requirements prevent
-that automatic substitution.
+## Native capability and roles
 
-This table is the delegated carrier route and is harness-independent: a Claude
-session that delegates bounded implementation still receives the Luna route.
-The model each harness runs as for its own turn is a separate layer with
-per-harness defaults. See
-[harness model invocation](harness-model-invocation.md) for those defaults,
-the Codex-only GLM-5.2 route, and the cross-harness handoffs. That reference
-is invocation guidance only; it grants no route this contract has not
-admitted.
+[`scripts/model-routing/native.mjs`](../scripts/model-routing/native.mjs)
+exports the small, dependency-free capability check used by the native gate.
+Its 2026-09-14 adapter snapshot includes Astra, Daybreak, and Terra through
+`ultra`, Luna through `max`, and `combo/grok-unified-4.6` through `xhigh`.
+All begin at `low` and include `medium` and `high`; see the
+[exact roster and fork rules](harness-model-invocation.md#current-codex-native-controls).
 
-## Codex roster and role doctrine
+The active tool schema is authoritative. A provider catalog or
+`models_cache.json` may include models the current native tool does not expose;
+neither is a promise that those overrides are callable. The shared native
+check does not claim runtime verification, account availability, or a universal
+model list. It must be updated from an inspected adapter surface when that
+surface changes.
 
-The owner-verified Codex roster is explicit because a missing model selector
-inherits native dispatch context rather than expressing a neutral choice.
-OpenAI's [subagent configuration documentation](https://learn.chatgpt.com/docs/agent-configuration/subagents)
-describes the precedence: a more-specific subagent setting wins, then a
-configured agent default, then the parent model and effort. Railyard therefore
-resolves and dispatches an explicit model and effort for every child.
+Native model selectors share the agent's exposed capabilities. Suitability for
+coordination, implementation, or review is a deliberate policy judgment;
+there is no fabricated Luna leaf-only capability restriction. A configured
+catalog can still constrain its own models to specified roles. A fixed
+specialist binding is a different feature: it requires an authoritative role
+configuration and an actually exposed role parameter. The current native tool
+has no role parameter, so a role name in a prompt cannot select one.
 
-| Model | Positive routing role |
-| --- | --- |
-| `gpt-5.6-sol` | Frontier agentic-coding tier for hard implementation, oversight, review, and ordinary coordination. |
-| `gpt-5.6-terra` | Balanced everyday implementation tier. |
-| `gpt-5.6-luna` | Cheapest fork-capable pure sub-agent tier for complete, narrow implementation and mechanical work under a stronger supervisor. |
-| `gpt-daybreak-blue-latest` | Limited-access defensive-security tier for the configured security roles when this machine's cache says it is available. |
-| `gpt-5.5` | Broad complex coding, research, and general-work tier; Sol remains the router's frontier agentic-coding/oversight tier. |
-
-Owner-verified Luna doctrine: Luna's modeled role set is deliberately the fully specified implementation
-roles. Its supervisor supplies the complete narrow brief and owns review and
-verification; coordination, reviewer-of-record, and judgment work stay with
-the supervising tier. Luna supports a bounded context fork, but that does not
-change this pure-sub-agent boundary or create a peer/coordinator route.
+Deliberate inheritance records why the same parent model and effort suit the
+work. It is not silent omission. Overrides require a compatible no-history or
+bounded-history fork; full-history inheritance carries neither override. Tool
+arguments document requested settings. Worker banner echoes do not prove what
+ran, and narrowing history does not disable plugins.
 
 ## Catalog
 
@@ -258,6 +272,11 @@ top-level keys only: `providers`, `models`, `roles`, `privacy`, `budgets`,
   URL, checked/effective timestamp, optional promotion expiry, a default
   30-day freshness limit, and an exact resolved-model digest, carrier/version,
   effort, and billing-surface binding.
+  `efforts` declares supported choices; its order does not choose one. A
+  multi-effort entry needs a request `effort` or a configured `effort` default,
+  otherwise it returns `effort_selection_required`. A single-effort entry may
+  use its sole value. Defaults must be deliberate policy choices, not inferred
+  from a capability enumeration.
 - `roles` maps role names to ordered `tiers`; each tier is an ordered model
   list or `{ "models": [...], "softPriorities": [...] }`. A
   `softPriorities` object is allowed only for tier zero; valid priorities are
@@ -272,53 +291,51 @@ top-level keys only: `providers`, `models`, `roles`, `privacy`, `budgets`,
 - `budgets` has task/run/project meter limits. A meter rule may contain
   `soft`, `hardAdmission`, or `strict` canonical amounts.
 
-The owner policy is shipped as the documented
-[`model-routing.example.json`](model-routing.example.json). Its role/tier
-catalog is deliberately ordinary schema data: `implementation.hard` selects
-Fable in a Claude harness or the max-effort Sol alias in Codex, `implementation.medium` and
-`implementation.long-running` select Sonnet, attested Terra, or healthy Luna,
-`implementation.mechanical` selects Haiku or Luna, and plain
-`implementation` selects Luna. Terra's tier position ahead of Luna is inert
-under the built-in fixed runtime attestor and matters only for a caller that
-embeds its own trusted runtime attestor: the `codex-terra-runtime` carrier's
-`runtimeVerifiedOnly` gate accepts Terra only when that attestation reports
-Luna `unavailable`/`unselectable`, and the same attestation excludes Luna as a
-candidate whenever it does. Terra and Luna are therefore mutually exclusive by
-construction, never a live preference between two eligible candidates, so
-reordering the tier would change nothing observable. The `implementation.cross-harness`
-role orders Luna and GLM by the existing cost tiebreak when the caller has
-explicitly named a cross-harness reason. GLM is still Codex-family even though
-its execution surface is the Z.ai subscription; its candidate is eligible only
-when the configured `[model_providers.zai_litellm]` section exists in the
-Codex `config.toml` and the normal callable attestation is present.
+The [`example catalog`](model-routing.example.json) uses Astra Max for
+substantial native work and records the supported efforts of the five current
+native alternatives. Those alternatives are not a cost-ranked ladder. Explicit
+`model` requirements select matching catalog entries ahead of role-tier
+preferences; the selected entry still has to satisfy its declared role,
+privacy, harness, and capability restrictions. Unsupported requirements never
+fall through to another entry. There are no invented relative prices, budget
+limits, or automatic cross-family reviewers in the example.
 
-The same example maps `security.review`, `security.threat-model`,
-`security.trust`, `security.redaction`, `security.signing`,
-`security.attack-shape`, and `security.audit` to Daybreak Blue first and Sol
-second. The role list itself is Luna's catalog annotation: only bounded
-implementation roles name Luna, while coordination and review name their
-supervising tier.
+Default role tiers can contain policy-authorized fallback candidates. A lower
+tier selected after ineligibility is disclosed as
+`configured_model_substitute`; refusal-gated and legacy Terra substitutions
+keep their more specific reasons. An explicit requested model cannot be
+replaced by any of them. Review provenance must identify the model that
+actually supplied the opinion. Same-model diversity is not cross-family
+review; configure a supported independent reviewer deliberately when needed.
 
-The small schema extension is the provider `harness`/`availability` metadata
-and request `harness`/`crossHarnessReason` fields. `harness` classifies the
-current invocation destination; it is not runtime availability or entitlement
-evidence. A candidate whose provider
-harness differs from the request is rejected as
-`cross_harness_reason_required` unless the non-empty reason is copied into the
-decision's `requested` and `binding` facets. This keeps the reason in the
-resolver's existing dispatch decision rather than adding a second policy
-mechanism. The existing arbitrary budget-meter map is sufficient for
-`claude_subscription`, `codex_subscription`, and `zai_credits`; no parallel
-meter table is added.
+Provider `harness` and request `harness`/`crossHarnessReason` classify the
+invocation, not availability. A different harness requires a concrete reason
+and a supported adapter. Credentials, capabilities, and accounting do not
+transfer merely because the model name is present. The optional GLM adapter
+still needs its own provider configuration and callable evidence; its legacy
+fixed profile is not a current native role.
 
-Install the example at the normal platform user-config path (the delivery
-installs this same file on the current machine):
+### Migrating an existing owner catalog
 
-```bash
-install -d -m 700 "${XDG_CONFIG_HOME:-$HOME/.config}/railyard"
-install -m 600 plugins/railyard/references/model-routing.example.json \
-  "${XDG_CONFIG_HOME:-$HOME/.config}/railyard/model-routing.json"
-```
+Do not overwrite an existing catalog with the example. Preserve a backup and
+apply only the intended policy changes:
+
+1. Add a `codex_astra` provider using the owner's existing Codex account,
+   locality, retention, and harness values, with `carrierId:"codex-astra"`.
+2. Add an `astra` model with `requestedModel:"gpt-6-astra"`, `effort:"max"`,
+   and the supported `low`, `medium`, `high`, `xhigh`, `max`, `ultra` efforts.
+3. Point the intended substantial engineering, orchestration, and review roles
+   to that baseline. Preserve explicit specialist or alternative-provider
+   selections and unrelated custom roles. Remove unbenchmarked automatic cost
+   ordering only where it conflicts with that chosen policy.
+4. Keep unrelated provider/account identifiers, budgets, privacy constraints,
+   discovery settings, learning preferences, and custom values intact.
+   `codex-terra` represents the current explicit Terra selector; the older
+   `codex-terra-runtime` row remains available for intentionally retained fleet
+   adapters and must not be reinterpreted as live native evidence.
+5. Validate the candidate catalog and review its selected pairs before applying
+   it. Source upgrades do not migrate user configuration automatically. Existing
+   provider entries may remain useful without being callable by native spawn.
 
 Catalog data is declarative, credential-free, and cannot define a profile,
 provider command, flag, executable, endpoint, path, prompt, source, host, or
@@ -331,9 +348,22 @@ Known cost/latency/quality fields order routes only after hard role, carrier,
 effort, context, work-shape, privacy, family, and transport eligibility.
 Unknown cost is never zero or free. Different meter types are not converted or
 added without explicit user policy. Claude review model identities are limited
-to the Fable/Opus family aliases. Exact, minimum-generation, and `current`
+to the Fable/Opus families, including full model IDs such as
+`claude-fable-5-1`. Hyphenated and dotted generations compare numerically:
+Fable 5.1 satisfies a minimum of 5.1; Fable 5 does not. Exact,
+minimum-generation, and `current`
 checks always preserve the family; a numeric version alone can never cross from
 Fable to Opus or vice versa.
+
+For Fable 5.1 on Claude Code, see the
+[current surface controls](harness-model-invocation.md#claude-code-allocation).
+The configured `claude-session-create` adapter maps to native `Agent`, whose
+per-call model choices are family aliases. An exact model ID needs a supported
+CLI route or authoritative subagent definition; the router must not emit an
+unusable native model argument. Existing CE code/doc review adapters accept
+the exact `claude-fable-5-1` selection and a supported effort through their
+model/effort overrides. Respect each selected seam's controls; a peer-review
+script's capabilities do not establish another workflow's support.
 
 A `provider_latest_family` route additionally needs positive host evidence for
 the observed model, resolved-model digest, required capabilities, and exact
@@ -360,7 +390,7 @@ Catalog fields may reference them; they cannot extend them.
 | --- | --- | --- | --- |
 | `codex-task-create` / `codex-task-message` | visible Codex task | `model`, `thinking` | task create needs one-use task authority |
 | `native-subagent-create` | native subagent | `model`, `reasoning_effort` | `contextFork` is `"none"` or `"1"`-`"999"` only |
-| `claude-session-create` | Claude Code `Agent` session | `model`, effort stated in the dispatch banner only | the Agent tool has no per-dispatch effort parameter |
+| `claude-session-create` | Claude Code `Agent` session | family-alias `model`; effort inherits or comes from the subagent definition | the stored v1 `banner-only` label is legacy metadata, not an effort control or proof |
 | `native-subagent-message` | existing subagent message | none | `none` or `adjust_active`, never a fake spawn claim |
 | `native-subagent-followup` | work-starting follow-up | none today | fresh resolved route/inheritance only |
 | `configured-profile-task-create` | separately callable profile task | carrier-owned fixed profile | GLM only after host attestation |
@@ -370,40 +400,23 @@ Catalog fields may reference them; they cannot extend them.
 
 | Carrier | Transport and fixed facts | Availability truth |
 | --- | --- | --- |
-| `codex-luna` | selector-native, `gpt-5.6-luna`, Low/Medium/High/Xhigh/Max | default policy |
-| `codex-sol` | selector-native, `gpt-5.6-sol`, Low/Medium/High/Xhigh/Max/Ultra | default policy |
-| `codex-daybreak-blue` | selector-native, `gpt-daybreak-blue-latest`, High/Max, defensive-security **and deep-technical** roles (see below) | fresh local Daybreak cache must be `available:true` |
-| `codex-terra-runtime` | selector-native, runtime-provided Terra at Low/Medium/High/Xhigh/Max/Ultra | requires runtime evidence; no static slug |
-| `glm-5-2-scout` | separate-task profile, `glm-5.2`, High | `transport_unsupported` until callable task-profile creation is host-attested |
-| `glm-5-2-engineer` | separate-task profile, `glm-5.2`, xhigh | same; not a native agent type or selector model |
+| `codex-astra` | `gpt-6-astra`, Low/Medium/High/Xhigh/Max/Ultra | baseline candidate; actual availability remains unknown |
+| `codex-terra` | `gpt-5.6-terra`, Low/Medium/High/Xhigh/Max/Ultra | explicit selector; no Luna-substitution condition |
+| `codex-luna` | `gpt-5.6-luna`, Low/Medium/High/Xhigh/Max | current native snapshot; configured restrictions still apply |
+| `codex-grok` | `combo/grok-unified-4.6`, Low/Medium/High/Xhigh | current native snapshot; provider routing does not prove execution |
+| `codex-daybreak-blue` | `gpt-daybreak-blue-latest`, Low/Medium/High/Xhigh/Max/Ultra | the strict configured path requires a fresh local availability cache |
+| `codex-sol` | legacy configured `gpt-5.6-sol` selector | not exposed by the current native override snapshot |
+| `codex-terra-runtime` | legacy runtime-attested Terra substitution | needs separately bound runtime and capability evidence |
+| `glm-5-2-scout` / `glm-5-2-engineer` | legacy separately callable profiles | unsupported until their own callable adapter is attested; not native agent roles |
+| `claude-ce-review` | CE Claude `-p` review adapter | unsupported until the compatible CE adapter is attested |
+| `oracle-browser` | `chatgpt_current_pro` channel on `chatgpt_standard` | Oracle v2 controls require their own current capability evidence |
+| `oracle-homebrew-lifecycle` | local Oracle install/upgrade lifecycle | separate v2 lifecycle evidence and claim |
 
-Carrier effort ranges mirror what the executor actually ships, read from the
-Codex model catalogue (`~/.codex/models_cache.json`), not a routing preference.
-Luna, Sol and Terra all advertise the full reasoning range; Luna's own default
-is Medium. Earlier revisions of this table pinned Luna and Terra to Max, which
-made a catalogue that asked for anything lower fail `effort_unsupported` for a
-model that supports it perfectly well. Pinning an operating point is a job for
-a role's tier in the catalogue, where it can be argued case by case — not for
-the carrier contract, which should describe the executor as it is.
-
-### Daybreak Blue role scope
-
-Daybreak Blue carries the `security.*` roles and, deliberately, `review`,
-`review.code`, `investigation`, `research` and the `review.deep` family. The
-widening is a routing-doctrine decision made by the operator on observed
-results: it is measurably better at deep technical work — firmware, low-level
-code, cryptography, reverse engineering — and at open-ended "why isn't this
-working" debugging, which is not a security topic but is the same skill. An
-auth change is security work and belongs here on those grounds alone.
-
-Two limits stay in force and are not implied away by the above. The local
-availability cache attests only that the model is reachable from this machine;
-it does not attest that a given task is authorized for a limited-access tier.
-And this tier's access terms are the operator's to honour — the router
-enforces reachability, never entitlement.
-| `claude-ce-review` | fixed CE Claude `-p` review adapter | unsupported until the compatible CE adapter is attested |
-| `oracle-browser` | `chatgpt_current_pro` on `chatgpt_standard` | unsupported until selected-route Oracle capability is attested |
-| `oracle-homebrew-lifecycle` | local-host Oracle install/upgrade lifecycle carrier | unsupported until its separate adapter capability is attested |
+Supported efforts describe a surface, not a recommended effort for each model.
+The catalog validates known carrier ranges, so Luna `ultra` and Grok `max`
+are rejected. Catalogs, native tools, CLI adapters, and browser models are
+separate surfaces; validate the one that will execute the work. A current
+native roster does not prove that an older configured adapter is available.
 
 ### Daybreak Blue local availability
 
@@ -415,7 +428,7 @@ and [Models and Trusted Access guidance](https://learn.chatgpt.com/docs/cyber-sa
 Railyard's owner-provisioned Codex selector is the distinct runtime string
 `gpt-daybreak-blue-latest`; it never substitutes the public alias at runtime.
 
-For a configured `security.*` role that includes the fixed Daybreak carrier,
+For a configured role whose selection needs the fixed Daybreak carrier,
 the CLI obtains a local availability fact through the inspected App Server
 surface: it starts only the fixed `codex app-server --stdio`, sends
 `initialize`, and calls `model/list` with hidden models excluded. The probe
@@ -429,14 +442,14 @@ state-level catalog-digest binding invalidates a legacy or policy-changed
 record before it is reused. The availability record is fresh for 24 hours only
 when its checked time is not in the future. A fresh positive
 record makes the Daybreak candidate eligible for the local configured Daybreak
-account; a remote host or different account uses the normal fallback without a
-probe. A missing, stale, negative, or unknown record makes that candidate
-ineligible and the catalog's normal Sol/Fable fallback decides the route. A
-stale security resolve refreshes under the existing private state lock; an
-overlapping resolver or failed cache maintenance uses that ordinary fallback
-while the first refresh owns the one probe. A list failure records
+account. A remote host or different account does not probe. A missing, stale,
+negative, or unknown record makes Daybreak ineligible; an explicitly configured
+fallback may then be selected and disclosed, while an explicit Daybreak request
+remains blocked. A stale eligible resolve refreshes under the existing private
+state lock; an overlapping resolver or failed cache maintenance observes that
+same ineligibility while the first refresh owns the one probe. A list failure records
 `available:null` for the same TTL, so the resolver neither crashes nor
-repeatedly probes. Non-security and no-catalog resolves do not probe or write
+repeatedly probes. Resolves that do not select or reject Daybreak, and no-catalog resolves, do not probe or write
 this cache. The optional availability field is state-schema v5; readers
 migrate a v4 state without the cache before validating it. One state document
 permits only one Daybreak provider, and the catalog's content digest—not just
@@ -656,7 +669,8 @@ node --test plugins/railyard/scripts/model-routing.test.mjs
 ```
 
 It exercises catalog and state validation, the Daybreak positive/negative/
-unknown 24-hour cache path, Luna's coordinator-role guard, reason-class
+unknown 24-hour cache path, Astra Max defaults, explicit pair preservation,
+native/provider capability boundaries, catalog role constraints, reason-class
 negative caches, learning limits, R28 decision/settlement/replay disclosure,
 authority and bridge identity binding, work-class/action-receipt invariants,
 all seven metadata presentation overlays, terminal/epoch transitions, protected
@@ -695,12 +709,14 @@ the route. It is a replacement of execution mechanism, not a rewrite of CE.
 | already-legitimized bounded execution step | claimed `glm-5-2-engineer` separate task | the ordinary CE executor outcome artifact |
 | code/doc/POV/PR read-only review seam | claimed `claude-ce-review` through its supported CE Claude `-p` path, or Oracle only where the closed role/carrier pair permits it | the ordinary seam-specific review receipt/findings artifact |
 
-`review.cross_family` exists to leave the family: a Codex-side CE review asks a
-**Claude** model for the independent opinion, which is what `claude-ce-review`
-is for — those adapters are the only way a Codex session can reach a Claude
-model at all. Fable is that reviewer.
+A configured `review.cross_family` role asks another model family for an
+independent opinion. Within this CE seam, use its supported Fable/Opus review
+adapter and the selected model and effort. A catalog alias does not establish
+that the reviewer is callable, and same-family review must not be labeled
+cross-family evidence.
 
-Daybreak Blue is reachable as a refusal substitute only, gated by
+If the owner configures Daybreak Blue as a same-family refusal substitute,
+gate it with
 `afterRefusalOnly` on its tier. The trigger is an explicit signal, never
 inference: the caller re-resolves with the refused alias in `refusedAliases`,
 and without that the tier stays shut with `refusal_required`. This matters
@@ -711,7 +727,7 @@ review.
 The resulting decision carries `fallback.reason: "review_refusal_substitute"`,
 which must reach the artifact. Per `provider-task-routing.md`, a substitute
 carrier's review is evidence about the code but never review evidence for the
-routed model, and the one same-model rephrase retry still comes first.
+routed model, and any authorized same-model retry remains with the owning review workflow.
 
 Preserve CE workflow, persona, plan/legitimacy and root-cause authority,
 canonical writer, review/validator/merge authority, least-privilege tooling,
@@ -749,7 +765,15 @@ A subsequent review claim must name that requirement and cannot settle it
 without matching identity and policy.
 
 The route’s requested identity is `chatgpt_current_pro`; its execution surface
-is `chatgpt_standard`. Browser auth can remain `unknown` for one policy-admitted
+is `chatgpt_standard`. The v2 browser adapter uses Oracle 0.20.3 or later,
+explicit `gpt-6-pro`, the Latest picker, and verified Pro thinking. Browser Pro
+is distinct from native Astra Max. V1 Sol capability records cannot attest this
+v2 control set. Historical v1 records remain readable and retain their original
+accounting and provenance; status marks their capability stale. Attempting to
+claim, inspect for dispatch, or reconcile them through the v2 adapter returns
+`adapter_version_changed`. Do not rewrite the old model identity or discard
+an outstanding liability to manufacture a new route. A new route requires a
+fresh decision and the corresponding v2 evidence. Browser auth can remain `unknown` for one policy-admitted
 normal attempt. A login/account-selection result is
 `auth_context_unavailable`: stop without interaction, credential changes, or
 API fallback. `oracle-api` is unsupported by this contract.

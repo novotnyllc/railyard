@@ -4,7 +4,7 @@
  * The model-routing contract is deliberately a policy/state primitive.  It
  * never creates a task or reads an installed plugin cache. Its public stdin
  * CLI may make one bounded local Codex model-list observation for a stale
- * Daybreak security resolve; callers still execute claimed decisions with
+ * Daybreak-eligible resolve; callers still execute claimed decisions with
  * their own fixed adapter and return a trusted receipt for reconciliation.
  *
  * This file is the stable entry point: `node scripts/model-routing.mjs` with a
@@ -26,6 +26,7 @@ export * from "./model-routing/disclosure.mjs";
 export * from "./model-routing/dispatch.mjs";
 export * from "./model-routing/learning.mjs";
 export * from "./model-routing/leases.mjs";
+export * from "./model-routing/native.mjs";
 export * from "./model-routing/paths.mjs";
 export * from "./model-routing/queries.mjs";
 export * from "./model-routing/receipts.mjs";

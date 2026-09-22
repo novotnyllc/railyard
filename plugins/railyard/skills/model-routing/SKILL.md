@@ -1,161 +1,138 @@
 ---
 name: model-routing
-description: "Resolve one bounded model, effort, transport, and budget decision through railyard/model-routing/v1. Use before model-specific task, subagent, provider-review, or steering actions."
+description: "Choose a model and reasoning effort for native delegation or a requested allocation review. Use the strict resolver only for configured fleet, budget, provider, or adapter decisions."
 ---
 
 # Model routing
 
-`railyard:model-routing` is the only public model, effort, budget, and
-transport-policy entrypoint. It returns a frozen decision or receipt; it never
-creates a task, invokes a provider, runs a browser, or executes a command on a
-provider's behalf.
+Choose model and reasoning effort together for the bounded assignment. Keep
+native execution lean; this skill does not create tasks, dispatch workers, or
+replace the selected delivery/review workflow. There is no mandatory routing
+CLI intake for every software turn.
 
-[`../../references/model-routing.md`](../../references/model-routing.md) is
-the normative contract — commands, request shapes, catalog schema, budget
-rules, CE override clauses, and state rules live there, and its transport
-phase incorporates the provider-task policy. Do not invoke a second router or
-copy a model table. For per-harness session defaults and cross-harness
-invocation, see
-[`../../references/harness-model-invocation.md`](../../references/harness-model-invocation.md).
+## Native allocation
 
-## Activation
+When `TYPESAFE_API_KEY` is present, use [Jev](../jev/SKILL.md) as the default
+model-and-reasoning-effort selector for substantive assignments. Supply the
+locally compatible, eligible pairs with task context and available outcome
+evidence; use its recommended pair after the checks below. Respect explicit
+user choices, fixed roles, and offline/privacy restrictions first. Map the
+returned ID through that same local list and recheck availability before
+dispatch. Missing key, uncertainty, or service failure leaves the ordinary
+allocation procedure below in charge. Jev is an adviser,
+not an execution carrier, capability attestation, or budget decision.
 
-Resolve `SKILL_DIR` from the activated skill path (never an installed-cache
-path or source checkout), then:
+1. Preserve explicit user model/effort choices and applicable repository
+   constraints. Identify the work, acceptance condition, and need for parallel
+   execution or specialization.
+2. In Codex, use **Astra at `max` as the baseline candidate for substantive engineering**.
+   Choose another supported model or effort when comparable accepted work
+   supports it, a specialist fits the assignment, or the user prioritizes
+   latency. In Claude Code, consider Fable 5.1 for substantial work and choose
+   its effort deliberately; do not copy Codex's effort defaults across models.
+   Use deterministic tools directly for mechanical work.
+3. Check the active dispatch tool's model selectors, effort values, history
+   constraints, and any authoritative fixed-role binding. A provider catalog
+   or working CLI route is not proof of a native override.
+4. Request the selected model and effort with a compatible history mode, or
+   deliberately inherit both. Record that decision and reason once in the
+   brief; dispatch without an extra acknowledgement.
+5. Evaluate the accepted result and the whole assignment's cost/time, including
+   all children, failed attempts, retries, and repairs. Lower per-call prices
+   or quota per hour do not establish better task efficiency. Use existing
+   outcomes and logs; no routine benchmark, charter, or retrospective artifact
+   is required.
+
+There is no unbenchmarked cheap-model ladder. Astra Max is a baseline candidate,
+not a universal winner. Inheritance is an explicit allocation choice, not a
+substitute for considering the assignment.
+
+The [native invocation reference](../../references/harness-model-invocation.md)
+contains the dated roster and dispatch examples. The active tool schema wins
+if it changes. For current Codex `spawn_agent`:
+
+- Explicit `model` and `reasoning_effort` overrides require
+  `fork_turns:"none"` or a supported positive history-count string. Supply a
+  sufficient brief for that context boundary.
+- Full history (`fork_turns` omitted or `"all"`) disallows either override.
+  For deliberate inheritance through the lean gate, use explicit
+  `fork_turns:"all"`, omit both overrides, and put
+  `Allocation: inherit model and reasoning effort; <reason>.` in the brief.
+- No role parameter is currently exposed. Use a fixed specialist binding only
+  when authoritative configuration and an actual role parameter support it;
+  never invent a native role selector or conflicting overrides.
+- Native spawn has no arbitrary per-child plugin controls. Narrowing history
+  and scoping skills are separate actions.
+
+For Claude Code, use the [Claude allocation controls](../../references/harness-model-invocation.md#claude-code-allocation)
+for Fable 5.1's exact selector, supported efforts, and the distinction between
+session CLI flags and inherited or configured subagent effort. A moving alias
+does not prove a requested model version ran.
+
+If a requested model, effort, history mode, or adapter is unsupported, disclose
+the incompatibility. Do not silently fall back, omit a requested override, or
+claim the unavailable selection ran. Dispatch arguments document intent;
+worker banner echoes do not verify actual execution. Use runtime metadata when
+available, otherwise label actual model/effort as unverified.
+
+Internal subtasks use native subagents. A user-visible task requires an
+explicit user request to create one; routing or orchestration alone does not
+authorize it. Follow-up text does not change a running agent's allocation.
+
+## Optional strict resolver
+
+Use `railyard/model-routing/v1` when the assignment needs configured fleet,
+budget, privacy, provider, or fixed-adapter controls. Read the relevant parts
+of the [contract](../../references/model-routing.md) for request shapes,
+catalog schema, admission, state, and transport rules. This is the operational
+contract for that configured path, not an additional router for native work.
+
+Resolve `SKILL_DIR` from the skill being used, then invoke the bundled script:
 
 ```bash
 ROUTER="$SKILL_DIR/../../scripts/model-routing.mjs"
 printf '%s\n' '<request JSON>' | node "$ROUTER"
 ```
 
-Every request carries exact `"contractVersion":"railyard/model-routing/v1"`.
-Requests are content-free: no prompts, task titles, paths, source, files,
-tokens, endpoints, or command text.
+Every request carries `"contractVersion":"railyard/model-routing/v1"`.
+Requests remain content-free: no prompts, task titles, paths, source, files,
+credentials, endpoints, or command text.
 
-## Lifecycle
+For this path:
 
-1. **Classify** the bounded destination work: role, categorical work shape,
-   adapter/dispatch kind, scope, and privacy. Runtime and transport facts are
-   router-owned, never caller JSON.
-2. **`resolve`** reads one immutable policy snapshot. No-config defaults: Sol
-   `high`/`max` for orchestration and review, Luna at `max` for
-   implementation, Terra at `max` only as the router-attested Luna substitute.
-   When the selected policy attributes providers to a harness, include
-   `harness:"claude"` or `harness:"codex"` in the request. A mismatched
-   provider needs a specific `crossHarnessReason`; the resolver copies it into
-   the decision. A catalog, request, or environment variable cannot nominate
-   Terra or mark Luna unavailable.
-3. For configured work-starting actions, **`admit`** with a stable
-   caller-generated `requestId`, a frozen artifact digest, and every
-   applicable scope; then **`claim-dispatch`** immediately before the one
-   carrier dispatch. A claim is one-way and cannot authorize a retry spawn.
-4. The owning workflow invokes only the selected fixed adapter/carrier and
-   **reconciles** its receipt through the fixed importer. Model output and
-   caller-authored JSON are not receipts; adapters outside the fixed set
-   return `transport_unsupported`.
-5. `status`, `inspect-claim`, local-only `refresh`, and
-   `learning inspect|clear|disable|enable` go only through this contract;
-   `refresh` never probes a remote provider.
+1. Classify the bounded work and `resolve` its model/effort, transport, and
+   policy. Preserve requested selections; missing availability evidence is
+   not permission to manufacture it.
+2. For configured work-starting actions, `admit` with the required stable
+   request identity, frozen digest, and scopes; `claim-dispatch` immediately
+   before the single authorized dispatch. A claim does not authorize a retry.
+3. The owning workflow invokes the selected supported adapter and reconciles
+   its trusted receipt. Caller JSON and model output are not receipts.
+4. Use the contract's status, steering, settlement, and learning controls only
+   as needed. Disclose configured fallbacks and unsupported transports;
+   explicit user requirements remain authoritative.
 
-Read the decision's `disclosure` (and any fallback/settlement disclosure) as
-the content-free R28 record; do not reconstruct it from provider output.
+Configured visible-task creation also needs the contract's fixed attestation
+of explicit user authority. Public stdin and environment variables cannot
+mint it. Advanced cross-harness and Oracle routes retain their own supported
+adapters, permissions, and accounting; configuration alone does not prove
+availability.
 
-For a budget-neutral status/narrowing message, use `resolve` with
-`budgetEffect:"none"`, a stable `actionId`, and the exact prior route binding;
-scope-expanding steering uses `adjust_active` against the active reservation.
-Unknown or changed work class blocks inheritance (`prior_route_unknown`)
-rather than silently reusing a route. The reference defines the binding fields
-and the closed action-receipt schema.
+## Workflow ownership and completion
 
-## Fixed transports
+Keep one delivery/review owner and its useful mechanisms. Preserve requested
+Compound Engineering workflows, including its commit/PR, feedback resolution,
+review, and watch behavior. Allocation does not replace CE with a parallel
+runner or transfer its approval, writer, review, or terminal authority.
 
-The full adapter/carrier tables are in the reference. Operative rules:
-
-- Native task creation may carry `contextFork:"none"` or `"1"`–`"999"`;
-  everything else is rejected.
-- A visible task create needs a one-use `mint-task-authority` receipt from the
-  fixed in-process user-turn attestor; public stdin and `CODEX_*` variables
-  cannot mint it.
-- Fable/Opus review runs only through the supported Compound Engineering
-  Claude `-p` adapter; this skill never builds a parallel Claude runner.
-- Oracle review is `oracle-browser` on `chatgpt_current_pro` only; lifecycle
-  is the separate `oracle-homebrew-lifecycle` carrier. Oracle API is
-  unsupported here.
-- GLM is Codex-only (below). The `glm-5-2-scout`/`glm-5-2-engineer` carrier
-  rows remain fail-closed (`transport_unsupported`); they are never a Codex
-  selector or native-subagent value.
-
-## Harness defaults and GLM
-
-The router's frozen no-config route is harness-independent. The owner catalog
-uses per-harness role tiers: hard implementation is Sol `max`/Fable
-`high`/`max`, medium or long-running implementation is Terra `max`/Sonnet
-`medium`, mechanical implementation is Luna `max`/Haiku `low`, and plain
-Codex implementation defaults to Luna `max`. Effort is part of every route.
-Escalate deliberately. The
-harness-model-invocation reference has the table, the current rate data, and
-why sticker rates settle almost nothing (meters differ, operating points
-differ, cache rates dominate).
-
-**Dispatch rule — explicit model and effort on every subagent, thread, or
-worker, no exceptions.** Harness children inherit the session model when
-the dispatch omits one; on a premium-tier session (Fable, Sol `max`) that
-silently runs workers at the top tier — the inversion this router exists
-to prevent, and it burns the premium meter without consent. Every child
-dispatch therefore names its model and effort from the table above, using
-the harness's exact parameters: Claude Code `Agent` sets `model`; Codex
-`spawn_agent` sets `model` + `reasoning_effort` (it has no provider field
-— a non-OpenAI child requires its thread already on that provider); Codex
-`thread/start` sets `model` + `config.model_reasoning_effort` plus
-`modelProvider` for any non-OpenAI model; `codex exec` uses `-m` plus
-`-c model_provider=` and `-c model_reasoning_effort=`. A child
-deliberately run on the session's own tier is a named escalation with its
-reason stated at dispatch. Silent inheritance is a routing violation.
-Cross-harness dispatch is additionally opt-in only: never a silent
-default, because each harness meters separately.
-
-**Dispatch banner — every dispatch prompt makes the child announce its
-route.** The dispatcher composes the line (the worker cannot introspect its
-own model or effort) and instructs the child to echo it verbatim as the
-first line of its first message, then proceed without waiting; a
-model/effort change mid-thread gets a `▸ route change:` line the same way,
-and is N/A on harnesses that cannot change either mid-thread. The canonical
-format, per-harness fields, and mid-thread table are in the
-harness-model-invocation reference.
-
-**Claude Code cannot invoke GLM-5.2.** A Claude session cannot both
-authenticate to Z.ai and keep its account-bound capabilities, so the route
-does not exist — do not rebuild it. GLM work goes through Codex:
-`codex exec -m glm-5.2 -c model_provider=zai_litellm`, available whenever the
-provider config and local proxy are present; a failed command is the
-availability check. GLM's case is subscription headroom (Z.ai Coding Plan
-credits, a meter that never converts to USD) and provider diversity, not
-price. Benchmarks are not a selection criterion.
-
-Cross-harness: Claude reaches Codex models through the `codex` plugin's
-`codex:rescue` skill (or a direct `codex` CLI invocation); Codex reaches
-Claude models through `claude -p`.
-
-## Work contract and CE overrides
-
-Use `build-work-contract` for a carrier-neutral execution envelope: supply the
-seven semantic digests plus the selected carrier/model/effort, preserve the
-invariant digest, and apply the returned source-owned presentation overlay
-(lean brief for GPT/Sol, complete spec for Opus, autonomy/pause boundaries for
-Fable, standards-plus-plan for GLM, self-contained one-shot for Oracle).
-Direct user and repository instructions outrank the overlay. Changed semantic
-inputs against a frozen digest return `invariant_contract_mutation`.
-
-Compound Engineering is never edited. A frozen decision may replace only a
-named CE execution mechanism at a seam in the closed registry, using the
-runtime replacement clause in the reference; workflow, persona, legitimacy,
-writer, review, and terminal authority stay with CE. If the exact carrier/seam
-is not attested, return `transport_unsupported` or the disclosed fallback.
-
-## Completion truth
+When a configured route needs `build-work-contract`, preserve its semantic
+invariants and apply only the supported presentation overlay. Direct user and
+repository instructions win. A CE mechanism replacement is valid only at a
+supported, attested seam under the contract; unsupported carrier/adapter pairs
+remain unsupported.
 
 `offline_implementation_ready`, `host_capability_attested`, and
-`live_carrier_verified` are distinct; offline tests prove only the first, and
-the public CLI cannot mint positive capability evidence from JSON. Never call
-an optional route live-verified without its separately authorized minimal
-canary or an equivalently bound trusted receipt.
+`live_carrier_verified` are distinct. Offline tests do not establish a live
+route, and the public CLI cannot mint positive capability evidence from JSON.
+Complete the requested work and its relevant verification before reporting
+success; a routing decision alone is not completion.

@@ -7,37 +7,40 @@ nav_order: 3
 
 # Model routing
 
-Route every work unit deliberately before dispatch. Match the model and effort to the work shape, bind the choice to its carrier and budget, and preserve the receipt so quality, cost, and execution can be explained together.
+Choose model and reasoning effort together for each delegated assignment. Astra Max (`codex-astra`, `gpt-6-astra`, `max`) is the baseline candidate for substantive Codex engineering; use task evidence, constraints, or an explicit latency preference to choose another supported pair. Mechanical work can use deterministic tools directly.
+
+In Claude Code, consider Fable 5.1 with a deliberately chosen effort. Its exact model ID is `claude-fable-5-1`, supported by Claude Code 2.1.257 or later. The CLI supports `low`, `medium`, `high`, `xhigh`, and `max` for this model. Native `Agent` calls use the `fable` alias and inherited effort, or an explicitly configured subagent definition for an exact model and effort; a moving alias does not guarantee a model version. Unsupported selections and runtime substitutions must be reported.
 
 ## What it adds
 
-Model routing provides the single decision surface for role, work shape, privacy, budget, and transport. Its response is a frozen route the caller uses for the actual dispatch.
+Model routing supports lean native allocation and an optional strict resolver for configured fleet, budget, privacy, provider, or adapter controls. Routine work does not require a routing CLI, contract, or receipt ceremony.
 
 ## How it works
 
-The route lifecycle moves through `resolve`, `admit`, dispatch claim, and receipt reconciliation. Work contracts bind objective, source of truth, scope, constraints, authorization, acceptance, and stop condition through seven SHA-256 semantic digests.
+For native delegation, check the active tool's model selectors, effort values, and history constraints. Request the chosen pair or deliberately inherit both settings through a supported history mode. Use native children; create a visible task only when the user explicitly requests one. If a requested selection is unsupported, disclose the incompatibility instead of silently substituting a route.
 
-`build-work-contract` turns those digests into a carrier-neutral invariant and a separate source-owned presentation overlay. Switching from Sol to Opus, Fable, Sonnet, Haiku, GLM, or Oracle can change briefing form without changing objective, scope, authority, acceptance, or stop condition. The returned `invariantDigest` detects any semantic mutation before dispatch.
+With `TYPESAFE_API_KEY` present, [Jev](/skills/jev/) selects among eligible
+model-and-effort pairs by default. The caller supplies available candidates
+and evidence, then applies the usual allocation checks before dispatch. Explicit
+choices, fixed roles, and privacy restrictions remain authoritative. Missing
+or uncertain advice leaves normal routing in charge.
+
+For configured controls, the strict route lifecycle retains `resolve`, `admit`, dispatch claim, and receipt reconciliation. Work contracts can bind objective, source of truth, scope, constraints, authorization, acceptance, and stop condition through seven SHA-256 semantic digests.
+
+When that configured path needs `build-work-contract`, it produces a carrier-neutral invariant and a source-owned presentation overlay. Switching among supported GPT, Claude, GLM, or Oracle routes can change briefing form without changing scope or authority; `invariantDigest` detects semantic mutation before dispatch.
+
+Illustrative native allocation brief:
 
 ```text
-objective_digest=sha256:12af... source_of_truth_digest=sha256:7c1a...
-scope_digest=sha256:2f4a... constraints_digest=sha256:91bd...
-authorization_digest=sha256:4e1d... acceptance_digest=sha256:63ab...
-stop_digest=sha256:8d20...
-invariant_digest=sha256:55ce... presentation=gpt_sol/lean_bounded_brief
-```
-
-```text
-> Resolve the implementation route, admit its forecast, and show the receipt binding.
-role=implementation model=gpt-5.6-luna effort=max
-carrier=codex-luna adapter=native-subagent-create
-implementationEngine=prefer/codex
-admit=default_route_no_state claim=one-way
+assignment=bounded-engineering
+modelAlias=codex-astra model=gpt-6-astra effort=max
+reason=baseline-candidate-for-substantive-engineering
+history=<compatible mode from the active tool>
 ```
 
 ## Scope
 
-The router decides and records. The selected workflow or carrier performs the work and returns fixed adapter evidence.
+The selected workflow or carrier performs the work. Model allocation preserves CE's ownership of review settlement and CI/PR monitoring. Cross-harness and Oracle routes retain their supported adapters and accounting; a catalog entry alone does not prove availability.
 
 ## Source
 
@@ -45,27 +48,6 @@ Ships in the `railyard` plugin.
 
 ## Proof point
 
-```json
-{
-  "contractVersion": "railyard/model-routing/v1",
-  "ok": true,
-  "reason": "default_route_no_state",
-  "decision": {
-    "role": "implementation",
-    "selected": {
-      "modelAlias": "codex-luna",
-      "model": "gpt-5.6-luna",
-      "effort": "max",
-      "carrierId": "codex-luna",
-      "adapterId": "native-subagent-create",
-      "transport": "selector-native",
-      "completionState": "offline_implementation_ready"
-    },
-    "implementationEngine": { "mode": "prefer", "target": "codex", "model": "gpt-5.6-luna", "source": "deliver" }
-  },
-  "reservation": "not_applicable",
-  "claimRequired": false
-}
-```
+Dispatch arguments document the intended selection. Use runtime metadata for the observed model and effort when available; otherwise label them unverified. Judge efficiency from accepted results and total assignment cost and time, including children, retries, and repairs. No model tier is a universal winner.
 
 Go deeper: [roles, tiers, and carriers](/delivery/model-routing/).

@@ -16,6 +16,7 @@ These integrations share a clear operational boundary, and each one is optional;
 The operator asks for a focused capability at an existing delivery or fleet boundary. The integration owns one seam—configuration rendering, a disposable VM, secret custody, or transport—while Railyard and Roundhouse keep route, trust, readiness, and proof. The turn is ownership staying explicit across the handoff. The run closes when the integration's evidence returns to the lifecycle that requested it without becoming a second operating system.
 
 - [Chezmoi](/integrations/chezmoi/) — deliberate dotfile reconciliation.
+- [Jev](/skills/jev/) — model/effort selection and bounded decisions throughout delivery, enabled when `TYPESAFE_API_KEY` is present.
 - [Tart Xcode Runner](/integrations/tart-xcode-runner/) — disposable macOS test VMs.
 - [1Password](/integrations/1password/) — auth-artifact custody and verification.
 - [Tailscale SSH](/integrations/tailscale-ssh/) — optional transport acceleration.

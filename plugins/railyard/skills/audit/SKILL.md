@@ -10,19 +10,31 @@ the other?** Not an activity list — a chain. Counts are one line; decisions ar
 the content.
 
 Read `../../references/run-audit.md` for the run-log location, the line
-grammar, the recap format, and the suggestion file format. It is the sibling
-of the dispatch banner section in `../../references/harness-model-invocation.md`:
-banners self-identify each child in the transcript, this reconstructs the run
-across it.
+grammar, task selection, and optional learning formats. Use native runtime
+results and task history to corroborate what the metadata log cannot observe.
 
 ## Scope the run
 
-Default to the last run: the most recent `session` line in the run log, and
-everything after it. Widen only when the user names a window ("this week",
-"that run yesterday") — then read at most the last 3 day files unless they ask
-for more. Print the log path with
+First identify the requested task's exact `session_id`, or the current task's
+ID when the user means this run. Confirm it from current runtime/task metadata
+or an identified SessionStart payload. A task name or date must resolve to that
+identity before it selects log records; a shared working directory is not an
+identity. If the requested task cannot be identified, report that limitation
+and use only task history whose ownership is known.
+
+Read at most the last 3 day files unless the user asks for a wider window.
+Select entries with `entriesForSession(entries, requestedSessionId)` from
+`../../hooks/run-log.js`; it matches `session_id` exactly. Never select the
+latest global `session` line and all later records: concurrent tasks interleave
+in the same daily file. Repeated startup anchors for one ID can be resumes or
+compactions; retain that task's earlier records within the requested window.
+Unidentified records remain unknown even when their timestamp or cwd is nearby.
+Include a child's separate task ID only when native parent/child evidence links
+it to the requested work, and state the additional IDs included.
+
+Print the log path with
 `node <this plugin>/hooks/run-log.js path` (resolve `../../hooks/run-log.js`
-from this file) and read the day files directly; they are small.
+from this file) and read the selected day files directly.
 
 Say plainly when the window is empty or the log starts mid-run — a run that
 predates the recorder, or a session whose SessionStart hook did not fire, is a
@@ -34,9 +46,11 @@ gap to name, not to interpolate.
    lines plus the session's own `decision`/`outcome`/`deviation` lines.
 2. **Model routing state** — what was actually admitted and claimed: the
    `status` and `inspect-claim` commands of `railyard:model-routing`
-   (read-only; never resolve a new decision during an audit).
-3. **Dispatch banners** in the transcript, when the transcript is still in
-   scope. Corroboration only — the log outlives compaction, banners do not.
+   when the task used that optional route (read-only; never resolve a new
+   decision during an audit).
+3. **Native runtime results and task history** — observed child starts,
+   resolved model/effort, and outcomes when available. Requested controls in a
+   PreToolUse entry alone do not prove the child used them.
 
 ## Report
 
@@ -48,13 +62,16 @@ Text first, in this order:
    forced a second review round on pieces 1 and 2." Follow the `fed_by` /
    `led_to` labels; where they are missing, say the link is inferred from
    ordering.
-2. **Shape.** One line of counts: dispatches by model/tier, fan-out width,
-   rounds, retries, and the timing span.
+2. **Shape.** One line of allowed dispatch attempts by requested model/effort,
+   observed fan-out, rounds, retries, and timing. Report unobserved values as
+   unknown; the default log does not measure child concurrency or completion.
 3. **Did it work as expected.** Compare the *decision sequence* against the
    route the intake planned — not just the counts. Name divergences plainly:
-   a phase that never ran, a tier that escalated without a recorded reason, a
-   fan-out that never drained (dispatches with no matching completion), a
-   review round that repeated. End with `Ran as expected.` or the divergence.
+   a phase shown to have been skipped, a model/effort change without a recorded
+   reason, a child confirmed incomplete, or a review round that repeated.
+   Missing optional completion records leave completion unknown. End with the
+   supported conclusion, including any uncertainty; do not infer failure or
+   success from absent records.
 
 Then a diagram **only when the shape genuinely benefits** — a fan-out of 10+
 or a multi-phase pipeline. Small mermaid, few nodes, showing *what fed what*
@@ -68,86 +85,32 @@ conclusion?", "was that right, or could it have been done better?" Answer from
 the `because` and `fed_by` fields of the decision records plus session context.
 
 When the record does not capture why, **say the record doesn't capture why**.
-Never reconstruct a plausible-sounding rationale that was not written down —
-a fabricated reason is worse than a gap, because it ends the investigation.
-A missing `because` is itself a finding: name it so the next run records it.
+Never reconstruct a plausible-sounding rationale that was not written down.
+Name missing reasons as evidence gaps; notes remain optional.
 
 ## Retrospective
 
-The closing step of a substantial run — not merely on-request. Every
-substantial deliver/orchestrate run runs it before it declares done; the
-Stop (Claude Code) / SessionEnd (Codex) hook is the backstop that reminds when
-a substantial run would end without one. Run it also whenever asked how the
-work could have gone better.
+Run only when the user requests one or a concrete repeated failure makes a
+bounded audit useful. Substantial work, fan-out, elapsed time, and multiple
+repositories do not automatically require a retrospective, plan artifact, or
+learning file. The default hook set has no retrospective reminder.
 
-**Substantial is by cost, not by route.** A run is substantial when it either
-fans out (a small fan-out of dispatches) *or* is expensive on its own —
-multi-host, multi-repo, or multi-hour — even with zero dispatches. A pure ops
-or release run is exactly that case, and it **must open an approach line
-before executing**, the same first decision line a deliver run opens:
+Choose a few questions from observed decisions and outcomes: why a model and
+reasoning effort were selected, whether a child needed more context, whether a
+review or verification repeated unchanged work, and which retries or repairs
+were necessary. Compare complete accepted assignments including subagents,
+retries, and repairs. Per-call prices and quota per hour do not establish cost
+per correctly completed task. Astra Max is a baseline candidate for substantial
+agentic work, not proof of a universal efficiency optimum.
 
-```bash
-node <this plugin>/hooks/run-log.js note '{"event":"decision","what":"approach","because":"..."}'
-```
+Use recorded reasons and actual runtime outcomes. PreToolUse log entries prove
+that the gate allowed an attempt, not that the child started or completed. A
+missing outcome, token meter, or rationale stays unknown. Do not demand a
+kickoff artifact retroactively or infer a failed run from its absence.
 
-That one line is the whole audit spine for an ops run: it gives the
-retrospective its baseline and it is what makes the Stop/SessionEnd hook fire
-at all. Without it a multi-hour fleet run records nothing and closes silently.
-
-Read the audit report and the session history, then **generate 3–7 pointed
-questions specific to this run** — not a fixed checklist — and answer each
-against the evidence. Question quality is the whole skill here: "phase 3
-dispatched 4 workers sequentially that had no data dependency — why not
-parallel?" beats "was parallelism used?".
-
-**Grade the run against its kickoff approach.** A substantial run records an
-`approach` decision line at the start — the loop, isolation boundary, and
-done-evidence an excellent engineer would have chosen for *this* run. Compare
-what actually happened against it as one lens: did first principles fire, or
-was the literal route executed and stopped at? A missing `approach` line is
-itself the first finding — name it so the next run derives one. This is the
-same lens for the process reflex (worktree isolation, scoped verification,
-verify-don't-trust) the charter names: was it applied, or re-learned mid-run?
-
-**Run the discipline lenses.** These are the reflexes the charter says must
-fire by default; the retrospective asks whether each actually did, and any
-"no" is a finding with a sink entry:
-
-- **Greenfield-disposable** — was production-migration caution applied to state
-  nobody depends on? Was "who depends on this?" asked before preserving it?
-- **Scope→plan threshold** — did the run cross multi-host, multi-repo, or
-  multi-hour scope and keep executing reactively instead of producing a plan?
-- **Safety guards** — was a tripped guard bypassed rather than fixed or routed
-  through the sanctioned path?
-- **Bytes, not version** — where a fix shipped under an unchanged version, was
-  the installed byte/SHA verified, or was the version string trusted?
-- **Completeness** — was this retrospective (and any plan or handoff the run
-  produced) built by sweeping the primary record, with every flagged item and
-  every mid-run workaround mapped to captured/not-captured? A workaround left
-  in place is an open defect; if it is not captured, capture it now.
-- **Owning skill named** — did any dispatch brief inline a workflow another
-  skill owns instead of naming that skill and passing a frozen contract? Check
-  the inlined copy against the real skill for a dropped gate; that omission,
-  not the inlining itself, is what reaches production.
-
-Look for waste the log makes visible: sequential dispatches with no
-dependency, duplicated reading across workers, a tier higher than the work
-needed, the same expensive command re-run on unchanged input, a review round a
-chunk gate would have prevented, a self-noted loop-tightener deferred for
-iterations, an abandoned dispatch nobody noticed.
-
-Every answer that yields an improvement lands in one of two sinks, per the
-reference — and producing at least one concrete sink entry (or a plain "nothing
-was wasteful here", honestly reached) is what makes the retrospective real
-rather than ceremony:
-
-- **Local learning** — repo-scoped lessons go to
-  `compound-engineering:ce-compound` (its `<root>/solutions/` store owns that
-  surface); only cross-repo routing/run-shape lessons append to
-  `~/.config/railyard/learnings.md`. Read that file first so a lesson is not
-  learned twice.
-- **Upstream suggestion** — one file under `~/.config/railyard/suggestions/`,
-  written to be postable as a GitHub issue verbatim.
-
-Writing a suggestion is not permission to post it or to implement it. Offer
-both paths and stop.
+Report actionable findings in the answer. Create a durable learning or upstream
+suggestion only when requested or when it is needed to complete the authorized
+repair. Repository learning uses `compound-engineering:ce-compound` when
+selected; the optional local formats live in the reference. Never create an
+artifact merely to satisfy a closing ritual, and do not post messages or issues
+without user authorization.

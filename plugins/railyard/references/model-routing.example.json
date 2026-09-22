@@ -1,215 +1,294 @@
 {
   "schemaVersion": 1,
   "providers": {
-    "claude": {
-      "carrierId": "claude-session",
-      "executionSurface": "provider_subscription",
-      "account": "claude-sub",
-      "locality": "external",
-      "retention": "provider_default",
-      "harness": "claude"
-    },
-    "codex_luna": {
-      "carrierId": "codex-luna",
+    "codex_astra": {
+      "carrierId": "codex-astra",
       "executionSurface": "codex",
-      "account": "codex-sub",
+      "account": "codex-account",
+      "harness": "codex",
       "locality": "external",
-      "retention": "provider_default",
-      "harness": "codex"
-    },
-    "codex_sol": {
-      "carrierId": "codex-sol",
-      "executionSurface": "codex",
-      "account": "codex-sub",
-      "locality": "external",
-      "retention": "provider_default",
-      "harness": "codex"
+      "retention": "provider_default"
     },
     "codex_daybreak_blue": {
       "carrierId": "codex-daybreak-blue",
       "executionSurface": "codex",
-      "account": "codex-sub",
+      "account": "codex-account",
+      "harness": "codex",
       "locality": "external",
-      "retention": "provider_default",
-      "harness": "codex"
+      "retention": "provider_default"
     },
     "codex_terra": {
-      "carrierId": "codex-terra-runtime",
+      "carrierId": "codex-terra",
       "executionSurface": "codex",
-      "account": "codex-sub",
-      "locality": "external",
-      "retention": "provider_default",
-      "harness": "codex"
-    },
-    "zai": {
-      "carrierId": "glm-5-2-engineer",
-      "executionSurface": "provider_subscription",
-      "account": "zai-credits",
-      "locality": "same_region",
-      "retention": "ephemeral",
+      "account": "codex-account",
       "harness": "codex",
-      "availability": {
-        "kind": "codex_config",
-        "section": "model_providers.zai_litellm"
-      }
+      "locality": "external",
+      "retention": "provider_default"
+    },
+    "codex_luna": {
+      "carrierId": "codex-luna",
+      "executionSurface": "codex",
+      "account": "codex-account",
+      "harness": "codex",
+      "locality": "external",
+      "retention": "provider_default"
+    },
+    "codex_grok": {
+      "carrierId": "codex-grok",
+      "executionSurface": "codex",
+      "account": "codex-account",
+      "harness": "codex",
+      "locality": "external",
+      "retention": "provider_default"
     }
   },
   "models": {
-    "fable": {
-      "provider": "claude",
-      "carrierId": "claude-session",
-      "requestedModel": "fable",
-      "efforts": ["high", "max"],
-      "roles": ["implementation.hard"],
-      "relativeCostIndex": 100
-    },
-    "sonnet": {
-      "provider": "claude",
-      "carrierId": "claude-session",
-      "requestedModel": "sonnet",
-      "efforts": ["medium"],
-      "roles": ["implementation.medium", "implementation.long-running"],
-      "relativeCostIndex": 30
-    },
-    "haiku": {
-      "provider": "claude",
-      "carrierId": "claude-session",
-      "requestedModel": "haiku",
-      "efforts": ["low"],
-      "roles": ["implementation.mechanical"],
-      "relativeCostIndex": 10
-    },
-    "sol": {
-      "provider": "codex_sol",
-      "carrierId": "codex-sol",
-      "requestedModel": "gpt-5.6-sol",
-      "efforts": ["high", "max"],
-      "roles": ["implementation.hard", "orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
-      "relativeCostIndex": 80
-    },
-    "sol_max": {
-      "provider": "codex_sol",
-      "carrierId": "codex-sol",
-      "requestedModel": "gpt-5.6-sol",
-      "efforts": ["max"],
-      "roles": ["implementation.hard"],
-      "relativeCostIndex": 80
+    "astra": {
+      "provider": "codex_astra",
+      "carrierId": "codex-astra",
+      "requestedModel": "gpt-6-astra",
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ],
+      "effort": "max"
     },
     "daybreak_blue": {
       "provider": "codex_daybreak_blue",
       "carrierId": "codex-daybreak-blue",
       "requestedModel": "gpt-daybreak-blue-latest",
-      "efforts": ["high", "max"],
-      "roles": ["security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
-      "relativeCostIndex": 80
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ]
     },
     "terra": {
       "provider": "codex_terra",
-      "carrierId": "codex-terra-runtime",
+      "carrierId": "codex-terra",
       "requestedModel": "gpt-5.6-terra",
-      "efforts": ["max"],
-      "roles": ["implementation.medium", "implementation.long-running"],
-      "relativeCostIndex": 60
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ]
     },
     "luna": {
       "provider": "codex_luna",
       "carrierId": "codex-luna",
       "requestedModel": "gpt-5.6-luna",
-      "efforts": ["max"],
-      "roles": ["implementation", "implementation.medium", "implementation.long-running", "implementation.mechanical", "implementation.cross-harness"],
-      "relativeCostIndex": 20
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
     },
-    "glm": {
-      "provider": "zai",
-      "carrierId": "glm-5-2-engineer",
-      "requestedModel": "glm-5.2",
-      "efforts": ["xhigh"],
-      "roles": ["implementation.cross-harness"],
-      "relativeCostIndex": 1
-    }
-  },
-  "roles": {
-    "orchestration": {
-      "tiers": [["sol"]]
-    },
-    "review": {
-      "tiers": [["sol"]]
-    },
-    "review.code": {
-      "tiers": [["sol"]]
-    },
-    "review.plan": {
-      "tiers": [["sol"]]
-    },
-    "review.primary": {
-      "tiers": [["sol"]]
-    },
-    "review.cross_family": {
-      "tiers": [["sol"]]
-    },
-    "security.review": {
-      "tiers": [["daybreak_blue"], ["sol"]]
-    },
-    "security.threat-model": {
-      "tiers": [["daybreak_blue"], ["sol"]]
-    },
-    "security.trust": {
-      "tiers": [["daybreak_blue"], ["sol"]]
-    },
-    "security.redaction": {
-      "tiers": [["daybreak_blue"], ["sol"]]
-    },
-    "security.signing": {
-      "tiers": [["daybreak_blue"], ["sol"]]
-    },
-    "security.attack-shape": {
-      "tiers": [["daybreak_blue"], ["sol"]]
-    },
-    "security.audit": {
-      "tiers": [["daybreak_blue"], ["sol"]]
-    },
-    "implementation": {
-      "tiers": [["luna"]]
-    },
-    "implementation.hard": {
-      "tiers": [["fable", "sol_max"]]
-    },
-    "implementation.medium": {
-      "tiers": [["sonnet", "terra", "luna"]]
-    },
-    "implementation.long-running": {
-      "tiers": [["sonnet", "terra", "luna"]]
-    },
-    "implementation.mechanical": {
-      "tiers": [["haiku", "luna"]]
-    },
-    "implementation.cross-harness": {
-      "tiers": [
-        {
-          "models": ["luna", "glm"],
-          "softPriorities": ["cost"]
-        }
+    "grok": {
+      "provider": "codex_grok",
+      "carrierId": "codex-grok",
+      "requestedModel": "combo/grok-unified-4.6",
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
       ]
     }
   },
-  "budgets": {
-    "task": {
-      "claude_subscription": {"soft": "100"},
-      "codex_subscription": {"soft": "100"},
-      "zai_credits": {"soft": "100"}
+  "roles": {
+    "implementation": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
     },
-    "run": {
-      "claude_subscription": {"soft": "1000"},
-      "codex_subscription": {"soft": "1000"},
-      "zai_credits": {"soft": "1000"}
+    "implementation.fix": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
     },
-    "project": {
-      "claude_subscription": {"soft": "10000"},
-      "codex_subscription": {"soft": "10000"},
-      "zai_credits": {"soft": "10000"}
+    "implementation.bounded_fix": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "implementation.mechanical": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "implementation.medium": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "implementation.long-running": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "implementation.hard": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "investigation": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "research": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "orchestration": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "review": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "review.code": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "review.plan": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "review.primary": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "review.secondary": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "review.deep": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "review.architecture": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "review.long_context": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "review.adversarial": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "security.review": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "security.threat-model": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "security.trust": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "security.redaction": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "security.signing": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "security.attack-shape": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
+    },
+    "security.audit": {
+      "tiers": [
+        [
+          "astra"
+        ]
+      ]
     }
-  },
-  "learning": {
-    "enabled": true
   }
 }

@@ -58,9 +58,9 @@ export function r28RouteDisclosure(candidate, request, {
   const observedModel = receipt?.observedModel || candidate?.observedModel;
   // `requested` is what the caller asked for and `configured` is the catalog's
   // answer.  They are separate facets precisely so a divergence — an effort the
-  // caller never named, a provider the request did not allow — is visible; a
-  // caller cannot name a model, surface, or endpoint at all, so those read
-  // "not_requested" rather than echoing the catalog back as if it were asked.
+  // caller never named, a provider the request did not allow — is visible.
+  // Model and effort may be requested; surfaces and endpoints cannot, so those
+  // remain "not_requested" rather than echoing the catalog as caller intent.
   const allowedProviders = request?.privacy?.allowedProviders;
   const requestedProvider = Array.isArray(allowedProviders) && allowedProviders.length === 1 ? allowedProviders[0] : null;
   const requested = notApplicable
@@ -70,7 +70,7 @@ export function r28RouteDisclosure(candidate, request, {
       endpointClass: disclosureFacet("not_requested", "request"),
       executionSurface: disclosureFacet("not_requested", "request"),
       billingSurface: disclosureFacet("not_requested", "request"),
-      model: disclosureFacet("not_requested", "request"),
+      model: disclosureFacet(request?.model || "not_requested", "request"),
       effort: disclosureFacet(request?.effort || "not_requested", "request"),
     };
   const configured = notApplicable

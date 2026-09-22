@@ -110,6 +110,9 @@ export function validRole(value) {
 }
 
 export function validModel(value) {
+  // This exact provider-qualified selector is a model ID exposed by the
+  // native adapter. It does not authorize arbitrary slash-containing paths.
+  if (value === "combo/grok-unified-4.6") return true;
   return typeof value === "string" && MODEL_RE.test(value) && !value.startsWith("-") && !value.includes("/") && !value.includes("\\") && !value.includes("@") && !value.includes("--");
 }
 
@@ -255,9 +258,11 @@ export function validSourceUrl(value) {
 
 export function parseClaudeFamily(value) {
   if (typeof value !== "string") return null;
-  const match = value.match(/^(?:claude-)?(fable|opus|sonnet|haiku)(?:[-:](current|\d+(?:\.\d+){0,3}))?$/i);
+  const match = value.match(/^(?:claude-)?(fable|opus|sonnet|haiku)(?:[-:](current|\d+(?:\.\d+){0,3}|\d+(?:-\d+){1,3}))?(?:\[1m\])?$/i);
   if (!match) return null;
-  return { family: match[1].toLowerCase(), selector: (match[2] || "current").toLowerCase() };
+  // Claude Code's context suffix is not part of the provider model ID.
+  // Normalize release separators while retaining snapshot dates in the pin.
+  return { family: match[1].toLowerCase(), selector: (match[2] || "current").toLowerCase().replaceAll("-", ".") };
 }
 
 export function validClaudeFamily(value) {
@@ -265,7 +270,9 @@ export function validClaudeFamily(value) {
 }
 
 export function validPolicyDigest(value) {
-  return value === DEFAULT_POLICY.digest || validDigest(value);
+  // Historical records remain readable/accounted after the built-in policy
+  // changes. Dispatch/settlement still compare against their current policy.
+  return value === DEFAULT_POLICY.digest || value === "builtin-model-routing-v1" || validDigest(value);
 }
 
 export function validIsoInstant(value) {

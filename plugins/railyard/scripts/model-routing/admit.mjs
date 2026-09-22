@@ -180,14 +180,22 @@ export function admitInternal(request, context) {
   const forecast = normalizeForecast(request.forecast || {});
   if (!forecast.ok) return error(forecast.reason);
   const policy = validateCatalog(catalog).policy;
-  const configured = configuredCandidates(catalog, request, state, now, policy.digest, { trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers }).filter((candidate) => candidate.ok).sort(candidateSort);
+  const candidates = configuredCandidates(catalog, request, state, now, policy.digest, { trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers });
+  const configured = candidates.filter((candidate) => candidate.ok).sort(candidateSort);
+  const ineligible = candidates.filter((candidate) => !candidate.ok).map((candidate) => ({ modelAlias: candidate.alias, reason: candidate.reason }));
   const rejectedByBudget = [];
   let decision = null;
   let budget = null;
   let admittedAuthority = null;
   let admittedForecast = null;
   for (const candidate of configured) {
-    const attempted = decisionFromCandidate(candidate, request, policy, now);
+    const alternatives = [
+      ...ineligible,
+      ...rejectedByBudget,
+      ...configured.filter((other) => other.alias !== candidate.alias && !rejectedByBudget.some((rejected) => rejected.modelAlias === other.alias))
+        .map((other) => ({ modelAlias: other.alias, reason: other.tierIndex === candidate.tierIndex ? "lower_ranked" : "lower_preference_tier" })),
+    ];
+    const attempted = decisionFromCandidate(candidate, request, policy, now, alternatives);
     if (attempted.binding.budgetEffect !== "start") {
       rejectedByBudget.push({ modelAlias: candidate.alias, reason: "budget_effect_ineligible" });
       continue;
@@ -213,7 +221,7 @@ export function admitInternal(request, context) {
     attempted.disclosure = r28RouteDisclosure(candidate, request, {
       forecast: learned.forecast,
       reservation: learned.forecast,
-      rejectedAlternatives: rejectedByBudget,
+      rejectedAlternatives: alternatives,
     });
     decision = attempted;
     budget = admitted;
@@ -263,6 +271,7 @@ export function claimInternal(request, context) {
   if (!reservation) return error("reservation_unknown");
   if (!validDigest(request.frozenInputDigest) || request.frozenInputDigest !== reservation.frozenInputDigest) return error("claim_input_mismatch");
   const adapter = ADAPTER_DESCRIPTORS[reservation.binding.adapterId];
+  if (adapter?.version !== reservation.binding.adapterVersion || CARRIER_DESCRIPTORS[reservation.selected.carrierId]?.version !== reservation.selected.carrierVersion) return error("adapter_version_changed");
   const identity = request.dispatchIdentity;
   if (!validDispatchIdentity(identity, adapter?.receiptProducer) || identity.dispatchKind !== reservation.binding.dispatchKind || identity.toolVersion !== reservation.binding.adapterVersion) return error("dispatch_identity_required");
   if (identity.hostScope !== reservation.binding.hostScope || identity.accountScope !== reservation.binding.accountScope) return error("dispatch_identity_mismatch");

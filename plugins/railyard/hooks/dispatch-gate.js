@@ -1,17 +1,9 @@
 #!/usr/bin/env node
-// PreToolUse: enforce the explicit-model dispatch rule as mechanism, not
-// prose. A subagent dispatch that omits its model (and, on Codex, effort)
-// silently inherits the session's premium tier — this gate refuses the call
-// with a corrective message so the model retries with the fields set.
-// Cross-platform, dependency-free. Fails OPEN for anything it does not
-// recognize: the gate must never break a session.
-//
-// It also records every ALLOWED dispatch to the run log — the mechanical
-// half of railyard:audit. Recording is best-effort and never affects the
-// verdict: a missing or broken recorder leaves the gate exactly as it was.
+// PreToolUse: validate a deliberate model/effort allocation against the
+// dispatch surface. No provider calls, prompt rewrites, delivery receipts,
+// or workflow enforcement. Unknown tools and malformed hook envelopes pass.
+// The best-effort log records an allowed request, not proof a child started.
 let record = () => {};
-let hasEntry = () => false;
-let rs = null;
 let clip = (value, max = 120) => {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
@@ -19,8 +11,7 @@ let clip = (value, max = 120) => {
   return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
 };
 try {
-  ({ record, clip, hasEntry } = require("./run-log.js"));
-  try { rs = require("./route-state.js"); } catch {}
+  ({ record, clip } = require("./run-log.js"));
 } catch {}
 
 function shellTokens(command) {
@@ -516,34 +507,48 @@ const CODEX_GLOBAL_VALUE_OPTIONS = new Set([
   "-s", "--sandbox", "-a", "--ask-for-approval", "-C", "--cd", "--add-dir",
 ]);
 
+function codexConfigValue(value) {
+  const match = String(value || "").match(/^(model|model_reasoning_effort|model_provider)\s*=\s*(.+)$/);
+  if (!match) return {};
+  const key = { model: "configModel", model_reasoning_effort: "effort", model_provider: "provider" }[match[1]];
+  return { [key]: match[2].replace(/^(['"])(.*)\1$/, "$2") };
+}
+
 function codexExecStart(tokens, index) {
   let cursor = index + 1;
-  let model;
-  let effort;
+  const allocation = {};
   while (cursor < tokens.length && tokens[cursor].kind === "word") {
     const value = tokens[cursor].value;
     const next = tokens[cursor + 1]?.value;
-    if (value === "exec") return { index: cursor, model, effort };
+    if (value === "exec") return { index: cursor, ...allocation };
     if (value === "--") return null;
     if (value === "-m" || value === "--model") {
-      model = next;
+      allocation.flagModel = next;
       cursor += 2;
       continue;
     }
     if (value.startsWith("--model=")) {
-      model = value.slice("--model=".length);
+      allocation.flagModel = value.slice("--model=".length);
       cursor += 1;
       continue;
     }
     if (value === "-c" || value === "--config") {
-      const match = (next || "").match(/^model_reasoning_effort\s*=\s*(.+)$/);
-      if (match) effort = match[1].replace(/^(['"])(.*)\1$/, "$2");
+      Object.assign(allocation, codexConfigValue(next));
       cursor += 2;
       continue;
     }
     if (value.startsWith("--config=")) {
-      const match = value.slice("--config=".length).match(/^model_reasoning_effort\s*=\s*(.+)$/);
-      if (match) effort = match[1].replace(/^(['"])(.*)\1$/, "$2");
+      Object.assign(allocation, codexConfigValue(value.slice("--config=".length)));
+      cursor += 1;
+      continue;
+    }
+    if (value === "--local-provider") {
+      allocation.provider = next;
+      cursor += 2;
+      continue;
+    }
+    if (value.startsWith("--local-provider=")) {
+      allocation.provider = value.slice("--local-provider=".length);
       cursor += 1;
       continue;
     }
@@ -957,9 +962,7 @@ function codexExecDispatches(args) {
     const execStart = codexExecStart(tokens, index);
     if (!execStart) continue;
     if (!commandPrefixAllows(tokens, index)) continue;
-    let model = execStart.model;
-    let effort = execStart.effort;
-    let label;
+    const allocation = { flagModel: execStart.flagModel, configModel: execStart.configModel, effort: execStart.effort, provider: execStart.provider };
     let cursor = execStart.index + 1;
     while (cursor < tokens.length && tokens[cursor].kind !== "separator") {
       if (tokens[cursor].kind === "redirection") {
@@ -972,437 +975,224 @@ function codexExecDispatches(args) {
       if (value === "--") break;
       const next = tokens[cursor + 1]?.value;
       if (value === "-m" || value === "--model") {
-        model = next;
+        allocation.flagModel = next;
         cursor += 1;
       } else if (value.startsWith("--model=")) {
-        model = value.slice("--model=".length);
+        allocation.flagModel = value.slice("--model=".length);
       } else if (value === "-c" || value === "--config") {
-        const match = (next || "").match(/^model_reasoning_effort\s*=\s*(.+)$/);
-        if (match) effort = match[1].replace(/^(['"])(.*)\1$/, "$2");
+        Object.assign(allocation, codexConfigValue(next));
         cursor += 1;
-      } else if (value.startsWith("--reasoning-effort=") || value.startsWith("--reasoning_effort=")) {
-        effort = value.slice(value.indexOf("=") + 1);
-      } else if (value === "--reasoning-effort" || value === "--reasoning_effort") {
-        effort = next;
+      } else if (value.startsWith("--config=")) {
+        Object.assign(allocation, codexConfigValue(value.slice("--config=".length)));
+      } else if (value === "--local-provider") {
+        allocation.provider = next;
         cursor += 1;
-      } else if (value === "--label" || value === "--task-name") {
-        label = next;
-        cursor += 1;
-      } else if (value.startsWith("--label=") || value.startsWith("--task-name=")) {
-        label = value.slice(value.indexOf("=") + 1);
+      } else if (value.startsWith("--local-provider=")) {
+        allocation.provider = value.slice("--local-provider=".length);
       }
       cursor += 1;
     }
-    const clippedModel = clip(model);
-    const clippedEffort = clip(effort, 20);
+    // Codex applies the dedicated model flag over config.model regardless
+    // of argument order; exec-local flags override inherited root flags.
+    const model = allocation.flagModel ?? allocation.configModel;
     dispatches.push({
-      model: clippedModel,
-      effort: clippedEffort,
-      label: clip(label),
-      missing: [!clippedModel && "model", !clippedEffort && "reasoning_effort"].filter(Boolean),
+      ...allocation,
+      model,
+      missing: [!clip(model) && "model", !clip(allocation.effort) && "reasoning_effort"].filter(Boolean),
     });
   }
   return dispatches;
 }
 
+// Installed Codex 0.154.0 emits agentsspawn_agent for agents.spawn_agent.
+// V1 emits spawn_agent. Retain agents__spawn_agent only for compatibility
+// with the previous gate; it is not a verified current event spelling.
+// See references/native-dispatch-contract.md.
+const NATIVE_TOOLS = new Set(["spawn_agent", "agentsspawn_agent", "agents__spawn_agent"]);
+const SHELL_TOOLS = new Set(["Bash", "shell", "local_shell", "exec_command", "unified_exec"]);
+const INHERIT_ALLOCATION = /^[ \t]*Allocation:[ \t]*inherit model and reasoning effort;[ \t]*\S[^\r\n]*\r?$/im;
+const ROLE_ALLOCATION = /^[ \t]*Allocation:[ \t]*role configuration;[ \t]*\S[^\r\n]*\r?$/im;
+const V2_FIELDS = new Set(["task_name", "message", "fork_turns", "model", "reasoning_effort"]);
+
+function nativePair(model, effort) {
+  try {
+    // This module contains only the verified native capability snapshot.
+    return require("../scripts/model-routing/native.mjs").validateNativeModelEffort(model, effort);
+  } catch {
+    return { ok: false, reason: "allocation_validator_unavailable" };
+  }
+}
+
+function allocationError(result, model) {
+  if (result.reason === "effort_unsupported") {
+    return `reasoning_effort for '${clip(model)}' must be one of: ${result.supportedEfforts.join(", ")}. Keep the requested model and choose a supported effort; no fallback was applied.`;
+  }
+  if (result.reason === "native_model_unsupported") {
+    return `'${clip(model) || "(missing)"}' is not in this native tool's verified model roster. Use a model exposed by this tool or an explicitly configured external CLI route; no fallback was applied.`;
+  }
+  return "the native allocation validator could not be loaded. Repair the plugin before dispatching; no fallback was applied.";
+}
+
+function validateNative(args, input, tool) {
+  // V2 requires task_name; V1 accepts agent_type/items/fork_context. A V2
+  // payload must never be interpreted as a configurable V1 specialist role.
+  const v2 = tool !== "spawn_agent" || Object.hasOwn(args, "task_name") || Object.hasOwn(args, "fork_turns");
+  const hasModel = Object.hasOwn(args, "model");
+  const hasEffort = Object.hasOwn(args, "reasoning_effort");
+  const message = typeof args.message === "string" ? args.message : "";
+  const inherit = INHERIT_ALLOCATION.test(message);
+  const useRole = ROLE_ALLOCATION.test(message);
+  const role = typeof args.agent_type === "string" ? args.agent_type.trim() : "";
+
+  if (v2 && Object.keys(args).some((key) => !V2_FIELDS.has(key))) {
+    return { error: "this native tool has no extra parameters. Use only its task_name/message/fork_turns/model/reasoning_effort fields; agent_type and provider controls require another supported surface." };
+  }
+  if (v2 && (typeof args.task_name !== "string" || !args.task_name.trim())) {
+    return { error: "this native tool requires a nonempty task_name and message." };
+  }
+  if (!message.trim() && !(!v2 && Array.isArray(args.items) && args.items.length)) {
+    return { error: "supply a nonempty task brief in message, including the bounded work and expected result." };
+  }
+  if (v2 && args.fork_turns !== undefined && args.fork_turns !== "all" && args.fork_turns !== "none" && !(typeof args.fork_turns === "string" && /^[1-9]\d*$/.test(args.fork_turns))) {
+    return { error: 'fork_turns must be "all", "none", or a positive integer string. Use none or limited history with a sufficient task brief when changing model or effort.' };
+  }
+  if (!v2 && Object.hasOwn(args, "fork_context") && typeof args.fork_context !== "boolean") {
+    return { error: "the CLI V1 fork_context parameter must be a boolean." };
+  }
+  const fullHistory = v2 ? args.fork_turns === undefined || args.fork_turns === "all" : args.fork_context === true;
+  if (fullHistory && (hasModel || hasEffort)) {
+    return { error: v2
+      ? 'a full-history fork (fork_turns:"all" or omitted) cannot override model or reasoning_effort. Omit both overrides and state "Allocation: inherit model and reasoning effort; <reason>." in message, or use fork_turns:"none" or a positive limited-history value with a sufficient task brief for the selected pair.'
+      : "a full-history CLI fork cannot override model or reasoning_effort. Omit both overrides and state 'Allocation: inherit model and reasoning effort; <reason>.' in message, or use fork_context:false with a sufficient task brief." };
+  }
+  if (!v2 && role) {
+    if (hasModel || hasEffort) {
+      return { error: "a named CLI role owns its configured model and effort. Omit both overrides, inspect the role configuration, and state 'Allocation: role configuration; <reason>.' in message. Any controls the role leaves unset deliberately inherit. For an explicit pair without role configuration, omit agent_type." };
+    }
+    if (fullHistory) return { error: "a full-history CLI fork cannot select a configured agent_type. Use fork_context:false with a sufficient task brief." };
+    if (!useRole) return { error: "state 'Allocation: role configuration; <reason>.' in message to deliberately use the named role's fixed controls and inherit any unset controls." };
+    return { allocation: "role", role, capability: "runtime_unverified" };
+  }
+  if (useRole) return { error: "role configuration allocation requires a named CLI agent_type; it is not a model override or a native V2 parameter." };
+  if (inherit) {
+    if (hasModel || hasEffort) return { error: "inheritance conflicts with explicit model or reasoning_effort. Omit both overrides or remove the inheritance declaration and choose both controls." };
+    return { allocation: "inherit", model: clip(input.model), role: role || undefined, capability: "runtime_inherited" };
+  }
+  const missing = [!clip(args.model) && "model", !clip(args.reasoning_effort) && "reasoning_effort"].filter(Boolean);
+  if (missing.length) {
+    if (fullHistory) return { error: "a full-history fork must deliberately inherit: state 'Allocation: inherit model and reasoning effort; <reason>.' in message and omit model and reasoning_effort. To choose an explicit pair, first select none/limited history (CLI V1: fork_context:false) and provide a sufficient task brief." };
+    return { error: `choose ${missing.join(" and ")} explicitly, or state 'Allocation: inherit model and reasoning effort; <reason>.' in message and omit both overrides. A custom CLI role may instead use its authoritative role configuration.` };
+  }
+  const result = nativePair(args.model, args.reasoning_effort);
+  if (!result.ok) return { error: allocationError(result, args.model) };
+  return { allocation: "explicit", model: args.model, effort: args.reasoning_effort, role: role || undefined, capability: "known_pair" };
+}
+
+function validateClaude(args) {
+  // Claude Agent exposes model but no per-call effort field. Do not invent
+  // one or claim to validate an effort the hook cannot observe.
+  if (Object.hasOwn(args, "reasoning_effort") || Object.hasOwn(args, "effort")) return { error: "Claude Agent does not expose a per-call effort parameter. Deliberately use the session's inherited effort or a configured subagent definition with model and effort; an explicit CLI route uses --effort." };
+  const prompt = typeof args.prompt === "string" ? args.prompt : "";
+  const inherit = INHERIT_ALLOCATION.test(prompt);
+  const useRole = ROLE_ALLOCATION.test(prompt);
+  if (args.subagent_type === "fork") {
+    if (Object.hasOwn(args, "model")) return { error: "Claude fork subagents ignore model overrides and inherit the parent. Omit model and declare 'Allocation: inherit model and reasoning effort; <reason>.' in prompt, or choose a non-fork subagent with sufficient context." };
+    if (!inherit) return { error: "Claude fork subagents inherit the parent: declare 'Allocation: inherit model and reasoning effort; <reason>.' in prompt." };
+    return { allocation: "inherit", capability: "runtime_inherited" };
+  }
+  // Claude 2.1.270 parses this env flag with P.bool -> Ie, not JS truthiness.
+  const forceModel = ["1", "true", "yes", "on"].includes((process.env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE ?? "").toLowerCase().trim());
+  if (forceModel && Object.hasOwn(args, "model")) return { error: "This Claude runtime forces subagent model selection and does not expose a model override. Use deliberate inheritance or the authoritative role configuration; do not silently substitute a requested model." };
+  if (useRole) {
+    if (!clip(args.subagent_type) || Object.hasOwn(args, "model")) return { error: "role configuration allocation requires subagent_type and no model override; the runtime resolves the role's controls." };
+    return { allocation: "role", capability: "runtime_unverified" };
+  }
+  if (inherit) {
+    if (Object.hasOwn(args, "model")) return { error: "inheritance conflicts with the explicit Claude model. Omit the model override when declaring inheritance in prompt." };
+    // A named definition or configured subagent default may take precedence
+    // over the parent. The declaration expresses intent, not a resolved pair.
+    return { allocation: "inherit", capability: "runtime_unverified" };
+  }
+  if (!clip(args.model)) return { error: "select a Claude model explicitly, declare 'Allocation: inherit model and reasoning effort; <reason>.' in prompt, or declare 'Allocation: role configuration; <reason>.' for a configured subagent_type." };
+  let aliases;
+  try {
+    ({ CLAUDE_AGENT_MODEL_ALIASES: aliases } = require("../scripts/model-routing/claude.mjs"));
+  } catch {
+    return { error: "the Claude allocation validator could not be loaded. Repair the plugin before dispatching; no fallback was applied." };
+  }
+  if (!aliases.includes(args.model)) {
+    return { error: `'${clip(args.model)}' is not exposed by Claude Agent's model control (opus, sonnet, haiku, fable). For exact Fable 5.1, use model claude-fable-5-1 in a configured subagent definition or its supported CLI or adapter; native Codex models require their own harness.` };
+  }
+  return { allocation: "explicit", model: args.model, capability: "runtime_effort_unobserved" };
+}
+
+function handlePayload(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return;
+  if (input.hook_event_name && input.hook_event_name !== "PreToolUse") return;
+  const tool = typeof input.tool_name === "string" ? input.tool_name : "";
+  const args = input.tool_input && typeof input.tool_input === "object" && !Array.isArray(input.tool_input) ? input.tool_input : {};
+  const block = (message) => {
+    process.stderr.write("[railyard] Dispatch refused: " + message + "\n");
+    process.exitCode = 2;
+  };
+  const log = (entry) => record({
+    event: "dispatch",
+    phase: "pre_tool_use",
+    tool,
+    session_id: clip(input.session_id),
+    ...entry,
+  });
+  if (NATIVE_TOOLS.has(tool)) {
+    const result = validateNative(args, input, tool);
+    if (result.error) return block(result.error);
+    log({ harness: "codex", ...result, reasoning_effort: result.effort, label: clip(args.task_name), fork_turns: clip(args.fork_turns) });
+    return;
+  }
+  if (tool === "Agent" || tool === "Task") {
+    const result = validateClaude(args);
+    if (result.error) return block(result.error);
+    log({ harness: "claude-code", ...result, role: clip(args.subagent_type, 60), label: clip(args.description) });
+    return;
+  }
+  if (!SHELL_TOOLS.has(tool)) return;
+  const dispatches = codexExecDispatches(args);
+  // Validate the entire shell invocation before recording any allowed
+  // request: a refusal prevents every command in that invocation from running.
+  for (const dispatch of dispatches) {
+    if (dispatch.missing.length) return block(`codex exec must set explicit ${dispatch.missing.join(" and ")} using --model and -c model_reasoning_effort=<effort>.`);
+    const result = nativePair(dispatch.model, dispatch.effort);
+    if (!result.ok && result.reason !== "native_model_unsupported") return block(allocationError(result, dispatch.model));
+    if (!result.ok && !clip(dispatch.provider)) return block(`codex exec model '${clip(dispatch.model)}' is outside the verified native roster. An explicit external route must also set -c model_provider=<provider> (or --local-provider). Its runtime must validate the requested pair; no fallback was applied.`);
+    dispatch.capability = result.ok ? "known_pair" : "runtime_unverified";
+  }
+  for (const dispatch of dispatches) {
+    log({ harness: "codex", allocation: "explicit", model: clip(dispatch.model), effort: clip(dispatch.effort, 20), reasoning_effort: clip(dispatch.effort, 20), provider: clip(dispatch.provider), capability: dispatch.capability });
+  }
+}
+
 let raw = "";
-process.stdin.setEncoding("utf8");
 let inputHandled = false;
 let inputTimer;
-function armInputTimer() {
+function handleInput({ final = false } = {}) {
+  if (inputHandled) return;
+  if (inputTimer) clearTimeout(inputTimer);
+  let input;
+  try { input = JSON.parse(raw); } catch {
+    if (final) inputHandled = true;
+    return;
+  }
+  inputHandled = true;
+  handlePayload(input);
+}
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  raw += chunk;
   if (inputTimer) clearTimeout(inputTimer);
   inputTimer = setTimeout(() => {
     handleInput();
     if (inputHandled) process.exit(process.exitCode || 0);
   }, 50);
-}
-process.stdin.on("data", (c) => {
-  raw += c;
-  armInputTimer();
 });
-// Build the carrier kernel text injected into the spawn prompt.
-function buildCarrierKernel(routeId) {
-  var cli = require("path").join(__dirname, "..", "scripts", "route-carrier.mjs");
-  return "[railyard] Route-carrier protocol active. Route ID: " + routeId + "."
-    + " You are the LFG delivery carrier. Execute compound-engineering:lfg through its full pipeline."
-    + " Record stage receipts: node " + cli + " receipt " + routeId + " <event>"
-    + " For terminal states use TRANSITION: node " + cli + " transition " + routeId + " lfg_complete"
-    + " Or block: node " + cli + " block <reason>"
-    + " Do NOT return early at checkpoints. SubagentStop will force continuation.";
-}
-
-function handleInput({ final = false } = {}) {
-  if (inputHandled) return;
-  if (inputTimer) clearTimeout(inputTimer);
-  let input;
-  try {
-    input = JSON.parse(raw);
-  } catch {
-    if (final) inputHandled = true;
-    return; // malformed input: allow
-  }
-  inputHandled = true;
-  const tool = String(input.tool_name || "");
-  const args = input.tool_input && typeof input.tool_input === "object"
-    ? input.tool_input
-    : {};
-
-  const block = (msg) => {
-    process.stderr.write(msg + "\n");
-    process.exitCode = 2;
-  };
-
-  if (tool === "Agent" || tool === "Task") {
-    // Claude Code subagent dispatch: the model field is required. Any
-    // explicit value — including the session's own tier — passes; writing
-    // it is what makes an escalation named.
-    if (typeof args.model !== "string" || !args.model.trim()) {
-      block(
-        "[railyard] Dispatch refused: every subagent names an explicit model" +
-          " (no silent inheritance of the session tier). Set model:" +
-          " opus for implementation/research/review, sonnet or haiku for" +
-          " mechanical work; setting the session's own tier explicitly is a" +
-          " named escalation. Retry the same call with the model field set.",
-      );
-      return;
-    }
-    // Cross-harness guardrail (interim): a Claude Code session dispatching a
-    // subagent onto an OpenAI/Codex-family model routes work into a harness
-    // that meters separately — it must be an explicit opt-in, never the
-    // silent product of a harness-independent default. Refuse unless the
-    // dispatch says "cross-harness" somewhere in its prompt or description.
-    // The durable fix is the harness-aware router default (queued), which
-    // stops the silent selection at the source; until it ships, this gate is
-    // the guardrail. ponytail: substring opt-in marker, precision over
-    // recall — a real cross-harness dispatch just names itself.
-    const crossHarnessFamily = (m) => /^(gpt-|o[0-9]|codex)/i.test(m);
-    if (crossHarnessFamily(args.model.trim())) {
-      const marker = [args.prompt, args.description]
-        .filter((v) => typeof v === "string")
-        .join("\n");
-      if (!/cross-harness/i.test(marker)) {
-        block(
-          "[railyard] Dispatch refused: '" + args.model.trim() + "' is an" +
-            " OpenAI/Codex-family model, and this is a Claude Code session —" +
-            " cross-harness dispatch meters separately and is explicit opt-in" +
-            " only, never a silent default. If you truly mean to run this" +
-            " worker on the other harness, say so in the dispatch (include" +
-            " 'cross-harness' and the reason) and retry; otherwise route it to" +
-            " a Claude model (opus/sonnet/haiku).",
-        );
-        return;
-      }
-    }
-    // Route-carrier receipt for Claude Code subagent dispatches
-    const ccDispatchText = [args.prompt, args.description, args.subagent_type]
-      .filter((v) => typeof v === "string").join(" ");
-    if (/\b(?:lfg|compound-engineering:lfg|railyard:deliver|ce-babysit-pr|ce-resolve-pr-feedback)\b/i.test(ccDispatchText)) {
-      var ccSid = input.session_id || process.env.CLAUDE_CODE_SESSION_ID || null;
-      if (rs && rs.getActiveRoute(ccSid)) {
-        block("[railyard] An active LFG carrier already exists for this lane.");
-        return;
-      }
-      var ccRoute = rs ? rs.createRoute({ session_id: ccSid, label: clip(args.description) }) : null;
-      record({ event: "route_carrier", tool, model: args.model ? args.model.trim() : "",
-        label: clip(args.description || ""), session_id: clip(input.session_id),
-        route_id: ccRoute ? ccRoute.route_id : undefined });
-      // Feedback resolution receipt: ce-resolve-pr-feedback was dispatched
-      if (rs && /ce-resolve-pr-feedback/i.test(ccDispatchText)) {
-        var fbRoute = ccRoute;
-        if (fbRoute) rs.recordReceipt(fbRoute.route_id, { event: "feedback_resolution_started" });
-      }
-      // Feedback resolution receipt: ce-resolve-pr-feedback was dispatched
-      if (rs && /ce-resolve-pr-feedback/i.test(ccDispatchText)) {
-        var fbRoute = ccRoute;
-        if (fbRoute) rs.recordReceipt(fbRoute.route_id, { event: "feedback_resolution_started" });
-      }
-      if (ccRoute && typeof args.prompt === "string") {
-        process.stdout.write(JSON.stringify({ updatedInput: {
-          model: args.model, description: args.description, subagent_type: args.subagent_type,
-          prompt: args.prompt + String.fromCharCode(10) + String.fromCharCode(10) + buildCarrierKernel(ccRoute.route_id),
-        }}) + "\\n");
-        return;
-      }
-    }
-    record({
-      event: "dispatch",
-      harness: "claude-code",
-      tool,
-      model: args.model.trim(),
-      role: clip(args.subagent_type, 60),
-      label: clip(args.description),
-      session_id: clip(input.session_id),
-    });
-    return;
-  }
-
-  // Codex Desktop's multi-agent v2 surface exposes the spawn tool as
-  // agents__spawn_agent; the CLI uses the bare name. Accept both spellings so
-  // the explicit-model rule cannot be bypassed by a harness alias.
-  if (tool === "spawn_agent" || tool === "agents__spawn_agent") {
-    // Codex subagent dispatch: model + reasoning_effort both required.
-    const missing = [];
-    if (typeof args.model !== "string" || !args.model.trim()) missing.push("model");
-    if (args.reasoning_effort == null || args.reasoning_effort === "") {
-      missing.push("reasoning_effort");
-    }
-    if (missing.length) {
-      block(
-        "[railyard] Dispatch refused: spawn_agent must set " +
-          missing.join(" and ") +
-          " explicitly (no silent inheritance of the session tier)." +
-          " Retry with the fields set.",
-      );
-      return;
-    }
-    // Provider coherence: spawn_agent has no provider field — a child
-    // inherits the thread's provider. A non-OpenAI child model therefore
-    // only works when non-OpenAI routing is configured at all. Provider ids
-    // are arbitrary and unrelated to model families (zai_litellm serves
-    // glm-*), so we can only check that some [model_providers.*] section
-    // exists — never claim a *named* provider is missing. The payload
-    // carries no session model field, so family coherence is unknowable
-    // here and is not asserted.
-    // ponytail: line-anchored section grep, not a TOML parse — upgrade to a
-    // real parser only if provider sections start appearing in odd shapes.
-    const child = args.model.trim();
-    let refused = false;
-    const openaiLike = (m) => /^(gpt-|o[0-9]|codex)/i.test(m);
-    if (!openaiLike(child)) {
-      let providersConfigured = true; // fail open when unreadable
-      try {
-        const fs = require("fs");
-        const path = require("path");
-        const os = require("os");
-        const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
-        const toml = fs.readFileSync(path.join(codexHome, "config.toml"), "utf8");
-        providersConfigured = /^[ \t]*\[model_providers[.\]]/m.test(toml);
-      } catch {}
-      if (!providersConfigured) {
-        refused = true;
-        block(
-          "[railyard] Dispatch refused: '" + child + "' is not an OpenAI-served" +
-            " model, and spawn_agent cannot switch providers — the child" +
-            " inherits this thread's provider. The active config.toml declares" +
-            " no [model_providers.*] section, so no non-OpenAI provider is" +
-            " configured at all. Start a dedicated thread instead (thread/start" +
-            " with model + modelProvider, or `codex exec -m " + child +
-            " -c model_provider=<provider>`).",
-        );
-        return;
-      }
-    }
-    // Route-carrier receipt: when a subagent dispatch names a delivery
-    // pipeline skill (LFG, babysit-pr, etc.), record it so the route gate
-    // can verify that delivery was actually dispatched before push/PR.
-    const dispatchText = [args.task_name, args.message, args.prompt]
-      .filter((v) => typeof v === "string").join(" ");
-    if (/\b(?:lfg|compound-engineering:lfg|railyard:deliver|ce-babysit-pr|ce-resolve-pr-feedback)\b/i.test(dispatchText)) {
-      var codexSid = input.session_id || process.env.CODEX_THREAD_ID || null;
-      if (rs && rs.getActiveRoute(codexSid)) {
-        block("[railyard] An active LFG carrier already exists for this lane.");
-        return;
-      }
-      var codexRoute = rs ? rs.createRoute({ session_id: codexSid, label: clip(args.task_name) }) : null;
-      record({ event: "route_carrier", tool, model: args.model ? args.model.trim() : "",
-        label: clip(args.task_name || args.description || ""), session_id: clip(input.session_id),
-        route_id: codexRoute ? codexRoute.route_id : undefined });
-      // Feedback resolution receipt: ce-resolve-pr-feedback was dispatched
-      if (rs && /ce-resolve-pr-feedback/i.test(dispatchText)) {
-        var fbRoute = codexRoute;
-        if (fbRoute) rs.recordReceipt(fbRoute.route_id, { event: "feedback_resolution_started" });
-      }
-      // Feedback resolution receipt: ce-resolve-pr-feedback was dispatched
-      if (rs && /ce-resolve-pr-feedback/i.test(dispatchText)) {
-        var fbRoute = codexRoute;
-        if (fbRoute) rs.recordReceipt(fbRoute.route_id, { event: "feedback_resolution_started" });
-      }
-      if (codexRoute && typeof args.message === "string") {
-        process.stdout.write(JSON.stringify({ updatedInput: {
-          model: args.model, reasoning_effort: args.reasoning_effort, task_name: args.task_name,
-          message: args.message + String.fromCharCode(10) + String.fromCharCode(10) + buildCarrierKernel(codexRoute.route_id),
-        }}) + "\\n");
-        return;
-      }
-    }
-    if (!refused) {
-      record({
-        event: "dispatch",
-        harness: "codex",
-        tool,
-        model: child,
-        effort: clip(String(args.reasoning_effort), 20),
-        label: clip(args.task_name),
-        session_id: clip(input.session_id),
-      });
-    }
-    return;
-  }
-
-  if (["Bash", "shell", "local_shell", "exec_command", "unified_exec"].includes(tool)) {
-
-    // Route-carrier gate: before any mutation surface (git push, gh pr create),
-    // verify that a delivery pipeline was dispatched via a run-log entry. This
-    // catches the repeated failure where agents implement directly and skip
-    // LFG/babysit-pr entirely. The run-log entry is written by spawn_agent
-    // dispatches whose task_name or message mentions lfg, deliver, or babysit.
-    const text = typeof args.command === "string" ? args.command
-      : typeof args.cmd === "string" ? args.cmd
-      : Array.isArray(args.input) ? args.input.join(" ")
-      : "";
-    // TOCTOU guard: refuse a single shell call that both mutates HEAD and creates a PR.
-    if (/\b(git\s+(commit|merge|rebase|cherry-pick|revert|reset|checkout|switch|pull)\b).*\b(gh\s+pr\s+create\b)|\b(gh\s+pr\s+create\b).*\b(git\s+(commit|merge|rebase|cherry-pick|revert|reset|checkout|switch|pull)\b)/.test(text)) {
-      block(
-        "[railyard] TOCTOU guard: this shell call both changes HEAD and creates a PR. Split them."
-      );
-      return;
-    }
-    // Feedback resolution gate: gh pr comment/reply requires feedback_resolution_started
-    if (/gh pr comment|pulls.*comments.*replies/.test(text)) {
-      if (rs) {
-        var fsid = process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID || null;
-        var fRoute = rs.getActiveRoute(fsid);
-        if (fRoute) {
-          var hasFeedback = false;
-          for (var fi = 0; fi < (fRoute.receipts || []).length; fi++) {
-            if (fRoute.receipts[fi].event === "feedback_resolution_started") { hasFeedback = true; break; }
-          }
-          if (!hasFeedback) {
-            block(
-              "[railyard] Feedback resolution gate: dispatch ce-resolve-pr-feedback before replying to PR feedback."
-            );
-            return;
-          }
-        }
-      }
-    }
-
-    // Feedback resolution gate: gh pr comment/reply requires feedback_resolution_started
-    if (/gh pr comment|pulls.*comments.*replies/.test(text)) {
-      if (rs) {
-        var fsid = process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID || null;
-        var fRoute = rs.getActiveRoute(fsid);
-        if (fRoute) {
-          var hasFeedback = false;
-          for (var fi = 0; fi < (fRoute.receipts || []).length; fi++) {
-            if (fRoute.receipts[fi].event === "feedback_resolution_started") { hasFeedback = true; break; }
-          }
-          if (!hasFeedback) {
-            block(
-              "[railyard] Feedback resolution gate: dispatch ce-resolve-pr-feedback before replying to PR feedback."
-            );
-            return;
-          }
-        }
-      }
-    }
-
-
-    // Merge gate: gh pr merge requires lfg_complete.
-    if (/\bgh\s+pr\s+merge\b/.test(text)) {
-      if (rs) {
-        var msid = process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID || null;
-        var mcomplete = false;
-        try {
-          var mdir = rs.stateDir();
-          var mfs = require('fs');
-          var mfiles = mfs.readdirSync(mdir).filter(function(f) { return f.endsWith('.json') && !f.startsWith('candidate-'); });
-          for (var mi = 0; mi < mfiles.length; mi++) {
-            var mr = rs.readRoute(mfiles[mi].replace('.json', ''));
-            if (mr && mr.state === 'lfg_complete' && (!msid || mr.parent_session_id === msid)) { mcomplete = true; break; }
-          }
-        } catch {}
-        if (!mcomplete) {
-          block(
-            "[railyard] Merge refused: the delivery route has not reached lfg_complete."
-          );
-          return;
-        }
-      }
-    }
-    if (/\bgit\s+push\b|\bgh\s+pr\s+create\b/.test(text)) {
-      if (rs) {
-        var sessionId = process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID || null;
-        var activeRoute = rs.getActiveRoute(sessionId);
-        var hasCandidate = rs.hasDeliveryCandidate(sessionId);
-        if (activeRoute && activeRoute.state === 'pending_spawn') {
-          block(
-            "[railyard] Push refused: delivery route is pending_spawn. The carrier subagent must actually start before any push."
-          );
-          return;
-        }
-        if (!activeRoute && hasCandidate) {
-          block(
-            "[railyard] Push refused: session classified as delivery work but no carrier dispatched. Dispatch a carrier naming lfg/deliver/babysit."
-          );
-          return;
-        }
-      } else if (!hasEntry("route_carrier")) {
-        // Fallback: run-log only when route-state is unavailable
-        block(
-          "[railyard] Route carrier missing: no delivery pipeline was dispatched. If you are running railyard:deliver, invoke compound-engineering:lfg as a subagent first."
-        );
-        return;
-      }
-    }
-    // PR-create gate: requires carrier_started + HEAD-bound pr_create_ready receipt.
-    if (new RegExp("\\bgh\\s+pr\\s+create\\b").test(text)) {
-      if (rs) {
-        var psid = process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID || null;
-        var prRoute = rs.getActiveRoute(psid);
-        if (!prRoute) {
-          block(
-            "[railyard] Route carrier required: no active delivery route. Dispatch a carrier naming lfg/deliver/babysit before creating a PR."
-          );
-          return;
-        }
-        if (prRoute.state === "pending_spawn") {
-          block(
-            "[railyard] Route carrier not started: pending_spawn. Wait for SubagentStart before PR creation."
-          );
-          return;
-        }
-        var prReceipt = null;
-        for (var ri = (prRoute.receipts || []).length - 1; ri >= 0; ri--) {
-          if (prRoute.receipts[ri].event === "pr_create_ready") { prReceipt = prRoute.receipts[ri]; break; }
-        }
-        if (!prReceipt) {
-          block(
-            "[railyard] PR-create receipt missing: carrier must record pr_create_ready --head-sha <sha> --branch <branch>."
-          );
-          return;
-        }
-      }
-    }
-    try {
-      for (const dispatch of codexExecDispatches(args)) {
-        if (dispatch.missing.length) {
-          block(
-            "[railyard] Dispatch refused: codex exec must set explicit " +
-              dispatch.missing.join(" and ") +
-              " (no silent inheritance of the session tier). Retry with " +
-              "--model and model_reasoning_effort set.",
-          );
-          return;
-        }
-        record({
-          event: "dispatch",
-          harness: "codex",
-          tool,
-          model: dispatch.model,
-          effort: dispatch.effort,
-          reasoning_effort: dispatch.effort,
-          label: dispatch.label,
-          session_id: clip(input.session_id),
-        });
-      }
-    } catch {}
-    return;
-  }
-  // Any other tool: allow.
-}
 process.stdin.on("end", () => handleInput({ final: true }));
-// Some hook runners keep stdin open after delivering the payload. Never let
-// that turn a fail-open hook into a shell deadlock; a complete payload is
-// parsed and exits within the dispatch budget. Incomplete JSON stays open
-// until the next chunk or stdin end, so a gap cannot bypass the gate.
+// Some runners leave stdin open. A complete payload exits promptly; a gap
+// inside incomplete JSON never finalizes the allocation check.

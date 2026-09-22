@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 /**
- * cleanup-codex is the invocable entry point: the Codex SessionEnd hook runs
- * `cleanup --hook` against this file, and the tests import from it. It keeps
- * argument parsing, inventory rendering, and the CLI; the implementation lives
- * in `lib/`.
+ * cleanup-codex is the manual entry point. The optional `cleanup --hook`
+ * adapter remains available, but the plugin ships no SessionEnd registration.
+ * Tests import from this file; it keeps argument parsing, inventory rendering,
+ * and the CLI while the implementation lives in `lib/`.
  */
 
 import fs from "node:fs";

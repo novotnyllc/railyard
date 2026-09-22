@@ -1,0 +1,4 @@
+interface:
+  display_name: "Jev Advice"
+  short_description: "Model selection and bounded delivery decisions with Jev."
+  default_prompt: "Use $jev for a bounded Railyard decision. Use TYPESAFE_API_KEY when configured, honor offline and privacy restrictions, and preserve explicit choices and the existing workflow owner's authority."

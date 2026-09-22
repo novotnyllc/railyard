@@ -1,339 +1,199 @@
-# Harness defaults and cross-harness model invocation
+# Native model and effort allocation
 
-This reference names the per-harness session defaults, the task shapes each
-model fits, and how each harness reaches models it does not run natively. It is
-invocation and suitability guidance; the resolver in
-[`model-routing.md`](model-routing.md) still owns admission, budget, and
-receipts for delegated routes, and nothing here grants a route it has not
-admitted.
+Choose the model and reasoning effort together for each assignment. A skill
+cannot change the current session's model. It can guide a supported child
+selection or deliberately keep the parent's settings.
 
-## Two distinct layers
+Use **Astra at `max` as the baseline candidate for substantive engineering**.
+This is a starting hypothesis, not a claim that Max is always cheapest or
+best. Preserve an explicit user selection. Choose another supported model or
+effort when comparable completed work supports the tradeoff, the work needs a
+specialist, or the user prioritizes latency. Run deterministic tools directly
+for mechanical operations; do not create a model worker merely because its
+per-token rate looks lower.
 
-| Layer | What it means | Harness-specific? |
-| --- | --- | --- |
-| Session model | The model the interactive harness runs as for the current turn | Yes |
-| Delegated carrier route | The model the router resolves for bounded work handed to a carrier | No |
+Judge cost and elapsed time through acceptance of the whole assignment,
+including child agents, unsuccessful attempts, repeated reads, retries, and
+repairs. Per-call prices, tokens per minute, and quota per hour do not establish
+cost per accepted task. Higher effort can reduce wasted actions; it can also
+cost more on short work. Use existing outcomes and logs when available, without
+adding a benchmarking framework or mandatory artifacts to ordinary delivery.
 
-The router's no-config profile is harness-independent: bounded implementation
-resolves to Luna at `max`, orchestration or independent review to Sol. A Claude
-session that delegates implementation still receives the Luna route.
+## Current Codex native controls
 
-## Session defaults
+The native `spawn_agent` tool exposed for this update (2026-09-14) advertises:
 
-A model name without an effort is an incomplete route. Same work rows on both
-sides, same escalation ladder, so the columns are directly comparable:
-
-| Work tier | Codex harness | Claude harness |
-| --- | --- | --- |
-| Hard implementation | Sol `max` | Fable `high`/`max` |
-| Medium or long-running implementation | Terra `max` | Sonnet `medium` |
-| Mechanical implementation | Luna `max` | Haiku `low` |
-| Defensive security review, threat model, trust/redaction/signing, attack-shape, or audit | Daybreak `high`/`max` when locally available; otherwise Sol | the resolver's configured standard fallback |
-| Implementation default | Luna `max` | the role-specific tier above |
-
-`medium` is the workhorse for steering, not `high`: most steering turns are
-not reasoning-bound, and paying `high` on all of them spends budget the hard
-turns need. That is a session-turn statement — the router's frozen delegated
-default for an orchestration/review handoff stays Sol `high`, and its frozen
-delegated implementation route stays Luna at `max` (Terra only as the attested
-substitute); this table is what an interactive session picks, not that
-contract.
-
-The two sides escalate by tier, not by matching effort labels. On the Codex
-side implementation runs at `max` because the models are priced for it: Luna
-at `max` is nearly free and removes retries on mechanical work, and Terra at
-`max` is the implementation partner under a Sol orchestration context. On the
-Claude side effort stays proportional to rate: Sonnet `medium` already
-saturates mechanical work, and Opus `high` is the agentic-coding sweet spot —
-`xhigh` is reserved for a genuinely hard unit, since as a standing default it
-overthinks and burns budget. Fable `high` maps to Sol `high`: both are the
-"this is actually hard" step. Fable-over-Opus for difficult review is this
-user's ordering, not a benchmark claim.
-
-## Codex roster and supervised leaf work
-
-The following is the owner-verified Codex roster as of 2026-08-15. It is a
-routing description, not a claim that every account can select every row.
-
-| Model | Best positive use | Boundary |
-| --- | --- | --- |
-| `gpt-5.6-sol` | Frontier agentic coding, hard implementation, oversight, review, and coordination. | The stronger Codex supervisor tier. |
-| `gpt-5.6-terra` | Balanced everyday implementation. | A capable bounded worker, not the default review/coordinator tier. |
-| `gpt-5.6-luna` | Cheapest fork-capable implementation/mechanical leaf work with a complete narrow brief. | Pure sub-agent: no peer orchestration or cross-agent coordination. |
-| `gpt-daybreak-blue-latest` | Approved defensive cybersecurity work. | Limited access; select only after local detection. |
-| `gpt-5.5` | Complex coding, research, and general work. | A broad general tier; it does not replace Sol's frontier agentic-coding/oversight placement. |
-
-OpenAI's [subagent configuration documentation](https://learn.chatgpt.com/docs/agent-configuration/subagents)
-states that a subagent without a more-specific model setting eventually inherits
-its parent model and effort. That native fallback is why every Railyard dispatch
-names an explicit model and effort rather than treating omission as a harmless
-default.
-
-Owner-verified Luna doctrine: Luna is most effective as a supervised leaf: Sol, Opus, or Fable gives it a
-complete narrow specification, bounded files/authority, and an objective
-verification target, then owns review and acceptance of the result. Luna may
-receive a bounded context fork, but it remains a pure sub-agent rather than a
-peer, coordinator, reviewer-of-record, or judgment authority. Its eligible
-catalog roles are therefore fully specified implementation and mechanical work;
-the supervisor retains coordination, review, and multi-agent decisions.
-
-### Daybreak Blue
-
-OpenAI documents Daybreak Blue as defensive cybersecurity-focused and separately
-approved/provisioned; access is scoped to the approved identity and product
-surface. See the [model documentation](https://developers.openai.com/api/docs/models/daybreak-blue-latest)
-and [trusted-access guidance](https://learn.chatgpt.com/docs/cyber-safety).
-Railyard uses the owner-provisioned Codex selector
-`gpt-daybreak-blue-latest` only when the configured local account's resolver
-cache is fresh and available. A stale local security-shaped resolve enumerates
-the fixed Codex App Server model list once, stores `{available,checkedAt}` for
-24 hours, and prefers Daybreak over Sol for the security roles in the catalog.
-One state document admits one Daybreak provider; a changed catalog digest
-invalidates that cache before reuse, even if file timestamps are preserved.
-Remote or differently scoped account requests use the
-normal route without a probe. Missing access, a negative result, or a failed
-enumeration silently keeps the standard route; it is not a warning or an
-entitlement claim. The full fixed probe and cache contract lives in [model routing](model-routing.md#daybreak-blue-local-availability).
-
-### Session model vs. work tier
-
-A skill cannot change the running session's model. When the session runs a
-materially higher tier than the work's routed tier — a Fable session asked
-to run mechanical fleet maintenance is the canonical case — do not execute
-inline: dispatch the work to a fresh child carrying the routed model
-(Claude Code: the Agent tool's model parameter or a `claude -p --model`
-worker; Codex: task/thread model controls) and keep the session as
-controller. Never open a new user-visible thread or chat the user is not
-expecting — subagents and the orchestrator's normal visible-task dispatch
-are the unsurprising forms; suggest a fresh chat only when asked or when
-the work genuinely needs a clean interactive session.
-
-## Dispatch banner
-
-Every child dispatched under this routing self-identifies at the top of its
-transcript, so a reader scanning a background session or a Codex subagent can
-sanity-check the route at a glance. **The dispatcher composes the line and the
-worker echoes it**: a worker cannot reliably introspect its own model or
-effort, but the dispatching session just chose both. It is informational
-output only — the worker never waits for acknowledgement.
-
-One canonical format, one line, model and effort first because they are the
-sanity-check payload:
-
-```text
-▸ <model>/<effort> · <role/work-class> · <harness> <session-tier> via <skill> · <label>
-```
-
-Every dispatch prompt ends (or begins) with the exact instruction:
-
-> Begin your first message with exactly this line, then proceed without
-> waiting: `▸ …`
-
-**Effort is never dropped from the banner** — the banner always shows
-`<model>/<effort>`, on every harness. The banner is dispatcher-composed *text*
-documenting the *intended* effort: the explicit-model-and-effort rule requires
-the dispatcher to choose an effort for every dispatch, so it states that effort
-regardless of whether the dispatch tool has a per-dispatch effort parameter.
-Where the tool has an effort parameter (Codex), the banner's effort matches the
-parameter; where it does not (Claude Code's `Agent`), the effort is a stated
-intent, still shown.
-
-| Dispatch | Banner fields | Example |
-| --- | --- | --- |
-| Claude Code `Agent` | `model` + intended `effort` — stated in the banner text; the tool takes model but has no effort parameter | `▸ opus/high · implementation · Claude Code Fable via railyard:deliver · retry-backoff fix` |
-| Codex `spawn_agent` | `model` + `reasoning_effort` (a real parameter) | `▸ gpt-5.6-terra/max · implementation · Codex Sol medium via railyard:orchestrate · importer rewrite` |
-| Codex `thread/start` / `create_thread` | `model` + `config.model_reasoning_effort`, plus `modelProvider` when non-default | `▸ glm-5.2/high · bulk edit · Codex Sol medium via railyard:orchestrate (zai_litellm) · lint sweep` |
-| `codex exec` / `claude -p` worker | `model` + `effort` — from the flags on Codex; a stated intent for `claude -p`, which has no effort flag | `▸ claude-opus-5/high · review · Codex Sol high via railyard:thermos · PR 412` |
-
-### Mid-thread changes
-
-When a continuation changes the running model **or** effort, the continuation
-message carries the same echo instruction with a change line. Both sides show
-`<model>/<effort>`, so a change of effort alone (same model) is still announced:
-
-```text
-▸ route change: <old-model>/<old-effort> → <new-model>/<new-effort> · <reason>
-```
-
-| Harness | Mid-thread change |
+| Model selector | Supported reasoning efforts |
 | --- | --- |
-| Codex thread continuation with a model or effort override | Supported — instruct the change line on the first message after the override. |
-| `codex exec` re-invocation | N/A: a fresh process emits a fresh banner, not a change line. |
-| Claude Code `Agent` + `SendMessage` | N/A: a live subagent's model is fixed at dispatch; a different model is a new dispatch with a fresh banner. |
-| Claude Code `SendMessage` to a peer session | N/A: a peer session owns its own route; a message cannot change its model or effort. |
+| `gpt-6-astra` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
+| `gpt-daybreak-blue-latest` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
+| `gpt-5.6-terra` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
+| `gpt-5.6-luna` | `low`, `medium`, `high`, `xhigh`, `max` |
+| `combo/grok-unified-4.6` | `low`, `medium`, `high`, `xhigh` |
 
-Where a harness cannot change model or effort mid-thread it is N/A — do not
-invent machinery to simulate it.
+Recheck the active tool schema before dispatch: this is a dated capability
+snapshot, not an availability promise for every account, host, or harness.
+Daybreak is a candidate for relevant defensive security work when the active
+surface exposes it; it is not an automatic replacement for a user-selected
+model. Model names do not establish a universal implementation/review ranking.
 
-## Session messaging
+The native tool exposes `model`, `reasoning_effort`, and `fork_turns`. Its fork
+constraints are part of allocation:
 
-Both harnesses can put text into another live session, and neither changes that
-session's route by doing so.
+- A full-history fork, with `fork_turns` omitted or `"all"`, inherits the
+  parent's model and effort and cannot carry either override.
+- Explicit model and effort overrides require `fork_turns:"none"` or a
+  supported positive history-count string. Supply enough task context for the
+  child to work correctly with that history.
+- Deliberate inheritance is a valid choice. For the lean dispatch gate, set
+  `fork_turns:"all"`, omit both override fields, and include
+  `Allocation: inherit model and reasoning effort; <reason>.` in the brief.
+  This records intent; it does not reveal otherwise unknown parent settings.
 
-| Harness | Reach | Mechanism |
-| --- | --- | --- |
-| Codex | its own tasks and threads | `send_message_to_thread` / `followup_task` |
-| Claude Code | live subagents; peer sessions on this machine; reply-only to sessions on other machines and on the web | `SendMessage` to a name from `ListAgents` (v2.1.224+, macOS/Linux) |
+A substantive bounded assignment can request Astra Max explicitly:
 
-A message carries plain text only, never a model or effort control, so there is
-no `▸ route change:` line for one. Work that needs a different model is a fresh
-dispatch with its own banner. Coordination doctrine — when messaging beats a
-checkpoint, addressing by `--name`, and the delivery limits — lives in
-`../skills/orchestrate/SKILL.md`.
-
-## Nested subagents
-
-A supervisor-tier subagent handed a subtask that genuinely splits should
-dispatch its own children rather than serializing the work itself. Both
-harnesses allow that capability:
-
-| Harness | Recursion | Depth |
-| --- | --- | --- |
-| Codex | `spawn_agent` from inside a spawned agent | pass the inherited nested-subagent ceiling down as the bound |
-| Claude Code | the `Agent` tool is available to a subagent by default | three layers below the main conversation; `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` changes it, `1` turns nesting off |
-
-At the Claude Code limit the `Agent` tool is withheld, so the deepest subagent
-does its delegated work itself and returns one summary — nothing to detect or
-handle. A worker that must not delegate at all omits `Agent` from its `tools`
-or lists it in `disallowedTools`.
-
-Luna is intentionally a leaf in this doctrine even when it receives a context
-fork: it returns its one bounded implementation result to its stronger parent.
-It does not become a peer-agent dispatcher, reviewer, or cross-agent
-coordinator.
-
-**Every rule applies at every depth.** A nested dispatch is a dispatch: it
-names an explicit model and effort, it carries the same objective, scope,
-constraints, and required evidence, and the *nested* dispatcher composes its
-own child's banner — the dispatcher-composes rule recurses, because a worker
-three levels down still cannot introspect its own route.
-
-What is mechanically enforced at depth, as opposed to briefed:
-
-| At depth | Claude Code | Codex |
-| --- | --- | --- |
-| Explicit-model gate | **Enforced.** Plugin `PreToolUse` hooks fire for a subagent's tool calls exactly as for the main thread — verified here: a model-less `Agent` call from inside a subagent, and from inside that subagent's own nested child, were both refused by the gate. | Doctrine, with the `spawn_agent` hook registered; whether Codex delivers `PreToolUse` inside a spawned agent's turn is unverified. |
-| Run-log `dispatch` line | Written wherever the gate runs — same hook, same process, one call apart. | Same. |
-| `subagent_stop` line | Fires per subagent. | No equivalent event; completion comes from doctrine `outcome` lines. |
-| Banner echo | Doctrine only, at every depth. | Doctrine only, at every depth. |
-
-Everything in a doctrine-only row is a briefing obligation: the parent's
-dispatch text is the only thing that makes it happen.
-
-**Sanity rule.** Each level must buy real fan-out or real specialization —
-several children that can run at once, or a child with a materially different
-model, tool set, or scope. A level that takes one assignment and passes it
-along unchanged is delegation theater: it adds a context boundary, a summary
-hop, and a budget line for nothing. Collapse it and do the work.
-
-This is unrelated to agent teams' *no nested teams* limitation (see
-`../skills/orchestrate/SKILL.md`). Teammates cannot spawn teammates; an
-ordinary subagent spawning subagents is a supported, default-on capability.
-Do not read the team restriction as a ban on recursion.
-
-The banner is per-dispatch self-ID inside one transcript. Its sibling,
-`run-audit.md`, is the aggregate reconstruction across a whole run — the
-append-only run log, the completion recap, and `railyard:audit`. Banners are
-corroboration for an audit; the log is what survives compaction.
-
-## Published rates and what they imply
-
-Checked 2026-08-05 against provider and OpenRouter listings; list prices in USD
-per million tokens. Rates go stale — re-check before relying on them.
-
-| Model | Input | Output | Context |
-| --- | --- | --- | --- |
-| `gpt-5.6-luna` | 0.20 | 1.20 | 1M |
-| `claude-haiku-4-5` | 1.00 | 5.00 | 200K |
-| `glm-5.2` (Z.ai direct API) | 1.40 | 4.40 | 1M |
-| `gpt-5.6-terra` | 2.00 | 12.00 | 1M |
-| `claude-sonnet-5` | 3.00 | 15.00 | 1M |
-| `gpt-5.6-sol` | 5.00 | 30.00 | 1M |
-| `claude-opus-5` | 5.00 | 25.00 | 1M |
-| `claude-fable-5` | 10.00 | 50.00 | 1M |
-
-Terra and Luna are listed at 50% off, and Sonnet 5 is introductory through
-2026-08-31; a promotional rate is not the rate to plan against.
-
-The one claim this table settles: after OpenAI's 2026-07-30 change, "route to
-GLM-5.2 to save money" is not true as a sticker-price argument. It settles
-little else:
-
-- **Rate is not cost per completed task.** Thinking tokens, retries, and extra
-  turns are what get billed; a higher-rate model that finishes in one pass can
-  cost less than a cheaper one that needs three.
-- **Operating points differ.** Luna at `max` and GLM at `xhigh` are different
-  amounts of work per request; dividing sticker rates compares unlike units.
-- **Meters differ.** This host's GLM route bills in Z.ai Coding Plan credits,
-  which do not convert to USD. Never compare or add across meter types.
-- **Cache rates dominate agentic spend.** These harnesses resend large stable
-  prefixes every turn, so most input is cache reads billed far below list —
-  Anthropic reads ~0.1x (writes 1.25x/2x), OpenAI cached input at one tenth,
-  Z.ai's credit formula has its own cached-input multiplier and its plan sizing
-  assumes ~90% cache hits. A ranking built on uncached list rates can invert
-  once caching is included.
-
-Treat the table as one bounded input, never the decision, and prefer measured
-local outcomes (the resolver's learning subsystem) over arithmetic on list
-prices. Published benchmark placements are deliberately not a selection
-criterion.
-
-## GLM-5.2 is Codex-only
-
-**Claude Code cannot invoke GLM-5.2.** Z.ai's Anthropic-compatible endpoint
-only authenticates when the config profile has no claude.ai login — an active
-login outranks any environment token and is sent to Z.ai, which rejects it.
-Removing the login also removes the account-bound connectors, so a GLM-backed
-Claude session structurally cannot carry the same MCP servers, permissions,
-and capabilities as the invoker; `--bare` strips even more. Since a degraded
-session is unacceptable, the route does not exist. Do not rebuild it with
-`ANTHROPIC_BASE_URL`, `CLAUDE_CONFIG_DIR`, `apiKeyHelper`, or `--bare` — all
-of these were tried and each either fails auth or fails capability parity.
-
-Route GLM work through Codex instead, where the provider mechanism preserves
-the full harness:
-
-```toml
-[model_providers.zai_litellm]
-name = "Z.ai Coding Plan via LiteLLM"
-base_url = "http://127.0.0.1:4141/v1"
-env_key = "LITELLM_PROXY_API_KEY"
-wire_api = "responses"
+```json
+{
+  "task_name": "repair_importer",
+  "message": "Repair the importer retry bug in the assigned files, run the relevant checks, and return the result. Allocation: gpt-6-astra at max for substantive debugging. Include the concrete failure and file scope in this brief.",
+  "model": "gpt-6-astra",
+  "reasoning_effort": "max",
+  "fork_turns": "none"
+}
 ```
 
-```bash
-codex exec -m glm-5.2 -c model_provider=zai_litellm '<prompt>'
+A child that needs the same policy judgment and full conversation can instead
+inherit deliberately:
+
+```json
+{
+  "task_name": "review_policy",
+  "message": "Allocation: inherit model and reasoning effort; this review needs the same policy judgment and full conversation context.\nReview the assigned policy change for contradictions and report actionable findings.",
+  "fork_turns": "all"
+}
 ```
 
-The local LiteLLM proxy must be running; a stopped proxy or missing key
-surfaces as a normal command failure, and that failure is the availability
-check — do not build a detection layer in front of it.
+These illustrate tool fields, not complete work briefs. Preserve the actual
+objective, assigned files, constraints, and acceptance checks in a dispatch.
+Do not send overrides with `"all"`, even when they repeat the parent's values.
+If required settings and history are incompatible, disclose that constraint;
+do not silently change settings, drop required context, or retry on another
+model.
 
-GLM's case is not price: it is **subscription headroom** (the Z.ai Coding Plan
-is already paid monthly, so work inside remaining quota costs nothing at the
-margin) and **provider diversity** when the primary is rate-limited or
-degraded. Good fits are high-volume or repetitive work and long-running
-investigation inside quota; brief it completely, since the process starts
-cold.
+## Roles, providers, and skill scope
 
-## Cross-harness handoffs
+A fixed specialist role may determine model and effort only when authoritative
+configuration defines that binding and the active tool exposes a role
+parameter. Resolve the binding and use that parameter without conflicting
+model/effort overrides. The current native `spawn_agent` tool has no role
+parameter: a role name in a prompt or catalog is not a supported native
+selector.
 
-| Direction | Mechanism |
-| --- | --- |
-| Claude Code → Codex models (including GLM) | the `codex` plugin's rescue forwarder — a skill on Codex, the `codex-rescue` agent on Claude Code — or a direct `codex` CLI invocation (`codex exec -m <model> ...`) |
-| Codex → Claude models | `claude -p --model <claude-model-id>`; a read-only Claude subscription review uses only the supported Compound Engineering `-p` adapter |
-| Either → ChatGPT Pro one-shot review | `railyard:oracle`, which has its own invocation rules and requires a ChatGPT Pro subscription (see that skill for cached availability detection) |
+A provider catalog, a working CLI route, or an App Server model list does not
+prove that native `spawn_agent` accepts the same model override. Use only the
+selectors and combinations supported by the active dispatch surface. Do not
+invent a provider parameter, claim an unavailable route works, or silently
+substitute a model when selection fails.
 
-These are the only supported handoff shapes. The rescue subagent is a
-forwarder, not an orchestrator: one invocation, return its output unchanged.
-The forwarding caller resolves and passes an explicit model and effort; it does
-not rely on the native parent-inheritance fallback.
+Native spawn has no arbitrary per-child plugin enablement control. A smaller
+history fork changes conversation context; it does not disable inherited
+skills or install a specialist tool. Use supported project/global skill scope
+or an actually exposed role configuration when needed, separately from history
+selection. Do not claim a narrower brief removed capabilities.
 
-## Boundaries this reference does not move
+## Delegation and reporting
 
-- The Claude subscription review preflight still blocks when
-  `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, or any
-  other third-party provider selector is in the launch environment. That is
-  the check doing its job, not an obstacle.
-- GLM runs as its own Codex process, never as a model value handed to another
-  harness's selector, `spawn_agent`, or native-subagent override.
+Delegate bounded work when parallel execution or specialization improves the
+accepted result. Apply the same model/effort decision at each depth, respecting
+the active tool's limits. Avoid a child that merely forwards an unchanged
+assignment. The parent retains coordination and acceptance; each child receives
+a clear scope and returns useful findings or verification evidence.
+
+Use subagents for internal subtasks. Create a user-visible task only when the
+user explicitly requests a new task. An orchestrator workflow or a desire to
+select another model does not supply that authorization.
+
+Record the intended allocation once in the brief or normal progress record.
+Tool arguments show what was requested; runtime metadata or a trusted adapter
+receipt may show what actually ran. A worker echoing a dispatch banner cannot
+verify its own model or effort. If actual settings are not observable, report
+the request or deliberate inheritance and say actual values are unverified.
+No banner, extra acknowledgement, or separate audit artifact is required for
+ordinary native work.
+
+A follow-up message does not itself change a running agent's model or effort.
+Use a supported new dispatch or an explicitly exposed continuation control for
+a change, and disclose the changed selection. Do not invent a mid-task switch.
+
+## Claude Code allocation
+
+Verified against Claude Code 2.1.270 and the official
+[model configuration](https://code.claude.com/docs/en/model-config) and
+[subagent configuration](https://code.claude.com/docs/en/sub-agents) references
+on 2026-09-15:
+
+- Fable 5.1's exact Anthropic model ID is `claude-fable-5-1`; it requires
+  Claude Code 2.1.257 or later. The `fable` alias usually resolves to 5.1,
+  but provider mappings, user pins, and the Claude apps gateway can resolve
+  it differently. Preserve intentional aliases; use the exact ID when 5.1
+  is required and verify the observed model.
+- Fable 5.1 supports `low`, `medium`, `high`, `xhigh`, and `max`. Choose for
+  the assignment. These names are model-specific; Astra's `ultra` is not a
+  Claude effort, and `ultracode` is a separate workflow setting. Neither a
+  smaller model nor lower effort proves lower total task cost.
+- The CLI selects both controls with `--model claude-fable-5-1 --effort LEVEL`.
+  The installed `Agent` tool's model choices are `sonnet`, `opus`, `haiku`,
+  and `fable`; full model IDs and `[1m]` suffixes are not tool parameters.
+  A subagent definition can set the exact `model` and `effort`; otherwise
+  effort inherits from the session. Select that definition with
+  `subagent_type` and `Allocation: role configuration; <reason>.` in the
+  prompt, omitting model overrides. Do not invent per-call `effort` or
+  `reasoning_effort` fields.
+- `subagent_type:"fork"` inherits the parent and ignores model overrides.
+  Declare deliberate inheritance and omit overrides. When
+  `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` removes the model control, use the
+  authoritative binding rather than claiming a caller override. Check the
+  current tool schema and respect managed policy.
+- For other Claude subagents, omitting `model` uses the definition and
+  configured subagent default before falling back to the parent. A definition
+  with `model: inherit` explicitly selects the parent. An inheritance marker
+  in the prompt records intent; it does not change those controls. The hook's
+  outer effort field belongs to the caller and cannot verify a child's effort.
+- A model ID, allowed dispatch, or prompt banner is not runtime verification.
+  Check native model and effort metadata when available. Managed effort caps,
+  alias mappings, or runtime substitutions can change the requested pair;
+  report a mismatch instead of calling it the selected allocation.
+
+Keep explicit model requirements on the selected route. Where an authorized
+Claude CLI invocation must refuse instead of switching models after a flagged
+request, use `switchModelsOnFlag:false` in that invocation's settings and do
+not supply a fallback chain. Do not overwrite global user settings or bypass
+managed policy. A refusal is not permission to change model or provider.
+
+## Optional configured and cross-harness routes
+
+Use the strict [`railyard/model-routing/v1` contract](model-routing.md) when a
+configured fleet, budget, privacy boundary, provider, or fixed adapter requires
+it. Its frozen decisions, admission, claims, and reconciliation apply to that
+path; they are not prerequisites for ordinary direct native delegation.
+Unsupported selections or adapter failures must remain visible. A configured
+fallback must be authorized by the applicable policy and disclosed, and cannot
+override an explicit user requirement silently.
+
+For Claude Code, inspect its active `Agent`/CLI controls and authoritative role
+configuration. Do not map Codex effort labels onto Claude by analogy or claim
+that effort text in a prompt configures a missing tool parameter. Cross-harness
+work changes capabilities and accounting; use it only when authorized and
+supported, preserving the user's permissions and required tools.
+
+Keep the chosen workflow's real mechanisms and ownership. A Compound
+Engineering Claude review uses its supported adapter and review process; model
+allocation is not permission to replace it with a parallel runner. Railyard's
+configured replacement seams apply only where the exact carrier and adapter
+are supported. Oracle retains its own invocation rules. GLM or another
+external provider requires its separately supported configured route, not a
+model name copied into native spawn.
+
+A catalog entry, passing offline tests, and live execution are different
+facts. Do not call a route live-verified without relevant runtime evidence;
+never manufacture availability from configuration or worker output.

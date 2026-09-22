@@ -7,19 +7,15 @@ has_children: true
 
 # Delivery
 
-Run delivery as an evidence-producing practice: state the outcome, give each stage a bounded handoff, and carry the change all the way to its real consumer. That discipline turns one request into a reviewed, merged, and observable result while keeping human attention on decisions that deserve it.
+Start with the requested outcome and use native tools for routine work. Railyard adds deliberate model and reasoning-effort allocation and selects useful Compound Engineering workflows for planning, debugging, review, or PR delivery.
 
-## The run
+A local edit needs the changed behavior and its focused checks. A plan request ends with a plan. An authorized ship request continues through review settlement, CI, merge, and proof of the merged result. The selected CE workflow owns its review and watch loop.
 
-The operator asks for a software outcome that can survive contact with the base branch and its real consumer. Railyard turns that intent into an explicit route, bounded implementation, paired review, settled merge, and focused post-merge proof. The turn is evidence earning authority: findings return to the work, while current checks and resolved review advance it. The run closes when the merge is reachable from the base branch, the smallest applicable check passes there, and the audit can replay how it happened.
+Native subagents handle bounded parallel work. Fleet/account orchestration is explicit, and visible tasks are created only when the user asks for them. Routine work does not require LFG, paired review, a delivery contract, a retrospective, or cleanup.
 
-- [Lifecycle](/delivery/lifecycle/) — one request from intent to proof.
-- [Model routing](/delivery/model-routing/) — model, effort, carrier, budget, privacy, and transport.
-- [Gates](/delivery/gates/) — review settlement, merge authority, and post-merge proof.
-- [Audit](/delivery/audit/) — the run log and retrospective that explain how the result arrived.
+- [Lifecycle](/delivery/lifecycle/) — native work and the selected shipping path.
+- [Model routing](/delivery/model-routing/) — deliberate model and effort decisions, plus optional account and budget controls.
+- [Gates](/delivery/gates/) — proportional verification and one owner for review settlement.
+- [Audit](/delivery/audit/) — optional analysis of outcomes and resource use.
 
-The [ship a change scenario](/what-it-does/ship-a-change/) shows the practice in its shortest useful form.
-
-Read the same operating system through two sibling lenses: [one agent item reaching every machine](/sync/) and [one machine adopting declared state](/roundhouse/).
-
-Railyard is the working proof: the [source repository](https://github.com/novotnyllc/railyard), [releases](https://github.com/novotnyllc/railyard/releases), and [review trail](https://github.com/novotnyllc/railyard/pulls) expose the mechanisms behind the practice.
+The [ship a change scenario](/what-it-does/ship-a-change/) shows an authorized PR delivery. Machine readiness and convergence are documented separately under [Roundhouse](/roundhouse/).

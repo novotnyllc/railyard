@@ -7,104 +7,50 @@ nav_order: 1
 
 # The delivery lifecycle
 
-Treat delivery as one continuous promise: translate intent into a change, challenge it, merge it, and prove that the result reached the base branch and its consumer. A traceable sequence of routing, implementation, review, proof, and learning makes that promise repeatable for humans and agents alike.
+The requested finish line determines the workflow. Routine work runs natively, with a focused skill selected automatically when it helps. Planning, diagnosis, review, and local-only requests keep their stated endpoints. The shipping path below applies when publishing and merging are authorized.
 
-## The run
+## Native work and allocation
 
-The operator asks for a finished change, not an open-ended agent session. Railyard names the artifact boundary, binds the route, carries one coherent implementation through Thermos and settlement, then verifies the merged result. The turn is the gate that returns weak or stale evidence to the stage that owns it. The run closes when ancestry, a focused post-merge check, and the run record agree on the terminal outcome.
+Name the behavior to change, preserve unrelated work, and use the repository's existing checks. Delegate independent bounded subtasks to native children when useful.
 
-## 1. Intent intake
+Choose model and reasoning effort together. Astra Max is the baseline candidate for substantive engineering, with other selections justified by comparable outcomes, specialist needs, or the user's latency preference. Explicit suitable inheritance is valid. Native full-history forks inherit; model or effort overrides require a supported limited-history or no-history fork and a sufficient brief.
 
-Begin by naming the finish line. A plan request should produce a plan, a diagnosis request should produce findings, and an implementation request should carry through the full delivery route. `railyard:deliver` turns that declared outcome into the artifact boundary.
+A policy selection does not prove that the current host can run it. Unsupported choices are reported explicitly, without a silent model, effort, provider, or host fallback.
 
-## 2. Model routing
+## Select a workflow where it helps
 
-Route by the economics of the work: use the right model for the job, spend where hardness lives, and treat budget as an engineering constraint. Before a carrier starts, `railyard:model-routing` records the selected model, effort, adapter, transport, privacy, and budget effect.
+CE planning, debugging, code review, feedback resolution, and UI skills are selected for relevant work. LFG remains available when explicitly chosen. Thermos and Oracle can supply an additional perspective when needed; neither is a routine prerequisite.
 
-```text
-route=implementation model=gpt-5.6-luna effort=max
-carrier=codex-luna transport=selector-native
-implementationEngine=prefer/codex budget=default_route_no_state
-```
+Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR. CE owns the selected review-settlement and CI watch loop. Railyard does not run a second watcher or require another reviewer after CE has completed that work.
 
-The lifecycle stays same-harness by default. Dispatching to Codex is opt-in and requires the Codex CLI already set up separately.
+## Verify the requested result
 
-## 3. Plan and implement
-
-Give the change a bounded working boundary, plan the behavior, write the smallest useful implementation, and run the checks that can prove it. Independent work can run in isolated worktrees and converge into one integration branch.
-
-## 4. Thermos review
-
-Challenge each coherent chunk while its context is fresh. The correctness/security lens and the maintainability lens review the same frozen packet; synthesis returns one findings list to the implementation lane, which fixes real findings before the chunk moves forward.
-
-```text
-thermos correctness_findings=1 quality_findings=2
-synthesis=deduplicated actionable=2
-gate=fix-before-commit
-```
-
-## 5. Browser-visible quality
-
-Match the quality gate to the surface users experience. For React, Next, JSX, TSX, or component work, the route runs the project-appropriate React Doctor command against the staged change. Docs-only work stays on its document checks.
-
-## 6. Commit and publish
-
-Publish a resumable state. The delivery owner creates the configured commit, pushes the working branch, and opens or updates the pull request when the repository workflow uses one. Checkpoint commits give another lane a precise handoff.
-
-## 7. Review settlement
-
-Earn merge authority from current evidence. The delivery tail settles CI, review threads, branch currency, and stack order, then follows the repository's configured merge strategy.
-
-```text
-head=4e1d... reviews=head-settled threads=0
-settlement_window=passed merge_authority=allowed
-```
-
-## 8. Post-merge proof
-
-Prove the merged result with an observable terminal pair:
+Run required repository checks and the smallest useful checks for the changed behavior. Repeat them when a relevant change, failure, or unresolved concern warrants it. For an authorized merge, verify that GitHub reports the PR merged, then prove the merge commit is on the fetched base branch and check the merged state.
 
 ```sh
 git merge-base --is-ancestor <merge-commit> origin/<base>
 <smallest applicable post-merge check>
 ```
 
-The result reports both the merge ancestry and the check outcome.
+A deployed application or other external result also needs evidence at the acceptance surface the user requested. A passing local test alone cannot prove deployment.
 
-```text
-git merge-base --is-ancestor 4e1d... origin/main
-exit=0
-post_merge_check=node --test test/retry.test.mjs
-exit=0
-```
+## An authorized shipping path
 
-The post-merge check is stack-specific and comes from the repository's existing tooling. A Python service might use `pytest -q` instead of the Node example.
+This diagram shows a shipping workflow with selected review and optional learning. Local work stops at its requested result; it does not traverse every stage.
 
-## 9. Durable learning
-
-Close a substantial run by turning experience into operating leverage. A recap and retrospective capture the decision chain; reusable repo lessons can enter the compound workflow, while cross-repo routing lessons stay in the routing learning surface.
-
-## One-line shape
-
-Run the lifecycle as an observable chain from intent through routing, implementation, paired review, settlement, merge, post-merge proof, and durable learning. The [delivery lifecycle diagram](#diagram) makes the handoff order easy to scan.
-
-<span id="diagram"></span>
-
-![Delivery lifecycle from intent intake through routing, implementation, review, settlement, merge, proof, and durable learning.](/diagrams/m2-delivery-lifecycle.svg)
+![An authorized shipping path with selected review, CE settlement, merge proof, and optional learning.](/diagrams/m2-delivery-lifecycle.svg)
 
 ### Sequence
 
-1. **Ask.** The operator turns a plain-language outcome into one bounded delivery request.
-2. **Route.** Railyard freezes the model, effort, carrier, and transport for the work unit.
-3. **Build.** The implementation lane plans and changes the repository.
-4. **Review.** Thermos challenges the diff through correctness/security and code-quality lenses.
-5. **Quality.** Browser-visible and focused quality checks establish evidence for the current head.
-6. **Publish.** The lane commits and publishes the reviewable change.
-7. **Settle.** Review threads and the merge-settlement condition become current; stale evidence returns to review.
-8. **Merge.** The settled change earns merge authority and reaches the base branch.
-9. **Prove.** Ancestry and the smallest applicable post-merge check prove arrival.
-10. **Learn.** The run receipt preserves the route, decisions, and terminal outcome for the next run.
+1. **Ask.** Establish the requested result and whether publishing and merging are authorized.
+2. **Route.** Choose model and reasoning effort deliberately, including suitable inheritance.
+3. **Build.** Execute natively or use a useful selected CE workflow.
+4. **Review.** Use the review appropriate to the change; specialist lenses are optional.
+5. **Quality.** Run required repository checks and focused checks for the changed surface.
+6. **Publish.** Use CE commit/push/PR for PR creation and user-requested PR pushes.
+7. **Settle.** Let the selected CE workflow own review settlement, feedback, and CI.
+8. **Merge.** Merge the authorized change once the current repository requirements are satisfied.
+9. **Prove.** Verify merge ancestry and the applicable post-merge or live result.
+10. **Learn.** Capture a reusable lesson when useful or requested; no routine retrospective artifact is required.
 
-The diagram is also available as text above: findings return to implementation, and unresolved review threads return to the review gate.
-
-Railyard supplies the load-bearing evidence: its [source repository](https://github.com/novotnyllc/railyard), [release record](https://github.com/novotnyllc/railyard/releases), and [review trail](https://github.com/novotnyllc/railyard/pulls) keep the delivery contract reviewable beside this guide.
+Report the changed behavior, validation, and any remaining limitation. Task archival, worktree removal, and runtime cleanup are separate operations with their own authority.

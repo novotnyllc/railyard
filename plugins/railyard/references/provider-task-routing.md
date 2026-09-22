@@ -32,8 +32,8 @@ as a compatibility probe. After that pass, missing evidence stays `unknown`.
 | --- | --- | --- |
 | Source and target are in the same verified transport trust domain | Eligible | Use the normal bounded native-child path. A separately exposed transport version is not required. |
 | Cross-provider plaintext transport is explicitly verified | Eligible | Use the normal bounded native-child path. |
-| Provider-bound encrypted transport cannot be decrypted by the target | Ineligible | Create the verified visible task owned by the target provider before any work dispatch. Never trial-spawn this known boundary. |
-| Transport, trust-domain, or provider evidence remains unresolved | Ineligible | Use the verified visible provider-task bridge; do not assume plaintext from a matching provider label. |
+| Provider-bound encrypted transport cannot be decrypted by the target | Ineligible | Block this native route. Use a verified visible provider task only if the user explicitly requested creating it; never trial-spawn this known boundary. |
+| Transport, trust-domain, or provider evidence remains unresolved | Ineligible | Report the unresolved route. A visible provider-task bridge requires explicit user direction; matching provider labels do not establish plaintext transport. |
 | Required provider-task bridge is unavailable | Ineligible | Block the required route; never substitute a provider or model silently. |
 
 Provider-bound encrypted Codex Multi-Agent v2 content is therefore incompatible
@@ -42,6 +42,11 @@ provider is not enough to override an unknown or different transport trust
 domain.
 
 ## Verified visible provider-task bridge
+
+Visible Codex tasks are user-owned. Only an explicit user request to create a
+task authorizes this bridge; delegation, a fleet configuration, or a transport
+failure does not. Ordinary subwork uses native subagents. Without task-creation
+authorization, keep the route blocked and continue independent work.
 
 The bridge requires three generic capabilities: create a visible task owned by
 the requested provider, address that returned task, and wait or monitor it
@@ -125,7 +130,7 @@ auth tokens, settings bodies, or raw review output in a routing receipt.
 Run from the trusted review checkout with a secret-free prompt:
 
 ```bash
-"$CLAUDE_BIN" -p --model "$REVIEW_MODEL" --effort high --permission-mode plan \
+"$CLAUDE_BIN" -p --model "$REVIEW_MODEL" --effort "$REVIEW_EFFORT" --permission-mode plan \
   --tools 'Read,Grep,Glob' \
   --safe-mode \
   --mcp-config '{"mcpServers":{}}' --strict-mcp-config \
@@ -137,6 +142,9 @@ Run from the trusted review checkout with a secret-free prompt:
 `CLAUDE_BIN` is the canonical executable path attested by the preflight, not a
 later `PATH` lookup. `REVIEW_MODEL` is the exact routed review model ID from
 `railyard:model-routing`, never a family alias or an inferred default. The
+`REVIEW_EFFORT` value is the selected effort supported by that exact adapter;
+do not substitute a fixed effort or infer native Codex effort support from it.
+The
 read-only route intentionally excludes `Bash`; a
 review that needs commands must use the maintained CE adapter's separately
 verified tool policy.
@@ -182,8 +190,8 @@ process exit zero. Claude-family expectations allow the observed auxiliary
 Haiku title-generation usage by default; extra auxiliaries need explicit
 `--allow-aux` and never satisfy the expected-model requirement.
 
-This parser attests Claude-family streams only. Codex-native review models (Sol
-today, successors later) validate through Codex's own native task/thread
+This parser attests Claude-family streams only. Codex-native review models
+validate through Codex's own native task/thread
 evidence, and Oracle-based review validates through the oracle route's own
 receipts; equivalents exist per carrier, and none is privileged.
 

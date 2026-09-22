@@ -1,7 +1,7 @@
 {
   "name": "railyard",
-  "version": "0.8.18",
-  "description": "The delivery system for agent work: model routing, deliver, task orchestration, cross-machine placement, review gates, Oracle, and Codex runtime hygiene.",
+  "version": "0.10.0",
+  "description": "Lean automatic workflow selection, deliberate model and reasoning effort, native delegation, selected CE delivery, and explicit fleet orchestration.",
   "author": {
     "name": "Claire Novotny LLC",
     "url": "https://github.com/novotnyllc"
@@ -13,8 +13,8 @@
   "hooks": "./codex/hooks.json",
   "interface": {
     "displayName": "Railyard",
-    "shortDescription": "Model routing, deliver, task orchestration, review gates, and Oracle",
-    "longDescription": "Railyard is the delivery system for agent work: budget-aware model routing, intent-routed LFG-first delivery (the deliver skill), multi-agent and cross-machine orchestration (the orchestrate skill), deep review gates, Oracle second-model review, guided setup and doctor diagnosis, and Codex runtime hygiene. It only dispatches cross-machine work to hosts the sibling roundhouse plugin has verified are ready; machine administration itself lives there.",
+    "shortDescription": "Deliberate model and effort, lean delivery, and fleet orchestration",
+    "longDescription": "Railyard supplies a concise startup routing charter and deterministic dispatch checks. Routine work runs natively; selected Compound Engineering workflows own planning, debugging, publishing, and PR follow-through. Model and reasoning effort are chosen together, with Astra Max as a baseline candidate for substantial engineering. Fleet/account placement, targeted review, Oracle, audit, and runtime cleanup remain available when explicitly needed.",
     "developerName": "Claire Novotny LLC",
     "category": "Productivity",
     "capabilities": [
@@ -26,9 +26,9 @@
     "privacyPolicyURL": "https://github.com/novotnyllc/railyard",
     "termsOfServiceURL": "https://github.com/novotnyllc/railyard",
     "defaultPrompt": [
-      "Use railyard to deliver this change through LFG, merge, and post-merge proof.",
-      "Use railyard to orchestrate this objective across tasks and machines.",
-      "Run the railyard doctor and fix anything out of sync."
+      "Use Railyard to complete this change with an appropriate model, effort, and workflow.",
+      "Use Railyard to coordinate this explicitly requested fleet or account workflow.",
+      "Run the Railyard doctor for this installation problem."
     ],
     "brandColor": "#B45309",
     "composerIcon": "./assets/icon.png",

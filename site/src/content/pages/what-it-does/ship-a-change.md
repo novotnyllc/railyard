@@ -15,15 +15,15 @@ A webhook worker drops retries under load, and the fix matters only when it reac
 > Fix the retry path in the webhook worker and get it merged.
 ```
 
-`railyard:deliver` provides the front door for this outcome.
+Routine implementation runs natively. `railyard:deliver` can coordinate useful Compound Engineering (CE) stages and carry their result to the requested merge boundary.
 
-## The run
+## Illustrative workflow
 
-The operator asks for webhook retries to survive load and land on the base branch. Railyard binds that outcome to one delivery lane, carries the change through implementation and paired review, and settles the pull request against current evidence. The turn comes when findings or stale settlement evidence send the work back instead of letting an old green state pass. The run closes when merge ancestry and the focused post-merge check are visible in the receipt.
+The operator asks for webhook retries to survive load and land on the base branch. Native tools implement the bounded fix, with CE stages selected automatically where useful. CE owns review settlement and CI monitoring; findings and failing checks return to that same owner for repair. The requested result is complete only after the merge is observed and its focused post-merge check supports the outcome.
 
 ## What happens
 
-The request enters intent routing, receives an explicit model and effort, moves through plan and implementation, passes the paired review gate, and reaches the delivery tail. The tail settles the pull request, proves the merge commit is reachable from the base branch, and runs the smallest applicable check.
+Choose model and effort together when delegating, using Astra Max as the baseline candidate for substantive engineering or deliberately inheriting a supported pair. Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR. Resolve CE when the selected stage needs it; optional specialist review feeds its existing loop. After CE settles review and CI, the authorized delivery tail verifies merge ancestry and the smallest applicable post-merge check.
 
 ## Proof point
 

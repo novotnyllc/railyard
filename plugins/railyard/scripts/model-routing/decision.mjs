@@ -102,12 +102,18 @@ export function actionReceiptFor(request, decision, {
 }
 
 export function decisionFromCandidate(candidate, request, policy, now, rejected = []) {
-  const selectedModel = candidate.observedModel === "unknown"
+  // Claude Agent accepts a family alias; keep the resolved release in the
+  // observation fields instead of placing it in an uncallable model control.
+  const selectedModel = candidate.adapterId === "claude-session-create" || candidate.observedModel === "unknown"
     ? candidate.model.requestedModel
     : candidate.observedModel;
   const hostScope = effectiveHostScope(request, candidate.capability?.hostScope);
   const accountScope = effectiveAccountScope(request, candidate.provider, candidate.capability?.accountScope);
   const readiness = request.r52 === undefined ? null : r52Binding(request.r52);
+  // Strict routes always bind explicit model and effort. Native creation must
+  // therefore choose a compatible history mode instead of the tool's default
+  // full-history fork, which rejects overrides.
+  const contextFork = request.contextFork ?? (candidate.adapterId === "native-subagent-create" ? "none" : undefined);
   const requestDigest = stableDigest({
     role: request.role,
     callerKind: request.callerKind || "local",
@@ -120,7 +126,7 @@ export function decisionFromCandidate(candidate, request, policy, now, rejected 
     transport: candidate.transport,
     hostScope,
     accountScope,
-    contextFork: request.contextFork || "not_applicable",
+    contextFork: contextFork || "not_applicable",
     harness: request.harness || "not_applicable",
     crossHarnessReason: request.crossHarnessReason || "not_applicable",
     r52Digest: readiness?.digest || "not_applicable",
@@ -184,31 +190,21 @@ export function decisionFromCandidate(candidate, request, policy, now, rejected 
     decision.binding.harness = candidate.provider.harness || "unknown";
     decision.binding.crossHarnessReason = request.crossHarnessReason || "not_applicable";
   }
-  if (request.contextFork !== undefined) decision.binding.contextFork = request.contextFork;
+  if (contextFork !== undefined) decision.binding.contextFork = contextFork;
   if (readiness) decision.binding.r52 = readiness;
   decision.learning = candidate.learning || "not_applicable";
   decision.disclosure = r28RouteDisclosure(candidate, request, { rejectedAlternatives: rejected });
   decision.fallbackReceipt = candidate.substitute
     ? r28RouteDisclosure(candidate, request, { route: "fallback", reasonCode: candidate.substitute, rejectedAlternatives: rejected })
     : r28RouteDisclosure(candidate, request, { route: "fallback", reasonCode: "not_applicable", rejectedAlternatives: [], notApplicable: true });
-  // The "must go to Codex" signal belongs to the implementation ROLE, not to
-  // one carrier descriptor: sourcing it from codex-luna alone dropped it
-  // exactly when Luna degraded to the Terra substitute. Model comes from the
-  // selected carrier, so an attested Terra slug is what deliver is told to run.
-  //
-  // Strength is "require" only when Codex is proven present — a measured
-  // runtime attestation (`provenance:"measured_fact"`, which the Terra
-  // substitute path also carries) or an explicitly configured catalog route
-  // (no `candidate.runtime`). The no-config fixed default assumes Luna without
-  // proof: the public CLI supplies no runtime attestor, so demanding Codex
-  // there dead-ends a Claude-Code-only host at the ce-work blocker before any
-  // code is written. That default is "prefer" instead — deliver still routes
-  // to Codex when its preflight proves it available, and falls back to a native
-  // Claude implementation when it is not.
+  // A baseline candidate does not force a new implementation harness. An
+  // explicit model or configured Codex route is binding policy, not proof of
+  // availability: its owner must surface an unsupported route, never silently
+  // switch model, effort, or harness through CE's optional prefer behavior.
   if ((request.role === "implementation" || request.role?.startsWith("implementation."))
-    && (candidate.provider.executionSurface === "codex" || candidate.provider.harness === "codex")) {
-    const codexProven = candidate.runtime ? candidate.runtime.provenance === "measured_fact" : true;
-    decision.implementationEngine = { mode: codexProven ? "require" : "prefer", target: "codex", model: selectedModel, source: "deliver" };
+    && (candidate.provider.executionSurface === "codex" || candidate.provider.harness === "codex")
+    && (request.model !== undefined || policy.source === "config")) {
+    decision.implementationEngine = { mode: "require", target: "codex", model: selectedModel, source: "deliver" };
   }
   if (candidate.substitute) decision.fallback = { reason: candidate.substitute, actualModel: selectedModel, effort: candidate.effort, disclosure: clone(decision.fallbackReceipt) };
   if (candidate.carrier.fixedProfile) decision.binding.profile = candidate.carrier.fixedProfile;

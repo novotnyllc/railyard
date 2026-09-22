@@ -29,10 +29,14 @@ import {
   scopeAccountingId,
   stableDigest,
   providerAvailabilityIssue,
+  parseClaudeFamily,
+  NATIVE_MODEL_EFFORTS,
+  validateNativeModelEffort,
   validateCatalog,
   validateState,
 } from "./model-routing.mjs";
-import { fixedRuntimeDecision } from "./model-routing/select.mjs";
+import { claudeIdentitySatisfied, fallbackSetDigest, fixedRuntimeDecision } from "./model-routing/select.mjs";
+import { CLAUDE_AGENT_MODEL_ALIASES, validateClaudeModelEffort } from "./model-routing/claude.mjs";
 import { validBinding } from "./model-routing/state-schema.mjs";
 import { build as buildOracle, dispatch as dispatchOracle, oracleSessionSlug } from "../skills/oracle/scripts/oracle-route.mjs";
 
@@ -159,8 +163,231 @@ function policyDigest(policy) {
   return validated.policy.digest;
 }
 
-function ownerPolicy() {
+function examplePolicy() {
   return JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../references/model-routing.example.json"), "utf8"));
+}
+
+// The strict adapter regression fixture preserves an explicitly configured
+// older fleet policy; it is not the native default or the current example.
+function legacyPolicy() {
+  return {
+    "schemaVersion": 1,
+    "providers": {
+      "claude": {
+        "carrierId": "claude-session",
+        "executionSurface": "provider_subscription",
+        "account": "claude-sub",
+        "locality": "external",
+        "retention": "provider_default",
+        "harness": "claude"
+      },
+      "codex_luna": {
+        "carrierId": "codex-luna",
+        "executionSurface": "codex",
+        "account": "codex-sub",
+        "locality": "external",
+        "retention": "provider_default",
+        "harness": "codex"
+      },
+      "codex_sol": {
+        "carrierId": "codex-sol",
+        "executionSurface": "codex",
+        "account": "codex-sub",
+        "locality": "external",
+        "retention": "provider_default",
+        "harness": "codex"
+      },
+      "codex_daybreak_blue": {
+        "carrierId": "codex-daybreak-blue",
+        "executionSurface": "codex",
+        "account": "codex-sub",
+        "locality": "external",
+        "retention": "provider_default",
+        "harness": "codex"
+      },
+      "codex_terra": {
+        "carrierId": "codex-terra-runtime",
+        "executionSurface": "codex",
+        "account": "codex-sub",
+        "locality": "external",
+        "retention": "provider_default",
+        "harness": "codex"
+      },
+      "zai": {
+        "carrierId": "glm-5-2-engineer",
+        "executionSurface": "provider_subscription",
+        "account": "zai-credits",
+        "locality": "same_region",
+        "retention": "ephemeral",
+        "harness": "codex",
+        "availability": {
+          "kind": "codex_config",
+          "section": "model_providers.zai_litellm"
+        }
+      }
+    },
+    "models": {
+      "fable": {
+        "provider": "claude",
+        "carrierId": "claude-session",
+        "requestedModel": "fable",
+        "effort": "high",
+      "efforts": ["high", "max"],
+        "roles": ["implementation.hard"],
+        "relativeCostIndex": 100
+      },
+      "sonnet": {
+        "provider": "claude",
+        "carrierId": "claude-session",
+        "requestedModel": "sonnet",
+        "efforts": ["medium"],
+        "roles": ["implementation.medium", "implementation.long-running"],
+        "relativeCostIndex": 30
+      },
+      "haiku": {
+        "provider": "claude",
+        "carrierId": "claude-session",
+        "requestedModel": "haiku",
+        "efforts": ["low"],
+        "roles": ["implementation.mechanical"],
+        "relativeCostIndex": 10
+      },
+      "sol": {
+        "provider": "codex_sol",
+        "carrierId": "codex-sol",
+        "requestedModel": "gpt-5.6-sol",
+        "effort": "high",
+      "efforts": ["high", "max"],
+        "roles": ["implementation.hard", "orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
+        "relativeCostIndex": 80
+      },
+      "sol_max": {
+        "provider": "codex_sol",
+        "carrierId": "codex-sol",
+        "requestedModel": "gpt-5.6-sol",
+        "efforts": ["max"],
+        "roles": ["implementation.hard"],
+        "relativeCostIndex": 80
+      },
+      "daybreak_blue": {
+        "provider": "codex_daybreak_blue",
+        "carrierId": "codex-daybreak-blue",
+        "requestedModel": "gpt-daybreak-blue-latest",
+        "effort": "high",
+      "efforts": ["high", "max"],
+        "roles": ["security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
+        "relativeCostIndex": 80
+      },
+      "terra": {
+        "provider": "codex_terra",
+        "carrierId": "codex-terra-runtime",
+        "requestedModel": "gpt-5.6-terra",
+        "efforts": ["max"],
+        "roles": ["implementation.medium", "implementation.long-running"],
+        "relativeCostIndex": 60
+      },
+      "luna": {
+        "provider": "codex_luna",
+        "carrierId": "codex-luna",
+        "requestedModel": "gpt-5.6-luna",
+        "efforts": ["max"],
+        "roles": ["implementation", "implementation.medium", "implementation.long-running", "implementation.mechanical", "implementation.cross-harness"],
+        "relativeCostIndex": 20
+      },
+      "glm": {
+        "provider": "zai",
+        "carrierId": "glm-5-2-engineer",
+        "requestedModel": "glm-5.2",
+        "efforts": ["xhigh"],
+        "roles": ["implementation.cross-harness"],
+        "relativeCostIndex": 1
+      }
+    },
+    "roles": {
+      "orchestration": {
+        "tiers": [["sol"]]
+      },
+      "review": {
+        "tiers": [["sol"]]
+      },
+      "review.code": {
+        "tiers": [["sol"]]
+      },
+      "review.plan": {
+        "tiers": [["sol"]]
+      },
+      "review.primary": {
+        "tiers": [["sol"]]
+      },
+      "review.cross_family": {
+        "tiers": [["sol"]]
+      },
+      "security.review": {
+        "tiers": [["daybreak_blue"], ["sol"]]
+      },
+      "security.threat-model": {
+        "tiers": [["daybreak_blue"], ["sol"]]
+      },
+      "security.trust": {
+        "tiers": [["daybreak_blue"], ["sol"]]
+      },
+      "security.redaction": {
+        "tiers": [["daybreak_blue"], ["sol"]]
+      },
+      "security.signing": {
+        "tiers": [["daybreak_blue"], ["sol"]]
+      },
+      "security.attack-shape": {
+        "tiers": [["daybreak_blue"], ["sol"]]
+      },
+      "security.audit": {
+        "tiers": [["daybreak_blue"], ["sol"]]
+      },
+      "implementation": {
+        "tiers": [["luna"]]
+      },
+      "implementation.hard": {
+        "tiers": [["fable", "sol_max"]]
+      },
+      "implementation.medium": {
+        "tiers": [["sonnet", "terra", "luna"]]
+      },
+      "implementation.long-running": {
+        "tiers": [["sonnet", "terra", "luna"]]
+      },
+      "implementation.mechanical": {
+        "tiers": [["haiku", "luna"]]
+      },
+      "implementation.cross-harness": {
+        "tiers": [
+          {
+            "models": ["luna", "glm"],
+            "softPriorities": ["cost"]
+          }
+        ]
+      }
+    },
+    "budgets": {
+      "task": {
+        "claude_subscription": {"soft": "100"},
+        "codex_subscription": {"soft": "100"},
+        "zai_credits": {"soft": "100"}
+      },
+      "run": {
+        "claude_subscription": {"soft": "1000"},
+        "codex_subscription": {"soft": "1000"},
+        "zai_credits": {"soft": "1000"}
+      },
+      "project": {
+        "claude_subscription": {"soft": "10000"},
+        "codex_subscription": {"soft": "10000"},
+        "zai_credits": {"soft": "10000"}
+      }
+    },
+    "learning": {
+      "enabled": true
+    }
+  };
 }
 
 function dispatchIdentity(adapterId, { hostScope = "local", accountScope = "local", sessionId = "session-one" } = {}) {
@@ -211,7 +438,7 @@ function refreshAttestor({ observedModel, capabilities = [], authState = "authen
   };
 }
 
-function attestedCapability(policy, { carrierId = "glm-5-2-engineer", adapterId = "configured-profile-task-create", hostScope = "local", accountScope = "plan", observedModel = "glm-5.2", capabilities = [] } = {}) {
+function attestedCapability(policy, { carrierId = "glm-5-2-engineer", adapterId = "configured-profile-task-create", hostScope = "local", accountScope = "plan", observedModel = "glm-5.2", capabilities = [], fallbackSetDigest } = {}) {
   const state = createEmptyState();
   const record = {
     carrierId,
@@ -231,6 +458,7 @@ function attestedCapability(policy, { carrierId = "glm-5-2-engineer", adapterId 
     attestorId: "railyard-host-attestor-v1",
     attestationDigest: DIGEST_A,
   };
+  if (fallbackSetDigest !== undefined) record.fallbackSetDigest = fallbackSetDigest;
   record.attestedFactsDigest = stableDigest(capabilityFacts(record, record));
   state.capabilities.capability_one = record;
   assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
@@ -371,12 +599,473 @@ function r52Readiness() {
   };
 }
 
-test("the built-in route stays Luna Max, and no-config task messages fail closed without a resolver-owned prior route", () => {
+test("native model capabilities distinguish exposed overrides from broader provider catalogs", () => {
+  assert.equal(validateNativeModelEffort("gpt-6-astra", "max").ok, true);
+  assert.equal(validateNativeModelEffort("gpt-6-astra", "ultra").ok, true);
+  assert.equal(validateNativeModelEffort("gpt-5.6-terra", "ultra").ok, true);
+  assert.equal(validateNativeModelEffort("gpt-daybreak-blue-latest", "ultra").ok, true);
+  assert.equal(validateNativeModelEffort("gpt-5.6-luna", "max").ok, true);
+  assert.equal(validateNativeModelEffort("gpt-5.6-luna", "ultra").reason, "effort_unsupported");
+  assert.equal(validateNativeModelEffort("combo/grok-unified-4.6", "xhigh").ok, true);
+  assert.equal(validateNativeModelEffort("combo/grok-unified-4.6", "max").reason, "effort_unsupported");
+  for (const model of ["gpt-5.6-sol", "cursor/composer-2.5", "zai/glm-5.3[1m]", "__proto__", undefined]) {
+    assert.equal(validateNativeModelEffort(model, "max").reason, "native_model_unsupported");
+  }
+  assert.equal(validateNativeModelEffort("gpt-6-astra", undefined).reason, "effort_unsupported");
+  assert.throws(() => NATIVE_MODEL_EFFORTS["gpt-5.6-luna"].push("ultra"), TypeError);
+});
+
+test("Claude selectors preserve release pins and compare hyphenated generations numerically", () => {
+  for (const model of ["fable", "fable-current", "fable[1m]"]) {
+    assert.deepEqual(parseClaudeFamily(model), { family: "fable", selector: "current" });
+  }
+  for (const model of ["claude-fable-5-1", "claude-fable-5-1[1m]", "fable:5.1", "fable-5.1"]) {
+    assert.deepEqual(parseClaudeFamily(model), { family: "fable", selector: "5.1" });
+  }
+  assert.deepEqual(parseClaudeFamily("claude-sonnet-4-5-20250929"), { family: "sonnet", selector: "4.5.20250929" });
+  for (const malformed of ["claude-fable-5--1", "claude-fable-5-1-extra", "claude-fable-5-1[2m]", "fable-5.1-2", "__proto__"]) {
+    assert.equal(parseClaudeFamily(malformed), null);
+  }
+  const current = { requestedModel: "fable", minimumGeneration: "5.1" };
+  assert.equal(claudeIdentitySatisfied(current, "claude-fable-5-1"), true);
+  assert.equal(claudeIdentitySatisfied(current, "claude-fable-5-10"), true);
+  assert.equal(claudeIdentitySatisfied(current, "claude-fable-5"), false);
+  assert.equal(claudeIdentitySatisfied(current, "fable[1m]"), false);
+  const snapshot = { requestedModel: "claude-sonnet-4-5-20250929", identityMode: "exact_pin" };
+  assert.equal(claudeIdentitySatisfied(snapshot, "claude-sonnet-4-5-20250929"), true);
+  assert.equal(claudeIdentitySatisfied(snapshot, "claude-sonnet-4-5-20251001"), false);
+});
+
+test("Claude Code effort capabilities are model-specific and do not extend Codex native support", () => {
+  assert.deepEqual(CLAUDE_AGENT_MODEL_ALIASES, ["sonnet", "opus", "haiku", "fable"]);
+  for (const model of ["fable", "claude-fable-5", "claude-fable-5-1", "claude-fable-5-1[1m]", "claude-opus-5", "claude-sonnet-5"]) {
+    for (const effort of ["low", "medium", "high", "xhigh", "max"]) assert.equal(validateClaudeModelEffort(model, effort).ok, true, `${model} ${effort}`);
+    assert.equal(validateClaudeModelEffort(model, "ultra").reason, "effort_unsupported");
+    assert.equal(validateNativeModelEffort(model, "max").reason, "native_model_unsupported");
+  }
+  for (const model of ["claude-opus-4-6", "claude-sonnet-4-6"]) {
+    assert.equal(validateClaudeModelEffort(model, "max").ok, true);
+    assert.equal(validateClaudeModelEffort(model, "xhigh").reason, "effort_unsupported");
+  }
+  assert.equal(validateClaudeModelEffort("claude-haiku-4-5-20251001", "low").reason, "effort_unsupported");
+  assert.equal(validateClaudeModelEffort("provider/custom-model", "high").reason, "claude_model_unverified");
+  assert.equal(validateClaudeModelEffort("claude-fable-99", "max").reason, "claude_model_unverified");
+});
+
+function claudePolicy(model = "claude-fable-5-1", { carrierId = "claude-ce-review", role = "review.code", ...modelFields } = {}) {
+  return {
+    schemaVersion: 1,
+    providers: { claude: { carrierId, executionSurface: "provider_subscription", account: "claude", harness: "claude" } },
+    models: { selected: { provider: "claude", carrierId, requestedModel: model, effort: "high", ...modelFields } },
+    roles: { [role]: { tiers: [["selected"]] } },
+  };
+}
+
+function claudePeerState(policy, observedModel = policy.models.selected.requestedModel) {
+  return attestedCapability(policy, {
+    carrierId: "claude-ce-review", adapterId: "claude-cli-via-worker", accountScope: "claude", observedModel,
+    fallbackSetDigest: fallbackSetDigest(policy.models.selected),
+  });
+}
+
+test("Fable 5.1 code and doc review routes preserve each deliberate effort and unverified applied effort", () => {
+  for (const [id, skill, role, schema] of [
+    ["ce-code-review.execution", "ce-code-review", "review.code", "railyard/ce-code-review-findings/v1"],
+    ["ce-doc-review.execution", "ce-doc-review", "review.plan", "railyard/ce-doc-review-findings/v1"],
+  ]) {
+    for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
+      const policy = claudePolicy("claude-fable-5-1", { role });
+      const state = claudePeerState(policy);
+      const fields = {
+        role, callerKind: "compound-engineering", harness: "claude", model: "claude-fable-5-1", effort, adapterId: "claude-cli-via-worker",
+        ceSeam: { id, skill, artifact: { schema, digest: DIGEST_A } },
+      };
+      const resolved = handleRequest(request("resolve", fields), { catalog: policy, state, now: NOW }).response;
+      assert.equal(resolved.reason, "resolved", JSON.stringify(resolved));
+      assert.equal(resolved.decision.selected.model, "claude-fable-5-1");
+      assert.equal(resolved.decision.selected.effort, effort);
+      assert.equal(resolved.decision.requestedVsActual.effectiveEffort, "unknown");
+      assert.equal(resolved.decision.binding.controls.claudeBinding, "ce-slot");
+      assert.equal(resolved.decision.fallback, undefined);
+      const admission = admit(policy, state, fields);
+      assert.equal(admission.reservation.selected.model, "claude-fable-5-1");
+      assert.equal(admission.reservation.selected.effort, effort);
+    }
+  }
+});
+
+test("Fable release pins and minimum generations refuse mismatched observations without admission or fallback", () => {
+  for (const [model, modelFields, observed, explicitModel, ok] of [
+    ["claude-fable-5-1", {}, "claude-fable-5", false, false],
+    ["claude-fable-5-1", { identityMode: "exact_pin" }, "fable", true, false],
+    ["fable", { identityMode: "provider_latest_family", minimumGeneration: "5.1" }, "claude-fable-5", false, false],
+    ["fable", { identityMode: "provider_latest_family", minimumGeneration: "5.1" }, "claude-fable-5-1", false, true],
+    ["claude-fable-5-1", { identityMode: "provider_latest_family" }, "claude-fable-5", true, false],
+  ]) {
+    const policy = claudePolicy(model, modelFields);
+    const state = claudePeerState(policy, observed);
+    const before = structuredClone(state);
+    const fields = {
+      role: "review.code", callerKind: "compound-engineering", harness: "claude", effort: "max", ...(explicitModel ? { model } : {}),
+      adapterId: "claude-cli-via-worker", ceSeam: { id: "ce-code-review.execution", skill: "ce-code-review", artifact: { schema: "railyard/ce-code-review-findings/v1", digest: DIGEST_A } },
+    };
+    const resolved = handleRequest(request("resolve", fields), { catalog: policy, state, now: NOW }).response;
+    assert.equal(resolved.ok, ok, JSON.stringify(resolved));
+    if (ok) {
+      assert.equal(resolved.decision.selected.model, observed);
+      continue;
+    }
+    assert.deepEqual(resolved.rejectedAlternatives, [{ modelAlias: "selected", reason: "claude_identity_mismatch" }]);
+    const refused = handleRequest(request("admit", { ...fields, requestId: "mismatched-fable", frozenInputDigest: DIGEST_A, scopes: { task: "claude-task" } }), { catalog: policy, state, now: NOW });
+    assert.equal(refused.response.reason, "no_eligible_route");
+    assert.equal(refused.changed, false);
+    assert.deepEqual(state, before);
+  }
+});
+
+test("native Claude Agent routes retain aliases and refuse unmappable full IDs and context suffixes", () => {
+  for (const model of ["fable", "claude-fable-5-1", "fable[1m]"]) {
+    const policy = claudePolicy(model, { carrierId: "claude-session", role: "implementation.hard" });
+    const fields = { role: "implementation.hard", harness: "claude", model, effort: "max", adapterId: "claude-session-create" };
+    const state = createEmptyState();
+    const resolved = handleRequest(request("resolve", fields), { catalog: policy, state, now: NOW }).response;
+    if (model === "fable") {
+      assert.equal(resolved.reason, "resolved", JSON.stringify(resolved));
+      assert.equal(resolved.decision.selected.model, "fable");
+      assert.equal(resolved.decision.requestedVsActual.effectiveEffort, "unknown");
+    } else if (model === "fable[1m]") {
+      assert.equal(resolved.reason, "invalid_model");
+    } else {
+      assert.equal(resolved.reason, "no_eligible_route", JSON.stringify(resolved));
+      assert.deepEqual(resolved.rejectedAlternatives, [{ modelAlias: "selected", reason: "claude_agent_model_unsupported" }]);
+    }
+    assert.equal(handleRequest(request("resolve", { model, effort: "max" }), { now: NOW }).response.reason, model === "fable[1m]" ? "invalid_model" : "native_model_unsupported");
+  }
+});
+
+test("native Claude Agent decisions keep a callable alias after attesting the resolved Fable release", () => {
+  const policy = claudePolicy("fable", { carrierId: "claude-session", role: "implementation.hard" });
+  const state = attestedCapability(policy, {
+    carrierId: "claude-session", adapterId: "claude-session-create", accountScope: "claude", observedModel: "claude-fable-5-1",
+  });
+  const fields = { role: "implementation.hard", harness: "claude", model: "fable", effort: "max", adapterId: "claude-session-create" };
+  const resolved = handleRequest(request("resolve", fields), { catalog: policy, state, now: NOW }).response;
+  assert.equal(resolved.reason, "resolved", JSON.stringify(resolved));
+  const decision = resolved.decision;
+  const agentModel = decision.selected.model;
+  assert.equal(agentModel, "fable");
+  assert.equal(CLAUDE_AGENT_MODEL_ALIASES.includes(agentModel), true);
+  assert.equal(decision.selected.effort, "max");
+  assert.equal(decision.selected.observedModel, "claude-fable-5-1");
+  assert.equal(decision.requestedVsActual.observedModel, "claude-fable-5-1");
+  assert.equal(decision.requestedVsActual.effectiveEffort, "unknown");
+  assert.deepEqual(decision.disclosure.observed.model, { value: "claude-fable-5-1", provenance: "capability_attestation" });
+  const admission = admit(policy, state, fields);
+  assert.equal(admission.reservation.selected.model, "fable");
+  assert.equal(admission.reservation.selected.observedModel, "claude-fable-5-1");
+  assert.equal(validateState(state).ok, true);
+
+  // Records made before the dispatch-alias correction remain readable with
+  // their original selected identity and unchanged adapter control binding.
+  const historical = structuredClone(state);
+  const stored = historical.reservations[admission.reservation.reservationId];
+  stored.selected.model = "claude-fable-5-1";
+  stored.decision.selected.model = "claude-fable-5-1";
+  assert.deepEqual(stored.binding, admission.reservation.binding);
+  assert.equal(validateState(historical).ok, true);
+  assert.equal(handleRequest(request("status"), { catalog: policy, state: historical, now: NOW }).response.ok, true);
+});
+
+test("Claude review efforts cannot exceed the observed model or fixed CE seam controls", () => {
+  for (const [model, observed, effort, seam, reason] of [
+    ["claude-opus-4-6", "claude-opus-4-6", "xhigh", "code", "effort_unsupported"],
+    ["opus", "claude-opus-4-6", "xhigh", "code", "effort_unsupported"],
+    ["claude-fable-5-1", "claude-fable-5-1", "max", "pov", "ce_effort_unsupported"],
+  ]) {
+    const role = seam === "pov" ? "review.cross_family" : "review.code";
+    const policy = claudePolicy(model, { role });
+    const state = claudePeerState(policy, observed);
+    const ceSeam = seam === "pov"
+      ? { id: "ce-pov.execution", skill: "ce-pov", artifact: { schema: "railyard/ce-pov-review/v1", digest: DIGEST_A } }
+      : { id: "ce-code-review.execution", skill: "ce-code-review", artifact: { schema: "railyard/ce-code-review-findings/v1", digest: DIGEST_A } };
+    const resolved = handleRequest(request("resolve", { role, callerKind: "compound-engineering", harness: "claude", effort, adapterId: "claude-cli-via-worker", ceSeam }), { catalog: policy, state, now: NOW }).response;
+    assert.equal(resolved.reason, "no_eligible_route", JSON.stringify(resolved));
+    assert.deepEqual(resolved.rejectedAlternatives, [{ modelAlias: "selected", reason }]);
+  }
+});
+
+test("Claude CE review routes reject unverified configured and observed model-effort pairs", () => {
+  const configuredUnknown = claudePolicy("claude-fable-99", { identityMode: "provider_latest_family" });
+  const configuredUnknownResponse = handleRequest(request("resolve", {
+    role: "review.code", callerKind: "compound-engineering", harness: "claude", effort: "max", adapterId: "claude-cli-via-worker",
+    ceSeam: { id: "ce-code-review.execution", skill: "ce-code-review", artifact: { schema: "railyard/ce-code-review-findings/v1", digest: DIGEST_A } },
+  }), { catalog: configuredUnknown, state: claudePeerState(configuredUnknown), now: NOW }).response;
+  assert.equal(configuredUnknownResponse.reason, "no_eligible_route", JSON.stringify(configuredUnknownResponse));
+  assert.deepEqual(configuredUnknownResponse.rejectedAlternatives, [{ modelAlias: "selected", reason: "claude_model_unverified" }]);
+
+  const observedUnknown = claudePolicy("fable", { identityMode: "provider_latest_family" });
+  const observedUnknownResponse = handleRequest(request("resolve", {
+    role: "review.code", callerKind: "compound-engineering", harness: "claude", effort: "max", adapterId: "claude-cli-via-worker",
+    ceSeam: { id: "ce-code-review.execution", skill: "ce-code-review", artifact: { schema: "railyard/ce-code-review-findings/v1", digest: DIGEST_A } },
+  }), { catalog: observedUnknown, state: claudePeerState(observedUnknown, "claude-fable-99"), now: NOW }).response;
+  assert.equal(observedUnknownResponse.reason, "no_eligible_route", JSON.stringify(observedUnknownResponse));
+  assert.deepEqual(observedUnknownResponse.rejectedAlternatives, [{ modelAlias: "selected", reason: "claude_model_unverified" }]);
+});
+
+test("default allocation preserves requested pairs and rejects unsupported choices without substitution", () => {
+  for (const [model, effort] of [["gpt-6-astra", "low"], ["gpt-5.6-terra", "ultra"], ["gpt-5.6-luna", "high"], ["combo/grok-unified-4.6", "xhigh"]]) {
+    const resolved = handleRequest(request("resolve", { model, effort }), { now: NOW });
+    assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
+    assert.equal(resolved.response.decision.selected.model, model);
+    assert.equal(resolved.response.decision.selected.effort, effort);
+    assert.deepEqual(resolved.response.decision.disclosure.requested.model, { value: model, provenance: "request" });
+    assert.equal(resolved.response.decision.fallback, undefined);
+    assert.equal(resolved.response.decision.requestedVsActual.observedModel, "unknown");
+  }
+  const effortOnly = handleRequest(request("resolve", { effort: "medium" }), { now: NOW });
+  assert.equal(effortOnly.response.decision.selected.model, "gpt-6-astra");
+  assert.equal(effortOnly.response.decision.selected.effort, "medium");
+  for (const [model, effort] of [["gpt-5.6-luna", "ultra"], ["combo/grok-unified-4.6", "max"]]) {
+    const rejected = handleRequest(request("resolve", { model, effort }), { now: NOW });
+    assert.equal(rejected.response.reason, "effort_unsupported");
+    assert.equal(rejected.response.decision, undefined);
+  }
+  assert.equal(handleRequest(request("resolve", { model: "gpt-5.6-sol", effort: "max" }), { now: NOW }).response.reason, "native_model_unsupported");
+  assert.equal(handleRequest(request("resolve", { model: "gpt-5.6-luna" }), { now: NOW }).response.reason, "effort_required");
+  assert.equal(handleRequest(request("resolve", { explicitModelRequirement: true }), { now: NOW }).response.reason, "explicit_model_required");
+});
+
+test("the example uses Astra Max without an invented cost ranking and honors explicit alternatives", () => {
+  const policy = examplePolicy();
+  assert.equal(validateCatalog(policy).ok, true);
+  assert.equal(Object.hasOwn(policy, "budgets"), false);
+  for (const model of Object.values(policy.models)) assert.equal(Object.hasOwn(model, "relativeCostIndex"), false);
+  for (const role of ["implementation", "implementation.hard", "implementation.bounded_fix", "orchestration", "review.primary"]) {
+    const resolved = handleRequest(request("resolve", { role, harness: "codex" }), { catalog: policy, now: NOW });
+    assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
+    assert.equal(resolved.response.decision.selected.model, "gpt-6-astra");
+    assert.equal(resolved.response.decision.selected.effort, "max");
+  }
+  const override = handleRequest(request("resolve", { role: "review.primary", harness: "codex", model: "gpt-5.6-luna", effort: "medium" }), { catalog: policy, now: NOW });
+  assert.equal(override.response.reason, "resolved", JSON.stringify(override.response));
+  assert.equal(override.response.decision.selected.model, "gpt-5.6-luna");
+  assert.equal(override.response.decision.selected.effort, "medium");
+  const unsupported = handleRequest(request("resolve", { harness: "codex", model: "gpt-5.6-luna", effort: "ultra" }), { catalog: policy, now: NOW });
+  assert.equal(unsupported.response.reason, "no_eligible_route");
+  assert.equal(unsupported.response.rejectedAlternatives[0].reason, "effort_unsupported");
+  const invalid = examplePolicy();
+  invalid.models.luna.efforts.push("ultra");
+  assert.equal(validateCatalog(invalid).reason, "effort_unsupported");
+});
+
+test("supported effort enumeration cannot silently choose an operating point", () => {
+  const policy = examplePolicy();
+  policy.roles.implementation = { tiers: [["terra"]] };
+  const missing = handleRequest(request("resolve", { harness: "codex" }), { catalog: policy, now: NOW });
+  assert.equal(missing.response.reason, "no_eligible_route");
+  assert.equal(missing.response.rejectedAlternatives[0].reason, "effort_selection_required");
+  assert.equal(missing.response.decision, undefined);
+  const explicit = handleRequest(request("resolve", { harness: "codex", effort: "max" }), { catalog: policy, now: NOW });
+  assert.equal(explicit.response.decision.selected.effort, "max");
+  policy.models.terra.effort = "high";
+  const configured = handleRequest(request("resolve", { harness: "codex" }), { catalog: policy, now: NOW });
+  assert.equal(configured.response.decision.selected.effort, "high");
+  delete policy.models.terra.effort;
+  policy.models.terra.efforts = ["medium"];
+  const sole = handleRequest(request("resolve", { harness: "codex" }), { catalog: policy, now: NOW });
+  assert.equal(sole.response.decision.selected.effort, "medium");
+});
+
+test("contradictory observed native identity cannot replace the requested model or create an unsupported pair", () => {
+  const policy = examplePolicy();
+  const state = attestedCapability(policy, { carrierId: "codex-astra", adapterId: "native-subagent-create", accountScope: "codex-account", observedModel: "gpt-5.6-luna" });
+  assert.equal(validateState(state).ok, true);
+  const resolved = handleRequest(request("resolve", { harness: "codex", model: "gpt-6-astra", effort: "ultra" }), { catalog: policy, state, now: NOW });
+  assert.equal(resolved.response.reason, "no_eligible_route");
+  assert.equal(resolved.response.rejectedAlternatives[0].reason, "observed_model_mismatch");
+  assert.equal(resolved.response.decision, undefined);
+});
+
+test("an explicitly configured fallback is disclosed and cannot replace an explicit model request", () => {
+  const policy = examplePolicy();
+  policy.roles["security.review"] = { tiers: [["daybreak_blue"], ["astra"]] };
+  const fields = { role: "security.review", harness: "codex", effort: "max" };
+  const fallback = handleRequest(request("resolve", fields), { catalog: policy, now: NOW });
+  assert.equal(fallback.response.reason, "resolved", JSON.stringify(fallback.response));
+  assert.equal(fallback.response.decision.selected.model, "gpt-6-astra");
+  assert.equal(fallback.response.decision.fallback.reason, "configured_model_substitute");
+  assert.equal(fallback.response.decision.rejectedAlternatives[0].reason, "daybreak_unavailable");
+  const explicit = handleRequest(request("resolve", { ...fields, model: "gpt-daybreak-blue-latest" }), { catalog: policy, now: NOW });
+  assert.equal(explicit.response.reason, "no_eligible_route");
+  assert.equal(explicit.response.decision, undefined);
+  assert.equal(explicit.response.rejectedAlternatives[0].reason, "daybreak_unavailable");
+  policy.roles["security.review"] = { tiers: [["daybreak_blue", "astra"]] };
+  const sameTier = handleRequest(request("resolve", fields), { catalog: policy, now: NOW });
+  assert.equal(sameTier.response.decision.fallback.reason, "configured_model_substitute");
+
+  const state = createEmptyState();
+  const admission = admit(policy, state, { ...fields, scopes: { task: "fallback-task" }, forecast: {} });
+  assert.equal(admission.decision.fallback.reason, "configured_model_substitute");
+  assert.equal(admission.decision.rejectedAlternatives[0].reason, "daybreak_unavailable");
+  const identity = dispatchIdentity("native-subagent-create", { accountScope: admission.reservation.binding.accountScope, sessionId: "fallback-session" });
+  const claimed = claim(policy, state, admission, { identity });
+  const priorRoute = {
+    reservationId: admission.reservation.reservationId,
+    claimId: claimed.response.claimId,
+    carrierId: admission.reservation.selected.carrierId,
+    model: admission.reservation.selected.model,
+    effort: admission.reservation.selected.effort,
+    adapterId: admission.reservation.binding.adapterId,
+    adapterVersion: admission.reservation.binding.adapterVersion,
+    policyDigest: admission.reservation.policyDigest,
+    hostScope: identity.hostScope,
+    accountScope: identity.accountScope,
+    sessionId: identity.sessionId,
+    toolId: identity.toolId,
+    toolVersion: identity.toolVersion,
+    workClassDigest: admission.reservation.workClassDigest,
+  };
+  const continuation = {
+    ...fields,
+    adapterId: "native-subagent-message", dispatchKind: "subagent_message",
+    priorRoute, priorWorkClassDigest: admission.reservation.workClassDigest,
+    dispatchIdentity: { ...identity, dispatchKind: "subagent_message" },
+  };
+  const neutral = handleRequest(request("resolve", { ...continuation, budgetEffect: "none", actionId: "fallback-status" }), { catalog: policy, state, now: NOW });
+  assert.equal(neutral.response.reason, "resolved", JSON.stringify(neutral.response));
+  assert.equal(neutral.response.decision.actionReceipt.fallbackReason, "configured_model_substitute");
+  const topup = handleRequest(request("admit", {
+    ...continuation, budgetEffect: "adjust_active", requestId: "fallback-topup", activeReservationId: admission.reservation.reservationId,
+    frozenInputDigest: DIGEST_A, forecast: {}, scopes: { task: "fallback-task" },
+  }), { catalog: policy, state, now: NOW });
+  assert.equal(topup.response.reason, "active_budget_adjusted", JSON.stringify(topup.response));
+  assert.equal(topup.response.actionReceipt.fallbackReason, "configured_model_substitute");
+});
+
+test("omitted native adapter fields select and admit a subagent without configuration", () => {
+  // Construct the public request directly: the shared factory supplies the
+  // very adapter and dispatch fields whose omission this regression covers.
+  const fields = { contractVersion: CONTRACT_VERSION, role: "implementation", model: "gpt-6-astra", effort: "max" };
+  const state = createEmptyState();
+  const resolved = handleRequest({ ...fields, command: "resolve" }, { state, now: NOW });
+  assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
+  assert.equal(resolved.response.decision.binding.adapterId, "native-subagent-create");
+  assert.equal(resolved.response.decision.binding.dispatchKind, "subagent_create");
+  assert.equal(resolved.response.decision.binding.contextFork, "none");
+  assert.deepEqual(resolved.response.decision.binding.controls, { model: "model", effort: "reasoning_effort" });
+  const admitted = handleRequest({ ...fields, command: "admit", requestId: "default-native" }, { state, now: NOW });
+  assert.equal(admitted.response.reason, "default_route_no_state", JSON.stringify(admitted.response));
+  assert.equal(admitted.response.decision.binding.adapterId, "native-subagent-create");
+  assert.equal(admitted.response.claimRequired, false);
+  assert.equal(admitted.changed, false);
+
+  const visible = { ...fields, adapterId: "codex-task-create", dispatchKind: "task_create" };
+  const explicit = handleRequest({ ...visible, command: "resolve" }, { state, now: NOW });
+  assert.equal(explicit.response.decision.binding.adapterId, "codex-task-create");
+  const blocked = handleRequest({ ...visible, command: "admit", requestId: "explicit-visible" }, { state, now: NOW });
+  assert.equal(blocked.response.reason, "visible_task_authority_required");
+});
+
+test("omitted native adapter fields select and admit a subagent for supported configured Codex carriers", () => {
+  const cases = [
+    ["codex-astra", "gpt-6-astra", "implementation", "max"],
+    ["codex-terra", "gpt-5.6-terra", "implementation", "max"],
+    ["codex-grok", "combo/grok-unified-4.6", "implementation", "xhigh"],
+    ["codex-luna", "gpt-5.6-luna", "implementation", "max"],
+    ["codex-daybreak-blue", "gpt-daybreak-blue-latest", "implementation", "max"],
+    ["codex-terra-runtime", "gpt-5.6-terra", "implementation", "max"],
+  ];
+  for (const [carrierId, model, role, effort] of cases) {
+    const policy = {
+      schemaVersion: 1,
+      providers: { codex: { carrierId, executionSurface: "codex", account: "local" } },
+      models: { selected: { provider: "codex", carrierId, requestedModel: model, effort } },
+      roles: { [role]: { tiers: [["selected"]] } },
+    };
+    const state = carrierId === "codex-terra-runtime"
+      ? attestedCapability(policy, { carrierId, adapterId: "native-subagent-create", accountScope: "local", observedModel: model })
+      : createEmptyState();
+    if (carrierId === "codex-daybreak-blue") {
+      state.daybreakAvailability = { available: true, checkedAt: new Date(NOW).toISOString() };
+      state.daybreakCatalogDigest = policyDigest(policy);
+    }
+    const context = { catalog: policy, state, now: NOW };
+    if (carrierId === "codex-terra-runtime") context.trustedRuntimeAttestor = ({ hostScope, accountScope }) => ({
+      attestorId: "railyard-runtime-attestor-v1", attestationDigest: DIGEST_A,
+      lunaAvailability: "unavailable", terra: { verified: true, model, effort }, hostScope, accountScope,
+    });
+    const fields = { contractVersion: CONTRACT_VERSION, role, model, effort };
+    const resolved = handleRequest({ ...fields, command: "resolve" }, context);
+    assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
+    assert.equal(resolved.response.decision.selected.carrierId, carrierId);
+    assert.equal(resolved.response.decision.binding.adapterId, "native-subagent-create", carrierId);
+    assert.equal(resolved.response.decision.binding.dispatchKind, "subagent_create", carrierId);
+    const admitted = handleRequest({
+      ...fields, command: "admit", requestId: "configured-native", frozenInputDigest: DIGEST_A, scopes: { task: "native-task" }, forecast: {},
+    }, context);
+    assert.equal(admitted.response.reason, "admitted", JSON.stringify(admitted.response));
+    assert.equal(admitted.response.reservation.binding.adapterId, "native-subagent-create", carrierId);
+    assert.equal(admitted.response.reservation.binding.dispatchKind, "subagent_create", carrierId);
+    if (carrierId === "codex-astra") {
+      const visible = { ...fields, adapterId: "codex-task-create", dispatchKind: "task_create" };
+      assert.equal(handleRequest({ ...visible, command: "resolve" }, context).response.decision.binding.adapterId, "codex-task-create");
+      const blocked = handleRequest({
+        ...visible, command: "admit", requestId: "configured-visible", frozenInputDigest: DIGEST_A, scopes: { task: "visible-task" }, forecast: {},
+      }, context);
+      assert.equal(blocked.response.reason, "visible_task_authority_required");
+    }
+  }
+});
+
+test("configured native creation refuses unsupported model and effort pairs before admission", () => {
+  for (const [carrierId, model, role, effort, reason] of [
+    ["codex-sol", "gpt-5.6-sol", "implementation.hard", "max", "native_model_unsupported"],
+    ["codex-luna", "gpt-5.6-luna", "implementation", "ultra", "effort_unsupported"],
+  ]) {
+    const policy = {
+      schemaVersion: 1,
+      providers: { codex: { carrierId, executionSurface: "codex", account: "local" } },
+      models: { selected: { provider: "codex", carrierId, requestedModel: model, effort: "max" } },
+      roles: { [role]: { tiers: [["selected"]] } },
+    };
+    const state = createEmptyState();
+    const before = structuredClone(state);
+    const context = { catalog: policy, state, now: NOW };
+    const fields = { contractVersion: CONTRACT_VERSION, role, model, effort };
+    for (const adapter of [{}, { adapterId: "native-subagent-create", dispatchKind: "subagent_create" }]) {
+      for (const command of ["resolve", "admit"]) {
+        const refused = handleRequest({
+          ...fields, ...adapter, command, requestId: "unsupported-native", frozenInputDigest: DIGEST_A, scopes: { task: "native-task" }, forecast: {},
+        }, context);
+        assert.equal(refused.response.reason, "no_eligible_route", JSON.stringify(refused.response));
+        assert.deepEqual(refused.response.rejectedAlternatives, [{ modelAlias: "selected", reason }]);
+        assert.equal(refused.changed, false);
+        assert.deepEqual(state, before);
+      }
+    }
+    if (carrierId === "codex-sol") {
+      const visible = { ...fields, adapterId: "codex-task-create", dispatchKind: "task_create" };
+      const resolved = handleRequest({ ...visible, command: "resolve" }, context);
+      assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
+      assert.equal(resolved.response.decision.selected.model, model);
+      assert.equal(resolved.response.decision.binding.adapterId, "codex-task-create");
+      const blocked = handleRequest({
+        ...visible, command: "admit", requestId: "legacy-visible", frozenInputDigest: DIGEST_A, scopes: { task: "visible-task" }, forecast: {},
+      }, context);
+      assert.equal(blocked.response.reason, "visible_task_authority_required");
+      assert.equal(blocked.changed, false);
+      assert.deepEqual(state, before);
+    }
+  }
+});
+
+test("the built-in route proposes Astra Max, and no-config task messages fail closed without a resolver-owned prior route", () => {
   const state = createEmptyState();
   const resolved = handleRequest(request("resolve"), { state, now: NOW });
   assert.equal(resolved.response.ok, true);
-  assert.equal(resolved.response.decision.selected.model, "gpt-5.6-luna");
+  assert.equal(resolved.response.decision.selected.model, "gpt-6-astra");
   assert.equal(resolved.response.decision.selected.effort, "max");
+  assert.equal(resolved.response.decision.binding.contextFork, "none");
   assert.equal(resolved.changed, false);
 
   const neutral = handleRequest(request("resolve", {
@@ -405,8 +1094,8 @@ test("the built-in route stays Luna Max, and no-config task messages fail closed
   assert.equal(validateState(state).ok, true);
 });
 
-test("the owner catalog selects Fable for hard Claude work and records an explicit Luna handoff reason", () => {
-  const policy = ownerPolicy();
+test("the configured legacy catalog selects Fable for hard Claude work and records an explicit Luna handoff reason", () => {
+  const policy = legacyPolicy();
   assert.equal(validateCatalog(policy).ok, true);
   const state = createEmptyState();
   const fable = handleRequest(request("resolve", {
@@ -485,7 +1174,7 @@ test("the owner catalog selects Fable for hard Claude work and records an explic
   assert.equal(crossHarnessWithoutReason.response.rejectedAlternatives.length > 0, true);
   assert.equal(crossHarnessWithoutReason.response.rejectedAlternatives.every((item) => item.reason === "cross_harness_reason_required"), true);
 
-  const review = handleRequest(request("resolve", { role: "review.code", harness: "codex" }), {
+  const review = handleRequest(request("resolve", { role: "review.code", harness: "codex", adapterId: "codex-task-create", dispatchKind: "task_create" }), {
     catalog: policy,
     state: createEmptyState(),
     now: NOW,
@@ -494,7 +1183,7 @@ test("the owner catalog selects Fable for hard Claude work and records an explic
   assert.equal(review.response.decision.selected.modelAlias, "sol");
   assert.equal(review.response.decision.selected.effort, "high");
   assert.equal(validBinding(review.response.decision.binding), true);
-  const crossFamily = handleRequest(request("resolve", { role: "review.cross_family", harness: "codex" }), {
+  const crossFamily = handleRequest(request("resolve", { role: "review.cross_family", harness: "codex", adapterId: "codex-task-create", dispatchKind: "task_create" }), {
     catalog: policy,
     state: createEmptyState(),
     now: NOW,
@@ -521,7 +1210,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
     privateDirectory(stateDirectory);
     const configPath = path.join(configDirectory, "model-routing.json");
     const statePath = path.join(stateDirectory, "model-routing-state.json");
-    fs.writeFileSync(configPath, JSON.stringify(ownerPolicy()));
+    fs.writeFileSync(configPath, JSON.stringify(legacyPolicy()));
     fs.chmodSync(configPath, 0o600);
     const v4 = createEmptyState();
     v4.stateSchemaVersion = 4;
@@ -534,7 +1223,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
       home,
       now: NOW,
     };
-    const securityRequest = request("resolve", { role: "security.review", harness: "codex" });
+    const securityRequest = request("resolve", { role: "security.review", harness: "codex", adapterId: "codex-task-create", dispatchKind: "task_create" });
     let probeCalls = 0;
     const available = await runCliAsync(securityRequest, {
       ...options,
@@ -549,7 +1238,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
     const cached = JSON.parse(fs.readFileSync(statePath, "utf8"));
     assert.equal(cached.stateSchemaVersion, 5);
     assert.deepEqual(cached.daybreakAvailability, { available: true, checkedAt: new Date(NOW).toISOString() });
-    assert.equal(cached.daybreakCatalogDigest, policyDigest(ownerPolicy()));
+    assert.equal(cached.daybreakCatalogDigest, policyDigest(legacyPolicy()));
 
     const fresh = await runCliAsync(securityRequest, {
       ...options,
@@ -589,11 +1278,13 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
     });
     assert.equal(recachedLegacy.decision.selected.model, "gpt-daybreak-blue-latest");
     assert.equal(probeCalls, 2);
-    assert.equal(JSON.parse(fs.readFileSync(statePath, "utf8")).daybreakCatalogDigest, policyDigest(ownerPolicy()));
+    assert.equal(JSON.parse(fs.readFileSync(statePath, "utf8")).daybreakCatalogDigest, policyDigest(legacyPolicy()));
 
     const remoteScope = await runCliAsync(request("resolve", {
       role: "security.review",
       harness: "codex",
+      adapterId: "codex-task-create",
+      dispatchKind: "task_create",
       hostScope: "remote-runner",
     }), {
       ...options,
@@ -608,6 +1299,8 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
     const differentAccount = await runCliAsync(request("resolve", {
       role: "security.review",
       harness: "codex",
+      adapterId: "codex-task-create",
+      dispatchKind: "task_create",
       accountScope: "different-account",
     }), {
       ...options,
@@ -619,7 +1312,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
     assert.equal(differentAccount.decision.selected.model, "gpt-5.6-sol");
     assert.equal(probeCalls, 2);
 
-    const changedCatalog = ownerPolicy();
+    const changedCatalog = legacyPolicy();
     changedCatalog.providers.codex_daybreak_blue.account = "codex-sub-b";
     const stateMtime = fs.statSync(statePath).mtime;
     fs.writeFileSync(configPath, JSON.stringify(changedCatalog));
@@ -751,6 +1444,8 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
     const nonSecurity = await runCliAsync(request("resolve", {
       role: "implementation.hard",
       harness: "codex",
+      adapterId: "codex-task-create",
+      dispatchKind: "task_create",
     }), {
       ...options,
       daybreakProbe: async () => {
@@ -802,7 +1497,7 @@ test("Daybreak availability state migrates v4 and validates its exact cache reco
 });
 
 test("a catalog has one Daybreak provider for its local state cache", () => {
-  const policy = ownerPolicy();
+  const policy = legacyPolicy();
   policy.providers.codex_daybreak_blue_b = {
     ...policy.providers.codex_daybreak_blue,
     account: "codex-sub-b",
@@ -815,7 +1510,7 @@ test("a catalog has one Daybreak provider for its local state cache", () => {
 });
 
 test("a catalog cannot bind Daybreak to another execution surface", () => {
-  const policy = ownerPolicy();
+  const policy = legacyPolicy();
   policy.providers.codex_daybreak_blue.executionSurface = "provider_subscription";
   const validation = validateCatalog(policy);
   assert.equal(validation.reason, "fixed_carrier_mismatch");
@@ -902,12 +1597,14 @@ test("the Daybreak App Server probe accepts only a visible exact selector and de
   assert.deepEqual(await unknownFrom(() => {}, 1), { available: null });
 });
 
-test("a catalog cannot promote Luna into a coordinator role", () => {
-  const policy = ownerPolicy();
+test("an explicit catalog role exclusion is enforced without inventing a model capability limit", () => {
+  const policy = legacyPolicy();
   policy.roles.orchestration = { tiers: [["luna", "sol"]] };
   const resolved = handleRequest(request("resolve", {
     role: "orchestration",
     harness: "codex",
+    adapterId: "codex-task-create",
+    dispatchKind: "task_create",
   }), { catalog: policy, state: createEmptyState(), now: NOW });
   assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
   assert.equal(resolved.response.decision.selected.modelAlias, "sol");
@@ -915,8 +1612,8 @@ test("a catalog cannot promote Luna into a coordinator role", () => {
   assert.equal(resolved.response.decision.rejectedAlternatives[0].reason, "role_ineligible");
 });
 
-test("the owner catalog keeps subscription meters separate and gates GLM on Codex config", () => {
-  const policy = ownerPolicy();
+test("the configured legacy catalog keeps subscription meters separate and gates GLM on Codex config", () => {
+  const policy = legacyPolicy();
   assert.deepEqual(Object.keys(policy.budgets.task).sort(), ["claude_subscription", "codex_subscription", "zai_credits"]);
   const previous = process.env.CODEX_HOME;
   const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), "railyard-codex-policy-"));
@@ -968,7 +1665,7 @@ test("the owner catalog keeps subscription meters separate and gates GLM on Code
 });
 
 test("configured runtime candidates fail closed when the trusted attestor is invalid", () => {
-  const policy = ownerPolicy();
+  const policy = legacyPolicy();
   for (const trustedRuntimeAttestor of [
     () => { throw new Error("attestor unavailable"); },
     () => ({}),
@@ -985,8 +1682,8 @@ test("configured runtime candidates fail closed when the trusted attestor is inv
   }
 });
 
-test("the owner catalog gives hard Codex implementation the max-effort Sol route", () => {
-  const policy = ownerPolicy();
+test("the configured legacy catalog gives hard Codex implementation the max-effort Sol route", () => {
+  const policy = legacyPolicy();
   const hardCodex = handleRequest(request("resolve", {
     role: "implementation.hard",
     harness: "codex",
@@ -1280,8 +1977,10 @@ test("a caller-authored receipt cannot settle a claim; an in-process importer bi
 });
 
 test("R28 decision, fallback, and settlement disclosures use explicit provenance without task content", () => {
-  const terra = handleRequest(request("resolve"), {
-    state: createEmptyState(),
+  const legacy = legacyPolicy();
+  const terra = handleRequest(request("resolve", { role: "implementation.medium", harness: "codex", model: "gpt-5.6-terra", effort: "max" }), {
+    catalog: legacy,
+    state: attestedCapability(legacy, { carrierId: "codex-terra-runtime", adapterId: "native-subagent-create", accountScope: "codex-sub", observedModel: "unknown" }),
     now: NOW,
     trustedRuntimeAttestor: () => ({
       attestorId: "railyard-runtime-attestor-v1",
@@ -1724,10 +2423,68 @@ test("carrier-neutral invariant work contracts keep seven closed presentation ov
   assert.equal(new Set(built.map((item) => item.contract.invariantDigest)).size, 1);
   assert.equal(new Set(built.map((item) => item.contract.presentationDigest)).size, fixtures.length);
   const invariantDigest = built[0].contract.invariantDigest;
+  const fable51 = buildInvariantWorkContract({ ...invariantInput, carrierId: "claude-ce-review", model: "claude-fable-5-1", effort: "max", expectedInvariantDigest: invariantDigest });
+  assert.equal(fable51.reason, "work_contract_built", JSON.stringify(fable51));
+  assert.equal(fable51.contract.presentation.family, "fable");
+  assert.equal(fable51.contract.presentation.model, "claude-fable-5-1");
+  assert.equal(fable51.contract.invariantDigest, invariantDigest);
   assert.equal(buildInvariantWorkContract({ ...invariantInput, carrierId: "codex-sol", model: "gpt-5.6-sol", effort: "high", expectedInvariantDigest: invariantDigest }).reason, "work_contract_built");
   assert.equal(buildInvariantWorkContract({ ...invariantInput, objectiveDigest: "2".repeat(64), carrierId: "codex-sol", model: "gpt-5.6-sol", effort: "high", expectedInvariantDigest: invariantDigest }).reason, "invariant_contract_mutation");
   assert.equal(buildInvariantWorkContract({ ...invariantInput, carrierId: "codex-sol", model: "unbound-model", effort: "high" }).reason, "presentation_overlay_mismatch");
   assert.equal(buildInvariantWorkContract({ ...invariantInput, carrierId: "codex-sol", model: "gpt-5.6-sol", effort: "high", prompt: "not metadata" }).reason, "invalid_work_contract");
+});
+
+test("Oracle v1 records remain readable and accounted but cannot attest or dispatch v2 controls", () => {
+  const policy = oraclePolicy();
+  policy.budgets = { task: { marginalUsd: { hardAdmission: "1" } } };
+  const state = attestedCapability(policy, { carrierId: "oracle-browser", adapterId: "oracle-browser", accountScope: "standard", observedModel: "gpt-6-pro" });
+  const admission = admit(policy, state, {
+    role: "review.deep", adapterId: "oracle-browser", requestId: "old-oracle",
+    scopes: { task: "old-oracle-budget" }, forecast: { marginalUsd: "1" },
+  });
+  const identity = dispatchIdentity("oracle-browser", { accountScope: "standard" });
+  const claimed = claim(policy, state, admission, { identity });
+
+  // Recreate a durable pre-upgrade record without rewriting its identity or
+  // releasing its still-outstanding reservation during the source upgrade.
+  for (const capability of Object.values(state.capabilities)) {
+    capability.carrierVersion = "v1";
+    capability.adapterVersion = "v1";
+    capability.observedModel = "gpt-5.6-sol";
+    capability.resolvedModelDigest = stableDigest(capability.observedModel);
+    capability.attestedFactsDigest = stableDigest(capabilityFacts(capability, capability));
+  }
+  const stored = state.reservations[admission.reservation.reservationId];
+  for (const selected of [stored.selected, stored.decision.selected]) {
+    selected.carrierVersion = "v1";
+    selected.adapterVersion = "v1";
+  }
+  stored.binding.adapterVersion = "v1";
+  stored.decision.binding.adapterVersion = "v1";
+  stored.claimed.toolVersion = "v1";
+  assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+  const before = stableDigest(state);
+  const status = handleRequest(request("status"), { catalog: policy, state, now: NOW });
+  assert.equal(status.response.reason, "status");
+  assert.equal(Object.values(status.response.readiness)[0].state, "unknown");
+  assert.equal(Object.values(status.response.readiness)[0].reason, "adapter_version_changed");
+  const resolved = handleRequest(request("resolve", { role: "review.deep", adapterId: "oracle-browser" }), { catalog: policy, state, now: NOW });
+  assert.equal(resolved.response.reason, "transport_unsupported");
+  const claimAgain = handleRequest(request("claim-dispatch", {
+    reservationId: stored.reservationId, frozenInputDigest: DIGEST_A, dispatchIdentity: { ...identity, toolVersion: "v1" },
+  }), { catalog: policy, state, now: NOW });
+  assert.equal(claimAgain.response.reason, "adapter_version_changed");
+  const inspected = handleRequest(request("inspect-claim", { claimId: claimed.response.claimId }), { catalog: policy, state, now: NOW });
+  assert.equal(inspected.response.reason, "adapter_version_changed");
+  const attemptedSettlement = handleRequest(request("reconcile", {
+    reservationId: stored.reservationId, frozenInputDigest: DIGEST_A, receipt: {},
+  }), { catalog: policy, state, now: NOW });
+  assert.equal(attemptedSettlement.response.reason, "adapter_version_changed");
+  const budget = handleRequest(request("admit", {
+    requestId: "other-work", scopes: { task: "old-oracle-budget" }, forecast: { marginalUsd: "1" }, frozenInputDigest: DIGEST_A,
+  }), { catalog: policy, state, now: NOW });
+  assert.equal(budget.response.reason, "hard_budget_exceeded");
+  assert.equal(stableDigest(state), before, "failed new dispatches preserve the historical liability");
 });
 
 test("Oracle auth failure is negatively cached and lifecycle success creates a required fresh review", () => {
@@ -1828,7 +2585,7 @@ test("the public CLI accepts only a fixed Oracle receipt reference and settles a
       dispatchKind: "subagent_create",
       sessionId: prepared.sessionId,
       toolId: "oracle-browser",
-      toolVersion: "v1",
+      toolVersion: "v2",
     };
     const claimed = publicCli({
       contractVersion: CONTRACT_VERSION,
@@ -1846,12 +2603,12 @@ test("the public CLI accepts only a fixed Oracle receipt reference and settles a
     privateDirectory(oracleSessions);
     privateDirectory(oracleSession);
     fs.writeFileSync(path.join(oracleSession, "meta.json"), JSON.stringify({
-      model: "gpt-5.6-sol",
+      model: "gpt-6-pro",
       browser: {
-        config: { desiredModel: "GPT-5.6 Sol", modelStrategy: "select", thinkingTime: "pro" },
+        config: { desiredModel: "Latest", modelStrategy: "select", thinkingTime: "pro" },
         modelSelection: {
-          requestedModel: "GPT-5.6 Sol",
-          resolvedLabel: "GPT-5.6 Sol",
+          requestedModel: "Latest",
+          resolvedLabel: "Latest",
           strategy: "select",
           status: "switched",
           verified: true,
@@ -1884,13 +2641,13 @@ test("the public CLI accepts only a fixed Oracle receipt reference and settles a
         trustedEmbedding: true,
         trustedPathOverrides: true,
       }),
-      resolveCarrier: () => ({ binary: "/usr/bin/true", version: "0.17.3" }),
+      resolveCarrier: () => ({ binary: "/usr/bin/true", version: "0.20.3" }),
       revalidateCarrier: () => "/usr/bin/true",
       run: () => ({ status: 0, stdout: "Fixture finding.\n", stderr: "" }),
     });
     assert.equal(receipt.status, "settled");
     assert.equal(receipt.reason, null);
-    assert.equal(receipt.observedModel, "gpt-5.6-sol");
+    assert.equal(receipt.observedModel, "gpt-6-pro");
 
     const rawRejected = publicCli({
       contractVersion: CONTRACT_VERSION,
@@ -1935,7 +2692,7 @@ test("public CLI environment and JSON cannot mint visible-task authority or sett
     fs.writeFileSync(configPath, JSON.stringify(policy));
     fs.chmodSync(configPath, 0o600);
 
-    fs.writeFileSync(configPath, JSON.stringify(ownerPolicy()));
+    fs.writeFileSync(configPath, JSON.stringify(legacyPolicy()));
     const publicFable = publicCli(request("resolve", {
       role: "implementation.hard",
       harness: "claude",
@@ -2143,7 +2900,7 @@ function lunaAvailableAttestor() {
 }
 
 test("configured Terra selection requires the fixed runtime attestor", () => {
-  const policy = ownerPolicy();
+  const policy = legacyPolicy();
   const requestFields = {
     role: "implementation.medium",
     harness: "codex",
@@ -2205,69 +2962,43 @@ test("configured Terra selection requires the fixed runtime attestor", () => {
   assert.equal(admitted.response.decision.selected.modelAlias, "terra");
 });
 
-test("implementationEngine follows the implementation role, not one carrier descriptor", () => {
-  // No-config default (the public model-routing.mjs CLI supplies no runtime
-  // attestor): Codex availability is assumed, not proven, so delivery must be
-  // able to proceed on a Claude-Code-only host. Strength is "prefer" — deliver
-  // routes to Codex when preflight proves it callable, native Claude otherwise.
-  const luna = handleRequest(request("resolve"), { state: createEmptyState(), now: NOW });
-  assert.equal(luna.response.ok, true, JSON.stringify(luna.response));
-  assert.equal(luna.response.reason, "resolved");
-  assert.deepEqual(luna.response.decision.implementationEngine, {
-    mode: "prefer", target: "codex", model: "gpt-5.6-luna", source: "deliver",
-  });
+test("baseline selection does not force an implementation harness and explicit routes never permit a silent fallback", () => {
+  for (const role of ["implementation", "implementation.fix", "implementation.mechanical", "review", "orchestration"]) {
+    const resolved = handleRequest(request("resolve", { role }), { state: createEmptyState(), now: NOW });
+    assert.equal(resolved.response.reason, "resolved");
+    assert.equal(resolved.response.decision.selected.model, "gpt-6-astra");
+    assert.equal(resolved.response.decision.selected.effort, "max");
+    assert.equal(resolved.response.decision.capability.status, "unknown");
+    assert.equal(Object.hasOwn(resolved.response.decision, "implementationEngine"), false);
+  }
 
-  // A measured runtime attestation proving Luna present restores "require" —
-  // Codex is proven, so the "must go to Codex" demand is honest.
-  const provenLuna = handleRequest(request("resolve"), {
-    state: createEmptyState(), now: NOW, trustedRuntimeAttestor: lunaAvailableAttestor(),
+  const explicit = handleRequest(request("resolve", { model: "gpt-5.6-terra", effort: "ultra" }), { now: NOW });
+  assert.deepEqual(explicit.response.decision.implementationEngine, {
+    mode: "require", target: "codex", model: "gpt-5.6-terra", source: "deliver",
   });
-  assert.equal(provenLuna.response.decision.selected.carrierId, "codex-luna");
-  assert.deepEqual(provenLuna.response.decision.implementationEngine, {
-    mode: "require", target: "codex", model: "gpt-5.6-luna", source: "deliver",
+  assert.equal(explicit.response.decision.selected.effort, "ultra");
+  assert.equal(explicit.response.decision.capability.status, "unknown");
+  assert.equal(explicit.response.decision.fallback, undefined);
+
+  const configured = handleRequest(request("resolve", { harness: "codex" }), { catalog: examplePolicy(), now: NOW });
+  assert.deepEqual(configured.response.decision.implementationEngine, {
+    mode: "require", target: "codex", model: "gpt-6-astra", source: "deliver",
   });
 
   const runtimeScopes = [];
   const transportScopes = [];
-  const scopedDefault = handleRequest(request("resolve"), {
-    state: createEmptyState(), now: NOW,
-    trustedRuntimeAttestor: (scope) => {
-      runtimeScopes.push({ hostScope: scope.hostScope, accountScope: scope.accountScope });
-      return { attestorId: "railyard-runtime-attestor-v1", attestationDigest: DIGEST_A, lunaAvailability: "available", hostScope: scope.hostScope, accountScope: scope.accountScope };
-    },
+  const resolved = handleRequest(request("resolve"), {
+    now: NOW,
+    trustedRuntimeAttestor: (scope) => { runtimeScopes.push(scope); return terraAttestor()(scope); },
     trustedTransportAttestor: (scope) => {
       transportScopes.push({ hostScope: scope.hostScope, accountScope: scope.accountScope });
       return { attestorId: "railyard-transport-attestor-v1", attestationDigest: DIGEST_A, compatibility: "native_compatible", bridgeAvailable: false };
     },
   });
-  assert.equal(scopedDefault.response.decision.binding.accountScope, "codex-sub");
-  assert.deepEqual(runtimeScopes, [{ hostScope: "local", accountScope: "codex-sub" }]);
+  assert.equal(resolved.response.decision.selected.model, "gpt-6-astra");
+  assert.deepEqual(runtimeScopes, [], "legacy Luna/Terra availability cannot replace Astra");
   assert.deepEqual(transportScopes, [{ hostScope: "local", accountScope: "codex-sub" }]);
-
-  // Sourcing the field from codex-luna alone dropped the "must go to Codex"
-  // signal exactly when Luna degraded to the Terra substitute. Terra rides a
-  // measured attestation, so it too keeps "require".
-  const terra = handleRequest(request("resolve"), {
-    state: createEmptyState(), now: NOW, trustedRuntimeAttestor: terraAttestor(),
-  });
-  assert.equal(terra.response.decision.selected.carrierId, "codex-terra-runtime");
-  assert.equal(terra.response.decision.fallback.reason, "implementation_model_substitute");
-  assert.deepEqual(terra.response.decision.implementationEngine, {
-    mode: "require", target: "codex", model: "gpt-5.6-terra", source: "deliver",
-  });
-
-  for (const role of ["implementation.fix", "implementation.mechanical"]) {
-    const subrole = handleRequest(request("resolve", { role }), { state: createEmptyState(), now: NOW });
-    assert.equal(subrole.response.decision.implementationEngine.target, "codex");
-    assert.equal(subrole.response.decision.implementationEngine.mode, "prefer");
-  }
-
-  // No other role ever carries it.
-  for (const role of ["review", "review.deep", "orchestration"]) {
-    const other = handleRequest(request("resolve", { role }), { state: createEmptyState(), now: NOW });
-    assert.equal(other.response.ok, true, JSON.stringify(other.response));
-    assert.equal(Object.hasOwn(other.response.decision, "implementationEngine"), false, role);
-  }
+  assert.equal(handleRequest(request("resolve", { harness: "claude" }), { now: NOW }).response.reason, "cross_harness_adapter_required");
 });
 
 test("a stale state lock is broken, a live one still holds", () => {

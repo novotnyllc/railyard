@@ -15,14 +15,16 @@ Cleanup Codex owns recovery. Inspection reports matching session servers, proces
 
 ## How it works
 
-The cleanup path checks ownership, thread identity, process arguments, and launcher relationship before acting. The macOS SessionEnd hook carries the same identity-bound contract.
+The cleanup path checks ownership, thread identity, process arguments, and launcher relationship before acting. Automatic cleanup is off by default; the plugin does not register a SessionEnd cleanup hook. The retained opt-in hook uses the same identity checks.
+
+Illustrative inspection fields:
 
 ```text
 > Inspect the detached Codex residue for this thread; reclaim it only when identity evidence is complete.
-thread=opaque-thread-01
-ownership=same-user  server=matched  launcher=matched
-snapshot=paired  lock=acquired-for-read
-recommendation=reap-safe
+thread=<selected thread>
+ownership=<observed identity> server=<match result> launcher=<match result>
+snapshot=<paired evidence> lock=<observed state>
+recommendation=<inspection result>
 ```
 
 ## Scope
@@ -35,10 +37,4 @@ Ships in the `railyard` plugin.
 
 ## Proof point
 
-```text
-thread=opaque-thread-01 action=reap
-before_snapshot=matched
-process_identity=verified
-after_snapshot=absent
-result=reclaimed
-```
+A completed cleanup must retain its matched identity evidence and verify that the exact selected residue is absent. Report incomplete evidence or refusal as observed; cleanup is not a routine delivery closing step.

@@ -9,7 +9,7 @@ nav_order: 1
 
 Install Railyard for routed delivery, review, merge, and proof. Roundhouse is the fleet convergence layer for inventory, readiness, and remote administration. The delivery-only path needs Railyard; the Roundhouse line is optional and only needed for fleet scenarios. See the [Start decision matrix](/start/).
 
-Railyard depends on [Compound Engineering (EveryInc)](https://github.com/EveryInc/compound-engineering-plugin) for the workflow engine and [ponytail (DietrichGebert)](https://github.com/DietrichGebert/ponytail) for the efficiency discipline used in implementation and verification. The marketplace groups these transitive installs into the same consent step; dependency behavior is unchanged.
+Railyard uses [Compound Engineering (EveryInc)](https://github.com/EveryInc/compound-engineering-plugin) for selected workflow stages. Resolve CE when a selected stage needs it; startup does not bootstrap workflow dependencies. [Ponytail (DietrichGebert)](https://github.com/DietrichGebert/ponytail) and Superpowers are not Railyard prerequisites.
 
 ## Claude Code
 
@@ -20,7 +20,7 @@ claude plugin install railyard@novotnyllc
 claude plugin install roundhouse@novotnyllc
 ```
 
-Expected confirmation after each command:
+Illustrative confirmations; exact wording varies by harness version:
 
 ```text
 marketplace added: novotnyllc
@@ -43,7 +43,7 @@ codex plugin add railyard --marketplace novotnyllc
 codex plugin add roundhouse --marketplace novotnyllc
 ```
 
-Expected confirmation after each command:
+Illustrative confirmations; exact wording varies by harness version:
 
 ```text
 marketplace added: novotnyllc
@@ -65,18 +65,17 @@ Run the plugin listing before the first conversation:
 claude plugin list
 ```
 
-A correct listing includes:
+Confirm that Railyard is listed:
 
 ```text
 railyard@novotnyllc
-roundhouse@novotnyllc
 ```
 
-On Codex, use `codex plugin list --json` and confirm that `railyard` is present. Add `roundhouse` when the fleet path is part of the work.
+If you selected the fleet path, also confirm `roundhouse@novotnyllc` is listed. On Codex, use `codex plugin list --json` and confirm the plugins you selected are present.
 
 ## Compatibility and cost
 
-Railyard supports macOS, Linux, Windows, and WSL. The minimum documented versions are Claude Code 2.1.220+ and Codex CLI 0.147.0+ with plugin marketplace support. Node 22.12+ is required for the site tooling, and Git must be available on `PATH` for repository delivery. Compound Engineering 3.20.0+ is the pinned workflow dependency.
+Railyard supports macOS, Linux, Windows, and WSL. The minimum documented versions are Claude Code 2.1.220+ and Codex CLI 0.147.0+ with plugin marketplace support. Node 22.12+ is required for the site tooling, and Git must be available on `PATH` for repository delivery. Selected CE workflow stages use Compound Engineering 3.20.0+.
 
 Railyard itself is free and open source (MIT); you pay only your own Claude/Codex usage, billed exactly as any other session in that harness.
 
@@ -101,4 +100,4 @@ Then try:
 > Fix the flaky retry test in the billing service and get it merged.
 ```
 
-Your request supplies the intent; the appropriate workflow carries routing, review, and evidence handling.
+Your request supplies the intent. Routine work runs natively, and useful CE workflows are selected automatically. Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or pushing user-requested commits to an existing PR.

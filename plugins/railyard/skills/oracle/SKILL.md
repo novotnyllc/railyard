@@ -1,46 +1,60 @@
 ---
 name: oracle
-description: "Oracle second-model review: bundle prompts/files, debug, refactor, design-check."
+description: "Optional Oracle specialist consult: bundle a scoped prompt and files for a selected browser or API model. Use for requested second-model advice, debugging, refactoring, or design checks."
 ---
 
-# Oracle (CLI) — best use
+# Oracle (CLI)
 
-Oracle bundles your prompt + selected files into one “one-shot” request so another model can answer with real repo context (API or browser automation). Treat outputs as advisory: verify against the codebase + tests.
+Oracle bundles a scoped question and selected files for an optional specialist
+consult through a browser or API. Use it when the question benefits from that
+model or the user requests it. It is not a mandatory review stage for ordinary
+work. Verify findings against the code and relevant tests, then return them to
+the existing review/CI owner; do not start another settlement or watch loop.
+
+## Choose the surface and reasoning setting
+
+Select the reviewer model and effort together for the question. These are
+distinct surfaces; the Oracle controls below were checked in **0.20.3**:
+
+| Surface | Model control | Reasoning control | Evidence |
+| --- | --- | --- | --- |
+| ChatGPT browser | `gpt-6-pro` | `--browser-thinking-time pro` | Verified `Latest` picker selection and Pro thinking in that session |
+| OpenAI Responses API | `gpt-6-astra` | `--reasoning-effort max`, plus an explicitly chosen `--reasoning-mode standard` or `pro` | Provider response/receipt; model availability is account-dependent |
+| Native Codex reviewer | Current native selector, such as `gpt-6-astra` | Current native `reasoning_effort`, chosen deliberately | Native dispatch evidence; this is not an Oracle route |
+
+Browser Pro is not native Astra `max`. In Oracle 0.20.3 the Astra API adapter
+accepts `low`, `medium`, `high`, `xhigh`, and `max`; it does not accept `none`
+or `ultra`. Do not copy effort values between surfaces or silently substitute
+models. See [model compatibility](references/model-compatibility.md) when
+checking a different Oracle version or picker layout.
 
 ## Availability (ChatGPT Pro)
 
-The main browser path requires a signed-in ChatGPT **Pro** account. Check
-availability efficiently and cache the answer instead of probing every
-activation:
+The browser path needs a signed-in account with access to the requested
+Pro tier. Use an existing availability result only as a planning hint, never
+as proof that a new session selected the intended controls.
 
-1. Read `${XDG_CONFIG_HOME:-$HOME/.config}/railyard/oracle-pro.json`
-   (`{"available": <bool>, "checkedAt": "<ISO-8601>"}`). If it exists and
-   `checkedAt` is within 7 days, trust it — available means proceed,
-   unavailable means say so and stop offering Oracle.
-2. If missing or stale, look for cheap local evidence first: a successful
-   `gpt-5.6-sol` browser session whose metadata records
-   `resolvedLabel=GPT-5.6 Sol; verified=yes` and whose pre-`Answer:` session
-   log has exactly one `[browser] Thinking time: Pro` control record proves
-   the supported browser-Pro pair; write the cache and proceed. A
-   `gpt-5-pro` browser session is not proof: Oracle 0.17.3 normalizes it to
-   the `GPT-5.5` picker target.
-3. Otherwise the first real run is the check. Never launch a throwaway browser
-   run purely to probe. A login or account-selection surface, or a missing Pro
-   picker target, means unavailable: write `available: false` and stop without
-   interacting with the login surface.
+An optional cache at
+`${XDG_CONFIG_HOME:-$HOME/.config}/railyard/oracle-pro.json` may record
+`available`, `checkedAt`, `browserModel`, and `thinkingTime`. Reuse it for up
+to seven days only when the pair is `gpt-6-pro`/`pro`. An old boolean-only or
+Sol cache does not establish this pair. Successful local session metadata and
+its own control log can supply evidence without another browser run.
 
-After any run that changes the answer (login fixed, subscription lapsed),
-rewrite the cache. The cache is advisory availability state only — never
-credentials or account identity.
+Otherwise the first requested consult is the availability check; do not launch
+a throwaway model call. A login/account-selection surface stops without
+interaction. A missing or disabled Pro control means that requested run could
+not select Pro; a timeout or transient failure does not establish subscription
+absence. Keep credentials and account identity out of availability state.
 
 ## Routed model-routing mode (policy-selected browser reviews only)
 
 When an active caller supplies an admitted, claimed
 `railyard/model-routing/v1` `oracle-browser` review decision, use this
 skill's `scripts/oracle-route.mjs` carrier instead of the manual bootstrap
-below. It accepts only the `chatgpt_current_pro` channel, fixes Oracle to
-local Homebrew Oracle `>=0.17.3`, and spawns only
-`--engine browser --model gpt-5.6-sol --browser-model-strategy select
+below. It accepts only the `chatgpt_current_pro` channel, uses the versioned
+`v2` browser carrier with local Homebrew Oracle `>=0.20.3`, and spawns only
+`--engine browser --model gpt-6-pro --browser-model-strategy select
 --browser-thinking-time pro`. Key invariants, enforced by the script and its
 tests rather than by prose:
 
@@ -57,13 +71,18 @@ tests rather than by prose:
 - After every completed dispatch or reattach, it reads only the route-owned
   session metadata allowlist plus the pre-`Answer:` control region of that
   session's `output.log`. It accepts the review only when the metadata proves
-  verified `GPT-5.6 Sol` selection and exactly one
-  `[browser] Thinking time: Pro` record; missing, duplicate, or mismatched
-  evidence is a named failure receipt and a nonzero route CLI exit. Never
-  accept model-answer text as picker or effort proof.
+  verified `Latest` selection (or Oracle's exact supported localized label)
+  and exactly one pre-answer Pro thinking-control record. When
+  `thinkingSelection` metadata is present it must also confirm Pro. Missing,
+  duplicate, or mismatched required evidence is a named failure receipt and a
+  nonzero route CLI exit. Never
+  accept model-answer text as picker or effort proof. These receipts attest
+  browser UI controls, not backend model identity or native Codex effort.
 - A detached session is reattached by the same claim on the same host, never
   redispatched; retries return the existing or an `ambiguous` receipt, never a
-  second launch. A login/account-selection surface stops without interaction.
+  second launch. Frozen Sol bundles and detached Sol sessions are unsupported
+  by this carrier revision and are never relabeled as Astra. A login/account
+  selection surface stops without interaction.
 - Install/upgrade is the separate `oracle-homebrew-lifecycle` transaction
   (fixed `steipete/tap/oracle`, no elevation, zero model-usage meters); a
   successful lifecycle requires a fresh review claim afterward.
@@ -90,15 +109,16 @@ session commands. Agents whose shell variables do not persist between tool
 calls must retain the returned absolute path and substitute it literally in
 later Oracle commands.
 
-Oracle requires version 0.17.3 or newer. `ORACLE_BIN` is only an explicit
-validation-only input override: it must be an absolute executable at that
-version or newer; the helper does not replace it. Otherwise the helper prefers the canonical
+Oracle requires version 0.20.3 or newer for the controls documented here.
+`ORACLE_BIN` is an explicit validation-only input override: it must be an
+absolute executable at that version or newer; the helper does not replace it.
+Otherwise the helper prefers the canonical
 `steipete/tap/oracle` Homebrew formula. A current selected package owner is a
 no-op. If Homebrew is unavailable, cannot repair its missing or stale formula,
 or cannot post-verify the selected formula, the bounded fallback is:
 
 ```bash
-npm install --global --prefix "$HOME/.local" @steipete/oracle@0.17.3
+npm install --global --prefix "$HOME/.local" @steipete/oracle@0.20.3
 ```
 
 A current stable `~/.local/bin/oracle` avoids repeat Homebrew attempts. The
@@ -114,52 +134,26 @@ fills in only keys that are ABSENT, so an explicit user value always wins:
 node "$SKILL_DIR/scripts/ensure-oracle-config.mjs"
 ```
 
-These defaults belong to this skill because they must reach every user of the
-plugin. A dotfile manager (chezmoi or anything else) is a personal choice, and
-nothing here may assume one exists — if the skill needs a setting to behave
-correctly, putting it there is the skill's job.
+The helper supplies `browser.headless: true` for Oracle's local automation
+browser while preserving an explicit user setting. No dotfile manager is
+required. Choose a remote `oracle serve` host or `--browser-attach-running`
+only when that browser placement is intended; those modes have their own
+session and profile requirements and are not a substitute for headless mode.
 
-`browser.headless: true` is the load-bearing one. Oracle's headful "hide" is
-implemented as `--window-position=-32000,-32000`, and macOS clamps a window
-that far off-screen back toward the display, so a window appears anyway.
-Headless is the only way to genuinely not show one, and it also sidesteps the
-"Chrome didn't shut down correctly / restore tabs" bubble, because there is no
-window to restore into. Measured: a headless one-shot returned in ~31s with no
-visible window.
+## Main use case (browser, Latest + Pro thinking)
 
-**Do not reach for `oracle serve` or `--browser-attach-running` to get this.**
-Both are worse locally, on evidence:
+For a selected browser consult, pass `--engine browser --model gpt-6-pro
+--browser-model-strategy select --browser-thinking-time pro`. Oracle 0.20.3
+maps that explicit browser alias to the `Latest` model radio and verifies the
+requested Pro tier. A stored session may take substantial time; reattach it
+rather than resubmitting the prompt.
 
-- `serve --manual-login` launches Chrome with no `--headless` and ignores
-  `browser.headless`, so it leaves a *permanently* visible window rather than a
-  transient one, and the same trivial prompt took ~1m10s through it versus ~31s
-  direct. Its real use is remote: one signed-in host serving machines that are
-  not signed in, where the window is on a machine nobody is looking at.
-- `--browser-attach-running` requires Oracle's own attach metadata and rejects a
-  hand-launched headless Chrome; pointed at a real everyday Chrome it drives the
-  user's own browser, which is neither hidden nor safe to automate.
-
-## Main use case (browser, GPT-5.6 Sol + Pro thinking)
-
-Default workflow here: `--engine browser` with the user's preferred signed-in reasoning model. This is the “human in the loop” path: it can take ~10 minutes to ~1 hour; expect a stored session you can reattach to.
-
-Recommended defaults:
-- Engine: browser (`--engine browser`)
-- Browser Pro: `${ORACLE_MODEL:-gpt-5.6-sol}` with
-  `--browser-model-strategy select --browser-thinking-time pro` selects
-  `GPT-5.6 Sol` and requests the verified Pro-thinking tier
-- Browser base Sol: `--model gpt-5.6-sol --browser-thinking-time heavy`
-- API Pro: `--model gpt-5.6-sol --reasoning-mode pro --reasoning-effort max`
-- Attachments: directories/globs + excludes; avoid secrets.
-
-Oracle 0.17.3 or newer is required for this browser-Pro pair. Pro is not a
-separate browser or API model slug: `gpt-5.6-pro` and `gpt-5.6-sol-pro` are
-invalid. Oracle 0.17.3 exposes no browser flag that deterministically targets
-an unnamed newer Pro picker label; its `gpt-5-pro` alias normalizes to
-`gpt-5.5-pro` and the `GPT-5.5` picker. Browser mode therefore uses
-`gpt-5.6-sol` plus Pro thinking and requires the observed pair below; API mode
-uses `gpt-5.6-sol` plus the Pro reasoning flags above. GPT-5.6 availability
-remains account-dependent.
+Use explicit controls rather than a generic Pro alias: older `gpt-5-pro`
+aliases still normalize to the Sol picker in Oracle 0.20.3. For API Astra, use
+`gpt-6-astra` and the API reasoning flags above; `gpt-6-pro` is a browser
+alias, not an API model slug. Read the compatibility reference before choosing
+another supported pair. Account access and the selected controls must be
+verified for the actual run.
 
 ## Browser profile mode (choose one)
 
@@ -167,7 +161,7 @@ Before a browser run, inspect only the presence, JSON type, and boolean value of
 the nested `browser.manualLogin` value in `~/.oracle/config.json`; never print
 the config, environment, or secrets. Oracle reads this nested key: a top-level
 `browserManualLogin` value and the absence of `ORACLE_*` environment variables
-do not override it. Oracle 0.17.0 rejects `--copy-profile` with manual-login
+do not override it. Oracle rejects `--copy-profile` with manual-login
 mode.
 
 Run this read-only Node stdlib probe; it prints only the non-secret
@@ -256,17 +250,18 @@ deliberately chosen, or after a run was interrupted.
   - `"$ORACLE_CLI" --perf-trace --perf-trace-path /tmp/oracle-perf.json --dry-run summary -p "<task>" --file "src/**"`
   - Use when CLI startup or time-to-first-output feels slow; inspect `first-output` and `exit`.
 
-- Browser run (main path; long-running is normal):
-  - `"$ORACLE_CLI" --engine browser --model "${ORACLE_MODEL:-gpt-5.6-sol}" --browser-model-strategy select --browser-thinking-time pro -p "<task>" --file "src/**"`
-  - For a Browser-Pro run, `ORACLE_MODEL` must resolve to `gpt-5.6-sol`.
-    After completion, accept it only when its session metadata reports
-    verified `GPT-5.6 Sol` and its own pre-`Answer:` `output.log` has exactly
-    one `[browser] Thinking time: Pro` line. Otherwise stop and report the
-    observed picker state; do not silently accept a downgrade or use answer
-    text as evidence.
+- Browser run (selected specialist consult):
+  - `"$ORACLE_CLI" --engine browser --model gpt-6-pro --browser-model-strategy select --browser-thinking-time pro -p "<task>" --file "src/**"`
+  - Accept the requested pair only when that session's metadata reports a
+    verified `Latest` selection and its own pre-`Answer:` `output.log` has
+    exactly one Pro thinking-control record. Any present `thinkingSelection`
+    metadata must also confirm the requested Pro tier. Otherwise report the
+    observed controls and missing evidence; answer text cannot verify them.
 
-- API Pro run (only after explicit cost consent):
-  - `"$ORACLE_CLI" --engine api --model gpt-5.6-sol --reasoning-mode pro --reasoning-effort max -p "<task>" --file "src/**"`
+- API Astra run (when paid API use is authorized):
+  - `"$ORACLE_CLI" --provider openai --engine api --model gpt-6-astra --reasoning-mode standard --reasoning-effort max -p "<task>" --file "src/**"`
+  - Choose `--reasoning-mode pro` only when that API mode is intended; it is
+    distinct from browser Pro and from the reasoning effort.
 
 - Manual paste fallback (assemble bundle, copy to clipboard):
   - `"$ORACLE_CLI" --render --copy -p "<task>" --file "src/**"`
@@ -293,7 +288,7 @@ deliberately chosen, or after a run was interrupted.
 
 ## Budget + observability
 
-- Target: keep total input under ~196k tokens.
+- Keep input within the selected model's reported limit; use a scoped bundle.
 - Use `--files-report` (and/or `--dry-run json`) to spot the token hogs before spending.
 - Use `--perf-trace` / `ORACLE_PERF_TRACE=1` for startup and first-output timing. Traces redact prompts, tokens, keys, cookies, and inline cookie payloads; detached API children write a session-suffixed sidecar trace.
 - If you need hidden/advanced knobs: `"$ORACLE_CLI" --help --verbose`.
@@ -301,12 +296,12 @@ deliberately chosen, or after a run was interrupted.
 ## Engines (API vs browser)
 
 - Auto-pick: uses `api` when `OPENAI_API_KEY` is set, otherwise `browser`.
-- GPT-5.6 Pro effort is surface-specific: browser uses
-  `gpt-5.6-sol --browser-model-strategy select --browser-thinking-time pro`
-  with the required observed-model assertion; API uses
-  `gpt-5.6-sol --reasoning-mode pro`.
+- Model and reasoning controls are surface-specific: browser uses
+  `gpt-6-pro --browser-model-strategy select --browser-thinking-time pro`;
+  API Astra uses `gpt-6-astra` with a supported explicit effort and mode.
 - Browser engine supports GPT + Gemini only; use `--engine api` for Claude/Grok/Codex or multi-model runs.
-- **API runs require explicit user consent** before starting because they incur usage costs.
+- API runs need authorization for the paid API path. Existing authorization
+  in the task counts; do not ask again merely because this skill was opened.
 - Browser attachments:
   - `--browser-attachments auto|never|always` (auto pastes inline up to ~60k chars then uploads).
   - Add `--browser-bundle-files --browser-bundle-format auto|zip` to upload many files as one bundle; ZIP bundles preserve original file bytes.
@@ -314,13 +309,12 @@ deliberately chosen, or after a run was interrupted.
   - Host: `"$ORACLE_CLI" serve --host 0.0.0.0 --port 9473 --token <secret>`
   - Client: `"$ORACLE_CLI" --engine browser --remote-host <host:port> --remote-token <secret> -p "<task>" --file "src/**"`
 
-## Follow-ups: do not restart a consult you already paid for
+## Follow-ups and independent review
 
-Oracle is one-shot **by default**, not by necessity, and re-review is the most
-common shape of work here. Starting a fresh session to re-examine something
-Oracle already has in context re-uploads the same tree, re-pays the input
-tokens, and throws away everything it concluded last round — the second answer
-is usually worse than the first for exactly that reason.
+Use a stored-session follow-up when revisiting the same question after a
+change. It preserves earlier findings and avoids resending unchanged context.
+Use a fresh session when independence or a materially different question
+calls for it. A follow-up to the same reviewer is not an independent review.
 
 Two distinct mechanisms; they are not interchangeable:
 
@@ -363,7 +357,7 @@ the model reasons confidently about code that no longer exists.
 
 ## API preflight
 
-- API runs require explicit user consent and cost money.
+- API runs incur usage costs; use the already-authorized provider and budget.
 - Before API runs, check provider readiness without printing secrets:
   - `"$ORACLE_CLI" doctor --providers --models "${ORACLE_MODELS:-<models>}"`
   - `"$ORACLE_CLI" --preflight --models "${ORACLE_MODELS:-<models>}"`
@@ -405,7 +399,9 @@ When you know this will be a long investigation, write a prompt that can stand a
 - Middle: concrete repro steps + exact errors + what you already tried.
 - Bottom: attach *all* context files needed so a fresh model can fully understand (entrypoints, configs, key modules, docs).
 
-If you need to reproduce the same context later, re-run with the same prompt + `--file …` set (Oracle runs are one-shot; the model doesn’t remember prior runs).
+To reproduce a standalone review, retain the scoped prompt and exact file
+revision. For a revision of an existing consult, use its stored-session
+follow-up with the changed files as described above.
 
 ## Safety
 

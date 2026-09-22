@@ -230,85 +230,46 @@ test("non-macOS SessionEnd hook no-ops with exit 0 before reading stdin", () => 
   }
 });
 
-test("plugin packaging exposes actual root SessionEnd cleanup and no Claude hook", () => {
+test("plugin packaging keeps cleanup manual alongside startup, dispatch, and CE merge guard", () => {
   const codexManifest = JSON.parse(fs.readFileSync(
-    path.join(PLUGIN_DIRECTORY, ".codex-plugin", "plugin.json"),
-    "utf8",
-  ));
+    path.join(PLUGIN_DIRECTORY, ".codex-plugin", "plugin.json"), "utf8"));
   const claudeManifest = JSON.parse(fs.readFileSync(
-    path.join(PLUGIN_DIRECTORY, ".claude-plugin", "plugin.json"),
-    "utf8",
-  ));
-  const hooks = JSON.parse(fs.readFileSync(
-    path.join(PLUGIN_DIRECTORY, "codex", "hooks.json"),
-    "utf8",
-  ));
-
+    path.join(PLUGIN_DIRECTORY, ".claude-plugin", "plugin.json"), "utf8"));
   assert.match(codexManifest.version, /^\d+\.\d+\.\d+$/);
   assert.equal(codexManifest.hooks, "./codex/hooks.json");
   assert.ok(codexManifest.interface.defaultPrompt.length <= 3);
   assert.equal(claudeManifest.version, codexManifest.version);
   assert.ok(claudeManifest.skills.includes("./skills/cleanup-codex"));
-  // Claude loads the routing hooks and the audit markers; the SessionEnd
-  // cleanup hook stays Codex-only and must never register here.
   assert.equal(claudeManifest.hooks, "./hooks/claude-hooks.json");
-  const claudeHooks = JSON.parse(fs.readFileSync(
-    path.join(PLUGIN_DIRECTORY, "hooks", "claude-hooks.json"),
-    "utf8",
-  ));
-  assert.deepEqual(
-    Object.keys(claudeHooks.hooks).sort(),
-    ["PreToolUse", "SessionStart", "Stop", "SubagentStart", "SubagentStop", "UserPromptSubmit"],
-  );
-  // The Stop hook is the retrospective reminder, not a cleanup hook.
-  assert.match(claudeHooks.hooks.Stop[0].hooks[0].command, /railyard-retro\.js/);
-  for (const event of Object.values(claudeHooks.hooks)) {
-    for (const entry of event) {
-      for (const hook of entry.hooks) {
-        assert.doesNotMatch(hook.command, /cleanup-codex/);
-      }
+  for (const relative of ["codex/hooks.json", "hooks/claude-hooks.json"]) {
+    const hooks = JSON.parse(fs.readFileSync(path.join(PLUGIN_DIRECTORY, relative), "utf8"));
+    assert.deepEqual(Object.keys(hooks.hooks).sort(), ["PreToolUse", "SessionStart"]);
+    const commands = Object.values(hooks.hooks).flatMap(entries =>
+      entries.flatMap(entry => entry.hooks.map(hook => hook.command)));
+    assert.ok(commands.some(command => command.includes("routing-charter.js")));
+    assert.ok(commands.some(command => command.includes("dispatch-gate.js")));
+    assert.ok(commands.some(command => command.includes("merge-settlement-gate.js")));
+    for (const command of commands) {
+      assert.doesNotMatch(command, /cleanup-codex|railyard-retro|routing-nudge|route-lifecycle/);
     }
   }
-  assert.deepEqual(
-    Object.keys(hooks.hooks).sort(),
-    ["PreToolUse", "SessionEnd", "SessionStart", "SubagentStart", "SubagentStop", "UserPromptSubmit"],
-  );
-  const commandHook = hooks.hooks.SessionEnd[0].hooks[0];
-  assert.equal(commandHook.type, "command");
-  // Codex clamps SessionEnd timeouts to 3s and warns on anything higher;
-  // the script's internal 2.2s budget leaves cold-start headroom under it.
-  assert.equal(commandHook.timeout, 3);
-  assert.match(commandHook.command, /cleanup-codex\.mjs\" cleanup --hook$/);
-  assert.doesNotMatch(commandHook.command, /\breap\b|\brecycle\b|\bStop\b|\bSubagentStop\b/);
-  // The retrospective reminder rides alongside cleanup as the second
-  // SessionEnd hook (Codex has no Stop event); it never does cleanup.
-  const retroHook = hooks.hooks.SessionEnd[0].hooks[1];
-  assert.match(retroHook.command, /railyard-retro\.js/);
-  assert.doesNotMatch(retroHook.command, /cleanup-codex/);
-  // Same 3s clamp: anything higher only earns a load warning. The reminder
-  // reads one day file and writes one line — ~30ms measured.
-  assert.equal(retroHook.timeout, 3);
+  // Packaging does not remove the manual cleanup implementation.
+  assert.ok(fs.existsSync(path.join(PLUGIN_DIRECTORY, "skills/cleanup-codex/scripts/cleanup-codex.mjs")));
 });
 
-test("Claude loader excludes the Codex-only SessionEnd hook", (context) => {
+test("Claude loader exposes only the minimal default routing hooks", (context) => {
   const loaded = spawnChildSync(
-    "claude",
-    ["--plugin-dir", PLUGIN_DIRECTORY, "plugin", "details", "railyard"],
-    { encoding: "utf8", timeout: 10_000 },
-  );
+    "claude", ["--plugin-dir", PLUGIN_DIRECTORY, "plugin", "details", "railyard"],
+    { encoding: "utf8", timeout: 10_000 });
   if (loaded.error?.code === "ENOENT") {
     context.skip("Claude loader is unavailable");
     return;
   }
   assert.equal(loaded.status, 0, loaded.stderr);
-  // Claude loads the routing hooks, the audit markers, and the Stop
-  // retrospective reminder; the Codex-only SessionEnd cleanup hook must not
-  // appear.
-  assert.match(loaded.stdout, /Hooks \(6\)/);
+  assert.match(loaded.stdout, /Hooks \(2\)/);
   assert.match(loaded.stdout, /SessionStart/);
-  assert.match(loaded.stdout, /SubagentStop/);
-  assert.match(loaded.stdout, /UserPromptSubmit/);
-  assert.doesNotMatch(loaded.stdout, /SessionEnd/);
+  assert.match(loaded.stdout, /PreToolUse/);
+  assert.doesNotMatch(loaded.stdout, /SessionEnd|SubagentStop|UserPromptSubmit/);
 });
 
 test("hook exit codes agree in both output modes and follow one status table", () => {

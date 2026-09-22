@@ -15,10 +15,11 @@ Deciding and driving work —
   projects, hosts, and dependencies, and choosing where each child runs
   (`orchestrate`, including the Codex saved-project and Claude SSH
   worker lanes).
-- *Quality gates and second opinions* — the pre-commit deep reviews
+- *Targeted reviews and second opinions* — optional pre-commit deep reviews
   (`thermos` and the two thermo-nuclear reviewers) and the Oracle one-shot
   advisor.
-- *Runtime hygiene* — cleaning up after completed runs (`cleanup-codex`).
+- *Runtime hygiene* — diagnosing and cleaning up observed residue on request
+  (`cleanup-codex`), with automatic cleanup off by default.
 - *Audit and retrospective* — reconstructing how a run went from the
   mechanical run log (`audit`).
 
@@ -33,16 +34,14 @@ hosts itself.
 
 ## External dependencies
 
-Two required external plugins, both auto-installed by railyard and never
-modified:
+Compound Engineering
+([EveryInc/compound-engineering-plugin](https://github.com/EveryInc/compound-engineering-plugin))
+provides selected planning, debugging, publishing, and review workflows.
+Railyard selects the appropriate stage automatically and leaves review
+settlement and CI monitoring with CE. Native routine work needs no workflow
+plugin bootstrap. Installing Railyard does not authorize installing unrelated
+plugins or enabling every available hook.
 
-- Compound Engineering
-  ([EveryInc/compound-engineering-plugin](https://github.com/EveryInc/compound-engineering-plugin))
-  — the delivery workflow engine; Deliver routes through its workflows.
-- ponytail
-  ([DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)) — the
-  efficiency discipline railyard carries into both the code and the process and
-  verification loop.
-
-Installing railyard authorizes and installs both as one group. The README
-carries the install and update commands.
+Roundhouse is needed for explicitly selected fleet/account work; craft skills
+and stacked-PR tooling are loaded only when relevant. Setup uses each host's
+plugin manager and preserves explicit disabled states.

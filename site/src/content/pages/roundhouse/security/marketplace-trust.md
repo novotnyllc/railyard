@@ -29,9 +29,9 @@ The [shared marketplace](https://github.com/novotnyllc/marketplace) is a public 
 
 ## Dependencies disclosed at install
 
-Railyard depends on [Compound Engineering (EveryInc)](https://github.com/EveryInc/compound-engineering-plugin) for the workflow engine used by delivery. It depends on [ponytail (DietrichGebert)](https://github.com/DietrichGebert/ponytail) for the efficiency discipline carried into implementation and verification.
+Railyard uses [Compound Engineering (EveryInc)](https://github.com/EveryInc/compound-engineering-plugin) for selected delivery workflow stages. [Ponytail (DietrichGebert)](https://github.com/DietrichGebert/ponytail) and Superpowers are not Railyard prerequisites.
 
-The grouped marketplace install is the consent step for both dependencies. This page documents the dependency boundary; it does not change install behavior.
+CE remains manager-owned and is resolved when a selected stage needs it. This page describes the dependency boundary.
 
 ## What to review
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Append-only run log: the mechanical half of the how-it-ran audit. Hooks
-// record what they can see (a dispatch happened, on which model, a session
-// started, a worker finished); the orchestrating session records what only
+// record what they can see (a dispatch attempt was allowed, its requested
+// model and effort, a session started); the owning session records what only
 // it knows (decisions, outcomes, deviations) through `note`.
 //
 // Metadata only — never prompts, handoff bodies, or provider output.
@@ -11,7 +11,7 @@
 // break either. One file per day; nothing rotates or prunes. railyard:audit
 // reads at most the last few days, and doctor can flag an oversized
 // directory later.
-// ponytail: no rotation, no locking — O_APPEND small-line writes, a day
+// No rotation or locking: O_APPEND small-line writes, a day
 // file, and a reader that tolerates a torn tail. Add machinery only if the
 // log ever gets big enough to matter.
 const fs = require("fs");
@@ -54,17 +54,16 @@ function harness() {
 //
 // CODEX_THREAD_ID wins when both are set. A `codex exec` worker launched from
 // Claude Code inherits the parent's CLAUDE_CODE_SESSION_ID and adds its own
-// thread id, so claude-first would stamp the parent's id and Codex's own
-// SessionEnd payload would never match the line. `harness()` cannot arbitrate
-// this: it reads CLAUDE_PLUGIN_ROOT, which the harness sets for its hooks —
+// thread id, so claude-first would attribute the worker's notes to its parent.
+// `harness()` cannot arbitrate this: it reads CLAUDE_PLUGIN_ROOT, which the
+// harness sets for its hooks —
 // a `note` run from a tool call may see it absent or inherited from the parent.
 // Plain Claude Code never sees CODEX_THREAD_ID (a parent does not inherit its
 // child's environment), so this costs that case nothing.
 //
-// ponytail: presence, not nesting order — a Claude session launched from
-// `codex exec` sees both and stamps the Codex ancestor's id. That direction is
-// the cheaper miss: Claude Code's reminder still has the dispatch count as a
-// second signal, while a zero-dispatch Codex ops run has only this line.
+// Presence, not nesting order: a Claude session launched from
+// `codex exec` sees both and stamps the Codex ancestor's id. This environment
+// hint cannot establish which session is innermost.
 // Revisit if either harness ever exports a depth or innermost marker.
 function sessionId() {
   return clip(process.env.CODEX_THREAD_ID) || clip(process.env.CLAUDE_CODE_SESSION_ID);
@@ -93,10 +92,18 @@ function record(entry) {
   }
 }
 
+// Day files are shared by concurrent tasks. A reader must select a confirmed
+// task identity before reconstructing its run; timestamps and cwd cannot bind
+// an unidentified line to that task. SessionStart on resume may repeat the ID.
+function entriesForSession(entries, requestedSessionId) {
+  if (!Array.isArray(entries) || typeof requestedSessionId !== "string" || !requestedSessionId.trim()) return [];
+  return entries.filter((entry) => entry && typeof entry === "object" &&
+    !Array.isArray(entry) && entry.session_id === requestedSessionId);
+}
+
 // Read today's entries and return true when at least one carries the given
-// event type and session id. Used by the route-carrier gate to verify that
-// a delivery pipeline (LFG etc.) was actually dispatched before allowing
-// mutation surfaces (git push, gh pr create).
+// event type and session id. Retained for optional diagnostic consumers;
+// a session-authored note is not proof that a carrier executed.
 // Read today entries; return true when at least one matches the event type
 // AND the current session. Fails closed: no session identity or a malformed
 // log line means no authorization.
@@ -118,7 +125,7 @@ function hasEntry(eventType) {
     return allParsed && found;
   } catch { return false; }
 }
-module.exports = { record, clip, logPath, logDir, hasEntry };
+module.exports = { record, clip, logPath, logDir, hasEntry, entriesForSession };
 
 if (require.main === module) {
   const [mode, arg] = process.argv.slice(2);

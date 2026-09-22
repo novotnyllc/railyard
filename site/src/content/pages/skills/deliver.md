@@ -7,27 +7,36 @@ nav_order: 1
 
 # Deliver
 
-Run each software change as one bounded delivery: name the outcome, preserve the evidence chain, and stay with it through merge and a real post-merge check. Software arrives with proof of what changed and where it landed.
+Carry a software change to the requested boundary: a local fix, a PR, or an authorized merge with a focused post-merge check. Routine edits and verification run natively.
 
 ## What it adds
 
-Deliver selects the route from the requested artifact, invokes model routing before work starts, and hands implementation to the workflow engine. It owns the requested terminal boundary and the delivery tail that settles review, branch currency, merge, and proof.
+Deliver coordinates useful Compound Engineering (CE) stages and the requested endpoint. Automatically select a CE stage when it helps, resolving the dependency when that stage is needed. CE owns review settlement and CI/PR monitoring; Deliver continues its settled result to the authorized terminal boundary.
 
 ## How it works
 
-Route selection distinguishes plan, diagnosis, local implementation, and full delivery outcomes. For implementation, isolated work boundaries, focused checks, Thermos review, and the configured GitHub flow create the evidence chain.
+Choose the stages that fit the work: planning, diagnosis, structured implementation, review, or shipping. Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR. Optional Thermos findings feed the same CE review owner.
+
+When `TYPESAFE_API_KEY` is present, [Jev](/skills/jev/) is the default for model
+and effort selection, workflow choice, evidence selection, work priority, and
+review triage throughout delivery. Explicit choices and privacy restrictions
+take precedence; uncertainty or service failure falls back to ordinary judgment.
+
+For delegation, choose model and reasoning effort together. Astra Max is the baseline candidate for substantive engineering; another supported pair or deliberate inheritance can fit the assignment. Native children handle ordinary subtasks, and visible tasks require an explicit user request.
+
+Illustrative delivery outline:
 
 ```text
 > Fix the retry path in the webhook worker and get it merged with post-merge proof.
-route=implementation  model=gpt-5.6-luna  effort=max
-scope=one-worktree  review=thermos-pair
-tail=settlement -> merge -> ancestry -> focused-check
-stop=report signed commit, merge, and proof separately
+allocation=codex-astra  model=gpt-6-astra  effort=max
+scope=bounded-change  review_and_ci=CE
+tail=CE-disposition -> authorized-merge -> ancestry -> focused-check
+stop=report observed delivery state and verification
 ```
 
 ## Scope
 
-One host-local implementation or pull-request lane belongs here. Multi-lane or cross-host placement belongs to [Orchestrate](/skills/orchestrate/).
+One software change or PR belongs here. Routine parallel work uses native children; explicitly requested fleet/account allocation or a delegated remote agent belongs to [Orchestrate](/skills/orchestrate/). Contracts, retrospectives, and cleanup are available on demand.
 
 ## Source
 
@@ -35,8 +44,4 @@ Ships in the `railyard` plugin.
 
 ## Proof point
 
-```text
-merge=4e1d... base=main ancestry=verified
-check=node --test test/retry.test.mjs exit=0
-receipt=post-merge-proof status=verified
-```
+For an authorized merge, record the observed PR and merge commit, verify reachability from the intended base, and run the smallest applicable post-merge or deployed-behavior check. A local pass, open PR, merge, and deployed result prove different boundaries.

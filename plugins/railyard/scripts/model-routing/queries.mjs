@@ -42,11 +42,14 @@ import {
 export function statusInternal(state, now, catalog = null) {
   const readiness = {};
   for (const [id, capability] of ownEntries(state.capabilities)) {
+    const current = capability.carrierVersion === CARRIER_DESCRIPTORS[capability.carrierId]?.version
+      && capability.adapterVersion === ADAPTER_DESCRIPTORS[capability.adapterId]?.version;
     readiness[id] = {
       carrierId: capability.carrierId,
       adapterId: capability.adapterId,
-      state: capability.state,
-      freshness: capability.expiresAt && Date.parse(capability.expiresAt) <= now ? "stale" : "fresh",
+      state: current ? capability.state : "unknown",
+      freshness: !current || (capability.expiresAt && Date.parse(capability.expiresAt) <= now) ? "stale" : "fresh",
+      ...(!current ? { reason: "adapter_version_changed" } : {}),
     };
   }
   return result(true, "status", {
@@ -70,6 +73,7 @@ export function inspectClaimInternal(request, state) {
     reservation = matches[0];
   }
   if (!ACTIVE_CLAIM_PHASES.has(reservation.phase) || reservation.claimed?.frozenInputDigest !== reservation.frozenInputDigest) return error("claim_not_active");
+  if (ADAPTER_DESCRIPTORS[reservation.binding.adapterId]?.version !== reservation.binding.adapterVersion || CARRIER_DESCRIPTORS[reservation.selected.carrierId]?.version !== reservation.selected.carrierVersion) return error("adapter_version_changed");
   return result(true, "claim_verified", {
     claim: {
       claimId: reservation.claimId,

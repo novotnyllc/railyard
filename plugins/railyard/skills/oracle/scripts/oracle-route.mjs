@@ -17,12 +17,12 @@ import {
 const CONTRACT = "railyard/model-routing/v1";
 const PRODUCER = "oracle-browser";
 const LIFECYCLE_PRODUCER = "oracle-homebrew-lifecycle";
-const ADAPTER_VERSION = "v1";
+const ADAPTER_VERSION = "v2";
 const IMPORTER_ID = "railyard-adapter-receipt-importer-v1";
 const IMPORTER_VERSION = "v1";
 const FORMULA = "steipete/tap/oracle";
-const PRODUCT_LABEL = "GPT-5.6 Sol + Pro thinking";
-const MIN_VERSION = [0, 17, 3];
+const PRODUCT_LABEL = "ChatGPT Latest + Pro thinking (Oracle gpt-6-pro)";
+const MIN_VERSION = [0, 20, 3];
 const MAX_PROMPT_BYTES = 128 * 1024;
 const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_TOTAL_BYTES = 4 * 1024 * 1024;
@@ -267,6 +267,10 @@ export function freezeInput(input, suppliedRoot = routeRoot()) {
 
 export function revalidateFrozen(frozen) {
   const manifest = JSON.parse(readBoundedRegular(path.join(frozen.bundle, "manifest.json"), 256 * 1024, "frozen_input_changed").toString("utf8"));
+  if (manifest.arguments?.engine !== "browser"
+    || manifest.arguments?.model !== FIXED_MODEL
+    || manifest.arguments?.browserModelStrategy !== FIXED_BROWSER_MODEL_STRATEGY
+    || manifest.arguments?.browserThinkingTime !== FIXED_BROWSER_THINKING_TIME) fail("frozen_model_binding_unsupported");
   const prompt = readBoundedRegular(frozen.promptPath, MAX_PROMPT_BYTES, "frozen_input_changed");
   if (hash(prompt) !== manifest.promptSha256) fail("frozen_input_changed");
   const files = frozen.files.map((entry) => {
@@ -337,7 +341,10 @@ function assertTrustedExecutableAncestors(file) {
       || !trustedOwners.has(uid)
       || (worldWritable && !stickyRootDirectory)
       || (groupWritable && !stickyRootDirectory && !homebrewOwnedGroupWrite)) fail("unsafe_oracle_executable");
-    identities.push({ path: current, ...executableIdentity(info) });
+    // Directory size/mtime describe sibling churn, not executable drift. Bind
+    // the ancestor's identity and trust attributes; keep file timestamps in
+    // executableIdentity for the executable and private-state race checks.
+    identities.push({ path: current, dev: String(info.dev), ino: String(info.ino), mode, uid, gid });
   }
   return identities;
 }
@@ -361,7 +368,9 @@ export function bindExecutable(candidate, repoRoot = process.cwd()) {
 
 export function revalidateExecutable(binding) {
   const current = bindExecutable(binding.binary, binding.repoRoot);
-  if (stable(current.identity) !== stable(binding.identity) || stable(current.ancestors) !== stable(binding.ancestors)) fail("oracle_executable_changed");
+  if (current.binary !== binding.binary
+    || stable(current.identity) !== stable(binding.identity)
+    || stable(current.ancestors) !== stable(binding.ancestors)) fail("oracle_executable_changed");
   return current.binary;
 }
 
@@ -887,6 +896,7 @@ export function reattach(input, options = {}) {
   if (claimState.kind !== "review" || claimState.state !== "started" || typeof claimState.receiptId !== "string") fail("session_not_reattachable");
   const prior = readJsonRegular(receiptFile(root, claimState.receiptId));
   if (prior.reason !== "detached" || prior.sessionId !== input.sessionId) fail("session_not_reattachable");
+  if (prior.adapterModelControl !== FIXED_MODEL) fail("session_model_binding_unsupported");
   const binding = inspectBinding(input, prior.frozenInputDigest, options);
   const lock = `${claimPath}.reattach`;
   const sessionExpiry = Date.parse(prior.expiresAt);

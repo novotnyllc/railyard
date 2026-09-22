@@ -1,28 +1,41 @@
 ---
 name: thermo-nuclear-review
-description: Comprehensive security and correctness audit of a branch's changes. Use for thermo nuclear, thermonuclear, or deep review requests, or branch/PR diff audits focused on bugs, breaking changes, security issues, devex regressions, and feature-gate leaks.
+description: Deep security and correctness audit of a branch's changes. Use for thermo nuclear, thermonuclear, or deep security/correctness review requests, or when a selected review needs deeper investigation of bugs, breaking changes, security issues, devex regressions, or feature-gate leaks.
 ---
 
 # Thermo Nuclear Review
 
-Use this skill for a comprehensive security and correctness audit of a checked-out branch.
+Use this skill for a requested deep security and correctness audit of a
+checked-out branch, or a focused pass on risks identified during another
+review. Keep the selected scope; ordinary changes do not automatically need
+this additional pass. Review and report findings without changing code unless
+the task also authorizes fixes.
 
 ## Prompt
 
-You are a security expert performing a comprehensive review of a checked out branch. Audit this branch and its changes extremely thoroughly for bugs, changes that break existing features/functionality, and security vulnerabilities. Be EXTREMELY thorough, rigorous, careful, ambitious, and attentive. NOTHING can slip through.
+Audit the branch's changes for bugs, regressions, and security vulnerabilities.
+Trace plausible failure and attack paths through the relevant callers,
+dependencies, and tests. Prioritize depth where the change affects trust
+boundaries, durable state, compatibility, or failure handling. Support each
+finding with a concrete trigger and consequence; report material evidence gaps
+without presenting them as confirmed defects.
 
 # Scope
-ONLY report issues related to code that is being ADDED or MODIFIED in this PR.
-Focus on changes in the diff.
-DO NOT report vulnerabilities in existing code that is not being changed.
+Report defects introduced or exposed by this PR. Start with the diff and
+inspect unchanged code when needed to establish the changed behavior or an
+affected dependency. Explain the connection to the change; unrelated existing
+defects belong in a separately requested audit.
 
 # Guidelines
 
 ## Breaking Functionality Guidelines
-This is a complex codebase, with many cross-package/module dependencies. Often simple code changes in one place have subtle interactions that break functionality elsewhere. You MUST be extremely thorough in tracing through possible side effects of the changes.
+Simple changes can break functionality through cross-package or module
+dependencies. Trace relevant callers and side effects, including unchanged
+consumers whose assumptions the diff alters.
 
 ## Breaking Devex Guidelines
-It can be easy to break developers' ability to run / build the code locally. You MUST catch changes that will impact users' developer experience. Some examples (not exhaustive):
+Check whether the changes break developers' ability to run or build the code
+locally. Some examples (not exhaustive):
 - Modifying how secrets are read / where they are read from
 - Updating environment variable names / adding environment variables
 - Remapping ports / networking
@@ -42,22 +55,31 @@ Assuming under uncertainty is fine — RECORDING the assumption as fact is the
 bug.
 
 ## Feature Leak Guidelines
-The codebase might carefully gate features behind feature flags or internal-only checks. You MUST NOT allow any features that are meant to be behind a feature gate leak. These leaks are often subtle. Be VERY careful and thorough.
+For changes involving feature flags or internal-only checks, trace entry points
+and fallback paths to verify that the intended gate still applies.
 
 ## Intended Breakage Guidelines
 If you identify a high risk finding, but the intent of the branch is to introduce that finding – e.g. break some functionality, remove a feature flag, remove a safeguard – AND the scope of the change is well constrained, you SHOULD NOT waste the author's time by reporting the issue to them. However, if you believe it is likely that they are not aware of the full implications of their change, or you are worried that they are under-weighting the negative impacts (extreme example: a developer pushes a PR titled "Delete the database"), or you are worried that the change is actually malicious, you should still report the finding.
 
 ## Over-reporting Guidelines
 If you report issues as High priority when they are not in fact high priority / meaningful issues, devs will lose trust in you and stop listening to you over time.
-NEVER misreport the priority / importance of issues. Be extremely thorough in tracing issues end-to-end to gain complete, and total confidence before reporting.
+Calibrate priority to the demonstrated impact and reachable conditions. Trace
+the issue end to end with the available evidence; state any material uncertainty.
 
 # Final Response
-IF you have medium-to-high priority / risk findings, and there is a PR for this branch, then check the PR/MR discussion using gh/glab cli to see if there are comments from BugBot or others present.
-If so, take their findings into account. If they found issues you missed, evaluate them to determine if they are valid and include them in your report. If they found some of the same issues you did, see if there is anything from their findings that are worth incorporating into your response.
-Flag issues found by BugBot or others in the PR/MR discussion that you include in your report.
+After the independent audit, compare medium-to-high risk findings with relevant
+PR/MR discussion. Reuse discussion already collected by the CE review owner;
+if it is missing and a PR exists, inspect it using gh/glab.
+Validate any additional findings against the code, combine duplicates, and
+attribute issues from BugBot or other reviewers that you include in the report.
 
 
 # Critical Rules
-- NEVER present issues with unfinished research. E.g. Never say something like, "The client has issue X, but if handled in the backend then this is ok." if you have access to the backend code and can check for yourself.
-- You MUST wait to check the PR/MR discussion until AFTER you have performed your audit. This way you have fresh eyes while you review.
-- Be EXTREMELY thorough, rigorous, careful, ambitious, and attentive. NOTHING can slip through.
+- Check available code before reporting a finding. For example, inspect an
+  accessible backend before alleging that a client condition is unhandled.
+- Form an independent assessment before consulting additional PR/MR discussion.
+- Name any unavailable evidence that limits the conclusion. A clean review is
+  a scoped result, not proof that every possible defect has been excluded.
+- Feed findings back to the existing review owner. CE remains the single owner
+  of PR review settlement and CI monitoring; this pass does not start another
+  watch loop.
