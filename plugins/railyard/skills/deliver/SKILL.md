@@ -1,6 +1,6 @@
 ---
 name: deliver
-description: "Coordinate a software change or PR through its requested delivery boundary using native execution and the relevant Compound Engineering stages. Use when a change benefits from coordinating implementation, review, or shipping, or when the user names this skill. Ordinary local fixes can execute directly. Fleet/account allocation and delegated remote-agent work use orchestrate when explicitly requested."
+description: "Deliver an implementation or fix through review, merge, required release or deployment, and consumer verification unless the user sets a narrower endpoint. Use when the user requests delivery or names this skill, or when coordinating selected Compound Engineering stages helps. Internal skill selection does not expand user authorization."
 ---
 
 # Deliver
@@ -13,11 +13,23 @@ receipt, or retrospective.
 
 ## Select the workflow and endpoint
 
+An explicit user request to deliver an implementation or fix, including invoking
+this skill for that change, authorizes the full delivery lifecycle by default:
+implementation, verification, commit, push, PR, CE review/CI settlement, merge,
+required release or deployment, and verification at the actual consumer. Do not
+stop at a local patch, passing tests, an open PR, or a merged source change when
+release, marketplace publication, installation, or deployment still remains.
+
 Determine the user's requested result and terminal boundary from the current
-instruction and still-applicable prior authorization. Continue authorized work
-without asking again. A later local-only stop halts shipping; a later ship or
-merge instruction extends an earlier local stop. A plan, review, diagnosis, or
+instruction and still-applicable prior authorization. Explicit plan-only,
+diagnosis-only, review-only, local-only, and PR-only requests override the full
+delivery default. Continue authorized work without asking again. A later
+local-only stop halts shipping; a later ship or merge instruction extends an
+earlier local stop. Internally selecting this skill does not expand the user's
+request: outside an explicit delivery request, a plan, review, diagnosis, or
 local edit does not by itself authorize publication or merge.
+An agent-authored child prompt invoking Deliver inherits the caller's already
+authorized endpoint; it cannot create new publication or deployment authority.
 
 When `TYPESAFE_API_KEY` is present, use [Jev](../jev/SKILL.md) by default
 throughout delivery for appropriate bounded decisions: workflow choice,
@@ -31,7 +43,7 @@ extend the requested endpoint or take over CE's review disposition.
 
 | Work to do | Appropriate execution | Completion boundary |
 | --- | --- | --- |
-| Bounded, understood fix or mechanical edit | Native edit and focused verification | Requested local result |
+| Bounded, understood fix or mechanical edit | Native edit and focused verification | Selected endpoint; full delivery for an explicit Deliver request |
 | Explore a consequential design choice | `compound-engineering:ce-brainstorm` | Requested decision or framing |
 | Substantial planning with dependencies or unclear implementation | `compound-engineering:ce-plan` | Plan, or continue when implementation is authorized |
 | Difficult diagnosis | `compound-engineering:ce-debug` | Findings; also fix and verify when requested |
@@ -41,6 +53,9 @@ extend the requested endpoint or take over CE's review disposition.
 | Create a PR or push user-requested commits to an existing PR | `compound-engineering:ce-commit-push-pr` | Requested PR or updated branch |
 | Watch or drive an existing PR, including review and CI repairs | `compound-engineering:ce-babysit-pr` | Requested watch result or delivery tail |
 | Resolve one bounded batch of review feedback | `compound-engineering:ce-resolve-pr-feedback` | Resolved feedback and relevant checks |
+
+These rows identify stage handoffs. A stage result is not the final endpoint
+when the user's delivery request includes later stages.
 
 Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or pushing
 user-requested commits to an existing PR, including inside another workflow.
@@ -79,8 +94,9 @@ authorization. Session startup does not install dependencies.
 
 ## Delivery tail
 
-For a PR-ready request, report the PR and its known state. For authorized ship
-or merge work, continue after CE's settled result:
+For an explicit PR-only request, report the PR and its known state. For an
+explicit Deliver request or other authorized ship or merge work, continue
+after CE's settled result:
 
 1. Confirm the requested merge is still authorized and no user or repository
    hold remains. CE supplies the review and CI disposition; this step checks
@@ -92,11 +108,23 @@ or merge work, continue after CE's settled result:
 3. Observe the merged state and merge commit, fetch the base, and verify that
    the merge is on the intended base. Run the smallest applicable post-merge
    or deployed-behavior check that proves the requested outcome.
-4. Report the result, PR/merge link, relevant checks, and any remaining blocker.
+4. Complete the repository's required release or deployment steps within the
+   assigned target. For plugins, publish required marketplace pins, update the
+   intended installation through its supported manager, and verify the installed
+   files and relevant runtime behavior. Source, marketplace, and installed state
+   are separate acceptance checks. Do not expand one target into unrelated fleet
+   work or edit installed cache files directly.
+5. Report the result, PR/merge and release links, relevant checks, and any
+   remaining concrete blocker.
 
 A local test pass, pushed branch, open PR, green CI, merge, and deployed result
 prove different things. Verify at the user's requested acceptance surface.
 Explicit plan-only, review-only, PR-only, and local-only boundaries stop there.
+Intermediate handoffs and bounded waits do not end the overall delivery. Keep
+ownership through the selected endpoint; continue independent work around a
+blocker and stop only when completion or a concrete unmet prerequisite requires
+user or external action. Do not ask again for routine steps already authorized
+by the delivery request.
 
 ## Allocate only when delegating
 
@@ -122,6 +150,12 @@ keep one canonical writer per shared file. Use isolated worktrees when concurren
 edits need isolation, and preserve unrelated changes. Visible user-owned tasks
 require explicit user direction to create or fork them; routine delegation and
 a configured catalog do not authorize task creation.
+
+Use [agent completion and waiting](../../references/agent-coordination.md):
+prefer completion notifications while doing independent work, then a supported
+yield/resume path or blocking event wait. Pass that rule in child briefs with
+the requirement to report completion, blockers, and dependencies needing
+attention. Reserve status polling for missing event support or concrete recovery.
 
 Use `railyard:orchestrate` when the user explicitly requests fleet/account
 allocation or a delegated remote agent. Load its specialized admission,

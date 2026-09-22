@@ -34,6 +34,7 @@ const deliveryPrompt = readFileSync(new URL("../../deliver/agents/openai.yaml", 
 const ceAdapter = readFileSync(new URL("../../deliver/references/ce-call-adapter.md", import.meta.url), "utf8");
 const legacyCarrier = readFileSync(new URL("../../deliver/references/carrier-protocol.md", import.meta.url), "utf8");
 const remoteExecution = readFileSync(new URL("../references/remote-execution.md", import.meta.url), "utf8");
+const agentCoordination = readFileSync(new URL("../../../references/agent-coordination.md", import.meta.url), "utf8");
 
 test("routine local fixes can execute natively without an LFG carrier", () => {
   assert.match(delivery, /Bounded, understood fix[^\n]*Native edit and focused verification/);
@@ -58,14 +59,27 @@ test("CE selection stays automatic and PR creation keeps its required workflow",
 
 test("explicit stops and existing authorization define the delivery endpoint", () => {
   assert.match(delivery, /still-applicable prior authorization/);
-  assert.match(delivery, /later local-only stop halts shipping/);
-  assert.match(delivery, /later ship or\s+merge instruction extends an earlier local stop/);
+  assert.match(delivery, /later\s+local-only stop halts shipping/);
+  assert.match(delivery, /later ship or merge instruction extends an\s+earlier local stop/);
   assert.match(delivery, /local edit does not by itself authorize publication or merge/);
   assert.match(delivery, /plan-only, review-only, PR-only, and local-only boundaries stop there/);
   assert.match(orchestrator, /Preserve earlier authorization unless a later instruction changes it/);
-  assert.match(delivery, /For authorized ship|For authorized.*merge|For a PR-ready request[\s\S]{0,100}authorized ship/i);
+  assert.match(delivery, /explicit Deliver request or other authorized ship or merge work/);
   assert.match(delivery, /merge is on the intended base/);
   assert.match(delivery, /post-merge\s+or deployed-behavior check/);
+});
+
+test("explicit Deliver requests finish release and consumer verification unless narrowed", () => {
+  assert.match(delivery, /explicit user request to deliver an implementation or fix[\s\S]*authorizes the full delivery lifecycle by default/);
+  assert.match(delivery, /Explicit plan-only,\s+diagnosis-only, review-only, local-only, and PR-only requests override/);
+  assert.match(delivery, /Internally selecting this skill does not expand the user's\s+request/);
+  assert.match(delivery, /agent-authored child prompt invoking Deliver inherits the caller's already\s+authorized endpoint/);
+  assert.match(delivery, /publish required marketplace pins[\s\S]*supported manager[\s\S]*runtime behavior/);
+  assert.match(delivery, /Intermediate handoffs and bounded waits do not end the overall delivery/);
+  assert.match(deliveryPrompt, /required release or deployment, and consumer verification/);
+  assert.match(orchestrator, /Endpoint: <caller's final delivery target and this child's owned handoff>/);
+  assert.match(orchestrator, /bounded handoff does not complete the\s+caller's delivery/);
+  assert.doesNotMatch(delivery, /Requested local result|For a PR-ready request, report/);
 });
 
 test("native children can implement and visible tasks need explicit creation direction", () => {
@@ -87,6 +101,21 @@ test("model and effort are deliberate while inheritance respects native fork con
     assert.match(text, /Fixed specialist roles[\s\S]{0,100}without\s+forbidden\s+overrides/);
     assert.doesNotMatch(text, /Every subagent dispatch names an explicit model and effort\. No\s+exceptions/);
   }
+});
+
+test("delegation propagates completion events, resumable waits, and bounded recovery", () => {
+  for (const consumer of [delivery, orchestrator, providerRouting, remoteExecution]) {
+    assert.match(consumer, /agent-coordination\.md/);
+    assert.doesNotMatch(consumer, /poll in bounded loops inside the turn|never end a turn to wait/i);
+  }
+  assert.match(orchestrator, /Coordination: Report completion, blockers, or dependencies needing attention/);
+  assert.match(delivery, /Pass that rule in child briefs/);
+  assert.match(agentCoordination, /guarantees resumption on the required child event/);
+  assert.match(agentCoordination, /`wait_agent`[\s\S]*`wait_threads`[\s\S]*`afterCursor`/);
+  assert.match(agentCoordination, /`timeoutMs: 0` is a one-off snapshot, not a monitoring loop/);
+  assert.match(agentCoordination, /`send_message`[\s\S]*does not\s+start an idle agent[\s\S]*`followup_task`/);
+  assert.match(agentCoordination, /Poll only when[\s\S]*Set a deadline and back off/);
+  assert.match(agentCoordination, /CE's\s+existing watcher owns PR review and CI/);
 });
 
 test("fleet configuration alone cannot activate orchestration or ordinary admission artifacts", () => {

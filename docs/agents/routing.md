@@ -16,6 +16,11 @@ or audit artifacts.
 - Honor the requested endpoint and persistent authorization. Plan-only,
   review-only, PR-only, and local-only work stop at that result; authorized
   delivery continues to its real acceptance surface.
+- An explicit Deliver implementation/fix request authorizes the full lifecycle
+  by default: commit, push, PR, CE settlement, merge, required release or
+  deployment, and consumer verification. Preserve explicit narrower stops;
+  internal skill selection alone does not expand the user's request. Child
+  handoffs and bounded waits are intermediate states, not delivery completion.
 - Choose model AND reasoning effort for each agent assignment through
   `railyard:model-routing`; routine native tool use needs no intake ritual.
   Astra Max is the baseline candidate for substantive engineering, with other

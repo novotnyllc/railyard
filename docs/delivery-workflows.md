@@ -13,7 +13,7 @@ fleet catalog does not turn an ordinary local edit into fleet work.
 | Planning, debugging, review, or UI work that benefits from a focused workflow | Select the matching CE or specialist skill automatically | The requested artifact or verified behavior |
 | Create a PR or push user-requested commits to an existing PR | `compound-engineering:ce-commit-push-pr` | The requested PR state, with the selected CE workflow owning follow-through |
 | Address PR feedback or watch CI | Applicable CE feedback or babysitting workflow | One owner for review settlement, CI, and the watch loop |
-| Authorized ship or merge request | Native or selected CE implementation, then CE settlement | Merge confirmation and focused proof of the merged result |
+| Explicit Deliver implementation/fix or authorized ship request | Native or selected CE implementation, then CE settlement | Merge, required release or deployment, and consumer verification |
 | Explicit fleet/account allocation, remote work, or coordination that needs `orchestrate` | `railyard:orchestrate` | Combined acceptance evidence from the selected lanes |
 | Fleet setup or reconciliation | `roundhouse:fleet-readiness` | Required host, project, tool, and authentication readiness |
 
@@ -21,7 +21,10 @@ fleet catalog does not turn an ordinary local edit into fleet work.
 a focused CE workflow; it does not send generic implementation through LFG by
 default. LFG remains available when explicitly chosen. Plan-only, diagnosis-only,
 review-only, local-only, and PR-only requests retain their stated endpoints.
-Existing authorization to ship or merge carries through to completion.
+An explicit Deliver implementation/fix request authorizes the full lifecycle,
+including commit, push, PR, merge, required release or deployment, and consumer
+verification. Internal skill selection does not expand a narrower user request.
+Existing authorization carries through child handoffs and waits to completion.
 
 ```mermaid
 flowchart TD
@@ -40,7 +43,7 @@ flowchart TD
     pr --> settlement["CE owns review settlement and CI"]
     settlement --> terminal{"Merge authorized?"}
     terminal -- No --> result
-    terminal -- Yes --> proof["Merge confirmation and post-merge proof"]
+    terminal -- Yes --> proof["Merge, required release/deployment, consumer proof"]
     proof --> result
 ```
 

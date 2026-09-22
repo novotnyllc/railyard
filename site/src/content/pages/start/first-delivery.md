@@ -9,12 +9,12 @@ nav_order: 2
 
 Prerequisite: [install Railyard first →](/start/install/). Add Roundhouse when you explicitly request fleet placement.
 
-Start with a real change and carry it to observable proof. One sentence on the machine you already use can produce a reviewed, merged result plus a post-merge receipt, giving you a complete delivery loop before you add fleet complexity.
+Start with a real change and carry it to observable proof. An explicit Deliver request produces a reviewed, merged result, completes required release or deployment, and verifies the actual consumer on the intended machine.
 
 ## Easy path
 
 ```text
-> Fix the retry path in the webhook worker and get it merged.
+> Use Deliver to fix the retry path in the webhook worker.
 ```
 
 This request names the outcome. Routine implementation runs natively; `railyard:deliver` can coordinate the useful Compound Engineering (CE) stages and the requested delivery boundary.
@@ -25,7 +25,7 @@ This request names the outcome. Routine implementation runs natively; `railyard:
 2. For delegated work, choose model and reasoning effort together. Astra Max is the baseline candidate for substantive engineering; deliberate inheritance is supported. Use native children unless the user explicitly requests a visible task.
 3. Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR.
 4. CE owns the review settlement and CI loop. Optional specialist reviews, including [Thermos](/skills/thermos/), feed findings to that owner before the authorized merge.
-5. The merged commit is checked for reachability from the base branch and the smallest applicable post-merge check runs.
+5. Check the merged commit for reachability from the base branch, complete required release or deployment steps, and verify the actual consumer. For plugins, this includes required marketplace publication, a supported manager update, and installed-runtime verification.
 
 Illustrative evidence fields for a native Codex run; fill them from actual observations:
 
@@ -35,6 +35,8 @@ observed_allocation=<runtime evidence or unverified>
 review_and_ci=<CE disposition>
 merge=<observed merge commit> ancestry=<check result>
 post_merge_check=<focused command and result>
+release_or_deployment=<observed result when required>
+consumer_check=<installed or deployed behavior>
 ```
 
 Same-harness execution is the default. Crossing from another harness to Codex is opt-in and requires a separately configured Codex CLI.
@@ -43,7 +45,7 @@ The post-merge check is stack-specific and comes from the repository's existing 
 
 ## Proof point
 
-The [delivery lifecycle](/delivery/lifecycle/) documents the observable terminal pair: `git merge-base --is-ancestor <merge-commit> origin/<base>` plus a real post-merge check.
+The [delivery lifecycle](/delivery/lifecycle/) requires merge ancestry and a real post-merge check, followed by applicable release or deployment and consumer verification. Explicit narrower requests retain their stated endpoints.
 
 ## Scope
 

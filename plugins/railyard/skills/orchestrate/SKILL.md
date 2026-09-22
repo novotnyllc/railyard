@@ -31,9 +31,9 @@ it. Do not serialize independent work merely to preserve a controller-only role.
 | Need | Codex | Claude Code |
 | --- | --- | --- |
 | Ordinary delegated work | `spawn_agent`, then `send_message` or `followup_task` | Native `Agent` subagent |
-| Monitor ordinary children | Native agent notifications and `wait_agent` | Native completion notifications and supported wait tools |
+| Monitor ordinary children | Pushed results; `wait_agent` when blocked | Native completion notifications; supported event waits |
 | A visible user-owned task | `create_thread` or `fork_thread`, only on explicit user direction | Use an exposed session/task capability only when requested |
-| Monitor an explicitly requested visible task | `wait_threads`; inspect messages when needed | Exposed session/task monitoring |
+| Monitor an explicitly requested visible task | `wait_threads` with cursors and a nonzero timeout | Exposed session/task completion events or waits |
 | A delegated agent on another host | Supported destination-native agent carrier | Supported destination-native agent carrier |
 | A bounded one-host admin operation | Named CLI or `roundhouse:remote-mac` over SSH | Named CLI or `roundhouse:remote-mac` over SSH |
 
@@ -49,6 +49,11 @@ catalog before declaring it unavailable. Use the actual tool schema; do not
 invent role, model, effort, placement, or per-child plugin controls. Report a
 missing or unsupported carrier accurately, with a disclosed supported
 alternative where one fits the user's scope.
+
+Follow [agent completion and waiting](../../references/agent-coordination.md)
+for every child and task: prefer completion notifications, do independent work,
+then use a supported yield/resume path or a blocking event wait. Status polling
+is a fallback for a missing event surface or a concrete recovery question.
 
 ## Allocate model and effort together
 
@@ -85,8 +90,9 @@ and cancellation messages are coordination, not a new implementation workflow.
 3. State each child's objective, owned files or system, constraints,
    dependencies, and required verification. Use an isolated worktree when
    concurrent changes need it; preserve unrelated work.
-4. Start dependency-ready work in parallel. Collect progress with native
-   notifications or bounded waits; do not repeatedly reread unchanged output.
+4. Start dependency-ready work in parallel. Consume completion notifications;
+   when blocked, yield with a verified resume path or use a blocking event wait.
+   Do not repeatedly reread unchanged output or duplicate the child's work.
    Answer child questions, resolve dependencies, and redirect failed work.
 5. Verify the combined result against the user's acceptance surface. Continue
    authorized delivery and needed repairs until complete or concretely blocked.
@@ -99,7 +105,9 @@ Scope: <files, repository, system, or decision; writer boundary>
 Constraints: <behavior, authorization, exclusions, and relevant dependencies>
 Allocation: <model and reasoning effort, or deliberate inheritance, with reason>
 Verify: <observable result and required checks>
+Endpoint: <caller's final delivery target and this child's owned handoff>
 Report: <changes, evidence, and remaining blocker or integration handoff>
+Coordination: Report completion, blockers, or dependencies needing attention; use completion events or a supported wait, not repeated status checks. End/yield only with a verified resume path when work remains. Pass this rule to descendants.
 ```
 
 Do not forward unrelated history or require a separate plan, admission receipt,
@@ -143,6 +151,11 @@ user-requested commits to an existing PR; use `gh-stack` for related dependent
 PRs when appropriate. Give integration and each affected repository a named
 owner. Push or publish only within the requested boundary.
 
+An explicit user Deliver implementation/fix request defaults to the full lifecycle,
+including required release or deployment and consumer verification. Pass that
+endpoint into child briefs. A child's bounded handoff does not complete the
+caller's delivery; the coordinator continues the remaining owned stages.
+
 CE alone owns review settlement and CI/PR monitoring. Reuse the lane's active
 CE watcher, including LFG's watcher, and its bounded continuations. The
 orchestrator monitors child completion and dependencies; it does not launch a
@@ -155,9 +168,9 @@ invalidates it. Distinguish the execution host from the target platform: a
 Linux or WSL pass alone does not prove native Windows behavior. Inspect the
 actual reported artifacts before accepting completion.
 
-Planning, diagnosis, review, and local-only work end at the requested result.
-Authorized merge/delivery continues through CE settlement, merge, and the
-smallest post-merge or deployed-behavior proof that reaches the real consumer.
+Explicit plan-only, diagnosis-only, review-only, local-only, and PR-only requests
+end at their stated result. Authorized delivery continues through CE settlement,
+merge, required release or deployment, and proof at the actual consumer.
 Keep monitoring active children until each owned scope is complete, handed off
 as requested, or blocked by a concrete unmet prerequisite. Report results and
 blockers without inventing a mandatory process recap.
