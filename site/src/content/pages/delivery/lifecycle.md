@@ -36,9 +36,9 @@ A deployed application or other external result also needs evidence at the accep
 
 ## An authorized shipping path
 
-This diagram shows a shipping workflow with selected review and optional learning. Local work stops at its requested result; it does not traverse every stage.
+This diagram shows a shipping workflow with selected review and CE settlement. Proof covers merge/source checks and, when required by the selected authorized endpoint, release or deployment followed by consumer verification. Learning is optional; narrower requests stop at their requested outcome.
 
-![An authorized shipping path with selected review, CE settlement, merge proof, and optional learning.](/diagrams/m2-delivery-lifecycle.svg)
+![A shipping workflow uses selected review and CE settlement. Proof covers merge/source checks and, when required by the selected authorized endpoint, release or deployment followed by consumer verification. Learning is optional; narrower requests stop at their requested outcome.](/diagrams/m2-delivery-lifecycle.svg)
 
 ### Sequence
 

@@ -1,6 +1,6 @@
 flowchart LR
     accTitle: M2 delivery lifecycle sequence
-    accDescr: An authorized shipping workflow uses selected review, CE settlement, merge, and proof. Learning is optional; narrower requests stop at their requested outcome.
+    accDescr: A shipping workflow uses selected review and CE settlement. Proof covers merge/source checks and, when required by the selected authorized endpoint, release or deployment followed by consumer verification. Learning is optional; narrower requests stop at their requested outcome.
     A["1 · Ask<br/>Intent intake"] --> B["2 · Route<br/>Model + effort"]
     B --> C["3 · Build<br/>Plan / implement"]
     C --> D["4 · Review<br/>Selected review"]
@@ -8,7 +8,7 @@ flowchart LR
     E --> F["6 · Publish<br/>CE commit / PR"]
     F --> G["7 · Settle<br/>CE review + CI"]
     G --> H["8 · Merge<br/>Base branch"]
-    H --> I["9 · Prove<br/>Post-merge check"]
+    H --> I["9 · Prove<br/>Merge/source proof<br/>Then, when required:<br/>Release/deploy<br/>Consumer proof"]
     I --> J["10 · Learn<br/>When useful"]
     D -->|findings return| C
     G -->|unresolved threads return| D
