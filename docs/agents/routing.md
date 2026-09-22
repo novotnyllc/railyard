@@ -21,6 +21,13 @@ or audit artifacts.
   Astra Max is the baseline candidate for substantive engineering, with other
   choices justified by the task, outcomes, or user constraints. Mechanical
   operations can use deterministic tools directly.
+- When `TYPESAFE_API_KEY` is present, use `railyard:jev` by default for bounded
+  model-and-effort selection, workflow choice, evidence selection, work priority,
+  and review-triage judgments throughout delivery. Explicit choices,
+  deterministic work, and offline/privacy restrictions take precedence. Its
+  typed suggestions do not grant authority; failures and uncertainty leave
+  ordinary Railyard reasoning in charge. Startup advertises it without
+  making a network request or recording the key.
 - Deliberate inheritance is valid. A native full-history fork cannot accept
   model/effort overrides; choose a supported limited/no-history fork and a
   sufficient brief when changing settings. Fixed roles keep their authoritative

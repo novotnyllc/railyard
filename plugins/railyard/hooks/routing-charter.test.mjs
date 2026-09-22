@@ -24,6 +24,7 @@ function environment(home, overrides = {}) {
     CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
     CLAUDE_PLUGIN_ROOT: "",
     RAILYARD_RUN_LOG_DIR: path.join(home, "run-log"),
+    TYPESAFE_API_KEY: "",
     ...overrides,
   };
 }
@@ -91,6 +92,23 @@ test("startup preserves requested delivery scope and a single CE settlement owne
   assert.match(out, /CE alone\n  owns review settlement and CI\/PR monitoring/);
   assert.match(out, /reuse its active watcher/);
   assert.doesNotMatch(out, /independent Sol|Thermos gate|MUST dispatch|lfg_complete|carrier_started/);
+});
+
+test("configured Jev advice is advertised without exposing credentials or sending startup content", (t) => {
+  const home = fixture(t);
+  const input = { hook_event_name: "SessionStart", prompt: "private-task-canary" };
+  const { out } = run(home, { TYPESAFE_API_KEY: "test-only-secret-canary" }, input);
+  assert.match(out, /Use railyard:jev by default/);
+  assert.match(out, /offline\/privacy restrictions/);
+  assert.ok(Buffer.byteLength(out) < 2500, "configured SessionStart must remain bounded");
+  const recorded = JSON.stringify(entries(home));
+  for (const secret of ["test-only-secret-canary", "private-task-canary"]) {
+    assert.ok(!out.includes(secret));
+    assert.ok(!recorded.includes(secret));
+  }
+  for (const key of ["", "   "]) {
+    assert.doesNotMatch(run(home, { TYPESAFE_API_KEY: key }).out, /railyard:jev/);
+  }
 });
 
 test("startup requires deliberate allocation and explains native fork constraints", (t) => {

@@ -25,6 +25,7 @@ Node 24, no package manager and no install step:
 ```sh
 node --test \
   plugins/railyard/scripts/model-routing.test.mjs \
+  plugins/railyard/skills/jev/scripts/jev-adviser.test.mjs \
   plugins/railyard/skills/orchestrate/scripts/delivery-contracts.test.mjs \
   plugins/railyard/skills/oracle/scripts/oracle-route.test.mjs \
   plugins/railyard/skills/oracle/scripts/ensure-oracle.test.mjs \

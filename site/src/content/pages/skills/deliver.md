@@ -17,6 +17,11 @@ Deliver coordinates useful Compound Engineering (CE) stages and the requested en
 
 Choose the stages that fit the work: planning, diagnosis, structured implementation, review, or shipping. Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR. Optional Thermos findings feed the same CE review owner.
 
+When `TYPESAFE_API_KEY` is present, [Jev](/skills/jev/) is the default for model
+and effort selection, workflow choice, evidence selection, work priority, and
+review triage throughout delivery. Explicit choices and privacy restrictions
+take precedence; uncertainty or service failure falls back to ordinary judgment.
+
 For delegation, choose model and reasoning effort together. Astra Max is the baseline candidate for substantive engineering; another supported pair or deliberate inheritance can fit the assignment. Native children handle ordinary subtasks, and visible tasks require an explicit user request.
 
 Illustrative delivery outline:

@@ -6,11 +6,21 @@ description: "Choose a model and reasoning effort for native delegation or a req
 # Model routing
 
 Choose model and reasoning effort together for the bounded assignment. Keep
-native execution lean; this skill does not create tasks, invoke providers, or
+native execution lean; this skill does not create tasks, dispatch workers, or
 replace the selected delivery/review workflow. There is no mandatory routing
 CLI intake for every software turn.
 
 ## Native allocation
+
+When `TYPESAFE_API_KEY` is present, use [Jev](../jev/SKILL.md) as the default
+model-and-reasoning-effort selector for substantive assignments. Supply the
+locally compatible, eligible pairs with task context and available outcome
+evidence; use its recommended pair after the checks below. Respect explicit
+user choices, fixed roles, and offline/privacy restrictions first. Map the
+returned ID through that same local list and recheck availability before
+dispatch. Missing key, uncertainty, or service failure leaves the ordinary
+allocation procedure below in charge. Jev is an adviser,
+not an execution carrier, capability attestation, or budget decision.
 
 1. Preserve explicit user model/effort choices and applicable repository
    constraints. Identify the work, acceptance condition, and need for parallel

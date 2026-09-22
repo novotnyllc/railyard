@@ -45,6 +45,7 @@ train, clears the departure, and confirms arrival:
 | --- | --- |
 | Setup & health | `setup` — inspect and configure relevant prerequisites; `doctor` — diagnose and fix drift |
 | Allocation | `model-routing` — model and effort decisions, with optional configured budgets and transport controls (`railyard/model-routing/v1`) |
+| Semantic decisions | `jev` — model/effort selection, workflow choice, evidence selection, work priority, and review triage; enabled by default when `TYPESAFE_API_KEY` is present |
 | Delivery | `deliver` — select native execution or one useful CE workflow and complete the authorized scope |
 | Orchestration & placement | `orchestrate` — explicit fleet/account work, cross-project coordination, and supported remote placement |
 | Specialist review | `thermos`, `thermo-nuclear-review`, `thermo-nuclear-code-quality-review`, `oracle` — when their perspective is useful |
@@ -73,6 +74,20 @@ claude plugin install compound-engineering@compound-engineering-plugin
 Ponytail and Superpowers are not Railyard prerequisites. Native subagents are
 the default for bounded parallel work; user-visible tasks are created only
 when the user explicitly asks for them.
+
+## Jev advice
+
+[TypeSafe Jev](https://docs.typesafe.ai/) selects among eligible model/effort
+pairs, available workflows, relevant evidence, ready work, and next review
+investigations. Railyard uses it throughout delivery wherever these bounded
+semantic judgments help, by default when `TYPESAFE_API_KEY` is in the environment. No extra installation
+is needed. Use `--offline` to disable the helper; missing credentials, service
+errors, and uncertain judgments fall back to ordinary Railyard reasoning.
+
+Jev receives only the context and candidates explicitly supplied to its helper.
+It leaves permissions, routing policy, execution, and CE review settlement with
+their existing owners. See the [Jev skill](plugins/railyard/skills/jev/SKILL.md)
+for examples and the request contract.
 
 ## The family
 

@@ -5,6 +5,14 @@ description: "Coordinate explicitly requested fleet/account allocation or delega
 
 # Orchestrate
 
+When `TYPESAFE_API_KEY` is available, use [Jev](../jev/SKILL.md) by default for
+appropriate bounded decisions during orchestration: selecting model and
+reasoning effort, prioritizing ready work, and choosing relevant evidence to
+inspect. Filter candidates through existing dependencies, eligibility,
+privacy, and authority first. Jev cannot admit or dispatch work, create visible
+tasks, or attest host readiness; failed or uncertain advice falls back to
+normal reasoning. Explicit choices and deterministic facts need no inference.
+
 Coordinate the requested objective, assigning clear ownership and verifying
 the combined result. Use this specialist workflow for explicitly requested
 fleet/account allocation or delegated remote-agent work. A configured catalog,
