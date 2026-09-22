@@ -17,8 +17,9 @@ remain explicit choices.
   Claude Code supports deliberate Fable 5.1 allocation. Suitable inheritance
   is an explicit choice, and unsupported selections are disclosed.
 - 🔍 **One completion owner.** CE owns review settlement and CI watching for
-  a selected PR workflow. Authorized shipping continues through merge and
-  focused post-merge proof; narrower requests keep their stated endpoint.
+  a selected PR workflow. An explicit Deliver implementation/fix request runs
+  through merge, required release or deployment, and consumer verification;
+  explicit narrower requests keep their stated endpoint.
 - 🖥️ **Explicit fleet work.** Orchestrates across machines when requested,
   and only dispatches to
   hosts its sibling [roundhouse](https://github.com/novotnyllc/roundhouse)

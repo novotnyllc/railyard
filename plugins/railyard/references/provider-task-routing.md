@@ -53,7 +53,9 @@ the requested provider, address that returned task, and wait or monitor it
 within the caller's existing bounded wait policy. In Codex, `create_thread`,
 `send_message_to_thread`, and `wait_threads` are adapter examples; another
 harness uses its native equivalents. Discover those capabilities before
-creating the task.
+creating the task. Follow [agent completion and waiting](agent-coordination.md)
+for notifications, cursor-aware event waits, and recovery; do not repeatedly
+read the task's transcript or request unchanged status.
 
 Task creation must return the task identifier plus model and provider metadata
 that matches the requested target. Bind every later message and wait to that

@@ -65,8 +65,10 @@ a checkpoint does not establish review readiness, merge, or completion.
 
 ## Monitor and communicate
 
-Use native status/completion surfaces where available and bounded log/result
-inspection otherwise. Do not start a duplicate worker after a timeout without
+Follow [agent completion and waiting](../../../references/agent-coordination.md):
+prefer native completion streams or event waits; use bounded log/result
+inspection with backoff only when unavailable or needed for recovery.
+Do not start a duplicate worker after a timeout without
 checking the original worker's liveness and progress. Keep monitoring until
 requested completion or a concrete blocker. CE owns any PR review and CI watch
 loop; remote placement does not add a second watcher.

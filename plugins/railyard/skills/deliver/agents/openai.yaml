@@ -1,4 +1,4 @@
 interface:
   display_name: "Deliver"
-  short_description: "Complete a change with native work and selected CE."
-  default_prompt: "Use $deliver to complete this change through the requested endpoint. Select useful CE stages automatically, preserve local or plan-only stops, and continue authorized shipping through CE-owned settlement, merge, and post-merge proof."
+  short_description: "Deliver changes through release and consumer verification."
+  default_prompt: "Use $deliver to complete this change through implementation, verification, commit, push, PR, CE-owned review and CI settlement, merge, required release or deployment, and consumer verification. Preserve explicit plan-only, diagnosis-only, review-only, local-only, or PR-only stops. Keep ownership across child handoffs and waits until the selected endpoint is reached or a concrete blocker requires user or external action."

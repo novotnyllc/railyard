@@ -7,7 +7,7 @@ nav_order: 1
 
 # The delivery lifecycle
 
-The requested finish line determines the workflow. Routine work runs natively, with a focused skill selected automatically when it helps. Planning, diagnosis, review, and local-only requests keep their stated endpoints. The shipping path below applies when publishing and merging are authorized.
+The requested finish line determines the workflow. An explicit Deliver implementation/fix request authorizes the shipping path through required release or deployment and consumer verification. Explicit plan-only, diagnosis-only, review-only, local-only, and PR-only requests keep their stated endpoints. Routine work runs natively, with a focused skill selected automatically when it helps; internal skill selection does not expand authorization.
 
 ## Native work and allocation
 
@@ -32,13 +32,13 @@ git merge-base --is-ancestor <merge-commit> origin/<base>
 <smallest applicable post-merge check>
 ```
 
-A deployed application or other external result also needs evidence at the acceptance surface the user requested. A passing local test alone cannot prove deployment.
+A deployed application or other external result also needs evidence at the acceptance surface the user requested. Complete required release and deployment steps; for plugins, publish required marketplace pins, update the intended installation through its supported manager, and verify installed behavior. A passing local test or merged source alone cannot prove that result.
 
 ## An authorized shipping path
 
-This diagram shows a shipping workflow with selected review and optional learning. Local work stops at its requested result; it does not traverse every stage.
+This diagram shows a shipping workflow with selected review and CE settlement. Proof covers merge/source checks and, when required by the selected authorized endpoint, release or deployment followed by consumer verification. Learning is optional; narrower requests stop at their requested outcome.
 
-![An authorized shipping path with selected review, CE settlement, merge proof, and optional learning.](/diagrams/m2-delivery-lifecycle.svg)
+![A shipping workflow uses selected review and CE settlement. Proof covers merge/source checks and, when required by the selected authorized endpoint, release or deployment followed by consumer verification. Learning is optional; narrower requests stop at their requested outcome.](/diagrams/m2-delivery-lifecycle.svg)
 
 ### Sequence
 
@@ -50,7 +50,7 @@ This diagram shows a shipping workflow with selected review and optional learnin
 6. **Publish.** Use CE commit/push/PR for PR creation and user-requested PR pushes.
 7. **Settle.** Let the selected CE workflow own review settlement, feedback, and CI.
 8. **Merge.** Merge the authorized change once the current repository requirements are satisfied.
-9. **Prove.** Verify merge ancestry and the applicable post-merge or live result.
+9. **Prove.** Verify merge ancestry, complete required release or deployment, and check the actual consumer.
 10. **Learn.** Capture a reusable lesson when useful or requested; no routine retrospective artifact is required.
 
 Report the changed behavior, validation, and any remaining limitation. Task archival, worktree removal, and runtime cleanup are separate operations with their own authority.

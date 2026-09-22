@@ -7,7 +7,7 @@ nav_order: 1
 
 # Deliver
 
-Carry a software change to the requested boundary: a local fix, a PR, or an authorized merge with a focused post-merge check. Routine edits and verification run natively.
+An explicit Deliver request for an implementation or fix runs through commit, push, PR, review and CI settlement, merge, required release or deployment, and consumer verification. Explicit plan-only, diagnosis-only, review-only, local-only, or PR-only requests retain their narrower endpoints. Routine edits and verification run natively; internal skill selection does not expand user authorization.
 
 ## What it adds
 
@@ -27,10 +27,10 @@ For delegation, choose model and reasoning effort together. Astra Max is the bas
 Illustrative delivery outline:
 
 ```text
-> Fix the retry path in the webhook worker and get it merged with post-merge proof.
+> Use Deliver to fix the retry path in the webhook worker through consumer verification.
 allocation=codex-astra  model=gpt-6-astra  effort=max
 scope=bounded-change  review_and_ci=CE
-tail=CE-disposition -> authorized-merge -> ancestry -> focused-check
+tail=CE-disposition -> merge -> required-release/deployment -> consumer-check
 stop=report observed delivery state and verification
 ```
 
@@ -44,4 +44,4 @@ Ships in the `railyard` plugin.
 
 ## Proof point
 
-For an authorized merge, record the observed PR and merge commit, verify reachability from the intended base, and run the smallest applicable post-merge or deployed-behavior check. A local pass, open PR, merge, and deployed result prove different boundaries.
+Record the observed PR and merge commit, verify reachability from the intended base, and complete required release or deployment steps. For a plugin, that includes required marketplace pins, a supported manager update, and installed-runtime verification. A local pass, open PR, merge, and deployed result prove different boundaries; an intermediate result does not finish an explicit Deliver request.

@@ -34,6 +34,7 @@ const deliveryPrompt = readFileSync(new URL("../../deliver/agents/openai.yaml", 
 const ceAdapter = readFileSync(new URL("../../deliver/references/ce-call-adapter.md", import.meta.url), "utf8");
 const legacyCarrier = readFileSync(new URL("../../deliver/references/carrier-protocol.md", import.meta.url), "utf8");
 const remoteExecution = readFileSync(new URL("../references/remote-execution.md", import.meta.url), "utf8");
+const agentCoordination = readFileSync(new URL("../../../references/agent-coordination.md", import.meta.url), "utf8");
 
 test("routine local fixes can execute natively without an LFG carrier", () => {
   assert.match(delivery, /Bounded, understood fix[^\n]*Native edit and focused verification/);
@@ -58,14 +59,40 @@ test("CE selection stays automatic and PR creation keeps its required workflow",
 
 test("explicit stops and existing authorization define the delivery endpoint", () => {
   assert.match(delivery, /still-applicable prior authorization/);
-  assert.match(delivery, /later local-only stop halts shipping/);
-  assert.match(delivery, /later ship or\s+merge instruction extends an earlier local stop/);
+  assert.match(delivery, /later\s+local-only stop halts shipping/);
+  assert.match(delivery, /later ship or merge instruction extends an\s+earlier local stop/);
   assert.match(delivery, /local edit does not by itself authorize publication or merge/);
   assert.match(delivery, /plan-only, review-only, PR-only, and local-only boundaries stop there/);
   assert.match(orchestrator, /Preserve earlier authorization unless a later instruction changes it/);
-  assert.match(delivery, /For authorized ship|For authorized.*merge|For a PR-ready request[\s\S]{0,100}authorized ship/i);
+  assert.match(delivery, /remaining work only through the user's\s+selected authorized endpoint/);
+  assert.match(delivery, /release or deployment steps required by the\s+selected endpoint/);
+  assert.match(delivery, /update the intended installation through its supported\s+manager as required by that endpoint/);
+  assert.match(delivery, /When the selected endpoint requires a deployed or installed result/);
   assert.match(delivery, /merge is on the intended base/);
-  assert.match(delivery, /post-merge\s+or deployed-behavior check/);
+  assert.match(delivery, /post-merge\s+source check/);
+});
+
+test("explicit Deliver requests finish release and consumer verification unless narrowed", () => {
+  assert.match(delivery, /explicit user request to deliver an implementation or fix[\s\S]*authorizes the full delivery lifecycle by default/);
+  assert.match(delivery, /Explicit plan-only,\s+diagnosis-only, review-only, local-only, and PR-only requests override/);
+  assert.match(delivery, /Internally selecting this skill does not expand the user's\s+request/);
+  assert.match(delivery, /agent-authored child prompt invoking Deliver inherits the caller's already\s+authorized endpoint/);
+  const tail = delivery.match(/## Delivery tail\n([\s\S]*?)\n## /)?.[1] ?? "";
+  const steps = Array.from(tail.matchAll(/^\d+\. (.*(?:\n {3}.+)*)/gm), ([, step]) => step);
+  const sourceIndex = steps.findIndex(step => /post-merge\s+source check/.test(step));
+  const releaseIndex = steps.findIndex(step => /release or deployment steps required by/.test(step));
+  const consumerIndex = steps.findIndex(step => /actual consumer/.test(step));
+  assert.ok(sourceIndex >= 0 && sourceIndex < releaseIndex && releaseIndex < consumerIndex,
+    "merged-source proof must precede release/deployment, then consumer proof");
+  assert.doesNotMatch(steps[sourceIndex], /deployed-behavior|actual consumer|runtime behavior/);
+  assert.match(steps[releaseIndex], /publish required\s+marketplace pins[\s\S]*supported\s+manager/);
+  assert.match(steps[consumerIndex], /newly deployed result at the actual consumer after completing the required\s+release, deployment, or installation/);
+  assert.match(steps[consumerIndex], /installed files\s+and relevant runtime behavior/);
+  assert.match(delivery, /Intermediate handoffs and bounded waits do not end the overall delivery/);
+  assert.match(deliveryPrompt, /required release or deployment, and consumer verification/);
+  assert.match(orchestrator, /Endpoint: <caller's final delivery target and this child's owned handoff>/);
+  assert.match(orchestrator, /bounded handoff does not complete the\s+caller's delivery/);
+  assert.doesNotMatch(delivery, /Requested local result|For a PR-ready request, report/);
 });
 
 test("native children can implement and visible tasks need explicit creation direction", () => {
@@ -87,6 +114,21 @@ test("model and effort are deliberate while inheritance respects native fork con
     assert.match(text, /Fixed specialist roles[\s\S]{0,100}without\s+forbidden\s+overrides/);
     assert.doesNotMatch(text, /Every subagent dispatch names an explicit model and effort\. No\s+exceptions/);
   }
+});
+
+test("delegation propagates completion events, resumable waits, and bounded recovery", () => {
+  for (const consumer of [delivery, orchestrator, providerRouting, remoteExecution]) {
+    assert.match(consumer, /agent-coordination\.md/);
+    assert.doesNotMatch(consumer, /poll in bounded loops inside the turn|never end a turn to wait/i);
+  }
+  assert.match(orchestrator, /Coordination: Report completion, blockers, or dependencies needing attention/);
+  assert.match(delivery, /Pass that rule in child briefs/);
+  assert.match(agentCoordination, /guarantees resumption on the required child event/);
+  assert.match(agentCoordination, /`wait_agent`[\s\S]*`wait_threads`[\s\S]*`afterCursor`/);
+  assert.match(agentCoordination, /`timeoutMs: 0` is a one-off snapshot, not a monitoring loop/);
+  assert.match(agentCoordination, /`send_message`[\s\S]*does not\s+start an idle agent[\s\S]*`followup_task`/);
+  assert.match(agentCoordination, /Poll only when[\s\S]*Set a deadline and back off/);
+  assert.match(agentCoordination, /CE's\s+existing watcher owns PR review and CI/);
 });
 
 test("fleet configuration alone cannot activate orchestration or ordinary admission artifacts", () => {
