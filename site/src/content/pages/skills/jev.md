@@ -2,7 +2,7 @@
 layout: default
 title: Jev advice
 parent: Skills
-nav_order: 4
+nav_order: 3.5
 ---
 
 # Jev advice
