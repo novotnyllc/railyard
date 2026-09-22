@@ -14,6 +14,7 @@ Select a skill when its expertise helps the requested work. This reference group
 - [Deliver](/skills/deliver/) — `railyard`
 - [Orchestrate](/skills/orchestrate/) — `railyard`
 - [Model routing](/skills/model-routing/) — `railyard`
+- [Jev advice](/skills/jev/) — `railyard`
 - [Thermos](/skills/thermos/) — `railyard`
 - [Oracle](/skills/oracle/) — `railyard`
 - [Audit](/skills/audit/) — `railyard`

@@ -19,6 +19,16 @@ without asking again. A later local-only stop halts shipping; a later ship or
 merge instruction extends an earlier local stop. A plan, review, diagnosis, or
 local edit does not by itself authorize publication or merge.
 
+When `TYPESAFE_API_KEY` is present, use [Jev](../jev/SKILL.md) by default
+throughout delivery for appropriate bounded decisions: workflow choice,
+model-and-effort selection, evidence selection, work priority, and the next
+review investigation. Revisit when task state or evidence changes, without
+repeating identical requests or asking it to perform deterministic lookups.
+Supply only available, eligible options and relevant permitted context.
+Honor explicit choices and offline/privacy restrictions; on missing key,
+uncertainty, or service failure, continue with normal judgment. Jev does not
+extend the requested endpoint or take over CE's review disposition.
+
 | Work to do | Appropriate execution | Completion boundary |
 | --- | --- | --- |
 | Bounded, understood fix or mechanical edit | Native edit and focused verification | Requested local result |

@@ -19,6 +19,12 @@ Model routing supports lean native allocation and an optional strict resolver fo
 
 For native delegation, check the active tool's model selectors, effort values, and history constraints. Request the chosen pair or deliberately inherit both settings through a supported history mode. Use native children; create a visible task only when the user explicitly requests one. If a requested selection is unsupported, disclose the incompatibility instead of silently substituting a route.
 
+With `TYPESAFE_API_KEY` present, [Jev](/skills/jev/) selects among eligible
+model-and-effort pairs by default. The caller supplies available candidates
+and evidence, then applies the usual allocation checks before dispatch. Explicit
+choices, fixed roles, and privacy restrictions remain authoritative. Missing
+or uncertain advice leaves normal routing in charge.
+
 For configured controls, the strict route lifecycle retains `resolve`, `admit`, dispatch claim, and receipt reconciliation. Work contracts can bind objective, source of truth, scope, constraints, authorization, acceptance, and stop condition through seven SHA-256 semantic digests.
 
 When that configured path needs `build-work-contract`, it produces a carrier-neutral invariant and a source-owned presentation overlay. Switching among supported GPT, Claude, GLM, or Oracle routes can change briefing form without changing scope or authority; `invariantDigest` detects semantic mutation before dispatch.

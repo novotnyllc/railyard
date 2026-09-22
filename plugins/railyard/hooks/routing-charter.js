@@ -31,6 +31,16 @@ process.stdout.write(
   ].join("\n") + "\n",
 );
 
+// Presence enables advice, not an inference call or a credential disclosure.
+if (process.env.TYPESAFE_API_KEY?.trim()) {
+  process.stdout.write(
+    "- Use railyard:jev by default for model and effort selection, workflow,\n"
+    + "  evidence selection, work priority, and review triage throughout delivery.\n"
+    + "  Honor explicit choices and offline/privacy restrictions;\n"
+    + "  uncertain or unavailable advice falls back to normal Railyard reasoning.\n",
+  );
+}
+
 // Native and Claude SessionStart JSON both carry session_id and cwd. The
 // process environment may belong to an ancestor, so never substitute it for
 // an absent payload identity. Missing/invalid input leaves an unidentified line.
