@@ -89,9 +89,10 @@ available, otherwise label actual model/effort as unverified.
 Internal subtasks use native subagents. A user-visible task requires an
 explicit user request to create one; routing or orchestration alone does not
 authorize it. A native subagent follow-up has no effort control. When its next
-assignment needs a different effort, start a successor subagent with the
-selected model and effort and a sufficient handoff from the current result;
-avoid concurrent writes to the same work. An existing Codex task may expose
+assignment needs a different effort, the current subagent may spawn a
+successor itself; its parent can do so when it owns the handoff. Use the
+selected model and effort with enough context, and avoid concurrent writes to
+the same work. An existing Codex task may expose
 `model` and `thinking` on its supported continuation surface; inspect that
 live schema before using it. Neither native continuation control is the
 Responses API's GPT-6 `configuration_update` mechanism.

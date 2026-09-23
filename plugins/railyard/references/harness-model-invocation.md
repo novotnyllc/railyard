@@ -83,11 +83,12 @@ support. The native tool schema and backend remain authoritative; report a
 rejected pair without silently substituting another allocation.
 
 A native follow-up exposes no effort field. When the next assignment warrants
-lower or higher effort, carry forward the current child's result and start a
-new child with the chosen pair and enough context. Finish or interrupt the old
-child before giving the successor the same write scope. This changes the
-allocation for the continuing work without claiming that the original child
-changed its own effort.
+lower or higher effort, the current child can spawn a successor with the chosen
+pair and enough context; its parent can also make that handoff. Use no or
+limited history for an explicit new pair. Finish or interrupt the old child
+before giving the successor the same write scope. This changes the allocation
+for the continuing work without claiming that the original child changed its
+own effort.
 
 A deliberately selected Astra child for difficult investigation can use:
 
