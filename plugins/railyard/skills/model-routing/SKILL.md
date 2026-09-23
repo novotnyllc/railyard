@@ -63,8 +63,9 @@ if it changes. For current Codex `spawn_agent`:
   sufficient brief for that context boundary.
 - If the local hook snapshot lags a model release, include
   `Allocation: model update override; <reason>.` with the explicit pair. This
-  bypasses only unknown-model/unsupported-effort snapshot checks; retired-route
-  and history restrictions remain. It does not prove backend support.
+  bypasses the local unknown-model and unsupported-effort checks for that
+  explicit pair. History restrictions still apply. The override does not prove
+  that the native backend will accept the selector.
 - Full history (`fork_turns` omitted or `"all"`) disallows either override.
   For deliberate inheritance through the lean gate, use explicit
   `fork_turns:"all"`, omit both overrides, and put

@@ -25,6 +25,7 @@ import {
   validRole,
   validScope,
   validScopes,
+  validStoredModel,
   validShape,
 } from "./bounds.mjs";
 import {
@@ -126,7 +127,7 @@ function storedVersionMatches(id, version) {
 
 export function validSelected(value, { stored = false } = {}) {
   const fields = new Set(["modelAlias", "model", "effort", "carrierId", "carrierVersion", "executionSurface", "transport", "adapterId", "adapterVersion", "completionState", "observedModel"]);
-  if (!onlyFields(value, fields) || !validId(value.modelAlias) || !validModel(value.model) || !validEffort(value.effort) || !(stored ? storedCarrier(value.carrierId) : isKnownCarrier(value.carrierId)) || !validId(value.carrierVersion) || !EXECUTION_SURFACES.has(value.executionSurface) || typeof value.transport !== "string" || !validId(value.adapterId) || !validId(value.adapterVersion)) return false;
+  if (!onlyFields(value, fields) || !validId(value.modelAlias) || !(stored ? validStoredModel(value.model) : validModel(value.model)) || !validEffort(value.effort) || !(stored ? storedCarrier(value.carrierId) : isKnownCarrier(value.carrierId)) || !validId(value.carrierVersion) || !EXECUTION_SURFACES.has(value.executionSurface) || typeof value.transport !== "string" || !validId(value.adapterId) || !validId(value.adapterVersion)) return false;
   const carrier = CARRIER_DESCRIPTORS[value.carrierId];
   const adapter = ADAPTER_DESCRIPTORS[value.adapterId];
   return stored
@@ -204,7 +205,7 @@ const CAPABILITY_IDENTITY = {
 
 /** Positive evidence names the model it saw and carries a trusted attestation. */
 const CAPABILITY_POSITIVE = {
-  observedModel: validModel,
+  observedModel: validStoredModel,
   resolvedModelDigest: (value, evidence) => value === stableDigest(evidence.observedModel),
   fallbackSetDigest: optional(validDigest),
   capabilities: optional(idList),
@@ -365,7 +366,7 @@ export function validDisclosureScalar(value) {
     || value === "not_selected"
     || EXECUTION_SURFACES.has(value)
     || validId(value)
-    || validModel(value)
+    || validStoredModel(value)
     || validEffort(value);
 }
 
@@ -400,10 +401,10 @@ export function validR28Disclosure(value) {
   return isObject(value.escalation) && onlyFields(value.escalation, new Set(["state", "provenance"])) && validDisclosureFacet(value.escalation.state) && validDisclosureFacet(value.escalation.provenance);
 }
 
-export function validActionModel(value, { actual = false } = {}) {
+export function validActionModel(value, { actual = false, stored = false } = {}) {
   return isObject(value)
     && onlyFields(value, new Set(["model", "effort"]))
-    && (actual && value.model === "unknown" || validModel(value.model))
+    && (actual && value.model === "unknown" || (stored ? validStoredModel(value.model) : validModel(value.model)))
     && (actual && value.effort === "unknown" || validEffort(value.effort));
 }
 
@@ -438,6 +439,8 @@ export function validActionReceipt(value, { stored = false } = {}) {
   return recordValid(value, ACTION_RECEIPT_FIELDS, stored ? {
     fallbackReason: (reason) => ACTION_FALLBACK_REASONS.has(reason) || reason === "implementation_model_substitute",
     adapter: (adapter) => isObject(adapter) && onlyFields(adapter, new Set(["adapterId", "adapterVersion", "dispatchKind"])) && validId(adapter.adapterId) && validId(adapter.adapterVersion) && DISPATCH_KINDS.has(adapter.dispatchKind),
+    requested: (model) => validActionModel(model, { stored: true }),
+    actual: (model) => validActionModel(model, { actual: true, stored: true }),
   } : {});
 }
 

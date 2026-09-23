@@ -162,7 +162,7 @@ test("native model and effort validation uses this tool's capability pairs", () 
     ["gpt-6-luna", "low"], ["gpt-6-luna", "max"],
   ]) assert.equal(run(native({ model, reasoning_effort })).code, 0, model);
   for (const [model, reasoning_effort] of [
-    ["gpt-6-astra", "none"], ["gpt-6-luna", "ultra"], ["combo/grok-unified-4.6", "max"],
+    ["gpt-6-astra", "none"], ["gpt-6-luna", "ultra"], ["unknown-native-model", "max"],
     ["gpt-6-astra", "turbo"], ["gpt-6-astra", 7], ["gpt-6-astra", {}],
     ["gpt-6-astra", " max "], ["unsupported-native-model", "max"], ["custom-external-model", "high"],
   ]) {
@@ -173,47 +173,36 @@ test("native model and effort validation uses this tool's capability pairs", () 
   }
 });
 
-test("model-update override passes an unknown explicit pair to the native backend without reviving retired models", () => {
-  const message = "Allocation: model update override; the user authorized checking the newly exposed native selector.\nProbe the exact requested pair and report the backend result.";
-  const accepted = run(native({ model: "gpt-6-next", reasoning_effort: "medium", message }));
-  assert.equal(accepted.code, 0, accepted.err);
-  assert.equal(accepted.log[0].capability, "native_backend_unverified");
-  assert.equal(accepted.log[0].modelUpdateOverride, true);
-  assert.equal(run(native({ model: "gpt-6-next", reasoning_effort: "medium" })).code, 2);
-  assert.equal(run(native({ model: "gpt-5.6-sol", reasoning_effort: "medium", message })).code, 2);
-  assert.equal(run(native({ model: "combo/grok-unified-4.6", reasoning_effort: "medium", message })).code, 2);
-  assert.equal(run(native({ model: "gpt-6-next", reasoning_effort: " medium ", message })).code, 2);
-  assert.equal(run(native({ model: "gpt-6-next", reasoning_effort: "medium", message, fork_turns: "all" })).code, 2);
+test("model-update override passes an unknown explicit pair to the native backend", () => {
+  const message = "Allocation: model update override; the local native snapshot may be stale.\nProbe the exact requested pair and report the backend result.";
+  for (const model of ["gpt-6-next", "example/unknown-model"]) {
+    const accepted = run(native({ model, reasoning_effort: "medium", message }));
+    assert.equal(accepted.code, 0, accepted.err);
+    assert.equal(accepted.log[0].capability, "native_backend_unverified");
+    assert.equal(accepted.log[0].modelUpdateOverride, true);
+    assert.equal(run(native({ model, reasoning_effort: "medium" })).code, 2);
+    assert.equal(run(native({ model, reasoning_effort: " medium ", message })).code, 2);
+    assert.equal(run(native({ model, reasoning_effort: "medium", message, fork_turns: "all" })).code, 2);
+  }
+  assert.equal(run(native({ model: "bad model name", reasoning_effort: "medium", message })).code, 2);
 });
 
-test("retired model families cannot dispatch natively or through an external provider", () => {
-  for (const model of [
-    "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "openai/gpt-5.6-sol",
-    "combo/grok-unified-4.6",
-    "glm-5.2", "glm-5.2-flash", "glm-5.2-air", "zai/glm-5.2",
-    "z-ai/glm-5.2-flash", "openrouter/z-ai/glm-5.2", "ZAI/GLM-5.2-AIR",
-    "glm-5.2[1m]", "glm-5.2:batch", "zai/glm-5.2[1m]", "zai/glm-5.2:batch",
-  ]) {
-    for (const input of [
-      native({ model, reasoning_effort: "high" }),
-      { tool_name: "Bash", tool_input: { command: `codex exec -m ${model} -c model_reasoning_effort=high` } },
-      { tool_name: "Bash", tool_input: { command: `codex exec -m ${model} -c model_reasoning_effort=high -c model_provider=example` } },
-    ]) {
-      const result = run(input);
-      assert.equal(result.code, 2, model);
-      assert.match(result.err, /model .* is retired/);
-      assert.deepEqual(result.log, []);
-    }
-  }
-});
+test("unknown models require a verified native pair or an explicit external provider", () => {
+  const model = "example/unknown-model";
+  const nativeResult = run(native({ model, reasoning_effort: "high" }));
+  assert.equal(nativeResult.code, 2);
+  assert.match(nativeResult.err, /not in this native tool's verified model roster/);
+  assert.deepEqual(nativeResult.log, []);
 
-test("retired model family matching preserves other external model versions", () => {
-  for (const model of ["glm-5.20", "zai/glm-5.20"]) {
-    const result = run({ tool_name: "Bash", tool_input: { command: `codex exec -m ${model} -c model_reasoning_effort=high -c model_provider=example` } });
-    assert.equal(result.code, 0, result.err);
-    assert.equal(result.log[0].model, model);
-    assert.equal(result.log[0].capability, "runtime_unverified");
-  }
+  const shellResult = run({ tool_name: "Bash", tool_input: { command: `codex exec -m ${model} -c model_reasoning_effort=high` } });
+  assert.equal(shellResult.code, 2);
+  assert.match(shellResult.err, /outside the verified native roster/);
+  assert.deepEqual(shellResult.log, []);
+
+  const externalResult = run({ tool_name: "Bash", tool_input: { command: `codex exec -m ${model} -c model_reasoning_effort=high -c model_provider=example` } });
+  assert.equal(externalResult.code, 0, externalResult.err);
+  assert.equal(externalResult.log[0].model, model);
+  assert.equal(externalResult.log[0].capability, "runtime_unverified");
 });
 
 test("unsupported effort gives the supported choices without downgrading", () => {

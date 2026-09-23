@@ -21,6 +21,7 @@ import {
   validRole,
   validScope,
   validShape,
+  validStoredModel,
 } from "./bounds.mjs";
 import {
   validWorkContractInput,
@@ -64,7 +65,7 @@ export function validateTransport(transport) {
 }
 
 export function validatePriorRoute(value) {
-  return isObject(value) && onlyFields(value, new Set(["reservationId", "claimId", "carrierId", "model", "effort", "adapterId", "adapterVersion", "policyDigest", "hostScope", "accountScope", "sessionId", "toolId", "toolVersion", "workClassDigest", "r52Digest"])) && validId(value.reservationId) && validId(value.claimId) && validId(value.carrierId) && validModel(value.model) && validEffort(value.effort) && validId(value.adapterId) && validId(value.adapterVersion) && validHistoricalPolicyDigest(value.policyDigest) && validId(value.hostScope) && validId(value.accountScope) && validId(value.sessionId) && validId(value.toolId) && validId(value.toolVersion) && validDigest(value.workClassDigest) && (value.r52Digest === undefined || validDigest(value.r52Digest));
+  return isObject(value) && onlyFields(value, new Set(["reservationId", "claimId", "carrierId", "model", "effort", "adapterId", "adapterVersion", "policyDigest", "hostScope", "accountScope", "sessionId", "toolId", "toolVersion", "workClassDigest", "r52Digest"])) && validId(value.reservationId) && validId(value.claimId) && validId(value.carrierId) && validStoredModel(value.model) && validEffort(value.effort) && validId(value.adapterId) && validId(value.adapterVersion) && validHistoricalPolicyDigest(value.policyDigest) && validId(value.hostScope) && validId(value.accountScope) && validId(value.sessionId) && validId(value.toolId) && validId(value.toolVersion) && validDigest(value.workClassDigest) && (value.r52Digest === undefined || validDigest(value.r52Digest));
 }
 
 export function validateBudgetScopes(value) {

@@ -40,7 +40,8 @@ import {
 } from "./model-routing.mjs";
 import { claudeIdentitySatisfied, fallbackSetDigest } from "./model-routing/select.mjs";
 import { CLAUDE_AGENT_MODEL_ALIASES, validateClaudeModelEffort } from "./model-routing/claude.mjs";
-import { validBinding, validSelected } from "./model-routing/state-schema.mjs";
+import { validActionModel, validActionReceipt, validBinding, validSelected } from "./model-routing/state-schema.mjs";
+import { validModel, validStoredModel } from "./model-routing/bounds.mjs";
 import { build as buildOracle, dispatch as dispatchOracle, oracleSessionSlug } from "../skills/oracle/scripts/oracle-route.mjs";
 
 const NOW = Date.parse("2026-08-04T12:00:00.000Z");
@@ -587,19 +588,19 @@ test("native model capabilities distinguish exposed overrides from broader provi
   assert.equal(validateNativeModelEffort("gpt-6-sol", "ultra").ok, true);
   assert.equal(validateNativeModelEffort("gpt-6-luna", "max").ok, true);
   assert.equal(validateNativeModelEffort("gpt-6-luna", "ultra").reason, "effort_unsupported");
-  assert.equal(validateNativeModelEffort("gpt-5.6-terra", "ultra").reason, "native_model_unsupported");
+  assert.equal(validateNativeModelEffort("example/unknown-model", "ultra").reason, "native_model_unsupported");
   assert.equal(validateNativeModelEffort("gpt-daybreak-blue-latest", "ultra").ok, true);
   assert.equal(validateNativeModelEffort("gpt-6-astra", "max").ok, true);
   assert.equal(validateNativeModelEffort("gpt-6-astra", "invalid").reason, "effort_unsupported");
-  for (const model of ["gpt-5.6-sol", "gpt-5.6-luna", "combo/grok-unified-4.6", "cursor/composer-2.5", "__proto__", undefined]) {
+  for (const model of ["unknown-native-model", "cursor/composer-2.5", "__proto__", undefined]) {
     assert.equal(validateNativeModelEffort(model, "max").reason, "native_model_unsupported");
   }
   assert.equal(validateNativeModelEffort("gpt-6-astra", undefined).reason, "effort_unsupported");
   assert.throws(() => NATIVE_SUBAGENT_MODEL_EFFORTS["gpt-6-astra"].push("ultra"), TypeError);
 });
 
-test("retired models have no carrier, native route, or task route", () => {
-  for (const model of ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]) {
+test("unknown models have no carrier, native route, or task route", () => {
+  for (const model of ["unknown-native-model", "gpt-6-unavailable"]) {
     assert.equal(validateNativeModelEffort(model, "medium").reason, "native_model_unsupported");
     assert.equal(validateCodexTaskModelEffort(model, "medium").reason, "task_model_unsupported");
     assert.equal(Object.values(CARRIER_DESCRIPTORS).some((carrier) => carrier.requestedModel === model), false);
@@ -607,7 +608,6 @@ test("retired models have no carrier, native route, or task route", () => {
     assert.equal(result.response.reason, "task_model_unsupported");
     assert.equal(result.response.decision, undefined);
   }
-  assert.equal(Object.keys(CARRIER_DESCRIPTORS).some((id) => id.startsWith("glm") || id.includes("terra")), false);
 });
 
 test("ordinary GPT-6 Sol task routes support implementation and investigation CE seams", () => {
@@ -2448,6 +2448,11 @@ test("work-class inheritance is exact and neutral or active adjustments emit ide
   const adjustmentReceipt = adjusted.response.actionReceipt;
   assert.equal(adjustmentReceipt.actionId, "work-class-adjust-action");
   assert.equal(adjustmentReceipt.startsWork, true);
+  const historicalReceipt = structuredClone(adjustmentReceipt);
+  historicalReceipt.requested.model = "example/unknown-model";
+  historicalReceipt.actual.model = "example/unknown-model";
+  assert.equal(validActionReceipt(historicalReceipt), false);
+  assert.equal(validActionReceipt(historicalReceipt, { stored: true }), true);
   assert.equal(adjustmentReceipt.inheritanceReason, "intentional_same_class_inheritance");
   assert.equal(adjustmentReceipt.fallbackReason, "not_applicable");
   assert.deepEqual(adjustmentReceipt.budget, { kind: "top_up", forecast: { marginalUsd: "1" }, warningCount: 0 });
@@ -3622,7 +3627,7 @@ test("cost ranks within a meter and is not a discriminator across meters", () =>
 });
 
 
-test("historical retired route state stays readable and authentic receipts settle original accounting", () => {
+test("stale route state stays readable and authentic receipts settle original accounting", () => {
   for (const retiredAdapter of [false, true]) {
     const policy = catalog({});
     const state = attestedCapability(policy, { carrierId: "codex-astra", adapterId: "native-subagent-create", accountScope: "local", observedModel: "gpt-6-astra" });
@@ -3630,13 +3635,13 @@ test("historical retired route state stays readable and authentic receipts settl
     const claimed = claim(policy, state, admission);
     const reservation = state.reservations[admission.reservation.reservationId];
     reservation.selected.carrierId = "codex-sol";
-    reservation.selected.model = "gpt-5.6-sol";
+    reservation.selected.model = "gpt-6-unavailable";
     reservation.policyDigest = "builtin-model-routing-v2";
     reservation.decision.policyDigest = reservation.policyDigest;
     reservation.decision.selected = structuredClone(reservation.selected);
     state.capabilities.capability_one.carrierId = "codex-sol";
-    state.capabilities.capability_one.observedModel = "gpt-5.6-sol";
-    state.capabilities.capability_one.resolvedModelDigest = stableDigest("gpt-5.6-sol");
+    state.capabilities.capability_one.observedModel = "gpt-6-unavailable";
+    state.capabilities.capability_one.resolvedModelDigest = stableDigest("gpt-6-unavailable");
     if (retiredAdapter) {
       reservation.binding.adapterId = "configured-profile-task-create";
       reservation.selected.adapterId = reservation.binding.adapterId;
@@ -3723,7 +3728,7 @@ for (const historicalPolicy of ["builtin-model-routing-v1", "builtin-model-routi
     assert.equal(effortOnly.response.reason, "route_reevaluation_required", JSON.stringify(effortOnly.response));
     assert.deepEqual(state, unchangedState, "read-only effort changes cannot mutate historical state");
     historical.selected.carrierId = "retired-native-carrier";
-    historical.selected.model = "retired-native-model";
+    historical.selected.model = "example/unknown-model";
     historical.decision.selected = structuredClone(historical.selected);
     historical.policyDigest = historicalPolicy;
     historical.decision.policyDigest = historical.policyDigest;
@@ -3739,7 +3744,7 @@ for (const historicalPolicy of ["builtin-model-routing-v1", "builtin-model-routi
     }), { catalog: policy, state, now: NOW });
     assert.equal(neutral.response.reason, "route_reevaluation_required", JSON.stringify(neutral.response));
     assert.equal(historical.currentRoute, undefined, "read-only resolution does not apply a new allocation");
-    assert.equal(historical.selected.model, "retired-native-model");
+    assert.equal(historical.selected.model, "example/unknown-model");
     const tampered = handleRequest(request("resolve", {
       adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "tampered-policy", priorRoute: { ...priorRoute, policyDigest: DIGEST_B },
       priorWorkClassDigest: historical.workClassDigest,
@@ -3760,12 +3765,12 @@ for (const historicalPolicy of ["builtin-model-routing-v1", "builtin-model-routi
     }), { catalog: policy, state, now: NOW });
     assert.equal(adjustment.response.reason, "active_budget_adjusted", JSON.stringify(adjustment.response));
     assert.equal(adjustment.response.decision.selected.model, "gpt-6-sol");
-    assert.equal(historical.selected.model, "retired-native-model");
+    assert.equal(historical.selected.model, "example/unknown-model");
     assert.equal(state.reservations[historical.reservationId].routeLearningEligible, false);
     assert.equal(historical.policyDigest, historicalPolicy);
     const recoveredStatus = handleRequest(request("status"), { catalog: policy, state: JSON.parse(JSON.stringify(state)), now: NOW });
     const recoveredRoute = recoveredStatus.response.reservations.find((record) => record.reservationId === historical.reservationId);
-    assert.equal(recoveredRoute.selected.model, "retired-native-model");
+    assert.equal(recoveredRoute.selected.model, "example/unknown-model");
     assert.equal(recoveredRoute.effectiveRoute.selected.model, "gpt-6-sol");
     assert.equal(recoveredRoute.effectiveRoute.policyDigest, policyDigest(policy));
     const currentPriorRoute = {
@@ -3785,7 +3790,7 @@ for (const historicalPolicy of ["builtin-model-routing-v1", "builtin-model-routi
     assert.equal(raised.response.reason, "active_budget_adjusted", JSON.stringify(raised.response));
     assert.equal(raised.response.decision.selected.effort, "max");
     assert.equal(state.reservations[historical.reservationId].currentRoute.selected.effort, "max");
-    assert.equal(state.reservations[historical.reservationId].selected.model, "retired-native-model");
+    assert.equal(state.reservations[historical.reservationId].selected.model, "example/unknown-model");
     assert.equal(state.reservations[historical.reservationId].policyDigest, historicalPolicy);
     assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
   });
@@ -3880,7 +3885,7 @@ test("invalidating stale undispatched routes releases tight budgets atomically a
 });
 
 
-test("stored descriptor versions survive catalog upgrades while live selections stay strict", () => {
+test("stored route evidence survives catalog upgrades while live selections stay strict", () => {
   const policy = catalog({});
   const state = attestedCapability(policy, { carrierId: "codex-astra", adapterId: "native-subagent-create", accountScope: "local", observedModel: "gpt-6-astra" });
   const admission = admit(policy, state);
@@ -3911,6 +3916,43 @@ test("stored descriptor versions survive catalog upgrades while live selections 
     badReservation.policyDigest = malformedPolicy;
     badReservation.decision.policyDigest = malformedPolicy;
     assert.equal(validateState(badPolicy).ok, false, malformedPolicy);
+  }
+  const storedModel = "example/unknown-model";
+  assert.equal(validModel(storedModel), false);
+  assert.equal(validStoredModel(storedModel), true);
+  assert.equal(validActionModel({ model: storedModel, effort: "max" }), false);
+  assert.equal(validActionModel({ model: storedModel, effort: "max" }, { stored: true }), true);
+  assert.equal(validStoredModel("example//unknown-model"), false);
+  assert.equal(validStoredModel(`example/${"x".repeat(128)}`), false);
+  reservation.selected.model = storedModel;
+  reservation.decision.selected.model = storedModel;
+  for (const facet of Object.values(reservation.decision.disclosure.requested)) {
+    if (facet.value === "gpt-6-astra") facet.value = storedModel;
+  }
+  for (const facet of Object.values(reservation.decision.disclosure.configured)) {
+    if (facet.value === "gpt-6-astra") facet.value = storedModel;
+  }
+  for (const facet of Object.values(reservation.decision.disclosure.observed)) {
+    if (facet.value === "gpt-6-astra") facet.value = storedModel;
+  }
+  assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+  assert.equal(validSelected(reservation.selected, { stored: true }), true);
+  assert.equal(validSelected(reservation.selected), false);
+
+  const currentDescriptorRoute = structuredClone(reservation.selected);
+  currentDescriptorRoute.carrierVersion = CARRIER_DESCRIPTORS[currentDescriptorRoute.carrierId].version;
+  currentDescriptorRoute.adapterVersion = ADAPTER_DESCRIPTORS[currentDescriptorRoute.adapterId].version;
+  assert.equal(validSelected(currentDescriptorRoute), false);
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "routing-stored-model-"));
+  try {
+    const statePath = path.join(directory, "state.json");
+    fs.writeFileSync(statePath, JSON.stringify(state), { mode: 0o600 });
+    const loaded = loadStateForCli({ state: { path: statePath }, config: { path: path.join(directory, "catalog.json") } });
+    assert.equal(loaded.ok, true, JSON.stringify(loaded));
+    assert.deepEqual(loaded.state, state);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
   }
 });
 

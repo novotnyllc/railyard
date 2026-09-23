@@ -77,8 +77,8 @@ constraints are part of allocation:
 If the local hook snapshot lags a model release, include
 `Allocation: model update override; <reason>.` in the brief with explicit
 `model` and `reasoning_effort` and compatible limited/no history. This bypasses
-only the hook's unknown-model or unsupported-effort snapshot checks. It does
-not enable retired routes, bypass history constraints, or verify backend
+the hook's unknown-model or unsupported-effort checks for that explicit pair.
+History constraints still apply, and the override does not verify backend
 support. The native tool schema and backend remain authoritative; report a
 rejected pair without silently substituting another allocation.
 
