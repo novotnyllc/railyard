@@ -1011,10 +1011,12 @@ function codexExecDispatches(args) {
 const NATIVE_TOOLS = new Set(["spawn_agent", "agentsspawn_agent", "agents__spawn_agent"]);
 const SHELL_TOOLS = new Set(["Bash", "shell", "local_shell", "exec_command", "unified_exec"]);
 const INHERIT_ALLOCATION = /^[ \t]*Allocation:[ \t]*inherit model and reasoning effort;[ \t]*\S[^\r\n]*\r?$/im;
+const MODEL_UPDATE_OVERRIDE = /^[ \t]*Allocation:[ \t]*model update override;[ \t]*\S[^\r\n]*\r?$/im;
 const ROLE_ALLOCATION = /^[ \t]*Allocation:[ \t]*role configuration;[ \t]*\S[^\r\n]*\r?$/im;
 const V2_FIELDS = new Set(["task_name", "message", "fork_turns", "model", "reasoning_effort"]);
 
 function nativePair(model, effort) {
+  if (/(?:^|\/)(?:gpt-5\.6|glm-5\.2|grok-unified-4\.6)(?:[-\[:]|$)/i.test(String(model))) return { ok: false, reason: "model_retired" };
   try {
     // This module contains only the verified native capability snapshot.
     return require("../scripts/model-routing/native.mjs").validateNativeModelEffort(model, effort);
@@ -1024,6 +1026,7 @@ function nativePair(model, effort) {
 }
 
 function allocationError(result, model) {
+  if (result.reason === "model_retired") return `model '${clip(model)}' is retired. Choose a current model and supported reasoning effort.`;
   if (result.reason === "effort_unsupported") {
     return `reasoning_effort for '${clip(model)}' must be one of: ${result.supportedEfforts.join(", ")}. Keep the requested model and choose a supported effort; no fallback was applied.`;
   }
@@ -1041,6 +1044,7 @@ function validateNative(args, input, tool) {
   const hasEffort = Object.hasOwn(args, "reasoning_effort");
   const message = typeof args.message === "string" ? args.message : "";
   const inherit = INHERIT_ALLOCATION.test(message);
+  const modelUpdateOverride = MODEL_UPDATE_OVERRIDE.test(message);
   const useRole = ROLE_ALLOCATION.test(message);
   const role = typeof args.agent_type === "string" ? args.agent_type.trim() : "";
 
@@ -1084,6 +1088,16 @@ function validateNative(args, input, tool) {
     return { error: `choose ${missing.join(" and ")} explicitly, or state 'Allocation: inherit model and reasoning effort; <reason>.' in message and omit both overrides. A custom CLI role may instead use its authoritative role configuration.` };
   }
   const result = nativePair(args.model, args.reasoning_effort);
+  if (!result.ok && modelUpdateOverride && ["native_model_unsupported", "effort_unsupported"].includes(result.reason)) {
+    // The local snapshot can lag a model release. The explicit override passes
+    // the pair through to the native tool, whose current schema and backend
+    // remain authoritative; it never turns a retired route back on.
+    if (typeof args.model !== "string" || args.model.length > 128 || !/^[A-Za-z0-9._/+:-]+$/.test(args.model)
+      || typeof args.reasoning_effort !== "string" || !/^[a-z][a-z0-9_-]{0,31}$/.test(args.reasoning_effort)) {
+      return { error: "model update override requires one explicit model and reasoning_effort token; no fallback was applied." };
+    }
+    return { allocation: "explicit", model: args.model, effort: args.reasoning_effort, capability: "native_backend_unverified", modelUpdateOverride: true };
+  }
   if (!result.ok) return { error: allocationError(result, args.model) };
   return { allocation: "explicit", model: args.model, effort: args.reasoning_effort, role: role || undefined, capability: "known_pair" };
 }

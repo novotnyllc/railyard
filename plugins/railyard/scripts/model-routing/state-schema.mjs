@@ -15,6 +15,7 @@ import {
   validDigest,
   validEffort,
   validId,
+  validHistoricalPolicyDigest,
   validIsoInstant,
   validMeter,
   validMeterMap,
@@ -108,29 +109,38 @@ export function migrateState(state) {
   return { ...state, stateSchemaVersion: STATE_SCHEMA_VERSION };
 }
 
-// Oracle v1 history keeps its original controls, accounting, and provenance.
-// Reading that known previous version is not permission to dispatch it: route
-// selection and claim/receipt execution check the current descriptor version.
-function storedVersionMatches(id, version, descriptor) {
-  return (descriptor !== undefined && descriptor.version === version)
-    || (descriptor?.version === "v2" && version === "v1" && ["oracle-browser", "oracle-homebrew-lifecycle"].includes(id));
+// Stored route identifiers describe immutable accounting evidence. Current
+// registry membership is checked by selection and dispatch, never by loading
+// the ledger: deleting a route must not strand receipts or reset spending.
+const storedCarrier = validId;
+const storedPolicy = validHistoricalPolicyDigest;
+function storedCarrierAdapter(carrierId, adapterId) {
+  return validId(carrierId) && validId(adapterId);
 }
 
-export function validSelected(value) {
+// Version numbers in stored evidence belong to the original execution.
+// Fresh selections use exact descriptor versions below.
+function storedVersionMatches(id, version) {
+  return validId(id) && validId(version);
+}
+
+export function validSelected(value, { stored = false } = {}) {
   const fields = new Set(["modelAlias", "model", "effort", "carrierId", "carrierVersion", "executionSurface", "transport", "adapterId", "adapterVersion", "completionState", "observedModel"]);
-  if (!onlyFields(value, fields) || !validId(value.modelAlias) || !validModel(value.model) || !validEffort(value.effort) || !isKnownCarrier(value.carrierId) || !validId(value.carrierVersion) || !EXECUTION_SURFACES.has(value.executionSurface) || typeof value.transport !== "string" || !validId(value.adapterId) || !validId(value.adapterVersion)) return false;
+  if (!onlyFields(value, fields) || !validId(value.modelAlias) || !validModel(value.model) || !validEffort(value.effort) || !(stored ? storedCarrier(value.carrierId) : isKnownCarrier(value.carrierId)) || !validId(value.carrierVersion) || !EXECUTION_SURFACES.has(value.executionSurface) || typeof value.transport !== "string" || !validId(value.adapterId) || !validId(value.adapterVersion)) return false;
   const carrier = CARRIER_DESCRIPTORS[value.carrierId];
   const adapter = ADAPTER_DESCRIPTORS[value.adapterId];
-  return storedVersionMatches(value.carrierId, value.carrierVersion, carrier) && storedVersionMatches(value.adapterId, value.adapterVersion, adapter) && carrier.adapters.includes(value.adapterId);
+  return stored
+    ? storedVersionMatches(value.carrierId, value.carrierVersion) && storedVersionMatches(value.adapterId, value.adapterVersion)
+    : carrier?.version === value.carrierVersion && adapter?.version === value.adapterVersion && carrier.adapters.includes(value.adapterId);
 }
 
-export function validBinding(value) {
+export function validBinding(value, { stored = false } = {}) {
   const fields = new Set(["adapterId", "adapterVersion", "dispatchKind", "budgetEffect", "controls", "transportPath", "bridgePhase", "hostScope", "accountScope", "contextFork", "r52", "profile", "compositeReservations", "ceSeam", "harness", "crossHarnessReason"]);
   if (!onlyFields(value, fields) || !validId(value.adapterId) || !validId(value.adapterVersion) || !DISPATCH_KINDS.has(value.dispatchKind) || !BUDGET_EFFECTS.has(value.budgetEffect) || !isObject(value.controls) || (value.transportPath !== "native" && value.transportPath !== "visible_provider_task") || ![null, "activation", "bootstrap"].includes(value.bridgePhase) || !validId(value.hostScope) || !validId(value.accountScope)) return false;
   if (Object.hasOwn(value, "harness") !== Object.hasOwn(value, "crossHarnessReason")) return false;
   const adapter = ADAPTER_DESCRIPTORS[value.adapterId];
-  if (!storedVersionMatches(value.adapterId, value.adapterVersion, adapter) || !adapter.dispatchKinds.includes(value.dispatchKind)) return false;
-  if (stableDigest(value.controls) !== stableDigest(adapter.controls)) return false;
+  if (!stored && (!adapter || adapter.version !== value.adapterVersion || !adapter.dispatchKinds.includes(value.dispatchKind))) return false;
+  if (adapter?.version === value.adapterVersion && stableDigest(value.controls) !== stableDigest(adapter.controls)) return false;
   if (value.profile !== undefined && !validId(value.profile)) return false;
   if (value.compositeReservations !== undefined && (!Array.isArray(value.compositeReservations) || value.compositeReservations.some((item) => !validId(item)))) return false;
   if (value.contextFork !== undefined && !validContextFork(value.contextFork)) return false;
@@ -154,7 +164,7 @@ export function ceSeamAllows(value, role, carrierId) {
 
 export function validStoredDecision(value) {
   if (!onlyFields(value, new Set(["decisionId", "policyDigest", "role", "selected", "binding", "disclosure", "workClassDigest"]))) return false;
-  return validId(value.decisionId) && validPolicyDigest(value.policyDigest) && validRole(value.role) && validSelected(value.selected) && validBinding(value.binding) && validR28Disclosure(value.disclosure) && (value.workClassDigest === undefined || validDigest(value.workClassDigest)) && (value.binding.ceSeam === undefined || ceSeamAllows(value.binding.ceSeam, value.role, value.selected.carrierId));
+  return validId(value.decisionId) && storedPolicy(value.policyDigest) && validRole(value.role) && validSelected(value.selected, { stored: true }) && validBinding(value.binding, { stored: true }) && validR28Disclosure(value.disclosure) && (value.workClassDigest === undefined || validDigest(value.workClassDigest)) && (value.binding.ceSeam === undefined || (validCeSeam(value.binding.ceSeam) && CE_SEAMS[value.binding.ceSeam.id].roles.includes(value.role)));
 }
 
 export function negativeClassFor(reason) {
@@ -180,13 +190,13 @@ export function retryAfterMaximumSeconds(catalog) {
 }
 
 const CAPABILITY_IDENTITY = {
-  carrierId: isKnownCarrier,
+  carrierId: storedCarrier,
   carrierVersion: (value, evidence) => storedVersionMatches(evidence.carrierId, value, CARRIER_DESCRIPTORS[evidence.carrierId]),
-  adapterId: (value, evidence) => Boolean(ADAPTER_DESCRIPTORS[value]) && CARRIER_DESCRIPTORS[evidence.carrierId].adapters.includes(value),
+  adapterId: (value, evidence) => storedCarrierAdapter(evidence.carrierId, value),
   adapterVersion: (value, evidence) => storedVersionMatches(evidence.adapterId, value, ADAPTER_DESCRIPTORS[evidence.adapterId]),
   hostScope: validId,
   accountScope: validId,
-  policyDigest: validPolicyDigest,
+  policyDigest: storedPolicy,
   state: (value) => POSITIVE_CAPABILITY_STATES.has(value) || NEGATIVE_CAPABILITY_STATES.has(value),
   authState: optional(is("unknown", "authenticated", "auth_context_unavailable")),
   expiresAt: validIsoInstant,
@@ -247,9 +257,9 @@ const TASK_AUTHORITY_FIELDS = {
   objectiveDigest: optional(validDigest),
   senderOwner: validId,
   accountScope: validId,
-  carrierId: isKnownCarrier,
-  adapterId: (value, authority) => Boolean(ADAPTER_DESCRIPTORS[value]) && CARRIER_DESCRIPTORS[authority.carrierId].adapters.includes(value),
-  policyDigest: validPolicyDigest,
+  carrierId: storedCarrier,
+  adapterId: (value, authority) => storedCarrierAdapter(authority.carrierId, value),
+  policyDigest: storedPolicy,
   destinationScope: validId,
   destinationClass: is("visible_task", "delegated_slot"),
   maxTaskCount: boundedInteger(1, MAX_LEASE_SLOTS),
@@ -279,11 +289,11 @@ const LEASE_FIELDS = {
   allocatorScopes: validScopes,
   destinationScope: validId,
   destinationAccountScope: validId,
-  policyDigest: validPolicyDigest,
+  policyDigest: storedPolicy,
   epochId: validId,
-  carrierId: isKnownCarrier,
+  carrierId: storedCarrier,
   carrierVersion: (value, lease) => storedVersionMatches(lease.carrierId, value, CARRIER_DESCRIPTORS[lease.carrierId]),
-  adapterId: (value, lease) => Boolean(ADAPTER_DESCRIPTORS[value]) && CARRIER_DESCRIPTORS[lease.carrierId].adapters.includes(value),
+  adapterId: (value, lease) => storedCarrierAdapter(lease.carrierId, value),
   adapterVersion: (value, lease) => storedVersionMatches(lease.adapterId, value, ADAPTER_DESCRIPTORS[lease.adapterId]),
   ceiling: validMeterMap,
   remainingCeiling: validMeterMap,
@@ -405,7 +415,7 @@ const ACTION_RECEIPT_FIELDS = {
   adapter: (value) => isObject(value)
     && onlyFields(value, new Set(["adapterId", "adapterVersion", "dispatchKind"]))
     && Boolean(ADAPTER_DESCRIPTORS[value.adapterId])
-    && storedVersionMatches(value.adapterId, value.adapterVersion, ADAPTER_DESCRIPTORS[value.adapterId])
+    && ADAPTER_DESCRIPTORS[value.adapterId].version === value.adapterVersion
     && DISPATCH_KINDS.has(value.dispatchKind),
   // A budget-neutral message starts no work; a top-up always does.
   startsWork: (value, receipt) => isBoolean(value) && value === (receipt.reason === "active_budget_top_up"),
@@ -424,8 +434,11 @@ const ACTION_RECEIPT_FIELDS = {
     : value === "not_applicable"),
 };
 
-export function validActionReceipt(value) {
-  return recordValid(value, ACTION_RECEIPT_FIELDS);
+export function validActionReceipt(value, { stored = false } = {}) {
+  return recordValid(value, ACTION_RECEIPT_FIELDS, stored ? {
+    fallbackReason: (reason) => ACTION_FALLBACK_REASONS.has(reason) || reason === "implementation_model_substitute",
+    adapter: (adapter) => isObject(adapter) && onlyFields(adapter, new Set(["adapterId", "adapterVersion", "dispatchKind"])) && validId(adapter.adapterId) && validId(adapter.adapterVersion) && DISPATCH_KINDS.has(adapter.dispatchKind),
+  } : {});
 }
 
 export function validLearningOutcome(id, value) {
@@ -443,7 +456,7 @@ export function validLearningOutcome(id, value) {
     && validDigest(value.baseBucket)
     && (routeFieldCount === 0 || (routeFieldCount === routeFields.length
       && validDigest(value.routeEffectBucket)
-      && isKnownCarrier(value.carrierId)
+      && storedCarrier(value.carrierId)
       && validId(value.carrierVersion)
       && storedVersionMatches(value.carrierId, value.carrierVersion, CARRIER_DESCRIPTORS[value.carrierId])
       && validEffort(value.effort)
@@ -465,12 +478,12 @@ export function validLearningAggregate(id, value) {
   if (!validId(id) || !isObject(value) || !["baseDemand", "routeEffect"].includes(value.kind) || !onlyFields(value, value.kind === "baseDemand" ? baseFields : routeFields)) return false;
   if (!validDigest(value.baseBucket) || !validRole(value.role) || !["low", "medium", "high", "critical", "unknown"].includes(value.risk) || !validId(value.contextClass) || !validLearningShape(value.workShape) || !Number.isInteger(value.count) || value.count < 0 || !Number.isInteger(value.totalDurationMs) || value.totalDurationMs < 0 || !Number.isInteger(value.totalRetries) || value.totalRetries < 0 || !Number.isInteger(value.failures) || value.failures < 0 || !Number.isInteger(value.verified) || value.verified < 0 || !Number.isInteger(value.ratingTotal) || value.ratingTotal < 0 || !validIsoInstant(value.updatedAt)) return false;
   if (value.kind === "baseDemand") return validMeterMap(value.usageTotals) && validMeterMap(value.forecastTotals) && isObject(value.forecastInfluenceByMeter) && ownEntries(value.forecastInfluenceByMeter).every(([meter, influence]) => validMeter(meter) && Number.isFinite(influence) && Math.abs(influence) <= MAX_LEARNING_SAMPLE_INFLUENCE);
-  return validDigest(value.routeEffectBucket) && isKnownCarrier(value.carrierId) && storedVersionMatches(value.carrierId, value.carrierVersion, CARRIER_DESCRIPTORS[value.carrierId]) && validEffort(value.effort) && EXECUTION_SURFACES.has(value.billingSurface) && validDigest(value.resolvedModelBucket) && Number.isFinite(value.tieBreakInfluence) && Math.abs(value.tieBreakInfluence) <= MAX_LEARNING_SAMPLE_INFLUENCE;
+  return validDigest(value.routeEffectBucket) && storedCarrier(value.carrierId) && storedVersionMatches(value.carrierId, value.carrierVersion, CARRIER_DESCRIPTORS[value.carrierId]) && validEffort(value.effort) && EXECUTION_SURFACES.has(value.billingSurface) && validDigest(value.resolvedModelBucket) && Number.isFinite(value.tieBreakInfluence) && Math.abs(value.tieBreakInfluence) <= MAX_LEARNING_SAMPLE_INFLUENCE;
 }
 
 export function validLifecycleReviewRequirement(id, value) {
   const fields = new Set(["requirementId", "hostScope", "accountScope", "policyDigest", "lifecycleReservationId", "lifecycleClaimId", "createdAt", "expiresAt", "reviewClaimId", "fulfilled", "fulfilledAt"]);
-  if (!validId(id) || !onlyFields(value, fields) || value.requirementId !== id || !validId(value.hostScope) || !validId(value.accountScope) || !validPolicyDigest(value.policyDigest) || !validId(value.lifecycleReservationId) || !validId(value.lifecycleClaimId) || !validIsoInstant(value.createdAt) || !validIsoInstant(value.expiresAt) || Date.parse(value.expiresAt) <= Date.parse(value.createdAt) || typeof value.fulfilled !== "boolean") return false;
+  if (!validId(id) || !onlyFields(value, fields) || value.requirementId !== id || !validId(value.hostScope) || !validId(value.accountScope) || !storedPolicy(value.policyDigest) || !validId(value.lifecycleReservationId) || !validId(value.lifecycleClaimId) || !validIsoInstant(value.createdAt) || !validIsoInstant(value.expiresAt) || Date.parse(value.expiresAt) <= Date.parse(value.createdAt) || typeof value.fulfilled !== "boolean") return false;
   if (value.reviewClaimId !== undefined && !validId(value.reviewClaimId)) return false;
   return value.fulfilled ? validIsoInstant(value.fulfilledAt) && validId(value.reviewClaimId) : value.fulfilledAt === undefined;
 }
@@ -512,7 +525,7 @@ function validClaimedRecord(claimed, reservation) {
     && identity.hostScope === reservation.binding.hostScope
     && identity.accountScope === reservation.binding.accountScope
     && identity.dispatchKind === reservation.binding.dispatchKind
-    && identity.toolId === ADAPTER_DESCRIPTORS[reservation.binding.adapterId].receiptProducer
+    && (ADAPTER_DESCRIPTORS[reservation.binding.adapterId]?.version !== reservation.binding.adapterVersion || identity.toolId === ADAPTER_DESCRIPTORS[reservation.binding.adapterId].receiptProducer)
     && identity.toolVersion === reservation.binding.adapterVersion
     && claimed.frozenInputDigest === reservation.frozenInputDigest
     && validIsoInstant(claimed.at)
@@ -535,7 +548,7 @@ function validAdjustment(adjustment) {
     requestDigest: validDigest,
     forecast: validMeterMap,
     at: validIsoInstant,
-    actionReceipt: optional(validActionReceipt),
+    actionReceipt: optional((value) => validActionReceipt(value, { stored: true })),
   });
 }
 
@@ -548,17 +561,18 @@ const RESERVATION_FIELDS = {
   objectiveDigest: optional(validDigest),
   instructionDigest: optional(validDigest),
   workClassDigest: optional(validDigest),
-  phase: is("reserved", "claimed", "started", "ambiguous", "settled", "no_start"),
+  phase: is("reserved", "claimed", "started", "ambiguous", "settled", "no_start", "invalidated"),
   scope: validScope,
   scopes: (value, reservation) => validScopes(value) && stableDigest(reservation.scope) === stableDigest(value[0]),
   forecast: validMeterMap,
-  selected: validSelected,
-  binding: validBinding,
-  policyDigest: validPolicyDigest,
+  selected: (value) => validSelected(value, { stored: true }),
+  currentRoute: optional((value) => onlyFields(value, new Set(["selected", "policyDigest"])) && validSelected(value.selected, { stored: true }) && storedPolicy(value.policyDigest)),
+  binding: (value) => validBinding(value, { stored: true }),
+  policyDigest: storedPolicy,
   createdAt: validIsoInstant,
   updatedAt: validIsoInstant,
-  claimId: (value, reservation) => (reservation.phase === "reserved" ? value === null : validId(value)),
-  claimed: (value, reservation) => (reservation.phase === "reserved" ? value === undefined : validClaimedRecord(value, reservation)),
+  claimId: (value, reservation) => (["reserved", "invalidated"].includes(reservation.phase) ? value === null : validId(value)),
+  claimed: (value, reservation) => (["reserved", "invalidated"].includes(reservation.phase) ? value === undefined : validClaimedRecord(value, reservation)),
   receiptIds: (value) => idList(value) && new Set(value).size === value.length,
   // The stored decision is the reservation's own route, restated: it must agree
   // on identity, policy, and the exact selected/binding bytes.
@@ -577,8 +591,9 @@ const RESERVATION_FIELDS = {
   risk: optional(is("low", "medium", "high", "critical")),
   contextClass: optional(validId),
   learningAllowed: optional(isBoolean),
+  routeLearningEligible: optional(isBoolean),
   postLifecycleRequirementId: optional(validId),
-  authorityBinding: (value, reservation) => (ADAPTER_DESCRIPTORS[reservation.binding.adapterId]?.requiresTaskAuthority ? validAuthorityBinding(value) : value === undefined),
+  authorityBinding: (value, reservation) => (ADAPTER_DESCRIPTORS[reservation.binding.adapterId]?.requiresTaskAuthority ? validAuthorityBinding(value) : !ADAPTER_DESCRIPTORS[reservation.binding.adapterId] ? value === undefined || validAuthorityBinding(value) : value === undefined),
 };
 
 export function validateReservationRecord(id, reservation) {
@@ -613,8 +628,8 @@ const BRIDGE_FIELDS = {
   claimId: validId,
   at: validIsoInstant,
   identityDigest: validDigest,
-  carrierId: isKnownCarrier,
-  adapterId: (value) => Boolean(ADAPTER_DESCRIPTORS[value]),
+  carrierId: storedCarrier,
+  adapterId: validId,
 };
 
 function validSpendAggregate(scope, meters) {

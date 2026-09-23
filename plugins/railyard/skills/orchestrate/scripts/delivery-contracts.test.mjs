@@ -107,7 +107,7 @@ test("native children can implement and visible tasks need explicit creation dir
 test("model and effort are deliberate while inheritance respects native fork controls", () => {
   for (const text of [delivery, orchestrator]) {
     assert.match(text, /model AND reasoning effort/);
-    assert.match(text, /Astra Max (?:is|as) the baseline candidate/);
+    assert.match(text, /GPT-6 Sol at medium effort (?:is|as) the ordinary Codex\s+baseline/);
     assert.match(text, /Allocation: inherit model and reasoning effort; <reason>\./);
     assert.match(text, /omit the override fields/);
     assert.match(text, /fork_turns: "all"[\s\S]{0,90}rejects? model\/effort overrides/);

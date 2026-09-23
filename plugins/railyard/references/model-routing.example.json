@@ -17,24 +17,16 @@
       "locality": "external",
       "retention": "provider_default"
     },
-    "codex_terra": {
-      "carrierId": "codex-terra",
-      "executionSurface": "codex",
-      "account": "codex-account",
-      "harness": "codex",
-      "locality": "external",
-      "retention": "provider_default"
-    },
     "codex_luna": {
-      "carrierId": "codex-luna",
+      "carrierId": "codex-6-luna",
       "executionSurface": "codex",
       "account": "codex-account",
       "harness": "codex",
       "locality": "external",
       "retention": "provider_default"
     },
-    "codex_grok": {
-      "carrierId": "codex-grok",
+    "codex_sol": {
+      "carrierId": "codex-6-sol",
       "executionSurface": "codex",
       "account": "codex-account",
       "harness": "codex",
@@ -55,7 +47,7 @@
         "max",
         "ultra"
       ],
-      "effort": "max"
+      "effort": "high"
     },
     "daybreak_blue": {
       "provider": "codex_daybreak_blue",
@@ -70,10 +62,23 @@
         "ultra"
       ]
     },
-    "terra": {
-      "provider": "codex_terra",
-      "carrierId": "codex-terra",
-      "requestedModel": "gpt-5.6-terra",
+    "luna": {
+      "provider": "codex_luna",
+      "carrierId": "codex-6-luna",
+      "requestedModel": "gpt-6-luna",
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "effort": "medium"
+    },
+    "sol": {
+      "provider": "codex_sol",
+      "carrierId": "codex-6-sol",
+      "requestedModel": "gpt-6-sol",
       "efforts": [
         "low",
         "medium",
@@ -81,78 +86,57 @@
         "xhigh",
         "max",
         "ultra"
-      ]
-    },
-    "luna": {
-      "provider": "codex_luna",
-      "carrierId": "codex-luna",
-      "requestedModel": "gpt-5.6-luna",
-      "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-      ]
-    },
-    "grok": {
-      "provider": "codex_grok",
-      "carrierId": "codex-grok",
-      "requestedModel": "combo/grok-unified-4.6",
-      "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh"
-      ]
+      ],
+      "effort": "medium"
     }
   },
   "roles": {
     "implementation": {
       "tiers": [
         [
-          "astra"
+          "sol"
         ]
       ]
     },
     "implementation.fix": {
       "tiers": [
         [
-          "astra"
+          "sol"
         ]
       ]
     },
     "implementation.bounded_fix": {
       "tiers": [
         [
-          "astra"
+          "luna"
         ]
       ]
     },
     "implementation.mechanical": {
       "tiers": [
         [
-          "astra"
+          "luna"
         ]
       ]
     },
     "implementation.medium": {
       "tiers": [
         [
-          "astra"
+          "sol"
         ]
       ]
     },
     "implementation.long-running": {
       "tiers": [
         [
-          "astra"
+          "sol"
         ]
       ]
     },
     "implementation.hard": {
       "tiers": [
         [
+          "sol",
           "astra"
         ]
       ]
@@ -160,90 +144,91 @@
     "investigation": {
       "tiers": [
         [
-          "astra"
+          "sol"
         ]
       ]
     },
     "research": {
       "tiers": [
         [
-          "astra"
+          "sol"
         ]
       ]
     },
     "orchestration": {
       "tiers": [
         [
-          "astra"
+          "sol"
         ]
       ]
     },
     "review": {
       "tiers": [
         [
-          "astra"
+          "sol"
         ]
       ]
     },
     "review.code": {
       "tiers": [
         [
-          "astra"
+          "sol"
         ]
       ]
     },
     "review.plan": {
       "tiers": [
         [
-          "astra"
+          "sol"
         ]
       ]
     },
     "review.primary": {
       "tiers": [
         [
-          "astra"
+          "sol"
         ]
       ]
     },
     "review.secondary": {
       "tiers": [
         [
-          "astra"
+          "sol"
         ]
       ]
     },
     "review.deep": {
       "tiers": [
         [
-          "astra"
+          "sol"
         ]
       ]
     },
     "review.architecture": {
       "tiers": [
         [
-          "astra"
+          "sol"
         ]
       ]
     },
     "review.long_context": {
       "tiers": [
         [
-          "astra"
+          "sol"
         ]
       ]
     },
     "review.adversarial": {
       "tiers": [
         [
-          "astra"
+          "sol"
         ]
       ]
     },
     "security.review": {
       "tiers": [
         [
+          "sol",
           "astra"
         ]
       ]
@@ -251,6 +236,7 @@
     "security.threat-model": {
       "tiers": [
         [
+          "sol",
           "astra"
         ]
       ]
@@ -258,6 +244,7 @@
     "security.trust": {
       "tiers": [
         [
+          "sol",
           "astra"
         ]
       ]
@@ -265,6 +252,7 @@
     "security.redaction": {
       "tiers": [
         [
+          "sol",
           "astra"
         ]
       ]
@@ -272,6 +260,7 @@
     "security.signing": {
       "tiers": [
         [
+          "sol",
           "astra"
         ]
       ]
@@ -279,6 +268,7 @@
     "security.attack-shape": {
       "tiers": [
         [
+          "sol",
           "astra"
         ]
       ]
@@ -286,6 +276,7 @@
     "security.audit": {
       "tiers": [
         [
+          "sol",
           "astra"
         ]
       ]

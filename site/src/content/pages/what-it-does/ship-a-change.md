@@ -23,7 +23,7 @@ The operator asks for webhook retries to survive load and land on the base branc
 
 ## What happens
 
-Choose model and effort together when delegating, using Astra Max as the baseline candidate for substantive engineering or deliberately inheriting a supported pair. Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR. Resolve CE when the selected stage needs it; optional specialist review feeds its existing loop. After CE settles review and CI, the authorized delivery tail verifies merge ancestry and the smallest applicable post-merge check.
+Choose model and effort together when delegating, using GPT-6 Sol at `medium` for ordinary engineering, Astra when stronger judgment is needed, or deliberately inheriting a supported pair. Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR. Resolve CE when the selected stage needs it; optional specialist review feeds its existing loop. After CE settles review and CI, the authorized delivery tail verifies merge ancestry and the smallest applicable post-merge check.
 
 ## Proof point
 

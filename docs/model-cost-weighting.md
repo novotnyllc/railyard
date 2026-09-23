@@ -149,6 +149,7 @@ Anyone assigning effort weights from a price list is inventing them.
 | `promotionExpiresAt` reached | Planning index becomes the live index; verify the reverted rate. |
 | Carrier version changes | Rates are carrier-bound; re-verify before reuse. |
 | A model's resolved identity changes | `resolvedModelDigest` mismatch invalidates the rate automatically — **except** where the identity moves underneath a stable selector; see below. |
+| Retained route-level outcomes reach usable volume, or route-level usage aggregation is added | Replace Step 3 arithmetic with measured cost per completed task. |
 
 `resolvedModelDigest` only invalidates what it can observe. `freshRate()`
 hashes `candidate.model.requestedModel` whenever `observedModel` is unknown,
@@ -164,75 +165,65 @@ Until the probe records an observed model identity, a Daybreak rate must not be
 carried as an exact rate derived from Sol's published price. Leave Daybreak
 unranked, or re-verify it manually on a schedule and treat the digest as
 evidence of nothing.
-| `learningAggregates` reaches usable volume | Replace Step 3 arithmetic with measured cost per completed task. |
 
 Step 3 is a bootstrap. Measured outcomes supersede it; that is the intended
 end state, not a fallback.
 
 ## Current table
 
-Rates as published 2026-08-05, re-read 2026-08-16 against OpenAI's pricing
-documentation. Re-check before relying
-on them.
+Rates were refreshed from OpenAI's GPT-6 Sol and Luna release on 2026-09-22.
+They are API-price heuristics for `codex-sub`, not measured subscription cost
+per accepted task. Re-check before relying on them.
 
 ### Meter: `claude-sub` — reference model `fable`
 
 | Model | Input | Output | Work unit | Index | Planning index |
 | --- | --- | --- | --- | --- | --- |
 | `fable` | 10.00 | 50.00 | 69.00 | **100** | 100 |
-| `sonnet` | 3.00 | 15.00 | 20.70 | **30** | unknown — introductory to 2026-08-31 |
+| `sonnet` | 3.00 | 15.00 | 20.70 | **30** | stale — introductory rate ended 2026-08-31 |
 | `haiku` | 1.00 | 5.00 | 6.90 | **10** | 10 |
 
 The derived indices reproduce the catalog's existing Claude-side numbers
 exactly, which is the intended check on the method.
 
-### Meter: `codex-sub` — reference model `sol`
+### Meter: `codex-sub` — reference work unit: prior Sol promotional pricing
 
 | Model | Input | Output | Work unit | Index | Planning index |
 | --- | --- | --- | --- | --- | --- |
-| `sol` | 5.00 | 30.00 | 39.50 | **100** | 100 |
-| `daybreak_blue` | 5.00 | 30.00 | 39.50 | **100** | 100 |
-| `terra` | 2.00 | 12.00 | 15.80 | **40** | **80** (listed at 50% off) |
-| `luna` | 0.20 | 1.20 | 1.58 | **4** | **8** (listed at 50% off) |
+| Prior Sol promotional reference | 4.00 | 20.00 | 27.60 | **100** | 100 |
+| `gpt-6-sol` | 2.00 | 10.00 | 13.80 | **50** | **50** |
+| `gpt-6-luna` | 0.10 | 0.50 | 0.69 | **3** | **3** |
 
-`daybreak-blue-latest` is not separately priced: OpenAI's pricing
-documentation states the alias **currently points to `gpt-5.6-sol`**, so it
-carries Sol's rate exactly. Two consequences worth holding onto:
+OpenAI's GPT-6 release publishes $2/$10 for Sol and $0.10/$0.50 for Luna per
+million input/output tokens, against prior promotional cells of $4/$20 and
+$0.20/$1.20. It calls both transitions 50% cheaper. Sol and Luna input are
+exact halvings; Luna output, $1.20 to $0.50, is a 58.3% reduction, not an exact
+half (which would be $0.60). These are the published cells used above, not a
+correction of OpenAI's table. Source: [Introducing GPT-6 Sol and Luna](https://openai.com/index/introducing-gpt-6-sol-and-luna/).
 
-- Routing a security role to Daybreak rather than Sol buys **access and
-  approval posture, not a cheaper or dearer unit** — the cost arm of that
-  decision is neutral, and the routing rationale is entitlement, not price.
-- "Currently points to" is an alias that can be repointed. The rate is
-  correct only while that holds, which is exactly what `resolvedModelDigest`
-  on a rate entry exists to catch: if the alias moves to a different model,
-  the digest stops matching and the rate is dropped rather than silently
-  misapplied.
+`daybreak-blue-latest` is not separately priced. Do not derive a current
+Daybreak rate from either GPT-6 model without an identity-attested rate. Two
+consequences worth holding onto:
 
-### Meter: `zai-credits`
-
-`glm` bills in Z.ai Coding Plan credits, which do not convert to USD. It is
-the only model on this meter, so a cost index is meaningless here; it exists
-to keep `glm` from being compared against a USD-metered model.
+- Routing a security role to Daybreak needs an access and approval rationale,
+  not a borrowed Sol or Luna price.
+- An alias can be repointed. Add an exact rate only when the observed identity
+  and its resolved-model digest bind the published rate to the actual carrier.
 
 ## What this changes
 
-1. **The current Codex indices are wrong in kind.** `sol 80 / terra 60 /
-   luna 20` is neither a current-rate nor a planning-rate normalization, and
-   80 vs 100 across meters implies a fable↔sol comparison that does not
-   exist. Derived within-meter: `sol 100 / terra 80 / luna 8` at planning
-   rates.
+1. **Use `gpt-6-sol: 50` and `gpt-6-luna: 3` as provisional
+   `relativeCostIndex` values.** They are normalized to the prior Sol
+   promotional work unit (27.60), so they remain within the same API meter and
+   do not compare Codex to Claude pricing.
 
-2. **Luna is far cheaper than the catalog implies** — about 8% of Sol at
-   planning rates, not 25%. That materially changes any cost-priority tier.
+2. **Luna is about 5% of GPT-6 Sol in this workload shape** (0.69 / 13.80),
+   but that does not establish an effort or accepted-task ranking.
 
-3. **`sonnet` needs re-checking before 2026-08-31.** Its index is built on an
-   introductory rate whose reverted value is not published.
+3. **`sonnet` is stale.** Its index is built on an introductory rate that ended
+   on 2026-08-31; re-verify before letting it order a route.
 
-4. **`daybreak_blue` costs exactly what Sol costs**, because the alias
-   currently resolves to `gpt-5.6-sol`. So preferring Daybreak for the seven
-   `security.*` roles is an access and approval decision with no price
-   consequence either way — worth knowing before anyone tries to justify or
-   attack that routing on cost grounds.
+4. **Daybreak remains unpriced** until it has an identity-attested rate.
 
 5. **Most indices are inert.** Only `softPriorities: ["cost"]` tiers read
    them. Populating `rates[]` and opting the right tiers in is what makes
@@ -244,5 +235,6 @@ to keep `glm` from being compared against a USD-metered model.
 2. Recompute Step 3 with the stated assumptions; change an assumption only
    deliberately, and note which.
 3. Recompute Step 4 for anything promotional.
-4. Leave effort weighting alone unless `learningAggregates` has data.
+4. Leave effort weighting alone unless retained route-level outcomes have
+   usable usage data, or route-level usage aggregation has been added.
 5. Diff against the catalog's current indices and justify each difference.

@@ -106,14 +106,41 @@ export function claimSlotInternal(request, context) {
   const lease = state.leases[reference.leaseId];
   const reservation = state.reservations[request.reservationId];
   if (!lease || !reservation) return error(!lease ? "lease_unknown" : "reservation_unknown");
-  if (!lease.accepted || lease.released || lease.slotsClaimed >= lease.maxSlots || lease.destinationScope !== reference.destinationScope || lease.destinationAccountScope !== reference.destinationAccountScope || (request.hostScope !== undefined && request.hostScope !== lease.destinationScope) || (request.accountScope !== undefined && request.accountScope !== lease.destinationAccountScope) || request.dispatchIdentity?.hostScope !== lease.destinationScope || request.dispatchIdentity?.accountScope !== lease.destinationAccountScope || Date.parse(lease.expiresAt) <= now || state.budgetEpochs[leaseEpochAccountingId(lease.epochId)]?.frozen) return error("lease_unavailable");
+  if (lease.destinationScope !== reference.destinationScope || lease.destinationAccountScope !== reference.destinationAccountScope || (request.hostScope !== undefined && request.hostScope !== lease.destinationScope) || (request.accountScope !== undefined && request.accountScope !== lease.destinationAccountScope) || request.dispatchIdentity?.hostScope !== lease.destinationScope || request.dispatchIdentity?.accountScope !== lease.destinationAccountScope) return error("lease_unavailable");
   if (lease.policyDigest !== reservation.policyDigest || lease.carrierId !== reservation.selected.carrierId || lease.carrierVersion !== reservation.selected.carrierVersion || lease.adapterId !== reservation.binding.adapterId || lease.adapterVersion !== reservation.binding.adapterVersion || reservation.binding.hostScope !== lease.destinationScope || reservation.binding.accountScope !== lease.destinationAccountScope) return error("lease_binding_mismatch");
+  const claimed = claimInternal(request, context);
+  if (!claimed.ok) {
+    if (claimed.reason === "route_reevaluation_required" && claimed.stateChanged === true && reservation.phase === "invalidated") {
+      const currentPolicy = validateCatalog(context.catalog).policy;
+      const staleLease = lease.policyDigest !== currentPolicy.digest
+        || Date.parse(lease.expiresAt) <= now || lease.slotsClaimed >= lease.maxSlots
+        || CARRIER_DESCRIPTORS[lease.carrierId]?.version !== lease.carrierVersion
+        || ADAPTER_DESCRIPTORS[lease.adapterId]?.version !== lease.adapterVersion;
+      if (staleLease) {
+        const activeWork = Object.keys(lease.allocations).length > 0 || Object.values(state.reservations).some((item) => item.leaseId === lease.leaseId && !["settled", "no_start", "invalidated"].includes(item.phase));
+        if (activeWork) claimed.leaseReleaseRequired = true;
+        else {
+          // Nothing started under this stale lease. Release its unused ceiling
+          // as part of the same transaction so a current lease can be issued.
+          releaseLeaseInternal(request, context);
+          claimed.leaseReleased = true;
+        }
+        claimed.lease = clone(lease);
+      }
+    }
+    return claimed;
+  }
+  if (claimed.reason === "claim_replayed") {
+    const allocation = lease.allocations[reservation.reservationId];
+    if (reservation.leaseId !== lease.leaseId || allocation?.claimId !== claimed.claimId) return error("lease_claim_replayed");
+    return result(true, "delegated_slot_replayed", { claimId: claimed.claimId, reservation: clone(reservation), lease: clone(lease), cooperative: true, stateChanged: false });
+  }
+  // Authentication and stale-route invalidation precede obsolete lease limits.
+  // A live claim rejected here is discarded by the transaction boundary.
+  if (!lease.accepted || lease.released || lease.slotsClaimed >= lease.maxSlots || Date.parse(lease.expiresAt) <= now || state.budgetEpochs[leaseEpochAccountingId(lease.epochId)]?.frozen) return error("lease_unavailable");
   for (const [meter, raw] of ownEntries(reservation.forecast)) {
     if (!Object.hasOwn(lease.remainingCeiling, meter) || parseMeterAmount(meter, raw).units > parseMeterAmount(meter, lease.remainingCeiling[meter]).units) return error("lease_ceiling_exceeded", { meter });
   }
-  const claimed = claimInternal(request, context);
-  if (!claimed.ok) return claimed;
-  if (claimed.reason === "claim_replayed") return error("lease_claim_replayed");
   for (const [meter, raw] of ownEntries(reservation.forecast)) {
     const left = parseMeterAmount(meter, lease.remainingCeiling[meter]).units - parseMeterAmount(meter, raw).units;
     lease.remainingCeiling[meter] = formatMeterAmount(meter, left);
@@ -166,6 +193,6 @@ export function epochHasActiveLeaseWork(state, epochId) {
   return Object.values(state.leases).some((lease) => {
     if (lease.epochId !== epochId || lease.released === true) return false;
     if (Object.keys(lease.allocations || {}).length > 0) return true;
-    return Object.values(state.reservations).some((reservation) => reservation.leaseId === lease.leaseId && !["settled", "no_start"].includes(reservation.phase));
+    return Object.values(state.reservations).some((reservation) => reservation.leaseId === lease.leaseId && !["settled", "no_start", "invalidated"].includes(reservation.phase));
   });
 }

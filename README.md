@@ -13,7 +13,7 @@ remain explicit choices.
 - 🚦 **Plain-language work.** Native execution for routine changes, selected
   CE workflows for planning, debugging, review, and PR delivery when useful.
 - 🧠 **Deliberate allocation.** Choose model and reasoning effort together.
-  Astra Max is the baseline candidate for substantive Codex engineering;
+  GPT-6 Sol at medium effort is the baseline candidate for ordinary Codex work;
   Claude Code supports deliberate Fable 5.1 allocation. Suitable inheritance
   is an explicit choice, and unsupported selections are disclosed.
 - 🔍 **One completion owner.** CE owns review settlement and CI watching for

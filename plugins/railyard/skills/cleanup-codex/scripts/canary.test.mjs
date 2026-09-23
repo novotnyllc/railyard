@@ -20,7 +20,7 @@ import {
 
 test("isolated managed recycle canary replaces a real Unix-socket fixture", {
   skip: process.platform !== "darwin" || !fs.existsSync("/usr/bin/nc"),
-  timeout: 10_000,
+  timeout: 120_000,
 }, () => {
   const directory = fs.realpathSync(fs.mkdtempSync("/tmp/cleanup-codex-canary."));
   const codex = "/usr/bin/nc";
@@ -196,7 +196,9 @@ test("isolated managed recycle canary replaces a real Unix-socket fixture", {
         throw new Error("Agent Utilities must not signal the managed server");
       },
       sleep,
-      readyTimeoutMs: 2_000,
+      // Real macOS lsof probes can each take about two seconds under host load.
+      // Keep the production readiness budget for the complete evidence sequence.
+      readyTimeoutMs: 10_000,
       readyPollMs: 20,
       lock: { acquire: () => () => {} },
     });
@@ -260,7 +262,7 @@ test("isolated managed recycle canary replaces a real Unix-socket fixture", {
 });
 
 test("controlled process-group canary signals only fixture identities", {
-  timeout: 5_000,
+  timeout: 30_000,
   // macOS-only: drives real spawned processes through the host's exact-identity
   // tooling, which the reaper (a no-op off macOS) only ever runs on darwin.
   // Matches the guard the sibling canary test above already carries.

@@ -41,7 +41,7 @@ the strict routing catalog.
 3. Supply locally checked eligible `candidates` with stable IDs. For
    allocation, include complete model and reasoning-effort pairs, availability,
    and relevant accepted-task evidence; do not invent a cheap-model ladder.
-   Keep Astra Max as the substantive Codex baseline candidate when eligible,
+   Keep GPT-6 Sol at medium effort as the ordinary Codex baseline candidate when eligible,
    and consider Fable 5.1 deliberately for Claude Code. Honor fixed roles.
 4. Resolve `SKILL_DIR` to this loaded skill's absolute directory, then run:
 

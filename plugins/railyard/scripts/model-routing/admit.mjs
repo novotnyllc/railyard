@@ -31,6 +31,9 @@ import {
   actionReceiptFor,
   allowedInheritedAdapterTransition,
   decisionFromCandidate,
+  effectiveContinuationRoute,
+  isAllowedMidTaskEffortChange,
+  isAllowedRouteReevaluation,
   resolveInternal,
 } from "./decision.mjs";
 import {
@@ -118,13 +121,37 @@ export function reservationFromDecision(request, decision, scopes, forecast, now
   return reservation;
 }
 
+function activeReservationMatchesPriorRoute(request, active) {
+  const prior = request.priorRoute;
+  const identity = request.dispatchIdentity;
+  const claimed = active?.claimed;
+  return prior !== undefined
+    && active?.reservationId === prior.reservationId
+    && active.claimId === prior.claimId
+    && claimed !== undefined
+    && active.binding.hostScope === prior.hostScope
+    && active.binding.accountScope === prior.accountScope
+    && claimed.hostScope === prior.hostScope
+    && claimed.accountScope === prior.accountScope
+    && claimed.sessionId === prior.sessionId
+    && claimed.toolId === prior.toolId
+    && claimed.toolVersion === prior.toolVersion
+    && identity !== undefined
+    && identity.hostScope === claimed.hostScope
+    && identity.accountScope === claimed.accountScope
+    && identity.sessionId === claimed.sessionId
+    && identity.toolId === claimed.toolId
+    && identity.toolVersion === claimed.toolVersion;
+}
+
 export function admitInternal(request, context) {
-  const { catalog, state, now, trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers, controllerRuntime, requireControllerRuntime } = context;
+  const { catalog, state, now, trustedTransportAttestor, fixedReceiptProducers, controllerRuntime, requireControllerRuntime } = context;
   if (!validId(request.requestId)) return error("request_id_required");
   const existing = Object.values(state.reservations).find((record) => record.requestId === request.requestId);
   const requestDigest = stableDigest({ ...request, command: undefined });
   if (existing) {
     if (existing.requestDigest !== requestDigest) return error("request_id_conflict");
+    if (existing.phase === "invalidated") return error("route_reevaluation_required", { reservation: clone(existing) });
     return result(true, "admission_replayed", { decision: existing.decision, reservation: clone(existing) });
   }
   if (!catalog) {
@@ -143,6 +170,21 @@ export function admitInternal(request, context) {
   if (!validDigest(request.frozenInputDigest)) return error("frozen_input_digest_required");
   const scopes = scopeFor(request);
   if (!scopes) return error("invalid_budget_scope");
+  // An already admitted effort change remains replayable after a later change
+  // updates the active route's effective effort. Its original request was
+  // fully validated before it was recorded; re-resolving it against the newer
+  // route would turn a harmless retry into a false binding mismatch.
+  if (request.budgetEffect === "adjust_active" && validId(request.activeReservationId)) {
+    const active = state.reservations[request.activeReservationId];
+    if (!active || !["claimed", "started"].includes(active.phase)) return error("active_attempt_unknown");
+    if (!activeReservationMatchesPriorRoute(request, active)) return error("prior_route_binding_mismatch");
+    const previous = active?.adjustments?.[request.requestId];
+    if (previous) {
+      const adjustmentDigest = stableDigest({ ...request, command: undefined });
+      if (previous.requestDigest !== adjustmentDigest) return error("request_id_conflict");
+      return result(true, "active_adjustment_replayed", { reservation: clone(active), adjustment: clone(previous), actionReceipt: clone(previous.actionReceipt) });
+    }
+  }
   const resolved = resolveInternal(request, context);
   if (!resolved.ok) return resolved;
   if (resolved.decision.binding.budgetEffect === "none") return error("budget_neutral_admission_not_allowed");
@@ -150,8 +192,17 @@ export function admitInternal(request, context) {
     if (!validId(request.activeReservationId)) return error("active_reservation_required");
     const active = state.reservations[request.activeReservationId];
     if (!active || !["claimed", "started"].includes(active.phase)) return error("active_attempt_unknown");
+    if (!activeReservationMatchesPriorRoute(request, active)) return error("prior_route_binding_mismatch");
     if (!validDigest(active.workClassDigest) || active.workClassDigest !== resolved.decision.workClassDigest) return error("prior_work_class_changed_requires_fresh_route");
-    if (stableDigest(active.scopes) !== stableDigest(scopes) || active.policyDigest !== resolved.decision.policy.digest || active.selected.carrierId !== resolved.decision.selected.carrierId || active.selected.model !== resolved.decision.selected.model || active.selected.effort !== resolved.decision.selected.effort || !allowedInheritedAdapterTransition(active.binding.adapterId, resolved.decision.binding.adapterId, active.selected.carrierId, resolved.decision.binding.dispatchKind)) return error("context_override_conflict");
+    const currentRoute = effectiveContinuationRoute(active);
+    const reevaluated = isAllowedRouteReevaluation(request, resolved.decision, currentRoute);
+    const effortChanged = currentRoute.selected.effort !== resolved.decision.selected.effort;
+    if (stableDigest(active.scopes) !== stableDigest(scopes)
+      || (!reevaluated && (currentRoute.policyDigest !== resolved.decision.policy.digest
+      || currentRoute.selected.carrierId !== resolved.decision.selected.carrierId
+      || currentRoute.selected.model !== resolved.decision.selected.model
+      || (effortChanged && !isAllowedMidTaskEffortChange(request, resolved.decision, currentRoute))))
+      || !allowedInheritedAdapterTransition(active.binding.adapterId, resolved.decision.binding.adapterId, resolved.decision.selected.carrierId, resolved.decision.binding.dispatchKind)) return error("context_override_conflict");
     const adjustmentDigest = stableDigest({ ...request, command: undefined });
     active.adjustments ||= {};
     const previous = active.adjustments[request.requestId];
@@ -161,7 +212,7 @@ export function admitInternal(request, context) {
     }
     const adjustment = normalizeForecast(request.forecast || {});
     if (!adjustment.ok) return error(adjustment.reason);
-    const budget = budgetAdmissionAll(catalog, state, scopes, adjustment.value, { carrier: CARRIER_DESCRIPTORS[active.selected.carrierId] });
+    const budget = budgetAdmissionAll(catalog, state, scopes, adjustment.value, { carrier: CARRIER_DESCRIPTORS[resolved.decision.selected.carrierId] });
     if (!budget.ok) return error(budget.reason, { meter: budget.meter, scope: budget.scope });
     const headroom = ensureStateHeadroom(state, now);
     if (!headroom.ok) return headroom;
@@ -173,14 +224,20 @@ export function admitInternal(request, context) {
       budget: { kind: "top_up", forecast: adjustment.value, warningCount: budget.warnings.length },
     });
     if (!actionReceipt) return error("invalid_action_receipt");
+    if (reevaluated || effortChanged || currentRoute.selected.model !== resolved.decision.selected.model) active.routeLearningEligible = false;
+    if (reevaluated || effortChanged || active.currentRoute) {
+      // Keep the original execution binding intact for settlement while later
+      // messages authenticate against the latest continuation allocation.
+      active.currentRoute = { selected: clone(resolved.decision.selected), policyDigest: resolved.decision.policy.digest };
+    }
     active.adjustments[request.requestId] = { requestDigest: adjustmentDigest, forecast: adjustment.value, at: nowIso(now), actionReceipt };
     active.updatedAt = nowIso(now);
-    return result(true, "active_budget_adjusted", { reservation: clone(active), adjustment: clone(active.adjustments[request.requestId]), actionReceipt: clone(actionReceipt), stateChanged: true });
+    return result(true, "active_budget_adjusted", { decision: resolved.decision, reservation: clone(active), adjustment: clone(active.adjustments[request.requestId]), actionReceipt: clone(actionReceipt), stateChanged: true });
   }
   const forecast = normalizeForecast(request.forecast || {});
   if (!forecast.ok) return error(forecast.reason);
   const policy = validateCatalog(catalog).policy;
-  const candidates = configuredCandidates(catalog, request, state, now, policy.digest, { trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers });
+  const candidates = configuredCandidates(catalog, request, state, now, policy.digest, { trustedTransportAttestor, fixedReceiptProducers });
   const configured = candidates.filter((candidate) => candidate.ok).sort(candidateSort);
   const ineligible = candidates.filter((candidate) => !candidate.ok).map((candidate) => ({ modelAlias: candidate.alias, reason: candidate.reason }));
   const rejectedByBudget = [];
@@ -271,15 +328,34 @@ export function claimInternal(request, context) {
   if (!reservation) return error("reservation_unknown");
   if (!validDigest(request.frozenInputDigest) || request.frozenInputDigest !== reservation.frozenInputDigest) return error("claim_input_mismatch");
   const adapter = ADAPTER_DESCRIPTORS[reservation.binding.adapterId];
-  if (adapter?.version !== reservation.binding.adapterVersion || CARRIER_DESCRIPTORS[reservation.selected.carrierId]?.version !== reservation.selected.carrierVersion) return error("adapter_version_changed");
+  const carrier = CARRIER_DESCRIPTORS[reservation.selected.carrierId];
   const identity = request.dispatchIdentity;
-  if (!validDispatchIdentity(identity, adapter?.receiptProducer) || identity.dispatchKind !== reservation.binding.dispatchKind || identity.toolVersion !== reservation.binding.adapterVersion) return error("dispatch_identity_required");
+  // Even a retired route can only be invalidated by a caller presenting its
+  // frozen input and destination binding. It never acquires a dispatch claim.
+  const expectedProducer = adapter?.version === reservation.binding.adapterVersion ? adapter.receiptProducer : undefined;
+  if (!validDispatchIdentity(identity, expectedProducer) || identity.dispatchKind !== reservation.binding.dispatchKind || identity.toolVersion !== reservation.binding.adapterVersion) return error("dispatch_identity_required");
   if (identity.hostScope !== reservation.binding.hostScope || identity.accountScope !== reservation.binding.accountScope) return error("dispatch_identity_mismatch");
   if ((request.hostScope !== undefined && request.hostScope !== identity.hostScope) || (request.accountScope !== undefined && request.accountScope !== identity.accountScope)) return error("dispatch_identity_mismatch");
+  if (reservation.phase === "invalidated") return error("route_reevaluation_required", { reservation: clone(reservation) });
   if (ACTIVE_CLAIM_PHASES.has(reservation.phase)) {
+    // A previously claimed dispatch is already bound to this exact identity.
+    // Replaying that claim does not authorize a new route or consume budget.
     if (dispatchIdentityDigest(identity) !== dispatchIdentityDigest(reservation.claimed)) return error("dispatch_identity_mismatch");
     return result(true, "claim_replayed", { claimId: reservation.claimId, claimed: clone(reservation.claimed), reservation: clone(reservation) });
   }
+  const currentPolicy = validateCatalog(context.catalog);
+  if (!currentPolicy.ok) return currentPolicy;
+  const versionChanged = adapter?.version !== reservation.binding.adapterVersion || carrier?.version !== reservation.selected.carrierVersion;
+  const stale = !adapter || !carrier || versionChanged || reservation.policyDigest !== currentPolicy.policy.digest
+    || (carrier.transport === "selector-native" && carrier.requestedModel !== reservation.selected.model);
+  if (stale && reservation.phase === "reserved") {
+    // This reservation never dispatched. Keep its original evidence for audit,
+    // but release the forecast so current-policy admission can make progress.
+    reservation.phase = "invalidated";
+    reservation.updatedAt = nowIso(now);
+    return error("route_reevaluation_required", { reservation: clone(reservation), stateChanged: true });
+  }
+  if (stale) return error(versionChanged && adapter && carrier ? "adapter_version_changed" : "route_reevaluation_required");
   if (reservation.phase !== "reserved") return error("claim_not_allowed", { phase: reservation.phase });
   if (reservation.authorityBinding && requireControllerRuntime && !validControllerRuntime(controllerRuntime)) return error("controller_runtime_unavailable");
   if (reservation.authorityBinding?.controller && controllerRuntime !== undefined && !sameControllerRuntime(reservation.authorityBinding.controller, controllerRuntime)) return error("controller_identity_mismatch");
@@ -291,11 +367,12 @@ export function claimInternal(request, context) {
   if (!authority.ok) return error(authority.reason);
   let lifecycleRequirement = null;
   if (reservation.decision.role === "review" || reservation.decision.role.startsWith("review.")) {
-    const pending = Object.values(state.lifecycleReviewRequirements).filter((item) => item.fulfilled !== true && Date.parse(item.expiresAt) > now && item.hostScope === identity.hostScope && item.accountScope === identity.accountScope && item.policyDigest === reservation.policyDigest);
+    // A later policy change cannot erase an outstanding lifecycle review.
+    const pending = Object.values(state.lifecycleReviewRequirements).filter((item) => item.fulfilled !== true && Date.parse(item.expiresAt) > now && item.hostScope === identity.hostScope && item.accountScope === identity.accountScope);
     if (pending.length > 0) {
       if (!validId(request.postLifecycleRequirementId)) return error("fresh_post_lifecycle_review_required");
       lifecycleRequirement = state.lifecycleReviewRequirements[request.postLifecycleRequirementId];
-      if (!lifecycleRequirement || lifecycleRequirement.fulfilled || Date.parse(lifecycleRequirement.expiresAt) <= now || lifecycleRequirement.hostScope !== identity.hostScope || lifecycleRequirement.accountScope !== identity.accountScope || lifecycleRequirement.policyDigest !== reservation.policyDigest || lifecycleRequirement.reviewClaimId !== undefined) return error("fresh_post_lifecycle_review_required");
+      if (!lifecycleRequirement || lifecycleRequirement.fulfilled || Date.parse(lifecycleRequirement.expiresAt) <= now || lifecycleRequirement.hostScope !== identity.hostScope || lifecycleRequirement.accountScope !== identity.accountScope || lifecycleRequirement.reviewClaimId !== undefined) return error("fresh_post_lifecycle_review_required");
     }
   }
   reservation.phase = "claimed";

@@ -12,6 +12,7 @@ import {
   validDigest,
   validEffort,
   validId,
+  validHistoricalPolicyDigest,
   validIsoInstant,
   validMeterMap,
   validModel,
@@ -52,7 +53,7 @@ export function validateRequestPrivacy(privacy) {
 export function validateRuntime(runtime) {
   // Runtime availability is attested by a fixed host integration, never by
   // caller JSON.  Keeping the field invalid rather than silently ignoring it
-  // prevents a request from selecting a Terra substitution for itself.
+  // prevents a request from asserting its own model availability.
   return runtime === undefined;
 }
 
@@ -63,7 +64,7 @@ export function validateTransport(transport) {
 }
 
 export function validatePriorRoute(value) {
-  return isObject(value) && onlyFields(value, new Set(["reservationId", "claimId", "carrierId", "model", "effort", "adapterId", "adapterVersion", "policyDigest", "hostScope", "accountScope", "sessionId", "toolId", "toolVersion", "workClassDigest", "r52Digest"])) && validId(value.reservationId) && validId(value.claimId) && isKnownCarrier(value.carrierId) && validModel(value.model) && validEffort(value.effort) && Boolean(ADAPTER_DESCRIPTORS[value.adapterId]) && validId(value.adapterVersion) && validPolicyDigest(value.policyDigest) && validId(value.hostScope) && validId(value.accountScope) && validId(value.sessionId) && validId(value.toolId) && validId(value.toolVersion) && validDigest(value.workClassDigest) && (value.r52Digest === undefined || validDigest(value.r52Digest));
+  return isObject(value) && onlyFields(value, new Set(["reservationId", "claimId", "carrierId", "model", "effort", "adapterId", "adapterVersion", "policyDigest", "hostScope", "accountScope", "sessionId", "toolId", "toolVersion", "workClassDigest", "r52Digest"])) && validId(value.reservationId) && validId(value.claimId) && validId(value.carrierId) && validModel(value.model) && validEffort(value.effort) && validId(value.adapterId) && validId(value.adapterVersion) && validHistoricalPolicyDigest(value.policyDigest) && validId(value.hostScope) && validId(value.accountScope) && validId(value.sessionId) && validId(value.toolId) && validId(value.toolVersion) && validDigest(value.workClassDigest) && (value.r52Digest === undefined || validDigest(value.r52Digest));
 }
 
 export function validateBudgetScopes(value) {

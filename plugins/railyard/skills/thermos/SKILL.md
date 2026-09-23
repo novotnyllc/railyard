@@ -16,10 +16,10 @@ workflow has covered the relevant concerns.
 Choose each reviewer's model **and** reasoning effort for its bounded scope
 before dispatch. Use `railyard:model-routing` when an active Railyard route
 owns that assignment; consume any already-reserved slot once. Otherwise make
-the choice through the current native tool's supported fields. Astra `max` is
-a baseline candidate for substantive Codex review, not a claim that it is
-cheapest for every review. Use another supported pair when the task, evidence,
-or user preference warrants it. Deliberate inheritance is valid when the
+the choice through the current native tool's supported fields. GPT-6 Sol at
+`medium` is the ordinary Codex review baseline where that dispatch surface
+supports it; raise effort for demanding review and use Astra for a specific
+need. Deliberate inheritance is valid when the
 inherited pair is known and suitable; record that choice rather than silently
 omitting allocation.
 

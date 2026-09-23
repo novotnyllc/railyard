@@ -12,6 +12,7 @@ import {
   ADAPTER_DESCRIPTORS,
   buildInvariantWorkContract,
   CARRIER_DESCRIPTORS,
+  CE_SEAMS,
   CONTRACT_VERSION,
   createEmptyState,
   DAYBREAK_MODEL,
@@ -19,6 +20,7 @@ import {
   handleRequest,
   MAX_APP_SERVER_RESPONSE_BYTES,
   measureFastPath,
+  loadStateForCli,
   migrateState,
   pathSafetyIssue,
   probeCodexDaybreak,
@@ -30,14 +32,15 @@ import {
   stableDigest,
   providerAvailabilityIssue,
   parseClaudeFamily,
-  NATIVE_MODEL_EFFORTS,
+  NATIVE_SUBAGENT_MODEL_EFFORTS,
   validateNativeModelEffort,
+  validateCodexTaskModelEffort,
   validateCatalog,
   validateState,
 } from "./model-routing.mjs";
-import { claudeIdentitySatisfied, fallbackSetDigest, fixedRuntimeDecision } from "./model-routing/select.mjs";
+import { claudeIdentitySatisfied, fallbackSetDigest } from "./model-routing/select.mjs";
 import { CLAUDE_AGENT_MODEL_ALIASES, validateClaudeModelEffort } from "./model-routing/claude.mjs";
-import { validBinding } from "./model-routing/state-schema.mjs";
+import { validBinding, validSelected } from "./model-routing/state-schema.mjs";
 import { build as buildOracle, dispatch as dispatchOracle, oracleSessionSlug } from "../skills/oracle/scripts/oracle-route.mjs";
 
 const NOW = Date.parse("2026-08-04T12:00:00.000Z");
@@ -96,7 +99,7 @@ function fakeAppServer(onRequest) {
   return { child, requests };
 }
 
-function rate({ model = "gpt-5.6-luna", carrierId = "codex-luna", effort = "max", billingSurface = "codex", amount = "0.10" } = {}) {
+function rate({ model = "gpt-6-astra", carrierId = "codex-astra", effort = "max", billingSurface = "codex", amount = "0.10" } = {}) {
   return {
     meter: "marginalUsd",
     amount,
@@ -116,37 +119,37 @@ function catalog({ budgets, privacy, discovery, rates = false, learning, extraPr
   const policy = {
     schemaVersion: 1,
     providers: {
-      codex: { carrierId: "codex-luna", executionSurface: "codex", account: "local", locality: "external", retention: "provider_default" },
-      glm: { carrierId: "glm-5-2-engineer", executionSurface: "provider_subscription", account: "plan", locality: "same_region", retention: "ephemeral" },
+      codex: { carrierId: "codex-astra", executionSurface: "codex", account: "local", locality: "external", retention: "provider_default" },
+      task_luna: { carrierId: "codex-6-luna", executionSurface: "codex", account: "plan", locality: "same_region", retention: "ephemeral" },
       ...extraProviders,
     },
     models: {
       luna: {
         provider: "codex",
-        carrierId: "codex-luna",
-        requestedModel: "gpt-5.6-luna",
+        carrierId: "codex-astra",
+        requestedModel: "gpt-6-astra",
         efforts: ["max"],
         roles: ["implementation", "implementation.mechanical"],
         relativeCostIndex: 50,
         ...(rates ? { rates: [rate()] } : {}),
       },
-      glm: {
-        provider: "glm",
-        carrierId: "glm-5-2-engineer",
-        requestedModel: "glm-5.2",
+      task_luna: {
+        provider: "task_luna",
+        carrierId: "codex-6-luna",
+        requestedModel: "gpt-6-luna",
         efforts: ["xhigh"],
         roles: ["implementation.mechanical"],
         relativeCostIndex: 1,
         workShape: {
           ambiguity: ["low"], novelty: ["low"], repetition: ["high"], decomposability: ["high"], unitVolume: ["high"], semanticRisk: ["low"], verificationStrength: ["high"],
         },
-        ...(rates ? { rates: [rate({ model: "glm-5.2", carrierId: "glm-5-2-engineer", effort: "xhigh", billingSurface: "provider_subscription", amount: "0.02" })] } : {}),
+        ...(rates ? { rates: [rate({ model: "gpt-6-luna", carrierId: "codex-6-luna", effort: "xhigh", billingSurface: "codex", amount: "0.02" })] } : {}),
       },
       ...extraModels,
     },
     roles: {
       implementation: { tiers: [{ models: ["luna"], softPriorities: ["cost"] }] },
-      "implementation.mechanical": { tiers: [{ models: ["luna", "glm"], softPriorities: ["cost"] }] },
+      "implementation.mechanical": { tiers: [{ models: ["luna", "task_luna"], softPriorities: ["cost"] }] },
       ...extraRoles,
     },
   };
@@ -167,9 +170,8 @@ function examplePolicy() {
   return JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../references/model-routing.example.json"), "utf8"));
 }
 
-// The strict adapter regression fixture preserves an explicitly configured
-// older fleet policy; it is not the native default or the current example.
-function legacyPolicy() {
+// Explicit multi-harness fixture for capability, cost, and privacy regressions.
+function configuredPolicy() {
   return {
     "schemaVersion": 1,
     "providers": {
@@ -182,7 +184,7 @@ function legacyPolicy() {
         "harness": "claude"
       },
       "codex_luna": {
-        "carrierId": "codex-luna",
+        "carrierId": "codex-astra",
         "executionSurface": "codex",
         "account": "codex-sub",
         "locality": "external",
@@ -190,7 +192,7 @@ function legacyPolicy() {
         "harness": "codex"
       },
       "codex_sol": {
-        "carrierId": "codex-sol",
+        "carrierId": "codex-6-sol",
         "executionSurface": "codex",
         "account": "codex-sub",
         "locality": "external",
@@ -205,25 +207,13 @@ function legacyPolicy() {
         "retention": "provider_default",
         "harness": "codex"
       },
-      "codex_terra": {
-        "carrierId": "codex-terra-runtime",
-        "executionSurface": "codex",
-        "account": "codex-sub",
-        "locality": "external",
-        "retention": "provider_default",
-        "harness": "codex"
-      },
       "zai": {
-        "carrierId": "glm-5-2-engineer",
-        "executionSurface": "provider_subscription",
+        "carrierId": "codex-6-luna",
+        "executionSurface": "codex",
         "account": "zai-credits",
         "locality": "same_region",
         "retention": "ephemeral",
-        "harness": "codex",
-        "availability": {
-          "kind": "codex_config",
-          "section": "model_providers.zai_litellm"
-        }
+        "harness": "codex"
       }
     },
     "models": {
@@ -254,8 +244,8 @@ function legacyPolicy() {
       },
       "sol": {
         "provider": "codex_sol",
-        "carrierId": "codex-sol",
-        "requestedModel": "gpt-5.6-sol",
+        "carrierId": "codex-6-sol",
+        "requestedModel": "gpt-6-sol",
         "effort": "high",
       "efforts": ["high", "max"],
         "roles": ["implementation.hard", "orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
@@ -263,8 +253,8 @@ function legacyPolicy() {
       },
       "sol_max": {
         "provider": "codex_sol",
-        "carrierId": "codex-sol",
-        "requestedModel": "gpt-5.6-sol",
+        "carrierId": "codex-6-sol",
+        "requestedModel": "gpt-6-sol",
         "efforts": ["max"],
         "roles": ["implementation.hard"],
         "relativeCostIndex": 80
@@ -278,26 +268,18 @@ function legacyPolicy() {
         "roles": ["security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
         "relativeCostIndex": 80
       },
-      "terra": {
-        "provider": "codex_terra",
-        "carrierId": "codex-terra-runtime",
-        "requestedModel": "gpt-5.6-terra",
-        "efforts": ["max"],
-        "roles": ["implementation.medium", "implementation.long-running"],
-        "relativeCostIndex": 60
-      },
       "luna": {
         "provider": "codex_luna",
-        "carrierId": "codex-luna",
-        "requestedModel": "gpt-5.6-luna",
+        "carrierId": "codex-astra",
+        "requestedModel": "gpt-6-astra",
         "efforts": ["max"],
         "roles": ["implementation", "implementation.medium", "implementation.long-running", "implementation.mechanical", "implementation.cross-harness"],
         "relativeCostIndex": 20
       },
-      "glm": {
+      "task_luna": {
         "provider": "zai",
-        "carrierId": "glm-5-2-engineer",
-        "requestedModel": "glm-5.2",
+        "carrierId": "codex-6-luna",
+        "requestedModel": "gpt-6-luna",
         "efforts": ["xhigh"],
         "roles": ["implementation.cross-harness"],
         "relativeCostIndex": 1
@@ -350,10 +332,10 @@ function legacyPolicy() {
         "tiers": [["fable", "sol_max"]]
       },
       "implementation.medium": {
-        "tiers": [["sonnet", "terra", "luna"]]
+        "tiers": [["sonnet", "luna"]]
       },
       "implementation.long-running": {
-        "tiers": [["sonnet", "terra", "luna"]]
+        "tiers": [["sonnet", "luna"]]
       },
       "implementation.mechanical": {
         "tiers": [["haiku", "luna"]]
@@ -361,7 +343,7 @@ function legacyPolicy() {
       "implementation.cross-harness": {
         "tiers": [
           {
-            "models": ["luna", "glm"],
+            "models": ["luna", "task_luna"],
             "softPriorities": ["cost"]
           }
         ]
@@ -438,7 +420,7 @@ function refreshAttestor({ observedModel, capabilities = [], authState = "authen
   };
 }
 
-function attestedCapability(policy, { carrierId = "glm-5-2-engineer", adapterId = "configured-profile-task-create", hostScope = "local", accountScope = "plan", observedModel = "glm-5.2", capabilities = [], fallbackSetDigest } = {}) {
+function attestedCapability(policy, { carrierId = "codex-6-luna", adapterId = "codex-task-create", hostScope = "local", accountScope = "plan", observedModel = "gpt-6-luna", capabilities = [], fallbackSetDigest } = {}) {
   const state = createEmptyState();
   const record = {
     carrierId,
@@ -602,17 +584,45 @@ function r52Readiness() {
 test("native model capabilities distinguish exposed overrides from broader provider catalogs", () => {
   assert.equal(validateNativeModelEffort("gpt-6-astra", "max").ok, true);
   assert.equal(validateNativeModelEffort("gpt-6-astra", "ultra").ok, true);
-  assert.equal(validateNativeModelEffort("gpt-5.6-terra", "ultra").ok, true);
+  assert.equal(validateNativeModelEffort("gpt-6-sol", "ultra").ok, true);
+  assert.equal(validateNativeModelEffort("gpt-6-luna", "max").ok, true);
+  assert.equal(validateNativeModelEffort("gpt-6-luna", "ultra").reason, "effort_unsupported");
+  assert.equal(validateNativeModelEffort("gpt-5.6-terra", "ultra").reason, "native_model_unsupported");
   assert.equal(validateNativeModelEffort("gpt-daybreak-blue-latest", "ultra").ok, true);
-  assert.equal(validateNativeModelEffort("gpt-5.6-luna", "max").ok, true);
-  assert.equal(validateNativeModelEffort("gpt-5.6-luna", "ultra").reason, "effort_unsupported");
-  assert.equal(validateNativeModelEffort("combo/grok-unified-4.6", "xhigh").ok, true);
-  assert.equal(validateNativeModelEffort("combo/grok-unified-4.6", "max").reason, "effort_unsupported");
-  for (const model of ["gpt-5.6-sol", "cursor/composer-2.5", "zai/glm-5.3[1m]", "__proto__", undefined]) {
+  assert.equal(validateNativeModelEffort("gpt-6-astra", "max").ok, true);
+  assert.equal(validateNativeModelEffort("gpt-6-astra", "invalid").reason, "effort_unsupported");
+  for (const model of ["gpt-5.6-sol", "gpt-5.6-luna", "combo/grok-unified-4.6", "cursor/composer-2.5", "__proto__", undefined]) {
     assert.equal(validateNativeModelEffort(model, "max").reason, "native_model_unsupported");
   }
   assert.equal(validateNativeModelEffort("gpt-6-astra", undefined).reason, "effort_unsupported");
-  assert.throws(() => NATIVE_MODEL_EFFORTS["gpt-5.6-luna"].push("ultra"), TypeError);
+  assert.throws(() => NATIVE_SUBAGENT_MODEL_EFFORTS["gpt-6-astra"].push("ultra"), TypeError);
+});
+
+test("retired models have no carrier, native route, or task route", () => {
+  for (const model of ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]) {
+    assert.equal(validateNativeModelEffort(model, "medium").reason, "native_model_unsupported");
+    assert.equal(validateCodexTaskModelEffort(model, "medium").reason, "task_model_unsupported");
+    assert.equal(Object.values(CARRIER_DESCRIPTORS).some((carrier) => carrier.requestedModel === model), false);
+    const result = handleRequest(request("resolve", { model, effort: "medium", adapterId: "codex-task-create", dispatchKind: "task_create" }), { now: NOW });
+    assert.equal(result.response.reason, "task_model_unsupported");
+    assert.equal(result.response.decision, undefined);
+  }
+  assert.equal(Object.keys(CARRIER_DESCRIPTORS).some((id) => id.startsWith("glm") || id.includes("terra")), false);
+});
+
+test("ordinary GPT-6 Sol task routes support implementation and investigation CE seams", () => {
+  for (const [id, skill, role] of [
+    ["ce-work.execution", "ce-work", "implementation"],
+    ["ce-debug.execution", "ce-debug", "investigation"],
+  ]) {
+    const seam = CE_SEAMS[id];
+    const result = handleRequest(request("resolve", {
+      role, callerKind: "compound-engineering", adapterId: "codex-task-create", dispatchKind: "task_create",
+      ceSeam: { id, skill, artifact: { schema: seam.artifactSchema, digest: DIGEST_A } },
+    }), { now: NOW });
+    assert.equal(result.response.reason, "resolved", JSON.stringify(result.response));
+    assert.equal(result.response.decision.selected.model, "gpt-6-sol");
+  }
 });
 
 test("Claude selectors preserve release pins and compare hyphenated generations numerically", () => {
@@ -739,7 +749,7 @@ test("native Claude Agent routes retain aliases and refuse unmappable full IDs a
       assert.equal(resolved.reason, "no_eligible_route", JSON.stringify(resolved));
       assert.deepEqual(resolved.rejectedAlternatives, [{ modelAlias: "selected", reason: "claude_agent_model_unsupported" }]);
     }
-    assert.equal(handleRequest(request("resolve", { model, effort: "max" }), { now: NOW }).response.reason, model === "fable[1m]" ? "invalid_model" : "native_model_unsupported");
+    assert.equal(handleRequest(request("resolve", { model, effort: "max" }), { now: NOW }).response.reason, model === "fable[1m]" ? "invalid_model" : "task_model_unsupported");
   }
 });
 
@@ -812,8 +822,8 @@ test("Claude CE review routes reject unverified configured and observed model-ef
   assert.deepEqual(observedUnknownResponse.rejectedAlternatives, [{ modelAlias: "selected", reason: "claude_model_unverified" }]);
 });
 
-test("default allocation preserves requested pairs and rejects unsupported choices without substitution", () => {
-  for (const [model, effort] of [["gpt-6-astra", "low"], ["gpt-5.6-terra", "ultra"], ["gpt-5.6-luna", "high"], ["combo/grok-unified-4.6", "xhigh"]]) {
+test("default allocation preserves requested pairs across native spawn and task creation", () => {
+  for (const [model, effort] of [["gpt-6-astra", "low"], ["gpt-6-astra", "medium"], ["gpt-6-astra", "high"]]) {
     const resolved = handleRequest(request("resolve", { model, effort }), { now: NOW });
     assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
     assert.equal(resolved.response.decision.selected.model, model);
@@ -823,34 +833,44 @@ test("default allocation preserves requested pairs and rejects unsupported choic
     assert.equal(resolved.response.decision.requestedVsActual.observedModel, "unknown");
   }
   const effortOnly = handleRequest(request("resolve", { effort: "medium" }), { now: NOW });
-  assert.equal(effortOnly.response.decision.selected.model, "gpt-6-astra");
+  assert.equal(effortOnly.response.reason, "resolved");
+  assert.equal(effortOnly.response.decision.selected.model, "gpt-6-sol");
   assert.equal(effortOnly.response.decision.selected.effort, "medium");
-  for (const [model, effort] of [["gpt-5.6-luna", "ultra"], ["combo/grok-unified-4.6", "max"]]) {
+  for (const [model, effort] of [["gpt-6-sol", "high"], ["gpt-6-luna", "medium"]]) {
+    const resolved = handleRequest(request("resolve", { model, effort, adapterId: "codex-task-create", dispatchKind: "task_create" }), { now: NOW });
+    assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
+    assert.equal(resolved.response.decision.selected.model, model);
+    assert.equal(resolved.response.decision.selected.effort, effort);
+  }
+  const nativeSol = handleRequest(request("resolve", { model: "gpt-6-sol", effort: "high" }), { now: NOW }).response;
+  assert.equal(nativeSol.reason, "resolved");
+  assert.equal(nativeSol.decision.binding.adapterId, "native-subagent-create");
+  for (const [model, effort] of [["gpt-6-astra", "none"]]) {
     const rejected = handleRequest(request("resolve", { model, effort }), { now: NOW });
-    assert.equal(rejected.response.reason, "effort_unsupported");
+    assert.equal(rejected.response.reason, "invalid_effort");
     assert.equal(rejected.response.decision, undefined);
   }
-  assert.equal(handleRequest(request("resolve", { model: "gpt-5.6-sol", effort: "max" }), { now: NOW }).response.reason, "native_model_unsupported");
-  assert.equal(handleRequest(request("resolve", { model: "gpt-5.6-luna" }), { now: NOW }).response.reason, "effort_required");
+  assert.equal(handleRequest(request("resolve", { model: "gpt-6-sol", effort: "max" }), { now: NOW }).response.reason, "resolved");
+  assert.equal(handleRequest(request("resolve", { model: "gpt-6-astra" }), { now: NOW }).response.reason, "effort_required");
   assert.equal(handleRequest(request("resolve", { explicitModelRequirement: true }), { now: NOW }).response.reason, "explicit_model_required");
 });
 
-test("the example uses Astra Max without an invented cost ranking and honors explicit alternatives", () => {
+test("the example defaults task work to GPT-6 Sol and bounded work to Luna without invented cost ranking", () => {
   const policy = examplePolicy();
   assert.equal(validateCatalog(policy).ok, true);
   assert.equal(Object.hasOwn(policy, "budgets"), false);
   for (const model of Object.values(policy.models)) assert.equal(Object.hasOwn(model, "relativeCostIndex"), false);
-  for (const role of ["implementation", "implementation.hard", "implementation.bounded_fix", "orchestration", "review.primary"]) {
-    const resolved = handleRequest(request("resolve", { role, harness: "codex" }), { catalog: policy, now: NOW });
+  for (const [role, model] of [["implementation", "gpt-6-sol"], ["implementation.hard", "gpt-6-sol"], ["implementation.bounded_fix", "gpt-6-luna"], ["orchestration", "gpt-6-sol"], ["review.primary", "gpt-6-sol"]]) {
+    const resolved = handleRequest(request("resolve", { role, harness: "codex", adapterId: "codex-task-create", dispatchKind: "task_create" }), { catalog: policy, now: NOW });
     assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
-    assert.equal(resolved.response.decision.selected.model, "gpt-6-astra");
-    assert.equal(resolved.response.decision.selected.effort, "max");
+    assert.equal(resolved.response.decision.selected.model, model);
+    assert.equal(resolved.response.decision.selected.effort, "medium");
   }
-  const override = handleRequest(request("resolve", { role: "review.primary", harness: "codex", model: "gpt-5.6-luna", effort: "medium" }), { catalog: policy, now: NOW });
+  const override = handleRequest(request("resolve", { role: "review.primary", harness: "codex", model: "gpt-6-luna", effort: "medium", adapterId: "codex-task-create", dispatchKind: "task_create" }), { catalog: policy, now: NOW });
   assert.equal(override.response.reason, "resolved", JSON.stringify(override.response));
-  assert.equal(override.response.decision.selected.model, "gpt-5.6-luna");
+  assert.equal(override.response.decision.selected.model, "gpt-6-luna");
   assert.equal(override.response.decision.selected.effort, "medium");
-  const unsupported = handleRequest(request("resolve", { harness: "codex", model: "gpt-5.6-luna", effort: "ultra" }), { catalog: policy, now: NOW });
+  const unsupported = handleRequest(request("resolve", { harness: "codex", model: "gpt-6-luna", effort: "ultra", adapterId: "codex-task-create", dispatchKind: "task_create" }), { catalog: policy, now: NOW });
   assert.equal(unsupported.response.reason, "no_eligible_route");
   assert.equal(unsupported.response.rejectedAlternatives[0].reason, "effort_unsupported");
   const invalid = examplePolicy();
@@ -860,25 +880,26 @@ test("the example uses Astra Max without an invented cost ranking and honors exp
 
 test("supported effort enumeration cannot silently choose an operating point", () => {
   const policy = examplePolicy();
-  policy.roles.implementation = { tiers: [["terra"]] };
+  policy.roles.implementation = { tiers: [["astra"]] };
+  delete policy.models.astra.effort;
   const missing = handleRequest(request("resolve", { harness: "codex" }), { catalog: policy, now: NOW });
   assert.equal(missing.response.reason, "no_eligible_route");
   assert.equal(missing.response.rejectedAlternatives[0].reason, "effort_selection_required");
   assert.equal(missing.response.decision, undefined);
   const explicit = handleRequest(request("resolve", { harness: "codex", effort: "max" }), { catalog: policy, now: NOW });
   assert.equal(explicit.response.decision.selected.effort, "max");
-  policy.models.terra.effort = "high";
+  policy.models.astra.effort = "high";
   const configured = handleRequest(request("resolve", { harness: "codex" }), { catalog: policy, now: NOW });
   assert.equal(configured.response.decision.selected.effort, "high");
-  delete policy.models.terra.effort;
-  policy.models.terra.efforts = ["medium"];
+  delete policy.models.astra.effort;
+  policy.models.astra.efforts = ["medium"];
   const sole = handleRequest(request("resolve", { harness: "codex" }), { catalog: policy, now: NOW });
   assert.equal(sole.response.decision.selected.effort, "medium");
 });
 
 test("contradictory observed native identity cannot replace the requested model or create an unsupported pair", () => {
   const policy = examplePolicy();
-  const state = attestedCapability(policy, { carrierId: "codex-astra", adapterId: "native-subagent-create", accountScope: "codex-account", observedModel: "gpt-5.6-luna" });
+  const state = attestedCapability(policy, { carrierId: "codex-astra", adapterId: "native-subagent-create", accountScope: "codex-account", observedModel: "gpt-daybreak-blue-latest" });
   assert.equal(validateState(state).ok, true);
   const resolved = handleRequest(request("resolve", { harness: "codex", model: "gpt-6-astra", effort: "ultra" }), { catalog: policy, state, now: NOW });
   assert.equal(resolved.response.reason, "no_eligible_route");
@@ -969,11 +990,9 @@ test("omitted native adapter fields select and admit a subagent without configur
 test("omitted native adapter fields select and admit a subagent for supported configured Codex carriers", () => {
   const cases = [
     ["codex-astra", "gpt-6-astra", "implementation", "max"],
-    ["codex-terra", "gpt-5.6-terra", "implementation", "max"],
-    ["codex-grok", "combo/grok-unified-4.6", "implementation", "xhigh"],
-    ["codex-luna", "gpt-5.6-luna", "implementation", "max"],
+    ["codex-6-sol", "gpt-6-sol", "implementation", "max"],
+    ["codex-6-luna", "gpt-6-luna", "implementation.mechanical", "low"],
     ["codex-daybreak-blue", "gpt-daybreak-blue-latest", "implementation", "max"],
-    ["codex-terra-runtime", "gpt-5.6-terra", "implementation", "max"],
   ];
   for (const [carrierId, model, role, effort] of cases) {
     const policy = {
@@ -982,18 +1001,12 @@ test("omitted native adapter fields select and admit a subagent for supported co
       models: { selected: { provider: "codex", carrierId, requestedModel: model, effort } },
       roles: { [role]: { tiers: [["selected"]] } },
     };
-    const state = carrierId === "codex-terra-runtime"
-      ? attestedCapability(policy, { carrierId, adapterId: "native-subagent-create", accountScope: "local", observedModel: model })
-      : createEmptyState();
+    const state = createEmptyState();
     if (carrierId === "codex-daybreak-blue") {
       state.daybreakAvailability = { available: true, checkedAt: new Date(NOW).toISOString() };
       state.daybreakCatalogDigest = policyDigest(policy);
     }
     const context = { catalog: policy, state, now: NOW };
-    if (carrierId === "codex-terra-runtime") context.trustedRuntimeAttestor = ({ hostScope, accountScope }) => ({
-      attestorId: "railyard-runtime-attestor-v1", attestationDigest: DIGEST_A,
-      lunaAvailability: "unavailable", terra: { verified: true, model, effort }, hostScope, accountScope,
-    });
     const fields = { contractVersion: CONTRACT_VERSION, role, model, effort };
     const resolved = handleRequest({ ...fields, command: "resolve" }, context);
     assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
@@ -1017,22 +1030,21 @@ test("omitted native adapter fields select and admit a subagent for supported co
   }
 });
 
-test("configured native creation refuses unsupported model and effort pairs before admission", () => {
+test("configured native creation refuses unsupported effort pairs before admission", () => {
   for (const [carrierId, model, role, effort, reason] of [
-    ["codex-sol", "gpt-5.6-sol", "implementation.hard", "max", "native_model_unsupported"],
-    ["codex-luna", "gpt-5.6-luna", "implementation", "ultra", "effort_unsupported"],
+    ["codex-6-luna", "gpt-6-luna", "implementation.mechanical", "ultra", "effort_unsupported"],
   ]) {
     const policy = {
       schemaVersion: 1,
       providers: { codex: { carrierId, executionSurface: "codex", account: "local" } },
-      models: { selected: { provider: "codex", carrierId, requestedModel: model, effort: "max" } },
+      models: { selected: { provider: "codex", carrierId, requestedModel: model, effort: "low" } },
       roles: { [role]: { tiers: [["selected"]] } },
     };
     const state = createEmptyState();
     const before = structuredClone(state);
     const context = { catalog: policy, state, now: NOW };
     const fields = { contractVersion: CONTRACT_VERSION, role, model, effort };
-    for (const adapter of [{}, { adapterId: "native-subagent-create", dispatchKind: "subagent_create" }]) {
+    for (const adapter of [{ adapterId: "native-subagent-create", dispatchKind: "subagent_create" }]) {
       for (const command of ["resolve", "admit"]) {
         const refused = handleRequest({
           ...fields, ...adapter, command, requestId: "unsupported-native", frozenInputDigest: DIGEST_A, scopes: { task: "native-task" }, forecast: {},
@@ -1043,28 +1055,16 @@ test("configured native creation refuses unsupported model and effort pairs befo
         assert.deepEqual(state, before);
       }
     }
-    if (carrierId === "codex-sol") {
-      const visible = { ...fields, adapterId: "codex-task-create", dispatchKind: "task_create" };
-      const resolved = handleRequest({ ...visible, command: "resolve" }, context);
-      assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
-      assert.equal(resolved.response.decision.selected.model, model);
-      assert.equal(resolved.response.decision.binding.adapterId, "codex-task-create");
-      const blocked = handleRequest({
-        ...visible, command: "admit", requestId: "legacy-visible", frozenInputDigest: DIGEST_A, scopes: { task: "visible-task" }, forecast: {},
-      }, context);
-      assert.equal(blocked.response.reason, "visible_task_authority_required");
-      assert.equal(blocked.changed, false);
-      assert.deepEqual(state, before);
-    }
   }
 });
 
-test("the built-in route proposes Astra Max, and no-config task messages fail closed without a resolver-owned prior route", () => {
+test("the built-in route supports explicit native allocation and task messages fail closed without a resolver-owned prior route", () => {
   const state = createEmptyState();
-  const resolved = handleRequest(request("resolve"), { state, now: NOW });
+  const resolved = handleRequest(request("resolve", { model: "gpt-6-astra", effort: "medium" }), { state, now: NOW });
   assert.equal(resolved.response.ok, true);
   assert.equal(resolved.response.decision.selected.model, "gpt-6-astra");
-  assert.equal(resolved.response.decision.selected.effort, "max");
+  assert.equal(resolved.response.decision.selected.effort, "medium");
+  assert.equal(resolved.response.decision.fallback, undefined);
   assert.equal(resolved.response.decision.binding.contextFork, "none");
   assert.equal(resolved.changed, false);
 
@@ -1094,8 +1094,84 @@ test("the built-in route proposes Astra Max, and no-config task messages fail cl
   assert.equal(validateState(state).ok, true);
 });
 
-test("the configured legacy catalog selects Fable for hard Claude work and records an explicit Luna handoff reason", () => {
-  const policy = legacyPolicy();
+test("no-config task and native spawn defaults use GPT-6 Sol or Luna", () => {
+  const task = (fields) => handleRequest(request("resolve", {
+    adapterId: "codex-task-create", dispatchKind: "task_create", harness: "codex", ...fields,
+  }), { now: NOW }).response;
+  const ordinary = task({ role: "implementation" });
+  assert.equal(ordinary.reason, "resolved", JSON.stringify(ordinary));
+  assert.equal(ordinary.decision.selected.model, "gpt-6-sol");
+  assert.equal(ordinary.decision.selected.effort, "medium");
+  assert.equal(ordinary.decision.fallback, undefined);
+
+  const hard = task({ role: "implementation.hard" });
+  assert.equal(hard.reason, "resolved", JSON.stringify(hard));
+  assert.equal(hard.decision.selected.model, "gpt-6-sol");
+  assert.equal(hard.decision.selected.effort, "high");
+
+  const highRisk = task({ role: "review", risk: "high" });
+  assert.equal(highRisk.reason, "resolved", JSON.stringify(highRisk));
+  assert.equal(highRisk.decision.selected.model, "gpt-6-sol");
+  assert.equal(highRisk.decision.selected.effort, "high");
+
+  const mechanicalTask = task({ role: "implementation.mechanical" });
+  assert.equal(mechanicalTask.reason, "resolved", JSON.stringify(mechanicalTask));
+  assert.equal(mechanicalTask.decision.selected.model, "gpt-6-luna");
+  assert.equal(mechanicalTask.decision.selected.effort, "low");
+
+  const mechanicalSpawn = handleRequest(request("resolve", { role: "implementation.mechanical" }), { now: NOW }).response;
+  assert.equal(mechanicalSpawn.reason, "resolved");
+  assert.equal(mechanicalSpawn.decision.selected.model, "gpt-6-luna");
+  assert.equal(mechanicalSpawn.decision.selected.effort, "low");
+  assert.equal(mechanicalSpawn.decision.binding.adapterId, "native-subagent-create");
+});
+
+test("no-config Claude native requests report the harness boundary before Codex model defaults", () => {
+  for (const adapterId of ["native-subagent-create", undefined]) {
+    for (const harness of ["claude", "codex", undefined]) {
+      const resolved = handleRequest(request("resolve", { adapterId, harness }), { now: NOW }).response;
+      assert.equal(resolved.reason, harness === "claude" ? "cross_harness_adapter_required" : "resolved", `${adapterId}/${harness}`);
+      if (harness === "claude") assert.equal(resolved.decision, undefined);
+      else assert.equal(resolved.decision.binding.adapterId, "native-subagent-create");
+    }
+  }
+});
+
+test("high-risk mechanical and bounded task defaults escalate to Sol high", () => {
+  for (const role of ["implementation.mechanical", "implementation.bounded_fix"]) {
+    for (const risk of ["high", "critical"]) {
+      for (const repetition of ["low", "high"]) {
+        const resolved = handleRequest(request("resolve", {
+          adapterId: "codex-task-create", dispatchKind: "task_create", harness: "codex", role, risk,
+          workShape: { ...request("resolve").workShape, repetition },
+        }), { now: NOW }).response;
+        assert.equal(resolved.reason, "resolved", JSON.stringify(resolved));
+        assert.equal(resolved.decision.selected.model, "gpt-6-sol", `${role}/${risk}/${repetition}`);
+        assert.equal(resolved.decision.selected.effort, "high", `${role}/${risk}/${repetition}`);
+      }
+    }
+  }
+});
+
+test("an omitted adapter honors an explicit native subagent dispatch kind", () => {
+  const resolved = handleRequest(request("resolve", {
+    adapterId: undefined,
+    dispatchKind: "subagent_create",
+    role: "implementation",
+  }), { now: NOW }).response;
+  assert.equal(resolved.reason, "resolved");
+  assert.equal(resolved.decision.binding.adapterId, "native-subagent-create");
+
+  const explicitTaskAdapter = handleRequest(request("resolve", {
+    adapterId: "codex-task-create",
+    dispatchKind: "subagent_create",
+    role: "implementation",
+  }), { now: NOW }).response;
+  assert.equal(explicitTaskAdapter.reason, "adapter_dispatch_mismatch");
+});
+
+test("the configured catalog selects Fable for hard Claude work and records an explicit Luna handoff reason", () => {
+  const policy = configuredPolicy();
   assert.equal(validateCatalog(policy).ok, true);
   const state = createEmptyState();
   const fable = handleRequest(request("resolve", {
@@ -1123,7 +1199,7 @@ test("the configured legacy catalog selects Fable for hard Claude work and recor
     const codex = handleRequest(request("resolve", {
       role,
       harness: "codex",
-    }), { catalog: policy, state: createEmptyState(), now: NOW, trustedRuntimeAttestor: lunaAvailableAttestor() });
+    }), { catalog: policy, state: createEmptyState(), now: NOW });
     assert.equal(codex.response.reason, "resolved", JSON.stringify(codex.response));
     assert.equal(codex.response.decision.selected.modelAlias, "luna");
   }
@@ -1210,7 +1286,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
     privateDirectory(stateDirectory);
     const configPath = path.join(configDirectory, "model-routing.json");
     const statePath = path.join(stateDirectory, "model-routing-state.json");
-    fs.writeFileSync(configPath, JSON.stringify(legacyPolicy()));
+    fs.writeFileSync(configPath, JSON.stringify(configuredPolicy()));
     fs.chmodSync(configPath, 0o600);
     const v4 = createEmptyState();
     v4.stateSchemaVersion = 4;
@@ -1238,7 +1314,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
     const cached = JSON.parse(fs.readFileSync(statePath, "utf8"));
     assert.equal(cached.stateSchemaVersion, 5);
     assert.deepEqual(cached.daybreakAvailability, { available: true, checkedAt: new Date(NOW).toISOString() });
-    assert.equal(cached.daybreakCatalogDigest, policyDigest(legacyPolicy()));
+    assert.equal(cached.daybreakCatalogDigest, policyDigest(configuredPolicy()));
 
     const fresh = await runCliAsync(securityRequest, {
       ...options,
@@ -1278,7 +1354,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
     });
     assert.equal(recachedLegacy.decision.selected.model, "gpt-daybreak-blue-latest");
     assert.equal(probeCalls, 2);
-    assert.equal(JSON.parse(fs.readFileSync(statePath, "utf8")).daybreakCatalogDigest, policyDigest(legacyPolicy()));
+    assert.equal(JSON.parse(fs.readFileSync(statePath, "utf8")).daybreakCatalogDigest, policyDigest(configuredPolicy()));
 
     const remoteScope = await runCliAsync(request("resolve", {
       role: "security.review",
@@ -1293,7 +1369,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
         return { available: true };
       },
     });
-    assert.equal(remoteScope.decision.selected.model, "gpt-5.6-sol");
+    assert.equal(remoteScope.decision.selected.model, "gpt-6-sol");
     assert.equal(probeCalls, 2);
 
     const differentAccount = await runCliAsync(request("resolve", {
@@ -1309,10 +1385,10 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
         return { available: true };
       },
     });
-    assert.equal(differentAccount.decision.selected.model, "gpt-5.6-sol");
+    assert.equal(differentAccount.decision.selected.model, "gpt-6-sol");
     assert.equal(probeCalls, 2);
 
-    const changedCatalog = legacyPolicy();
+    const changedCatalog = configuredPolicy();
     changedCatalog.providers.codex_daybreak_blue.account = "codex-sub-b";
     const stateMtime = fs.statSync(statePath).mtime;
     fs.writeFileSync(configPath, JSON.stringify(changedCatalog));
@@ -1371,7 +1447,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
         return { available: false };
       },
     });
-    assert.equal(future.decision.selected.model, "gpt-5.6-sol");
+    assert.equal(future.decision.selected.model, "gpt-6-sol");
     assert.equal(probeCalls, 4);
 
     cached.daybreakAvailability.checkedAt = new Date(NOW - DAYBREAK_AVAILABILITY_TTL_MS).toISOString();
@@ -1385,7 +1461,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
       },
     });
     assert.equal(unavailable.reason, "resolved", JSON.stringify(unavailable));
-    assert.equal(unavailable.decision.selected.model, "gpt-5.6-sol");
+    assert.equal(unavailable.decision.selected.model, "gpt-6-sol");
     assert.equal(probeCalls, 5);
 
     const staleLockedState = JSON.parse(fs.readFileSync(statePath, "utf8"));
@@ -1401,7 +1477,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
         return { available: true };
       },
     });
-    assert.equal(locked.decision.selected.model, "gpt-5.6-sol");
+    assert.equal(locked.decision.selected.model, "gpt-6-sol");
     assert.equal(probeCalls, 5);
     fs.unlinkSync(staleLock);
 
@@ -1417,7 +1493,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
       },
     });
     assert.equal(unknown.reason, "resolved", JSON.stringify(unknown));
-    assert.equal(unknown.decision.selected.model, "gpt-5.6-sol");
+    assert.equal(unknown.decision.selected.model, "gpt-6-sol");
     assert.equal(probeCalls, 6);
     assert.equal(JSON.parse(fs.readFileSync(statePath, "utf8")).daybreakAvailability.available, null);
 
@@ -1434,7 +1510,7 @@ test("security resolves cache Daybreak availability once per TTL and otherwise r
           return { available: true };
         },
       });
-      assert.equal(writeFailure.decision.selected.model, "gpt-5.6-sol");
+      assert.equal(writeFailure.decision.selected.model, "gpt-6-sol");
       assert.equal(probeCalls, 7);
     } finally {
       fs.chmodSync(stateDirectory, 0o700);
@@ -1497,7 +1573,7 @@ test("Daybreak availability state migrates v4 and validates its exact cache reco
 });
 
 test("a catalog has one Daybreak provider for its local state cache", () => {
-  const policy = legacyPolicy();
+  const policy = configuredPolicy();
   policy.providers.codex_daybreak_blue_b = {
     ...policy.providers.codex_daybreak_blue,
     account: "codex-sub-b",
@@ -1510,7 +1586,7 @@ test("a catalog has one Daybreak provider for its local state cache", () => {
 });
 
 test("a catalog cannot bind Daybreak to another execution surface", () => {
-  const policy = legacyPolicy();
+  const policy = configuredPolicy();
   policy.providers.codex_daybreak_blue.executionSurface = "provider_subscription";
   const validation = validateCatalog(policy);
   assert.equal(validation.reason, "fixed_carrier_mismatch");
@@ -1598,7 +1674,7 @@ test("the Daybreak App Server probe accepts only a visible exact selector and de
 });
 
 test("an explicit catalog role exclusion is enforced without inventing a model capability limit", () => {
-  const policy = legacyPolicy();
+  const policy = configuredPolicy();
   policy.roles.orchestration = { tiers: [["luna", "sol"]] };
   const resolved = handleRequest(request("resolve", {
     role: "orchestration",
@@ -1612,78 +1688,10 @@ test("an explicit catalog role exclusion is enforced without inventing a model c
   assert.equal(resolved.response.decision.rejectedAlternatives[0].reason, "role_ineligible");
 });
 
-test("the configured legacy catalog keeps subscription meters separate and gates GLM on Codex config", () => {
-  const policy = legacyPolicy();
-  assert.deepEqual(Object.keys(policy.budgets.task).sort(), ["claude_subscription", "codex_subscription", "zai_credits"]);
-  const previous = process.env.CODEX_HOME;
-  const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), "railyard-codex-policy-"));
-  try {
-    process.env.CODEX_HOME = codexHome;
-    assert.equal(providerAvailabilityIssue(policy.providers.zai), "provider_unavailable");
-    fs.writeFileSync(path.join(codexHome, "config.toml"), "[model_providers.zai_litellm]\n");
-    assert.equal(providerAvailabilityIssue(policy.providers.zai), null);
-    fs.writeFileSync(path.join(codexHome, "config.toml"), "[model_providers.zai_litellm] # enabled\n");
-    assert.equal(providerAvailabilityIssue(policy.providers.zai), null);
-    assert.equal(providerAvailabilityIssue(policy.providers.zai, { hostScope: "runner-2" }), null);
 
-    const transportScopes = [];
-    const runtimeScopes = [];
-    const remote = handleRequest(request("resolve", {
-      role: "implementation.cross-harness",
-      harness: "codex",
-      destinationScope: "runner-2",
-      crossHarnessReason: "Use the remote Codex-family GLM destination for this bounded task.",
-      adapterId: "configured-profile-task-create",
-      dispatchKind: "task_create",
-    }), {
-      catalog: policy,
-      state: attestedCapability(policy, {
-        hostScope: "runner-2",
-        accountScope: "zai-credits",
-      }),
-      now: NOW,
-      trustedTransportAttestor: ({ hostScope, accountScope }) => {
-        transportScopes.push({ hostScope, accountScope });
-        return { attestorId: "railyard-transport-attestor-v1", attestationDigest: DIGEST_A, compatibility: "native_compatible", bridgeAvailable: false };
-      },
-      trustedRuntimeAttestor: ({ hostScope, accountScope }) => {
-        runtimeScopes.push({ hostScope, accountScope });
-        return { attestorId: "railyard-runtime-attestor-v1", attestationDigest: DIGEST_A, lunaAvailability: "available", hostScope, accountScope };
-      },
-    });
-    assert.equal(remote.response.reason, "resolved", JSON.stringify(remote.response));
-    assert.equal(remote.response.decision.selected.modelAlias, "glm");
-    assert.equal(remote.response.decision.binding.hostScope, "runner-2");
-    assert.equal(remote.response.decision.binding.accountScope, "zai-credits");
-    assert.deepEqual(transportScopes, [{ hostScope: "runner-2", accountScope: "zai-credits" }]);
-    assert.deepEqual(runtimeScopes, [{ hostScope: "runner-2", accountScope: "codex-sub" }]);
-  } finally {
-    if (previous === undefined) delete process.env.CODEX_HOME;
-    else process.env.CODEX_HOME = previous;
-    fs.rmSync(codexHome, { recursive: true, force: true });
-  }
-});
 
-test("configured runtime candidates fail closed when the trusted attestor is invalid", () => {
-  const policy = legacyPolicy();
-  for (const trustedRuntimeAttestor of [
-    () => { throw new Error("attestor unavailable"); },
-    () => ({}),
-    () => ({ attestorId: "railyard-runtime-attestor-v1", attestationDigest: DIGEST_A, lunaAvailability: "unknown", hostScope: "local", accountScope: "codex-sub" }),
-  ]) {
-    const refused = handleRequest(request("resolve", { role: "implementation", harness: "codex" }), {
-      catalog: policy,
-      state: createEmptyState(),
-      now: NOW,
-      trustedRuntimeAttestor,
-    });
-    assert.equal(refused.response.reason, "no_eligible_route", JSON.stringify(refused.response));
-    assert.equal(refused.response.rejectedAlternatives.find((item) => item.modelAlias === "luna")?.reason, "invalid_runtime_attestation");
-  }
-});
-
-test("the configured legacy catalog gives hard Codex implementation the max-effort Sol route", () => {
-  const policy = legacyPolicy();
+test("the configured catalog gives hard Codex implementation the max-effort Sol route", () => {
+  const policy = configuredPolicy();
   const hardCodex = handleRequest(request("resolve", {
     role: "implementation.hard",
     harness: "codex",
@@ -1753,21 +1761,21 @@ test("CE review routes remain restricted to Fable and Opus", () => {
 
 test("catalogs, privacy, and closed CE seams cannot widen routing authority", () => {
   const unsafe = catalog();
-  unsafe.models.glm.profile = "caller-controlled";
+  unsafe.models.task_luna.profile = "caller-controlled";
   assert.equal(validateCatalog(unsafe).reason, "unsafe_catalog");
 
   const privatePolicy = catalog({ privacy: { locality: "local_only", retention: "none" } });
   assert.equal(handleRequest(request("resolve", { privacy: { locality: "external", retention: "provider_default" } }), { catalog: privatePolicy, now: NOW }).response.reason, "no_eligible_route");
 
   const plan = handleRequest(request("resolve", {
-    callerKind: "compound-engineering",
+    model: "gpt-6-astra", effort: "medium", callerKind: "compound-engineering",
     ceSeam: { id: "ce-plan.execution", skill: "ce-plan", artifact: { schema: "railyard/ce-plan-execution-input/v1", digest: DIGEST_A } },
   }), { now: NOW });
   assert.equal(plan.response.ok, true, JSON.stringify(plan.response));
   assert.equal(plan.response.decision.executionOverride.seam.id, "ce-plan.execution");
 
   const incompatible = handleRequest(request("resolve", {
-    callerKind: "compound-engineering",
+    model: "gpt-6-astra", effort: "medium", callerKind: "compound-engineering",
     ceSeam: { id: "ce-code-review.execution", skill: "ce-code-review", artifact: { schema: "railyard/ce-code-review-findings/v1", digest: DIGEST_A } },
   }), { now: NOW });
   assert.equal(incompatible.response.reason, "ce_seam_binding_mismatch");
@@ -1777,16 +1785,16 @@ test("capability attestation binds evidence facts and configured TTLs", () => {
   const policy = catalog({ discovery: { positiveTtlSeconds: 3600, negativeTtlSeconds: 90, manualRefresh: true } });
   const state = createEmptyState();
   const refresh = request("refresh", {
-    capability: { carrierId: "glm-5-2-engineer", adapterId: "configured-profile-task-create", hostScope: "local", accountScope: "plan", state: "host_capability_attested" },
+    capability: { carrierId: "codex-6-luna", adapterId: "codex-task-create", hostScope: "local", accountScope: "plan", state: "host_capability_attested" },
   });
   assert.equal(handleRequest(refresh, { catalog: policy, state, now: NOW }).response.reason, "trusted_attestor_unavailable");
-  const refreshed = handleRequest(refresh, { catalog: policy, state, now: NOW, trustedCapabilityAttestor: refreshAttestor({ observedModel: "glm-5.2" }) });
+  const refreshed = handleRequest(refresh, { catalog: policy, state, now: NOW, trustedCapabilityAttestor: refreshAttestor({ observedModel: "gpt-6-luna" }) });
   assert.equal(refreshed.response.reason, "capability_refreshed");
   const evidence = Object.values(state.capabilities)[0];
-  assert.equal(evidence.resolvedModelDigest, stableDigest("glm-5.2"));
+  assert.equal(evidence.resolvedModelDigest, stableDigest("gpt-6-luna"));
   assert.equal(evidence.expiresAt, "2026-08-04T12:30:00.000Z");
 
-  const tooLong = handleRequest(refresh, { catalog: policy, state: createEmptyState(), now: NOW, trustedCapabilityAttestor: refreshAttestor({ observedModel: "glm-5.2", expiresAt: "2026-08-05T12:00:00.000Z" }) });
+  const tooLong = handleRequest(refresh, { catalog: policy, state: createEmptyState(), now: NOW, trustedCapabilityAttestor: refreshAttestor({ observedModel: "gpt-6-luna", expiresAt: "2026-08-05T12:00:00.000Z" }) });
   assert.equal(tooLong.response.reason, "invalid_trusted_attestation");
 });
 
@@ -1828,16 +1836,16 @@ test("negative capability caches use reason classes, capped Retry-After, and pol
 
 test("rates bind the resolved model, carrier, effort, and billing surface", () => {
   const invalid = catalog({ rates: true });
-  delete invalid.models.glm.rates[0].resolvedModelDigest;
+  delete invalid.models.task_luna.rates[0].resolvedModelDigest;
   assert.equal(validateCatalog(invalid).reason, "invalid_model");
 
   const policy = catalog({ rates: true });
   const resolved = handleRequest(request("resolve", {
     role: "implementation.mechanical", adapterId: undefined, dispatchKind: undefined, hostScope: "local", accountScope: "plan",
   }), { catalog: policy, state: attestedCapability(policy), now: NOW });
-  assert.equal(resolved.response.decision.selected.modelAlias, "glm");
+  assert.equal(resolved.response.decision.selected.modelAlias, "task_luna");
 
-  policy.models.glm.rates[0].resolvedModelDigest = DIGEST_B;
+  policy.models.task_luna.rates[0].resolvedModelDigest = DIGEST_B;
   assert.equal(validateCatalog(policy).reason, "rate_binding_mismatch");
 });
 
@@ -1873,52 +1881,52 @@ test("learning separates route-independent demand from route effects, gates samp
   assert.equal(base.contextClass, "fixture");
   assert.equal(base.count, 5);
   assert.equal(base.forecastInfluenceByMeter.marginalUsd, 0.2);
-  assert.equal(route.carrierId, "codex-luna");
-  assert.equal(route.carrierVersion, CARRIER_DESCRIPTORS["codex-luna"].version);
+  assert.equal(route.carrierId, "codex-astra");
+  assert.equal(route.carrierVersion, CARRIER_DESCRIPTORS["codex-astra"].version);
   assert.equal(route.billingSurface, "codex");
   assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
 
   const learnedPolicy = catalog({ budgets: { task: { marginalUsd: { soft: "10" } } } });
-  learnedPolicy.roles["implementation.mechanical"] = { tiers: [{ models: ["luna", "glm"], softPriorities: ["learnedEstimate"] }] };
+  learnedPolicy.roles["implementation.mechanical"] = { tiers: [{ models: ["luna", "task_luna"], softPriorities: ["learnedEstimate"] }] };
   const selectionState = attestedCapability(learnedPolicy);
   const shape = request("resolve").workShape;
   const baseBucket = stableDigest({ role: "implementation.mechanical", risk: "unknown", contextClass: "unknown", workShape: shape });
-  const glmRouteBucket = stableDigest({
+  const task_lunaRouteBucket = stableDigest({
     baseBucket,
-    resolvedModel: "glm-5.2",
-    carrierId: "glm-5-2-engineer",
-    carrierVersion: CARRIER_DESCRIPTORS["glm-5-2-engineer"].version,
+    resolvedModel: "gpt-6-luna",
+    carrierId: "codex-6-luna",
+    carrierVersion: CARRIER_DESCRIPTORS["codex-6-luna"].version,
     effort: "xhigh",
-    billingSurface: "provider_subscription",
+    billingSurface: "codex",
   });
   selectionState.learningAggregates.learning_base_fixture = {
     kind: "baseDemand", baseBucket, role: "implementation.mechanical", risk: "unknown", contextClass: "unknown", workShape: shape,
     count: 5, totalDurationMs: 0, totalRetries: 0, failures: 0, verified: 5, ratingTotal: 25,
     usageTotals: { marginalUsd: "6" }, forecastTotals: { marginalUsd: "5" }, forecastInfluenceByMeter: { marginalUsd: 0.2 }, updatedAt: "2026-08-04T12:00:00.000Z",
   };
-  selectionState.learningAggregates.learning_glm_fixture = {
-    kind: "routeEffect", baseBucket, routeEffectBucket: glmRouteBucket, role: "implementation.mechanical", risk: "unknown", contextClass: "unknown", workShape: shape,
-    carrierId: "glm-5-2-engineer", carrierVersion: CARRIER_DESCRIPTORS["glm-5-2-engineer"].version, effort: "xhigh", billingSurface: "provider_subscription", resolvedModelBucket: stableDigest({ carrierId: "glm-5-2-engineer", model: "glm-5.2" }),
+  selectionState.learningAggregates.learning_task_luna_fixture = {
+    kind: "routeEffect", baseBucket, routeEffectBucket: task_lunaRouteBucket, role: "implementation.mechanical", risk: "unknown", contextClass: "unknown", workShape: shape,
+    carrierId: "codex-6-luna", carrierVersion: CARRIER_DESCRIPTORS["codex-6-luna"].version, effort: "xhigh", billingSurface: "codex", resolvedModelBucket: stableDigest({ carrierId: "codex-6-luna", model: "gpt-6-luna" }),
     count: 5, totalDurationMs: 0, totalRetries: 0, failures: 0, verified: 5, ratingTotal: 25, tieBreakInfluence: 0.2, updatedAt: "2026-08-04T12:00:00.000Z",
   };
   assert.equal(validateState(selectionState).ok, true, JSON.stringify(validateState(selectionState)));
-  const glmAuthority = {
-    authorityId: "learning-glm-authority", objectiveEpoch: "learning-epoch", objectiveDigest: DIGEST_A, senderOwner: "learning-owner", accountScope: "plan", carrierId: "glm-5-2-engineer", adapterId: "configured-profile-task-create", policyDigest: policyDigest(learnedPolicy),
+  const task_lunaAuthority = {
+    authorityId: "learning-task_luna-authority", objectiveEpoch: "learning-epoch", objectiveDigest: DIGEST_A, senderOwner: "learning-owner", accountScope: "plan", carrierId: "codex-6-luna", adapterId: "codex-task-create", policyDigest: policyDigest(learnedPolicy),
     destinationScope: "local", destinationClass: "visible_task", maxTaskCount: 1, currentTurn: "learning-turn", expiresAt: "2026-08-05T12:00:00.000Z", explicitUserInstructionDigest: DIGEST_A,
   };
-  mintAuthority(learnedPolicy, selectionState, glmAuthority);
+  mintAuthority(learnedPolicy, selectionState, task_lunaAuthority);
   const learned = handleRequest(request("admit", {
     role: "implementation.mechanical", adapterId: undefined, dispatchKind: undefined, hostScope: "local", accountScope: "plan",
     requestId: "learned-selection", frozenInputDigest: DIGEST_A, forecast: { marginalUsd: "1" }, scopes: { task: "learned-task" },
-    taskAuthorityId: glmAuthority.authorityId, objectiveEpoch: glmAuthority.objectiveEpoch, objectiveDigest: glmAuthority.objectiveDigest, instructionDigest: glmAuthority.explicitUserInstructionDigest, senderOwner: glmAuthority.senderOwner, destinationScope: "local", destinationClass: "visible_task", currentTurn: glmAuthority.currentTurn,
+    taskAuthorityId: task_lunaAuthority.authorityId, objectiveEpoch: task_lunaAuthority.objectiveEpoch, objectiveDigest: task_lunaAuthority.objectiveDigest, instructionDigest: task_lunaAuthority.explicitUserInstructionDigest, senderOwner: task_lunaAuthority.senderOwner, destinationScope: "local", destinationClass: "visible_task", currentTurn: task_lunaAuthority.currentTurn,
   }), { catalog: learnedPolicy, state: selectionState, now: NOW });
   assert.equal(learned.response.ok, true, JSON.stringify(learned.response));
-  assert.equal(learned.response.decision.selected.modelAlias, "glm");
+  assert.equal(learned.response.decision.selected.modelAlias, "task_luna");
   assert.equal(learned.response.reservation.forecast.marginalUsd, "1.2");
   assert.equal(learned.response.decision.learning.policyOrdering, "unchanged");
 
   const explicitPolicy = catalog({ budgets: { task: { marginalUsd: { soft: "10" } } } });
-  explicitPolicy.roles["implementation.mechanical"] = { tiers: [["luna", "glm"]] };
+  explicitPolicy.roles["implementation.mechanical"] = { tiers: [["luna", "task_luna"]] };
   const explicitState = attestedCapability(explicitPolicy);
   explicitState.learningAggregates = JSON.parse(JSON.stringify(selectionState.learningAggregates));
   const explicit = handleRequest(request("resolve", {
@@ -1927,11 +1935,11 @@ test("learning separates route-independent demand from route effects, gates samp
   assert.equal(explicit.response.decision.selected.modelAlias, "luna");
 
   const hardPolicy = catalog({ budgets: { task: { marginalUsd: { hardAdmission: "2" } } } });
-  hardPolicy.roles["implementation.mechanical"] = { tiers: [{ models: ["luna", "glm"], softPriorities: ["learnedEstimate"] }] };
+  hardPolicy.roles["implementation.mechanical"] = { tiers: [{ models: ["luna", "task_luna"], softPriorities: ["learnedEstimate"] }] };
   const hardState = attestedCapability(hardPolicy);
   hardState.learningAggregates = JSON.parse(JSON.stringify(selectionState.learningAggregates));
   hardState.learningAggregates.learning_base_fixture.forecastInfluenceByMeter.marginalUsd = -0.2;
-  const hardAuthority = { ...glmAuthority, authorityId: "hard-glm-authority", policyDigest: policyDigest(hardPolicy), explicitUserInstructionDigest: DIGEST_B };
+  const hardAuthority = { ...task_lunaAuthority, authorityId: "hard-task_luna-authority", policyDigest: policyDigest(hardPolicy), explicitUserInstructionDigest: DIGEST_B };
   mintAuthority(hardPolicy, hardState, hardAuthority);
   const hard = handleRequest(request("admit", {
     role: "implementation.mechanical", adapterId: undefined, dispatchKind: undefined, hostScope: "local", accountScope: "plan",
@@ -1977,24 +1985,6 @@ test("a caller-authored receipt cannot settle a claim; an in-process importer bi
 });
 
 test("R28 decision, fallback, and settlement disclosures use explicit provenance without task content", () => {
-  const legacy = legacyPolicy();
-  const terra = handleRequest(request("resolve", { role: "implementation.medium", harness: "codex", model: "gpt-5.6-terra", effort: "max" }), {
-    catalog: legacy,
-    state: attestedCapability(legacy, { carrierId: "codex-terra-runtime", adapterId: "native-subagent-create", accountScope: "codex-sub", observedModel: "unknown" }),
-    now: NOW,
-    trustedRuntimeAttestor: () => ({
-      attestorId: "railyard-runtime-attestor-v1",
-      attestationDigest: DIGEST_A,
-      lunaAvailability: "unavailable",
-      hostScope: "local",
-      accountScope: "codex-sub",
-      terra: { verified: true, model: "gpt-5.6-terra", effort: "max" },
-    }),
-  });
-  assert.equal(terra.response.decision.selected.carrierId, "codex-terra-runtime");
-  assert.equal(terra.response.decision.fallback.reason, "implementation_model_substitute");
-  assert.equal(terra.response.decision.fallbackReceipt.schema, "railyard/r28-route-disclosure/v1");
-
   const policy = catalog();
   const state = createEmptyState();
   const admission = admit(policy, state, { scopes: { task: "r28-task" } });
@@ -2035,7 +2025,7 @@ test("visible task authority is checked before admission and is bound to destina
   const policy = catalog({ budgets: { task: { marginalUsd: { hardAdmission: "2" } } } });
   const state = createEmptyState();
   const authority = {
-    authorityId: "authority-one", objectiveEpoch: "epoch-one", objectiveDigest: DIGEST_A, senderOwner: "owner-one", accountScope: "local", carrierId: "codex-luna", adapterId: "codex-task-create", policyDigest: policyDigest(policy),
+    authorityId: "authority-one", objectiveEpoch: "epoch-one", objectiveDigest: DIGEST_A, senderOwner: "owner-one", accountScope: "local", carrierId: "codex-astra", adapterId: "codex-task-create", policyDigest: policyDigest(policy),
     destinationScope: "host-one", destinationClass: "visible_task", maxTaskCount: 1, currentTurn: "turn-one", expiresAt: "2026-08-05T12:00:00.000Z", explicitUserInstructionDigest: DIGEST_B,
   };
   const rawAuthority = handleRequest(request("admit", {
@@ -2076,7 +2066,7 @@ test("visible bridge acknowledgement and activation bind the exact fixed task id
     bridgeAvailable: true,
   });
   const authority = {
-    authorityId: "bridge-authority-one", objectiveEpoch: "bridge-epoch", objectiveDigest: DIGEST_A, senderOwner: "bridge-owner", accountScope: "local", carrierId: "codex-luna", adapterId: "codex-task-create", policyDigest: policyDigest(policy),
+    authorityId: "bridge-authority-one", objectiveEpoch: "bridge-epoch", objectiveDigest: DIGEST_A, senderOwner: "bridge-owner", accountScope: "local", carrierId: "codex-astra", adapterId: "codex-task-create", policyDigest: policyDigest(policy),
     destinationScope: "bridge-host", destinationClass: "visible_task", maxTaskCount: 1, currentTurn: "bridge-turn", expiresAt: "2026-08-05T12:00:00.000Z", explicitUserInstructionDigest: DIGEST_A,
   };
   mintAuthority(policy, state, authority);
@@ -2127,7 +2117,7 @@ test("allocator leases reserve project headroom, cap slots, and release unused c
   const admission = admit(policy, state, { hostScope: "child-one", accountScope: "local", scopes: { task: "child-task" } });
   const lease = {
     leaseId: "lease-one", issuerScope: "allocator-one", allocatorScopes: { project: "project-one" }, destinationScope: "child-one", destinationAccountScope: "local", epochId: "epoch-one", expiresAt: "2026-08-05T12:00:00.000Z",
-    carrierId: "codex-luna", adapterId: "native-subagent-create", ceiling: { marginalUsd: "2" }, maxSlots: 2, allocatorReceiptDigest: DIGEST_B,
+    carrierId: "codex-astra", adapterId: "native-subagent-create", ceiling: { marginalUsd: "2" }, maxSlots: 2, allocatorReceiptDigest: DIGEST_B,
   };
   assert.equal(handleRequest(request("issue-lease", { lease }), { catalog: policy, state, now: NOW }).response.reason, "lease_issued");
   assert.equal(handleRequest(request("issue-lease", { lease: { ...lease, leaseId: "lease-two", ceiling: { marginalUsd: "2" } } }), { catalog: policy, state, now: NOW }).response.reason, "hard_budget_exceeded");
@@ -2139,6 +2129,17 @@ test("allocator leases reserve project headroom, cap slots, and release unused c
   assert.equal(slotted.response.reason, "delegated_slot_claimed");
   assert.equal(state.leases["lease-one"].slotsClaimed, 1);
   assert.equal(handleRequest(request("release-lease", { hostScope: "child-one", accountScope: "local", lease: { leaseId: "lease-one", destinationScope: "child-one", destinationAccountScope: "local" } }), { catalog: policy, state, now: NOW }).response.reason, "lease_released");
+  policy.providers.codex.locality = "same_region";
+  const replayInput = request("claim-slot", {
+    reservationId: admission.reservation.reservationId, frozenInputDigest: DIGEST_A,
+    hostScope: "child-one", accountScope: "local", dispatchIdentity: identity,
+    lease: { leaseId: "lease-one", destinationScope: "child-one", destinationAccountScope: "local" },
+  });
+  const beforeReplay = structuredClone(state);
+  const replay = handleRequest(replayInput, { catalog: policy, state, now: NOW });
+  assert.equal(replay.response.reason, "delegated_slot_replayed", JSON.stringify(replay.response));
+  assert.equal(replay.changed, false);
+  assert.deepEqual(state, beforeReplay, "replaying a released lease cannot consume another slot");
   assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
 });
 
@@ -2149,7 +2150,7 @@ test("terminal receipts cannot reopen settled work, and an epoch cannot seal acr
   const second = admit(policy, state, { requestId: "epoch-second", frozenInputDigest: DIGEST_B, hostScope: "epoch-child", accountScope: "local", scopes: { task: "epoch-second-task" } });
   const lease = {
     leaseId: "epoch-lease", issuerScope: "epoch-allocator", allocatorScopes: { project: "epoch-project" }, destinationScope: "epoch-child", destinationAccountScope: "local", epochId: "epoch-one", expiresAt: "2026-08-05T12:00:00.000Z",
-    carrierId: "codex-luna", adapterId: "native-subagent-create", ceiling: { marginalUsd: "4" }, maxSlots: 2, allocatorReceiptDigest: DIGEST_B,
+    carrierId: "codex-astra", adapterId: "native-subagent-create", ceiling: { marginalUsd: "4" }, maxSlots: 2, allocatorReceiptDigest: DIGEST_B,
   };
   assert.equal(handleRequest(request("issue-lease", { lease }), { catalog: policy, state, now: NOW }).response.reason, "lease_issued");
   assert.equal(handleRequest(request("accept-lease", { hostScope: "epoch-child", accountScope: "local", lease: { leaseId: lease.leaseId, destinationScope: "epoch-child", destinationAccountScope: "local" } }), { catalog: policy, state, now: NOW }).response.reason, "lease_accepted");
@@ -2184,51 +2185,187 @@ test("terminal receipts cannot reopen settled work, and an epoch cannot seal acr
   assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
 });
 
-test("create-to-message routing inherits only the exact model, effort, policy, and approved adapter transition", () => {
-  const policy = catalog({ budgets: { task: { marginalUsd: { hardAdmission: "5" } } } });
+for (const staleCarrierVersion of [false, true]) {
+  test(`create-to-message routing preserves bindings and refreshes carrier version when stale=${staleCarrierVersion}`, () => {
+    const policy = catalog({ budgets: { task: { marginalUsd: { hardAdmission: "5" } } } });
+    const state = createEmptyState();
+    const authority = {
+      authorityId: "authority-msg", objectiveEpoch: "epoch-msg", objectiveDigest: DIGEST_A, senderOwner: "owner-msg", accountScope: "local", carrierId: "codex-astra", adapterId: "codex-task-create", policyDigest: policyDigest(policy),
+      destinationScope: "host-msg", destinationClass: "visible_task", maxTaskCount: 1, currentTurn: "turn-msg", expiresAt: "2026-08-05T12:00:00.000Z", explicitUserInstructionDigest: DIGEST_B,
+    };
+    mintAuthority(policy, state, authority);
+    const admission = admit(policy, state, { adapterId: "codex-task-create", dispatchKind: "task_create", scopes: { task: "message-task" }, taskAuthorityId: authority.authorityId, objectiveEpoch: authority.objectiveEpoch, objectiveDigest: authority.objectiveDigest, instructionDigest: authority.explicitUserInstructionDigest, senderOwner: authority.senderOwner, destinationScope: "host-msg", destinationClass: "visible_task", currentTurn: "turn-msg" });
+    const created = claim(policy, state, admission, { identity: dispatchIdentity("codex-task-create", { hostScope: "host-msg", sessionId: "task-msg" }), fields: { taskAuthorityId: authority.authorityId } });
+    const priorRoute = {
+      reservationId: admission.reservation.reservationId,
+      claimId: created.response.claimId,
+      carrierId: "codex-astra",
+      model: "gpt-6-astra",
+      effort: "max",
+      adapterId: "codex-task-create",
+      adapterVersion: "v1",
+      policyDigest: policyDigest(policy),
+      hostScope: "host-msg",
+      accountScope: "local",
+      sessionId: "task-msg",
+      toolId: "codex-task",
+      toolVersion: "v1",
+      workClassDigest: admission.reservation.workClassDigest,
+    };
+    const original = state.reservations[admission.reservation.reservationId];
+    if (staleCarrierVersion) {
+      original.selected.carrierVersion = "v0";
+      original.decision.selected.carrierVersion = "v0";
+    }
+    const originalSelected = structuredClone(original.selected);
+    const neutral = handleRequest(request("resolve", {
+      adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "message-neutral", priorRoute,
+      priorWorkClassDigest: admission.reservation.workClassDigest,
+      dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }) },
+    }), { catalog: policy, state, now: NOW });
+    assert.equal(neutral.response.reason, staleCarrierVersion ? "route_reevaluation_required" : "resolved");
+    if (staleCarrierVersion) assert.equal(original.currentRoute, undefined, "read-only resolution cannot move a stale route");
+    const crossedDestination = handleRequest(request("resolve", {
+      adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "message-crossed", priorRoute,
+      priorWorkClassDigest: admission.reservation.workClassDigest,
+      dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "wrong-session" }) },
+    }), { catalog: policy, state, now: NOW });
+    assert.equal(crossedDestination.response.reason, "prior_destination_identity_mismatch");
+    const adjustment = handleRequest(request("admit", {
+      adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "adjust_active", requestId: "message-adjust", activeReservationId: admission.reservation.reservationId,
+      frozenInputDigest: DIGEST_A, forecast: { marginalUsd: "1" }, scopes: { task: "message-task" }, priorRoute,
+      priorWorkClassDigest: admission.reservation.workClassDigest,
+      dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }) },
+    }), { catalog: policy, state, now: NOW });
+    assert.equal(adjustment.response.reason, "active_budget_adjusted");
+    const continued = state.reservations[admission.reservation.reservationId];
+    assert.deepEqual(continued.selected, originalSelected, "settlement preserves the original carrier version");
+    if (staleCarrierVersion) {
+      assert.equal(continued.currentRoute.selected.carrierVersion, CARRIER_DESCRIPTORS["codex-astra"].version);
+      assert.equal(continued.routeLearningEligible, false, "version reevaluation must not train on mixed carrier versions");
+      assert.equal(continued.currentRoute.policyDigest, priorRoute.policyDigest, "version drift alone triggers reevaluation");
+      assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+    } else {
+      assert.equal(continued.currentRoute, undefined, "unchanged descriptor needs no continuation override");
+    }
+  });
+}
+
+test("a GPT-6 visible task can change effort through an active task-message adjustment only", () => {
+  const policy = catalog({
+    budgets: { task: { marginalUsd: { hardAdmission: "5" } } },
+    extraProviders: {
+      codex_astra: { carrierId: "codex-astra", executionSurface: "codex", account: "local", locality: "external", retention: "provider_default" },
+    },
+    extraModels: {
+      astra: { provider: "codex_astra", carrierId: "codex-astra", requestedModel: "gpt-6-astra", effort: "medium", efforts: ["low", "medium", "high"], roles: ["implementation"], relativeCostIndex: 10 },
+    },
+    extraRoles: { implementation: { tiers: [{ models: ["astra"], softPriorities: ["cost"] }] } },
+  });
   const state = createEmptyState();
   const authority = {
-    authorityId: "authority-msg", objectiveEpoch: "epoch-msg", objectiveDigest: DIGEST_A, senderOwner: "owner-msg", accountScope: "local", carrierId: "codex-luna", adapterId: "codex-task-create", policyDigest: policyDigest(policy),
-    destinationScope: "host-msg", destinationClass: "visible_task", maxTaskCount: 1, currentTurn: "turn-msg", expiresAt: "2026-08-05T12:00:00.000Z", explicitUserInstructionDigest: DIGEST_B,
+    authorityId: "authority-gpt6-effort", objectiveEpoch: "epoch-gpt6-effort", objectiveDigest: DIGEST_A, senderOwner: "owner-gpt6-effort", accountScope: "local", carrierId: "codex-astra", adapterId: "codex-task-create", policyDigest: policyDigest(policy),
+    destinationScope: "host-gpt6-effort", destinationClass: "visible_task", maxTaskCount: 1, currentTurn: "turn-gpt6-effort", expiresAt: "2026-08-05T12:00:00.000Z", explicitUserInstructionDigest: DIGEST_B,
   };
   mintAuthority(policy, state, authority);
-  const admission = admit(policy, state, { adapterId: "codex-task-create", dispatchKind: "task_create", scopes: { task: "message-task" }, taskAuthorityId: authority.authorityId, objectiveEpoch: authority.objectiveEpoch, objectiveDigest: authority.objectiveDigest, instructionDigest: authority.explicitUserInstructionDigest, senderOwner: authority.senderOwner, destinationScope: "host-msg", destinationClass: "visible_task", currentTurn: "turn-msg" });
-  const created = claim(policy, state, admission, { identity: dispatchIdentity("codex-task-create", { hostScope: "host-msg", sessionId: "task-msg" }), fields: { taskAuthorityId: authority.authorityId } });
+  const admission = admit(policy, state, {
+    model: "gpt-6-astra", effort: "low", adapterId: "codex-task-create", dispatchKind: "task_create", scopes: { task: "gpt6-effort-task" }, taskAuthorityId: authority.authorityId,
+    objectiveEpoch: authority.objectiveEpoch, objectiveDigest: authority.objectiveDigest, instructionDigest: authority.explicitUserInstructionDigest, senderOwner: authority.senderOwner,
+    destinationScope: "host-gpt6-effort", destinationClass: "visible_task", currentTurn: "turn-gpt6-effort",
+  });
+  const identity = dispatchIdentity("codex-task-create", { hostScope: "host-gpt6-effort", sessionId: "task-gpt6-effort" });
+  const created = claim(policy, state, admission, { identity, fields: { taskAuthorityId: authority.authorityId } });
   const priorRoute = {
-    reservationId: admission.reservation.reservationId,
-    claimId: created.response.claimId,
-    carrierId: "codex-luna",
-    model: "gpt-5.6-luna",
-    effort: "max",
-    adapterId: "codex-task-create",
-    adapterVersion: "v1",
-    policyDigest: policyDigest(policy),
-    hostScope: "host-msg",
-    accountScope: "local",
-    sessionId: "task-msg",
-    toolId: "codex-task",
-    toolVersion: "v1",
-    workClassDigest: admission.reservation.workClassDigest,
+    reservationId: admission.reservation.reservationId, claimId: created.response.claimId, carrierId: "codex-astra", model: "gpt-6-astra", effort: "low",
+    adapterId: "codex-task-create", adapterVersion: "v1", policyDigest: policyDigest(policy), hostScope: identity.hostScope, accountScope: identity.accountScope,
+    sessionId: identity.sessionId, toolId: identity.toolId, toolVersion: identity.toolVersion, workClassDigest: admission.reservation.workClassDigest,
   };
-  const neutral = handleRequest(request("resolve", {
-    adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "message-neutral", priorRoute,
-    priorWorkClassDigest: admission.reservation.workClassDigest,
-    dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }) },
+  const baseAdjustment = {
+    adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "adjust_active", activeReservationId: admission.reservation.reservationId,
+    frozenInputDigest: DIGEST_A, forecast: { marginalUsd: "1" }, scopes: { task: "gpt6-effort-task" }, priorWorkClassDigest: admission.reservation.workClassDigest,
+    dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-gpt6-effort", sessionId: "task-gpt6-effort" }) },
+  };
+  const secondAuthority = {
+    ...authority,
+    authorityId: "authority-gpt6-effort-second", objectiveEpoch: "epoch-gpt6-effort-second", senderOwner: "owner-gpt6-effort-second",
+    destinationScope: "host-gpt6-effort-second", currentTurn: "turn-gpt6-effort-second",
+  };
+  mintAuthority(policy, state, secondAuthority);
+  const secondAdmission = admit(policy, state, {
+    requestId: "gpt6-effort-second-task", model: "gpt-6-astra", effort: "low", adapterId: "codex-task-create", dispatchKind: "task_create", scopes: { task: "gpt6-effort-task" }, taskAuthorityId: secondAuthority.authorityId,
+    objectiveEpoch: secondAuthority.objectiveEpoch, objectiveDigest: secondAuthority.objectiveDigest, instructionDigest: secondAuthority.explicitUserInstructionDigest, senderOwner: secondAuthority.senderOwner,
+    destinationScope: secondAuthority.destinationScope, destinationClass: "visible_task", currentTurn: secondAuthority.currentTurn,
+  });
+  const secondIdentity = dispatchIdentity("codex-task-create", { hostScope: "host-gpt6-effort-second", sessionId: "task-gpt6-effort-second" });
+  claim(policy, state, secondAdmission, { identity: secondIdentity, fields: { taskAuthorityId: secondAuthority.authorityId } });
+  const crossReservation = handleRequest(request("admit", {
+    ...baseAdjustment, requestId: "gpt6-cross-reservation", actionId: "gpt6-cross-reservation", activeReservationId: secondAdmission.reservation.reservationId,
+    model: "gpt-6-astra", effort: "high", priorRoute,
   }), { catalog: policy, state, now: NOW });
-  assert.equal(neutral.response.reason, "resolved");
-  const crossedDestination = handleRequest(request("resolve", {
-    adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "message-crossed", priorRoute,
-    priorWorkClassDigest: admission.reservation.workClassDigest,
-    dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "wrong-session" }) },
-  }), { catalog: policy, state, now: NOW });
-  assert.equal(crossedDestination.response.reason, "prior_destination_identity_mismatch");
-  const adjustment = handleRequest(request("admit", {
-    adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "adjust_active", requestId: "message-adjust", activeReservationId: admission.reservation.reservationId,
-    frozenInputDigest: DIGEST_A, forecast: { marginalUsd: "1" }, scopes: { task: "message-task" }, priorRoute,
-    priorWorkClassDigest: admission.reservation.workClassDigest,
-    dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }) },
-  }), { catalog: policy, state, now: NOW });
-  assert.equal(adjustment.response.reason, "active_budget_adjusted");
+  assert.equal(crossReservation.response.reason, "prior_route_binding_mismatch");
+  assert.equal(state.reservations[secondAdmission.reservation.reservationId].forecast.marginalUsd, "1");
+  const omittedEffort = (route, suffix) => request("admit", {
+    ...baseAdjustment, requestId: `gpt6-omitted-effort-${suffix}`, actionId: `gpt6-omitted-effort-${suffix}`, priorRoute: route,
+  });
+  const beforeOmittedLow = structuredClone(state);
+  assert.equal(handleRequest(omittedEffort(priorRoute, "low"), { catalog: policy, state, now: NOW }).response.reason, "prior_route_binding_mismatch");
+  assert.deepEqual(state, beforeOmittedLow);
+  const raisedInput = request("admit", { ...baseAdjustment, requestId: "gpt6-effort-high", actionId: "gpt6-effort-high", model: "gpt-6-astra", effort: "high", priorRoute });
+  const raised = handleRequest(raisedInput, { catalog: policy, state, now: NOW });
+  assert.equal(raised.response.reason, "active_budget_adjusted", JSON.stringify(raised.response));
+  assert.deepEqual(raised.response.actionReceipt.requested, { model: "gpt-6-astra", effort: "high" });
+  assert.deepEqual(raised.response.reservation.binding.controls, { model: "model", effort: "thinking" });
+  assert.equal(state.reservations[admission.reservation.reservationId].currentRoute.selected.effort, "high");
+  assert.equal(state.reservations[admission.reservation.reservationId].forecast.marginalUsd, "2");
+  // A copied prior adjustment must not let the replay fast path charge a
+  // different active reservation.
+  state.reservations[secondAdmission.reservation.reservationId].adjustments = {
+    [raisedInput.requestId]: structuredClone(state.reservations[admission.reservation.reservationId].adjustments[raisedInput.requestId]),
+  };
+  assert.equal(handleRequest({ ...raisedInput, activeReservationId: secondAdmission.reservation.reservationId }, { catalog: policy, state, now: NOW }).response.reason, "prior_route_binding_mismatch");
+  delete state.reservations[secondAdmission.reservation.reservationId].adjustments;
+
+  assert.equal(state.reservations[admission.reservation.reservationId].routeLearningEligible, false);
+  assert.equal(state.reservations[admission.reservation.reservationId].selected.effort, "low");
+  const recoveredStatus = handleRequest(request("status"), { catalog: policy, state: JSON.parse(JSON.stringify(state)), now: NOW });
+  const recoveredRoute = recoveredStatus.response.reservations.find((record) => record.reservationId === admission.reservation.reservationId);
+  assert.equal(recoveredRoute.selected.effort, "low", "status retains the original settlement allocation");
+  assert.equal(recoveredRoute.effectiveRoute.selected.effort, "high");
+  assert.equal(recoveredRoute.effectiveRoute.policyDigest, policyDigest(policy));
+  const unchangedRoute = recoveredStatus.response.reservations.find((record) => record.reservationId === secondAdmission.reservation.reservationId);
+  assert.deepEqual(unchangedRoute.effectiveRoute.selected, unchangedRoute.selected);
+  const secondPriorRoute = { ...priorRoute, effort: recoveredRoute.effectiveRoute.selected.effort, policyDigest: recoveredRoute.effectiveRoute.policyDigest };
+  const beforeOmittedHigh = structuredClone(state);
+  assert.equal(handleRequest(omittedEffort(secondPriorRoute, "high"), { catalog: policy, state, now: NOW }).response.reason, "prior_route_binding_mismatch");
+  assert.deepEqual(state, beforeOmittedHigh);
+  const loweredInput = request("admit", { ...baseAdjustment, requestId: "gpt6-effort-medium", actionId: "gpt6-effort-medium", model: "gpt-6-astra", effort: "medium", priorRoute: secondPriorRoute });
+  const lowered = handleRequest(loweredInput, { catalog: policy, state, now: NOW });
+  assert.equal(lowered.response.reason, "active_budget_adjusted", JSON.stringify(lowered.response));
+  assert.equal(state.reservations[admission.reservation.reservationId].currentRoute.selected.effort, "medium");
+  assert.equal(state.reservations[admission.reservation.reservationId].forecast.marginalUsd, "3");
+  assert.equal(handleRequest(loweredInput, { catalog: policy, state, now: NOW }).response.reason, "active_adjustment_replayed");
+
+  for (const phase of ["started", "settled", "no_start", "ambiguous"]) {
+    const replayState = structuredClone(state);
+    const active = replayState.reservations[admission.reservation.reservationId];
+    const receipt = baseReceipt(active, identity, { receiptId: `effort-replay-${phase}`, status: phase, measuredUsage: phase === "settled" ? { marginalUsd: "1" } : {} });
+    const reconciled = handleRequest(request("reconcile", {
+      reservationId: active.reservationId, frozenInputDigest: active.frozenInputDigest, receipt,
+    }), { catalog: policy, state: replayState, now: NOW, trustedReceiptImporter: trustedReceiptImporter(receipt) });
+    assert.equal(reconciled.response.ok, true, JSON.stringify(reconciled.response));
+    assert.equal(replayState.reservations[active.reservationId].phase, phase);
+    const beforeReplay = structuredClone(replayState);
+    const replay = handleRequest(loweredInput, { catalog: policy, state: replayState, now: NOW });
+    assert.equal(replay.response.reason, phase === "started" ? "active_adjustment_replayed" : "active_attempt_unknown", phase);
+    assert.deepEqual(replayState, beforeReplay);
+  }
+
+  const currentPriorRoute = { ...priorRoute, effort: "medium" };
+  const modelChange = handleRequest(request("admit", { ...baseAdjustment, requestId: "gpt6-model-change", actionId: "gpt6-model-change", model: "gpt-6-luna", effort: "max", priorRoute: currentPriorRoute }), { catalog: policy, state, now: NOW });
+  assert.equal(modelChange.response.reason, "no_eligible_route");
+  const subagentFollowup = handleRequest(request("admit", { ...baseAdjustment, requestId: "gpt6-subagent-followup", actionId: "gpt6-subagent-followup", model: "gpt-6-astra", effort: "high", adapterId: "native-subagent-followup", dispatchKind: "subagent_followup", priorRoute: currentPriorRoute }), { catalog: policy, state, now: NOW });
+  assert.equal(subagentFollowup.response.reason, "no_eligible_route");
+  assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
 });
 
 test("work-class inheritance is exact and neutral or active adjustments emit idempotent closed receipts", () => {
@@ -2279,7 +2416,7 @@ test("work-class inheritance is exact and neutral or active adjustments emit ide
   assert.equal(neutralReceipt.priorWorkClassDigest, workClassDigest);
   assert.equal(neutralReceipt.priorRouteDigest, stableDigest(priorRoute));
   assert.deepEqual(neutralReceipt.adapter, { adapterId: "native-subagent-message", adapterVersion: "v1", dispatchKind: "subagent_message" });
-  assert.deepEqual(neutralReceipt.requested, { model: "gpt-5.6-luna", effort: "max" });
+  assert.deepEqual(neutralReceipt.requested, { model: "gpt-6-astra", effort: "max" });
   assert.equal(neutralReceipt.budget, "not_applicable");
   assert.deepEqual(handleRequest(neutralInput, { catalog: policy, state, now: NOW }).response.decision.actionReceipt, neutralReceipt);
   assert.equal(handleRequest({ ...neutralInput, workClassDigest: DIGEST_A }, { catalog: policy, state, now: NOW }).response.reason, "work_class_digest_mismatch");
@@ -2391,7 +2528,7 @@ test("native and Oracle claims cannot cross their admitted host or account ident
   assert.equal(oracleClaim("local", "standard").reason, "dispatch_claimed");
 });
 
-test("carrier-neutral invariant work contracts keep seven closed presentation overlays", () => {
+test("carrier-neutral invariant work contracts keep six closed presentation overlays", () => {
   const invariantInput = {
     objectiveDigest: DIGEST_A,
     sourceOfTruthDigest: DIGEST_B,
@@ -2402,12 +2539,11 @@ test("carrier-neutral invariant work contracts keep seven closed presentation ov
     stopDigest: "1".repeat(64),
   };
   const fixtures = [
-    ["gpt_sol", "codex-sol", "gpt-5.6-sol", "high", "lean, explicit, bounded brief"],
+    ["gpt_sol", "codex-6-sol", "gpt-6-sol", "high", "lean, explicit, bounded brief"],
     ["opus", "claude-ce-review", "opus-current", "high", "complete task specification"],
     ["fable", "claude-ce-review", "fable-current", "high", "autonomy and pause boundaries"],
     ["sonnet", "claude-session", "sonnet", "medium", "bounded objective, relevant context"],
     ["haiku", "claude-session", "haiku", "low", "exact mechanical change"],
-    ["glm", "glm-5-2-engineer", "glm-5.2", "xhigh", "repository standards and boundaries"],
     ["oracle", "oracle-browser", "chatgpt_current_pro", "high", "complete selected file context"],
   ];
   const built = fixtures.map(([family, carrierId, model, effort, expectedInstruction]) => {
@@ -2428,10 +2564,10 @@ test("carrier-neutral invariant work contracts keep seven closed presentation ov
   assert.equal(fable51.contract.presentation.family, "fable");
   assert.equal(fable51.contract.presentation.model, "claude-fable-5-1");
   assert.equal(fable51.contract.invariantDigest, invariantDigest);
-  assert.equal(buildInvariantWorkContract({ ...invariantInput, carrierId: "codex-sol", model: "gpt-5.6-sol", effort: "high", expectedInvariantDigest: invariantDigest }).reason, "work_contract_built");
-  assert.equal(buildInvariantWorkContract({ ...invariantInput, objectiveDigest: "2".repeat(64), carrierId: "codex-sol", model: "gpt-5.6-sol", effort: "high", expectedInvariantDigest: invariantDigest }).reason, "invariant_contract_mutation");
-  assert.equal(buildInvariantWorkContract({ ...invariantInput, carrierId: "codex-sol", model: "unbound-model", effort: "high" }).reason, "presentation_overlay_mismatch");
-  assert.equal(buildInvariantWorkContract({ ...invariantInput, carrierId: "codex-sol", model: "gpt-5.6-sol", effort: "high", prompt: "not metadata" }).reason, "invalid_work_contract");
+  assert.equal(buildInvariantWorkContract({ ...invariantInput, carrierId: "codex-6-sol", model: "gpt-6-sol", effort: "high", expectedInvariantDigest: invariantDigest }).reason, "work_contract_built");
+  assert.equal(buildInvariantWorkContract({ ...invariantInput, objectiveDigest: "2".repeat(64), carrierId: "codex-6-sol", model: "gpt-6-sol", effort: "high", expectedInvariantDigest: invariantDigest }).reason, "invariant_contract_mutation");
+  assert.equal(buildInvariantWorkContract({ ...invariantInput, carrierId: "codex-6-sol", model: "unbound-model", effort: "high" }).reason, "presentation_overlay_mismatch");
+  assert.equal(buildInvariantWorkContract({ ...invariantInput, carrierId: "codex-6-sol", model: "gpt-6-sol", effort: "high", prompt: "not metadata" }).reason, "invalid_work_contract");
 });
 
 test("Oracle v1 records remain readable and accounted but cannot attest or dispatch v2 controls", () => {
@@ -2450,7 +2586,7 @@ test("Oracle v1 records remain readable and accounted but cannot attest or dispa
   for (const capability of Object.values(state.capabilities)) {
     capability.carrierVersion = "v1";
     capability.adapterVersion = "v1";
-    capability.observedModel = "gpt-5.6-sol";
+    capability.observedModel = "gpt-6-sol";
     capability.resolvedModelDigest = stableDigest(capability.observedModel);
     capability.attestedFactsDigest = stableDigest(capabilityFacts(capability, capability));
   }
@@ -2473,13 +2609,13 @@ test("Oracle v1 records remain readable and accounted but cannot attest or dispa
   const claimAgain = handleRequest(request("claim-dispatch", {
     reservationId: stored.reservationId, frozenInputDigest: DIGEST_A, dispatchIdentity: { ...identity, toolVersion: "v1" },
   }), { catalog: policy, state, now: NOW });
-  assert.equal(claimAgain.response.reason, "adapter_version_changed");
+  assert.equal(claimAgain.response.reason, "claim_replayed", "the original claimed identity is safe to replay without creating a new dispatch");
   const inspected = handleRequest(request("inspect-claim", { claimId: claimed.response.claimId }), { catalog: policy, state, now: NOW });
   assert.equal(inspected.response.reason, "adapter_version_changed");
   const attemptedSettlement = handleRequest(request("reconcile", {
     reservationId: stored.reservationId, frozenInputDigest: DIGEST_A, receipt: {},
   }), { catalog: policy, state, now: NOW });
-  assert.equal(attemptedSettlement.response.reason, "adapter_version_changed");
+  assert.equal(attemptedSettlement.response.reason, "trusted_receipt_importer_unavailable");
   const budget = handleRequest(request("admit", {
     requestId: "other-work", scopes: { task: "old-oracle-budget" }, forecast: { marginalUsd: "1" }, frozenInputDigest: DIGEST_A,
   }), { catalog: policy, state, now: NOW });
@@ -2510,7 +2646,7 @@ test("Oracle auth failure is negatively cached and lifecycle success creates a r
   const reviewClaim = claim(policy, state, review, { identity: reviewIdentity });
   const oracleReceipt = baseReceipt(reviewClaim.response.reservation, reviewIdentity, {
     receiptId: "oracle-receipt", producer: "oracle-browser", measuredUsage: {}, measuredBilled: false,
-    requestedModel: "chatgpt_current_pro", adapterModelControl: "gpt-5.6-sol", documentedProductLabel: "GPT-5.6 Sol + Pro thinking", observedModel: "unknown", executionSurface: "chatgpt_standard",
+    requestedModel: "chatgpt_current_pro", adapterModelControl: "gpt-6-sol", documentedProductLabel: "GPT-6 Sol + Pro thinking", observedModel: "unknown", executionSurface: "chatgpt_standard",
     chargedMeters: { marginalUsd: 0, codexCredits: 0, openaiApiSpend: 0 }, originalHostDigest: DIGEST_A, recordedAt: "2026-08-04T12:00:00.000Z", expiresAt: "2026-08-05T12:00:00.000Z", outputTrusted: false, reason: "auth_context_unavailable", authReadiness: "auth_context_unavailable", retentionClass: "local-private-24h",
   });
   assert.equal(handleRequest(request("reconcile", { reservationId: review.reservation.reservationId, frozenInputDigest: DIGEST_A, receipt: oracleReceipt }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(oracleReceipt) }).response.reason, "reconciled");
@@ -2526,6 +2662,65 @@ test("Oracle auth failure is negatively cached and lifecycle success creates a r
   assert.equal(handleRequest(request("reconcile", { reservationId: lifecycle.reservation.reservationId, frozenInputDigest: DIGEST_A, receipt: lifecycleReceipt }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(lifecycleReceipt) }).response.reason, "reconciled");
   assert.equal(Object.keys(state.lifecycleReviewRequirements).length, 1);
   assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+});
+
+test("historical lifecycle settlement keeps a review obligation across policy changes", () => {
+  const policy = catalog({
+    extraProviders: {
+      lifecycle: { carrierId: "oracle-homebrew-lifecycle", executionSurface: "local_host", account: "local", locality: "local_only", retention: "none" },
+    },
+    extraModels: {
+      lifecycle: { provider: "lifecycle", carrierId: "oracle-homebrew-lifecycle", requestedModel: "oracle-homebrew-lifecycle", efforts: ["high"], roles: ["lifecycle.oracle"] },
+      followup: { provider: "codex", carrierId: "codex-astra", requestedModel: "gpt-6-astra", efforts: ["max"], roles: ["review.deep"] },
+    },
+    extraRoles: {
+      "lifecycle.oracle": { tiers: [["lifecycle"]] },
+      "review.deep": { tiers: [["followup"]] },
+    },
+  });
+  const state = attestedCapability(policy, { carrierId: "codex-astra", adapterId: "native-subagent-create", accountScope: "local", observedModel: "gpt-6-astra" });
+  const refreshed = handleRequest(request("refresh", { capability: { carrierId: "oracle-homebrew-lifecycle", adapterId: "oracle-homebrew-lifecycle", hostScope: "local", accountScope: "local", state: "host_capability_attested" } }), { catalog: policy, state, now: NOW, trustedCapabilityAttestor: refreshAttestor({ observedModel: "oracle-homebrew-lifecycle" }) });
+  assert.equal(refreshed.response.reason, "capability_refreshed", JSON.stringify(refreshed.response));
+
+  const lifecycle = admit(policy, state, { requestId: "historical-lifecycle", role: "lifecycle.oracle", adapterId: "oracle-homebrew-lifecycle", dispatchKind: "lifecycle_action", scopes: { task: "lifecycle-task" }, forecast: {} });
+  const lifecycleIdentity = dispatchIdentity("oracle-homebrew-lifecycle", { sessionId: "historical-lifecycle-session" });
+  const lifecycleClaim = claim(policy, state, lifecycle, { identity: lifecycleIdentity });
+  const historical = state.reservations[lifecycle.reservation.reservationId];
+  historical.policyDigest = "builtin-model-routing-v1";
+  historical.decision.policyDigest = historical.policyDigest;
+  assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+
+  const lifecycleReceipt = baseReceipt(lifecycleClaim.response.reservation, lifecycleIdentity, {
+    receiptId: "historical-lifecycle-receipt", producer: "oracle-homebrew-lifecycle", measuredUsage: {}, measuredBilled: false,
+    chargedMeters: { marginalUsd: 0, codexCredits: 0, openaiApiSpend: 0 }, originalHostDigest: DIGEST_A, recordedAt: "2026-08-04T12:00:00.000Z", expiresAt: "2026-08-05T12:00:00.000Z", outputTrusted: false, reason: null, freshReviewRequired: true, beforeVersion: "0.17.0", afterVersion: "0.17.1", formula: "steipete/tap/oracle",
+  });
+  const settled = handleRequest(request("reconcile", { reservationId: lifecycle.reservation.reservationId, frozenInputDigest: DIGEST_A, receipt: lifecycleReceipt }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(lifecycleReceipt) });
+  assert.equal(settled.response.reason, "reconciled", JSON.stringify(settled.response));
+  const requirement = Object.values(state.lifecycleReviewRequirements)[0];
+  assert.equal(requirement.policyDigest, policyDigest(policy));
+  assert.notEqual(requirement.policyDigest, historical.policyDigest);
+
+  // A later policy rotation must not make this outstanding review disappear.
+  requirement.policyDigest = "builtin-model-routing-v1";
+  assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+  const review = admit(policy, state, { requestId: "current-review", role: "review.deep", adapterId: "native-subagent-create", dispatchKind: "subagent_create", scopes: { task: "review-task" }, forecast: {} });
+  const reviewIdentity = dispatchIdentity("native-subagent-create", { sessionId: "review-session" });
+  const withoutRequirement = handleRequest(request("claim-dispatch", { reservationId: review.reservation.reservationId, frozenInputDigest: DIGEST_A, dispatchIdentity: reviewIdentity }), { catalog: policy, state, now: NOW });
+  assert.equal(withoutRequirement.response.reason, "fresh_post_lifecycle_review_required");
+  assert.equal(state.reservations[review.reservation.reservationId].phase, "reserved");
+  const reviewClaim = claim(policy, state, review, { identity: reviewIdentity, fields: { postLifecycleRequirementId: requirement.requirementId } });
+  assert.equal(reviewClaim.response.reservation.postLifecycleRequirementId, requirement.requirementId);
+  const noStartReceipt = baseReceipt(reviewClaim.response.reservation, reviewIdentity, { receiptId: "review-no-start", status: "no_start", measuredUsage: {}, measuredBilled: false });
+  assert.equal(handleRequest(request("reconcile", { reservationId: review.reservation.reservationId, frozenInputDigest: DIGEST_A, receipt: noStartReceipt }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(noStartReceipt) }).response.reason, "reconciled");
+  assert.equal(state.lifecycleReviewRequirements[requirement.requirementId].reviewClaimId, undefined);
+  assert.equal(state.lifecycleReviewRequirements[requirement.requirementId].fulfilled, false);
+
+  const retry = admit(policy, state, { requestId: "current-review-retry", role: "review.deep", adapterId: "native-subagent-create", dispatchKind: "subagent_create", scopes: { task: "review-retry-task" }, forecast: {} });
+  const retryIdentity = dispatchIdentity("native-subagent-create", { sessionId: "review-retry-session" });
+  const retryClaim = claim(policy, state, retry, { identity: retryIdentity, fields: { postLifecycleRequirementId: requirement.requirementId } });
+  const successReceipt = baseReceipt(retryClaim.response.reservation, retryIdentity, { receiptId: "review-success", measuredUsage: {}, measuredBilled: false });
+  assert.equal(handleRequest(request("reconcile", { reservationId: retry.reservation.reservationId, frozenInputDigest: DIGEST_A, receipt: successReceipt }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(successReceipt) }).response.reason, "reconciled");
+  assert.equal(state.lifecycleReviewRequirements[requirement.requirementId].fulfilled, true);
 });
 
 test("the public CLI accepts only a fixed Oracle receipt reference and settles an adapter-emitted private artifact", () => {
@@ -2692,7 +2887,7 @@ test("public CLI environment and JSON cannot mint visible-task authority or sett
     fs.writeFileSync(configPath, JSON.stringify(policy));
     fs.chmodSync(configPath, 0o600);
 
-    fs.writeFileSync(configPath, JSON.stringify(legacyPolicy()));
+    fs.writeFileSync(configPath, JSON.stringify(configuredPolicy()));
     const publicFable = publicCli(request("resolve", {
       role: "implementation.hard",
       harness: "claude",
@@ -2714,7 +2909,7 @@ test("public CLI environment and JSON cannot mint visible-task authority or sett
       objectiveDigest: DIGEST_A,
       senderOwner: "native-cli-owner",
       accountScope: "local",
-      carrierId: "codex-luna",
+      carrierId: "codex-astra",
       adapterId: "codex-task-create",
       policyDigest: policyDigest(policy),
       destinationScope: "native-cli-host",
@@ -2815,21 +3010,21 @@ test("public CLI environment and JSON cannot mint visible-task authority or sett
     const persisted = publicCli({ contractVersion: CONTRACT_VERSION, command: "status" }, home, callerControlledEnv);
     assert.equal(persisted.reservations.filter((reservation) => reservation.phase === "claimed").length, 1);
 
-    const glmOnly = catalog();
-    glmOnly.roles["implementation.mechanical"] = { tiers: [["glm"]] };
-    fs.writeFileSync(configPath, JSON.stringify(glmOnly));
+    const task_lunaOnly = catalog();
+    task_lunaOnly.roles["implementation.mechanical"] = { tiers: [["task_luna"]] };
+    fs.writeFileSync(configPath, JSON.stringify(task_lunaOnly));
     fs.chmodSync(configPath, 0o600);
     const unsupported = publicCli({
       contractVersion: CONTRACT_VERSION,
       command: "admit",
       callerKind: "fleet",
       role: "implementation.mechanical",
-      adapterId: "configured-profile-task-create",
+      adapterId: "codex-task-create",
       dispatchKind: "task_create",
-      requestId: "glm-public-admit",
+      requestId: "task_luna-public-admit",
       frozenInputDigest: DIGEST_A,
       forecast: {},
-      scopes: { task: "glm-public-task" },
+      scopes: { task: "task_luna-public-task" },
       hostScope: "local",
       accountScope: "plan",
       r52: r52Readiness(),
@@ -2878,127 +3073,25 @@ test("protected inspect-claim ignores caller path and XDG overrides", () => {
   }
 });
 
-function terraAttestor(model = "gpt-5.6-terra") {
-  return () => ({
-    attestorId: "railyard-runtime-attestor-v1",
-    attestationDigest: DIGEST_A,
-    lunaAvailability: "unavailable",
-    hostScope: "local",
-    accountScope: "codex-sub",
-    terra: { verified: true, model, effort: "max" },
-  });
-}
-
-function lunaAvailableAttestor() {
-  return () => ({
-    attestorId: "railyard-runtime-attestor-v1",
-    attestationDigest: DIGEST_A,
-    lunaAvailability: "available",
-    hostScope: "local",
-    accountScope: "codex-sub",
-  });
-}
-
-test("configured Terra selection requires the fixed runtime attestor", () => {
-  const policy = legacyPolicy();
-  const requestFields = {
-    role: "implementation.medium",
-    harness: "codex",
-    adapterId: "codex-task-create",
-    dispatchKind: "task_create",
-  };
-  const state = attestedCapability(policy, {
-    carrierId: "codex-terra-runtime",
-    adapterId: "codex-task-create",
-    accountScope: "codex-sub",
-    observedModel: "unknown",
-  });
-  const missingCapability = handleRequest(request("resolve", requestFields), {
-    catalog: policy,
-    state: createEmptyState(),
-    now: NOW,
-    trustedRuntimeAttestor: terraAttestor(),
-  });
-  assert.equal(missingCapability.response.reason, "no_eligible_route", JSON.stringify(missingCapability.response));
-  assert.equal(missingCapability.response.rejectedAlternatives.find((item) => item.modelAlias === "terra")?.reason, "runtime_attestation_required");
-
-  const untrusted = handleRequest(request("resolve", requestFields), { catalog: policy, state, now: NOW });
-  assert.equal(untrusted.response.reason, "resolved", JSON.stringify(untrusted.response));
-  assert.equal(untrusted.response.decision.selected.modelAlias, "luna");
-  assert.equal(untrusted.response.decision.rejectedAlternatives.find((item) => item.modelAlias === "terra")?.reason, "runtime_attestation_required");
-
-  const trusted = handleRequest(request("resolve", requestFields), {
-    catalog: policy,
-    state,
-    now: NOW,
-    trustedRuntimeAttestor: terraAttestor(),
-  });
-  assert.equal(trusted.response.reason, "resolved", JSON.stringify(trusted.response));
-  assert.equal(trusted.response.decision.selected.modelAlias, "terra");
-  assert.equal(trusted.response.decision.fallback.reason, "implementation_model_substitute");
-  assert.equal(trusted.response.decision.fallbackReceipt.reasonCode, "implementation_model_substitute");
-
-  const admissionState = attestedCapability(policy, {
-    carrierId: "codex-terra-runtime",
-    adapterId: "native-subagent-create",
-    accountScope: "codex-sub",
-    observedModel: "unknown",
-  });
-  const admitted = handleRequest(request("admit", {
-    ...requestFields,
-    adapterId: "native-subagent-create",
-    dispatchKind: "subagent_create",
-    requestId: "terra-admission",
-    frozenInputDigest: DIGEST_A,
-    forecast: { marginalUsd: "1" },
-    scopes: { task: "terra-task", run: "terra-run", project: "terra-project" },
-  }), {
-    catalog: policy,
-    state: admissionState,
-    now: NOW,
-    trustedRuntimeAttestor: terraAttestor(),
-  });
-  assert.equal(admitted.response.reason, "admitted", JSON.stringify(admitted.response));
-  assert.equal(admitted.response.decision.selected.modelAlias, "terra");
-});
-
-test("baseline selection does not force an implementation harness and explicit routes never permit a silent fallback", () => {
-  for (const role of ["implementation", "implementation.fix", "implementation.mechanical", "review", "orchestration"]) {
-    const resolved = handleRequest(request("resolve", { role }), { state: createEmptyState(), now: NOW });
-    assert.equal(resolved.response.reason, "resolved");
-    assert.equal(resolved.response.decision.selected.model, "gpt-6-astra");
-    assert.equal(resolved.response.decision.selected.effort, "max");
-    assert.equal(resolved.response.decision.capability.status, "unknown");
-    assert.equal(Object.hasOwn(resolved.response.decision, "implementationEngine"), false);
+test("native defaults resolve current GPT-6 models and explicit Astra never silently falls back", () => {
+  for (const role of ["implementation", "implementation.fix", "review", "orchestration", "implementation.mechanical"]) {
+    const result = handleRequest(request("resolve", { role }), { now: NOW });
+    assert.equal(result.response.reason, "resolved");
+    assert.equal(result.response.decision.selected.model, role === "implementation.mechanical" ? "gpt-6-luna" : "gpt-6-sol");
+    assert.equal(result.response.decision.binding.adapterId, "native-subagent-create");
   }
-
-  const explicit = handleRequest(request("resolve", { model: "gpt-5.6-terra", effort: "ultra" }), { now: NOW });
-  assert.deepEqual(explicit.response.decision.implementationEngine, {
-    mode: "require", target: "codex", model: "gpt-5.6-terra", source: "deliver",
-  });
-  assert.equal(explicit.response.decision.selected.effort, "ultra");
-  assert.equal(explicit.response.decision.capability.status, "unknown");
-  assert.equal(explicit.response.decision.fallback, undefined);
-
-  const configured = handleRequest(request("resolve", { harness: "codex" }), { catalog: examplePolicy(), now: NOW });
-  assert.deepEqual(configured.response.decision.implementationEngine, {
-    mode: "require", target: "codex", model: "gpt-6-astra", source: "deliver",
-  });
-
-  const runtimeScopes = [];
-  const transportScopes = [];
-  const resolved = handleRequest(request("resolve"), {
-    now: NOW,
-    trustedRuntimeAttestor: (scope) => { runtimeScopes.push(scope); return terraAttestor()(scope); },
-    trustedTransportAttestor: (scope) => {
-      transportScopes.push({ hostScope: scope.hostScope, accountScope: scope.accountScope });
-      return { attestorId: "railyard-transport-attestor-v1", attestationDigest: DIGEST_A, compatibility: "native_compatible", bridgeAvailable: false };
-    },
-  });
-  assert.equal(resolved.response.decision.selected.model, "gpt-6-astra");
-  assert.deepEqual(runtimeScopes, [], "legacy Luna/Terra availability cannot replace Astra");
-  assert.deepEqual(transportScopes, [{ hostScope: "local", accountScope: "codex-sub" }]);
-  assert.equal(handleRequest(request("resolve", { harness: "claude" }), { now: NOW }).response.reason, "cross_harness_adapter_required");
+  for (const role of ["implementation.hard", "security.review"]) {
+    const result = handleRequest(request("resolve", { role }), { now: NOW });
+    assert.equal(result.response.reason, "resolved");
+    assert.equal(result.response.decision.selected.model, "gpt-6-sol");
+    assert.equal(result.response.decision.selected.effort, "high");
+  }
+  for (const effort of ["low", "medium", "high"]) {
+    const result = handleRequest(request("resolve", { model: "gpt-6-astra", effort }), { now: NOW });
+    assert.equal(result.response.reason, "resolved");
+    assert.equal(result.response.decision.selected.effort, effort);
+    assert.equal(result.response.decision.fallback, undefined);
+  }
 });
 
 test("a stale state lock is broken, a live one still holds", () => {
@@ -3070,10 +3163,10 @@ test("blocked R52 readiness is refused for every caller, not only fleet", () => 
     assert.equal(handled.response.reason, "model_routing_capability_unavailable", callerKind);
   }
   // Ready readiness still binds, and omitting it entirely stays fine off-fleet.
-  const ready = handleRequest(request("resolve", { callerKind: "deliver", r52: r52Readiness() }), { state: createEmptyState(), now: NOW });
+  const ready = handleRequest(request("resolve", { callerKind: "deliver", model: "gpt-6-astra", effort: "medium", r52: r52Readiness() }), { state: createEmptyState(), now: NOW });
   assert.equal(ready.response.ok, true, JSON.stringify(ready.response));
   assert.ok(ready.response.decision.binding.r52.digest);
-  assert.equal(handleRequest(request("resolve", { callerKind: "deliver" }), { state: createEmptyState(), now: NOW }).response.ok, true);
+  assert.equal(handleRequest(request("resolve", { callerKind: "deliver", model: "gpt-6-astra", effort: "medium" }), { state: createEmptyState(), now: NOW }).response.ok, true);
 });
 
 test("a strict budget meter is reserved and fails closed: no carrier attests enforcement", () => {
@@ -3103,7 +3196,7 @@ test("state paths fail closed for a selected missing policy and the paired fast-
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
-  const measured = measureFastPath(request("resolve"), { iterations: 9, now: NOW });
+  const measured = measureFastPath(request("resolve", { model: "gpt-6-astra", effort: "medium" }), { iterations: 9, now: NOW });
   assert.equal(measured.ok, true, JSON.stringify(measured));
   assert.equal(measured.receipt.paired.baseline.toolCalls, 0);
   assert.equal(measured.receipt.paired.routed.stateWrites, 0);
@@ -3245,8 +3338,8 @@ test("build-work-contract reaches the same closed builder through the command di
     authorizationDigest: "e".repeat(64),
     acceptanceDigest: "f".repeat(64),
     stopDigest: "1".repeat(64),
-    carrierId: "codex-sol",
-    model: "gpt-5.6-sol",
+    carrierId: "codex-6-sol",
+    model: "gpt-6-sol",
     effort: "high",
   };
   const built = handleRequest(request("build-work-contract", { workContract }), { now: NOW });
@@ -3277,12 +3370,12 @@ test("a tampered authority or lease record refuses the whole state document", ()
   const admission = admit(policy, state, { hostScope: "tamper-child", accountScope: "local", scopes: { task: "tamper-task" } });
   const authority = mintAuthority(policy, state, {
     authorityId: "tamper-authority", objectiveEpoch: "tamper-epoch", objectiveDigest: DIGEST_A, senderOwner: "tamper-owner", accountScope: "local",
-    carrierId: "codex-luna", adapterId: "codex-task-create", policyDigest: policyDigest(policy), destinationScope: "local", destinationClass: "visible_task",
+    carrierId: "codex-astra", adapterId: "codex-task-create", policyDigest: policyDigest(policy), destinationScope: "local", destinationClass: "visible_task",
     maxTaskCount: 1, currentTurn: "tamper-turn", expiresAt: "2026-08-05T12:00:00.000Z", explicitUserInstructionDigest: DIGEST_A,
   });
   const lease = {
     leaseId: "tamper-lease", issuerScope: "tamper-allocator", allocatorScopes: { project: "project-one" }, destinationScope: "tamper-child", destinationAccountScope: "local",
-    epochId: "tamper-epoch-id", expiresAt: "2026-08-05T12:00:00.000Z", carrierId: "codex-luna", adapterId: "native-subagent-create",
+    epochId: "tamper-epoch-id", expiresAt: "2026-08-05T12:00:00.000Z", carrierId: "codex-astra", adapterId: "native-subagent-create",
     ceiling: { marginalUsd: "2" }, maxSlots: 2, allocatorReceiptDigest: DIGEST_B,
   };
   assert.equal(handleRequest(request("issue-lease", { lease }), { catalog: policy, state, now: NOW }).response.reason, "lease_issued");
@@ -3311,8 +3404,8 @@ test("a tampered authority or lease record refuses the whole state document", ()
     ["accepted", "yes"],
     ["maxSlots", 0],
     ["slotsClaimed", 3],
-    ["carrierVersion", "v9"],
-    ["adapterVersion", "v9"],
+    ["carrierVersion", "invalid version"],
+    ["adapterVersion", "invalid version"],
     ["remainingCeiling", { marginalUsd: "5" }],
     ["expiresAt", "2026-08-03T12:00:00.000Z"],
   ]) {
@@ -3367,34 +3460,6 @@ test("a mutating command that refuses leaves the caller's state exactly as it fo
   assert.equal(Object.keys(state.spendAggregates).length, 2);
 });
 
-test("a Terra runtime attestation is accepted at every effort the carrier declares, and only those", () => {
-  const attestation = (effort) => () => ({
-    attestorId: "railyard-runtime-attestor-v1",
-    attestationDigest: DIGEST_A,
-    lunaAvailability: "unavailable",
-    hostScope: "local",
-    accountScope: "codex-sub",
-    terra: { verified: true, model: "gpt-5.6-terra", effort },
-  });
-  const request = { hostScope: "local" };
-  const provider = { account: "codex-sub" };
-
-  // Positive control across the whole declared range - this previously accepted
-  // "max" alone, so every other effort silently produced a null decision.
-  const declared = CARRIER_DESCRIPTORS["codex-terra-runtime"].efforts;
-  assert.ok(declared.length > 1, `terra should declare a range, got ${JSON.stringify(declared)}`);
-  for (const effort of declared) {
-    const decision = fixedRuntimeDecision(attestation(effort), request, provider);
-    assert.ok(decision, `terra attestation at ${effort} should be accepted`);
-    assert.equal(decision.terra.effort, effort);
-    assert.equal(decision.provenance, "measured_fact");
-  }
-
-  // Negative: an effort the carrier does not declare is still refused outright.
-  for (const effort of ["bogus", "", "MAX"]) {
-    assert.equal(fixedRuntimeDecision(attestation(effort), request, provider), null, `terra attestation at ${JSON.stringify(effort)} must be refused`);
-  }
-});
 
 // review.cross_family exists to leave the family: a Codex-side CE review asks a
 // CLAUDE model for the independent opinion. Fable is that reviewer. Daybreak is
@@ -3518,15 +3583,15 @@ test("a cross-family review substitutes only on an actual refusal, never on unav
 test("cost ranks within a meter and is not a discriminator across meters", () => {
   const policy = catalog({
     extraProviders: {
-      codex_b: { carrierId: "codex-sol", executionSurface: "codex", account: "local", locality: "external", retention: "provider_default" },
+      codex_b: { carrierId: "codex-6-sol", executionSurface: "codex", account: "local", locality: "external", retention: "provider_default" },
       // Same carrier as `luna` (so it is genuinely eligible - no attestation
       // gate to reject it for an unrelated reason) but a DIFFERENT meter.
-      codex_other: { carrierId: "codex-luna", executionSurface: "codex", account: "other-meter", locality: "external", retention: "provider_default" },
+      codex_other: { carrierId: "codex-astra", executionSurface: "codex", account: "other-meter", locality: "external", retention: "provider_default" },
     },
     extraModels: {
       // Same meter as `luna` (account "local"), and far more expensive.
-      pricey: { provider: "codex_b", carrierId: "codex-sol", requestedModel: "gpt-5.6-sol", efforts: ["max"], roles: ["implementation"], relativeCostIndex: 900 },
-      cheap_other: { provider: "codex_other", carrierId: "codex-luna", requestedModel: "gpt-5.6-luna", efforts: ["max"], roles: ["implementation.mechanical"], relativeCostIndex: 1 },
+      pricey: { provider: "codex_b", carrierId: "codex-6-sol", requestedModel: "gpt-6-sol", efforts: ["max"], roles: ["implementation"], relativeCostIndex: 900 },
+      cheap_other: { provider: "codex_other", carrierId: "codex-astra", requestedModel: "gpt-6-astra", efforts: ["max"], roles: ["implementation.mechanical"], relativeCostIndex: 1 },
     },
     extraRoles: {
       // Deliberately lists the expensive model FIRST, so a pass is cost
@@ -3554,4 +3619,458 @@ test("cost ranks within a meter and is not a discriminator across meters", () =>
     "luna",
     "across meters cost decides nothing: list position governs, so the first entry wins despite the far lower index",
   );
+});
+
+
+test("historical retired route state stays readable and authentic receipts settle original accounting", () => {
+  for (const retiredAdapter of [false, true]) {
+    const policy = catalog({});
+    const state = attestedCapability(policy, { carrierId: "codex-astra", adapterId: "native-subagent-create", accountScope: "local", observedModel: "gpt-6-astra" });
+    const admission = admit(policy, state);
+    const claimed = claim(policy, state, admission);
+    const reservation = state.reservations[admission.reservation.reservationId];
+    reservation.selected.carrierId = "codex-sol";
+    reservation.selected.model = "gpt-5.6-sol";
+    reservation.policyDigest = "builtin-model-routing-v2";
+    reservation.decision.policyDigest = reservation.policyDigest;
+    reservation.decision.selected = structuredClone(reservation.selected);
+    state.capabilities.capability_one.carrierId = "codex-sol";
+    state.capabilities.capability_one.observedModel = "gpt-5.6-sol";
+    state.capabilities.capability_one.resolvedModelDigest = stableDigest("gpt-5.6-sol");
+    if (retiredAdapter) {
+      reservation.binding.adapterId = "configured-profile-task-create";
+      reservation.selected.adapterId = reservation.binding.adapterId;
+      reservation.decision.selected.adapterId = reservation.binding.adapterId;
+      reservation.decision.binding.adapterId = reservation.binding.adapterId;
+    }
+    const before = structuredClone(reservation.selected);
+    assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "routing-history-"));
+    try {
+      const statePath = path.join(directory, "state.json");
+      fs.writeFileSync(statePath, JSON.stringify(state), { mode: 0o600 });
+      const loaded = loadStateForCli({ state: { path: statePath }, config: { path: path.join(directory, "catalog.json") } });
+      assert.equal(loaded.ok, true, JSON.stringify(loaded));
+      assert.deepEqual(loaded.state, state);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+    const malformed = structuredClone(state);
+    malformed.reservations[reservation.reservationId].forecast.marginalUsd = "invalid";
+    assert.equal(validateState(malformed).ok, false, "historical identity does not bypass accounting validation");
+    assert.equal(validSelected(reservation.selected), false, "stored retired selections do not validate as live routes");
+    const receipt = baseReceipt(reservation, claimed.identity);
+    const wrongDestination = { ...receipt, sessionId: "another-task" };
+    const refused = handleRequest(request("reconcile", { reservationId: reservation.reservationId, frozenInputDigest: reservation.frozenInputDigest, receipt: wrongDestination }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(wrongDestination) });
+    assert.equal(refused.response.reason, "receipt_dispatch_identity_mismatch");
+    const settled = handleRequest(request("reconcile", { reservationId: reservation.reservationId, frozenInputDigest: reservation.frozenInputDigest, receipt }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(receipt) });
+    assert.equal(settled.response.ok, true, JSON.stringify(settled.response));
+    assert.equal(state.reservations[reservation.reservationId].phase, "settled");
+    assert.deepEqual(state.reservations[reservation.reservationId].selected, before, "settlement never relabels old execution");
+    assert.equal(state.spendAggregates[scopeAccountingId(reservation.scope)].marginalUsd.hardAccounted, "1");
+    assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+    const replayed = handleRequest(request("reconcile", { reservationId: reservation.reservationId, frozenInputDigest: reservation.frozenInputDigest, receipt }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(receipt) });
+    assert.equal(replayed.response.reason, "reconciliation_replayed");
+    assert.equal(state.spendAggregates[scopeAccountingId(reservation.scope)].marginalUsd.hardAccounted, "1");
+  }
+});
+
+for (const historicalPolicy of ["builtin-model-routing-v1", "builtin-model-routing-gpt6-sol-v2"]) {
+  test(`stale continuation re-selection from ${historicalPolicy} uses current rules and preserves the authenticated destination`, () => {
+    const policy = catalog({ budgets: { task: { marginalUsd: { hardAdmission: "5" } } } });
+    const state = createEmptyState();
+    const authority = {
+      authorityId: "authority-msg", objectiveEpoch: "epoch-msg", objectiveDigest: DIGEST_A, senderOwner: "owner-msg", accountScope: "local", carrierId: "codex-astra", adapterId: "codex-task-create", policyDigest: policyDigest(policy),
+      destinationScope: "host-msg", destinationClass: "visible_task", maxTaskCount: 1, currentTurn: "turn-msg", expiresAt: "2026-08-05T12:00:00.000Z", explicitUserInstructionDigest: DIGEST_B,
+    };
+    mintAuthority(policy, state, authority);
+    const admission = admit(policy, state, { adapterId: "codex-task-create", dispatchKind: "task_create", scopes: { task: "message-task" }, taskAuthorityId: authority.authorityId, objectiveEpoch: authority.objectiveEpoch, objectiveDigest: authority.objectiveDigest, instructionDigest: authority.explicitUserInstructionDigest, senderOwner: authority.senderOwner, destinationScope: "host-msg", destinationClass: "visible_task", currentTurn: "turn-msg" });
+    const created = claim(policy, state, admission, { identity: dispatchIdentity("codex-task-create", { hostScope: "host-msg", sessionId: "task-msg" }), fields: { taskAuthorityId: authority.authorityId } });
+    const priorRoute = {
+      reservationId: admission.reservation.reservationId,
+      claimId: created.response.claimId,
+      carrierId: "codex-astra",
+      model: "gpt-6-astra",
+      effort: "max",
+      adapterId: "codex-task-create",
+      adapterVersion: "v1",
+      policyDigest: policyDigest(policy),
+      hostScope: "host-msg",
+      accountScope: "local",
+      sessionId: "task-msg",
+      toolId: "codex-task",
+      toolVersion: "v1",
+      workClassDigest: admission.reservation.workClassDigest,
+    };
+    const historical = state.reservations[admission.reservation.reservationId];
+    historical.policyDigest = historicalPolicy;
+    historical.decision.policyDigest = historicalPolicy;
+    priorRoute.policyDigest = historicalPolicy;
+    const unchangedState = structuredClone(state);
+    const unchanged = handleRequest(request("resolve", {
+      adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "message-unchanged", priorRoute,
+      priorWorkClassDigest: historical.workClassDigest,
+      dispatchIdentity: dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }),
+    }), { catalog: policy, state, now: NOW });
+    assert.equal(unchanged.response.reason, "route_reevaluation_required", JSON.stringify(unchanged.response));
+    assert.deepEqual(state, unchangedState, "read-only resolution cannot refresh a historical policy binding");
+    policy.models.luna.efforts = ["high", "max"];
+    const effortOnly = handleRequest(request("resolve", {
+      adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "message-effort-only", priorRoute,
+      effort: "high", priorWorkClassDigest: historical.workClassDigest,
+      dispatchIdentity: dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }),
+    }), { catalog: policy, state, now: NOW });
+    assert.equal(effortOnly.response.reason, "route_reevaluation_required", JSON.stringify(effortOnly.response));
+    assert.deepEqual(state, unchangedState, "read-only effort changes cannot mutate historical state");
+    historical.selected.carrierId = "retired-native-carrier";
+    historical.selected.model = "retired-native-model";
+    historical.decision.selected = structuredClone(historical.selected);
+    historical.policyDigest = historicalPolicy;
+    historical.decision.policyDigest = historical.policyDigest;
+    Object.assign(priorRoute, { carrierId: historical.selected.carrierId, model: historical.selected.model, policyDigest: historical.policyDigest });
+    assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+    policy.providers.sol = { carrierId: "codex-6-sol", executionSurface: "codex", account: "local", locality: "external", retention: "provider_default" };
+    policy.models.sol = { provider: "sol", carrierId: "codex-6-sol", requestedModel: "gpt-6-sol", effort: "high", efforts: ["high", "max"], roles: ["implementation"], relativeCostIndex: 10 };
+    policy.roles.implementation.tiers[0].models = ["sol"];
+    const neutral = handleRequest(request("resolve", {
+      adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "message-neutral", priorRoute,
+      priorWorkClassDigest: admission.reservation.workClassDigest,
+      dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }) },
+    }), { catalog: policy, state, now: NOW });
+    assert.equal(neutral.response.reason, "route_reevaluation_required", JSON.stringify(neutral.response));
+    assert.equal(historical.currentRoute, undefined, "read-only resolution does not apply a new allocation");
+    assert.equal(historical.selected.model, "retired-native-model");
+    const tampered = handleRequest(request("resolve", {
+      adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "tampered-policy", priorRoute: { ...priorRoute, policyDigest: DIGEST_B },
+      priorWorkClassDigest: historical.workClassDigest,
+      dispatchIdentity: dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }),
+    }), { catalog: policy, state, now: NOW });
+    assert.equal(tampered.response.reason, "prior_route_binding_mismatch");
+    const crossedDestination = handleRequest(request("resolve", {
+      adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "message-crossed", priorRoute,
+      priorWorkClassDigest: admission.reservation.workClassDigest,
+      dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "wrong-session" }) },
+    }), { catalog: policy, state, now: NOW });
+    assert.equal(crossedDestination.response.reason, "prior_destination_identity_mismatch");
+    const adjustment = handleRequest(request("admit", {
+      adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "adjust_active", requestId: "message-adjust", activeReservationId: admission.reservation.reservationId,
+      frozenInputDigest: DIGEST_A, forecast: { marginalUsd: "1" }, scopes: { task: "message-task" }, priorRoute,
+      priorWorkClassDigest: admission.reservation.workClassDigest,
+      dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }) },
+    }), { catalog: policy, state, now: NOW });
+    assert.equal(adjustment.response.reason, "active_budget_adjusted", JSON.stringify(adjustment.response));
+    assert.equal(adjustment.response.decision.selected.model, "gpt-6-sol");
+    assert.equal(historical.selected.model, "retired-native-model");
+    assert.equal(state.reservations[historical.reservationId].routeLearningEligible, false);
+    assert.equal(historical.policyDigest, historicalPolicy);
+    const recoveredStatus = handleRequest(request("status"), { catalog: policy, state: JSON.parse(JSON.stringify(state)), now: NOW });
+    const recoveredRoute = recoveredStatus.response.reservations.find((record) => record.reservationId === historical.reservationId);
+    assert.equal(recoveredRoute.selected.model, "retired-native-model");
+    assert.equal(recoveredRoute.effectiveRoute.selected.model, "gpt-6-sol");
+    assert.equal(recoveredRoute.effectiveRoute.policyDigest, policyDigest(policy));
+    const currentPriorRoute = {
+      ...priorRoute,
+      carrierId: recoveredRoute.effectiveRoute.selected.carrierId,
+      model: recoveredRoute.effectiveRoute.selected.model,
+      effort: recoveredRoute.effectiveRoute.selected.effort,
+      policyDigest: recoveredRoute.effectiveRoute.policyDigest,
+    };
+    const raised = handleRequest(request("admit", {
+      adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "adjust_active", requestId: "message-adjust-again", activeReservationId: historical.reservationId,
+      model: "gpt-6-sol", effort: "max", frozenInputDigest: DIGEST_A,
+      forecast: { marginalUsd: "1" }, scopes: { task: "message-task" }, priorRoute: currentPriorRoute,
+      priorWorkClassDigest: historical.workClassDigest,
+      dispatchIdentity: dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }),
+    }), { catalog: policy, state, now: NOW });
+    assert.equal(raised.response.reason, "active_budget_adjusted", JSON.stringify(raised.response));
+    assert.equal(raised.response.decision.selected.effort, "max");
+    assert.equal(state.reservations[historical.reservationId].currentRoute.selected.effort, "max");
+    assert.equal(state.reservations[historical.reservationId].selected.model, "retired-native-model");
+    assert.equal(state.reservations[historical.reservationId].policyDigest, historicalPolicy);
+    assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+  });
+}
+
+test("an already claimed dispatch replays its exact identity after policy rotation", () => {
+  const policy = catalog();
+  const state = createEmptyState();
+  const admission = admit(policy, state);
+  const identity = dispatchIdentity("native-subagent-create");
+  const claimInput = request("claim-dispatch", {
+    reservationId: admission.reservation.reservationId,
+    frozenInputDigest: DIGEST_A,
+    dispatchIdentity: identity,
+  });
+  const first = handleRequest(claimInput, { catalog: policy, state, now: NOW });
+  assert.equal(first.response.reason, "dispatch_claimed", JSON.stringify(first.response));
+  policy.providers.codex.locality = "same_region";
+  const before = structuredClone(state);
+  const replay = handleRequest(claimInput, { catalog: policy, state, now: NOW });
+  assert.equal(replay.response.reason, "claim_replayed", JSON.stringify(replay.response));
+  assert.equal(replay.response.claimId, first.response.claimId);
+  assert.equal(replay.changed, false);
+  assert.deepEqual(state, before);
+  const wrongIdentity = handleRequest({ ...claimInput, dispatchIdentity: { ...identity, sessionId: "another-session" } }, { catalog: policy, state, now: NOW });
+  assert.equal(wrongIdentity.response.reason, "dispatch_identity_mismatch");
+  assert.deepEqual(state, before);
+});
+
+test("invalidating stale undispatched routes releases tight budgets atomically and replays safely", () => {
+  const policy = catalog({ budgets: { task: { marginalUsd: { hardAdmission: "1" } } } });
+  for (const change of ["policy", "model", "carrier", "version"]) {
+    const state = createEmptyState();
+    const admission = admit(policy, state);
+    const reservation = state.reservations[admission.reservation.reservationId];
+    if (change === "policy") {
+      reservation.policyDigest = "builtin-model-routing-v1";
+      reservation.decision.policyDigest = reservation.policyDigest;
+    } else if (change === "carrier") {
+      reservation.selected.carrierId = "retired-native-carrier";
+      reservation.decision.selected.carrierId = reservation.selected.carrierId;
+    } else if (change === "version") {
+      reservation.selected.carrierVersion = "v0";
+      reservation.decision.selected.carrierVersion = "v0";
+      reservation.binding.adapterVersion = "v0";
+      reservation.selected.adapterVersion = "v0";
+      reservation.decision.binding.adapterVersion = "v0";
+      reservation.decision.selected.adapterVersion = "v0";
+    } else {
+      reservation.selected.model = "retired-native-model";
+      reservation.decision.selected.model = reservation.selected.model;
+    }
+    const nextInput = request("admit", {
+      requestId: "current-admission", frozenInputDigest: DIGEST_A,
+      forecast: { marginalUsd: "1" }, scopes: { task: "task-one", run: "run-one", project: "project-one" },
+    });
+    assert.equal(handleRequest(nextInput, { catalog: policy, state, now: NOW }).response.ok, false);
+    const claimInput = request("claim-dispatch", {
+      reservationId: reservation.reservationId,
+      frozenInputDigest: reservation.frozenInputDigest,
+      dispatchIdentity: { ...dispatchIdentity(reservation.binding.adapterId), ...(change === "version" ? { toolVersion: "v0", toolId: "retired-native-producer" } : {}) },
+    });
+    const before = structuredClone(state);
+    const wrongDestination = handleRequest({ ...claimInput, dispatchIdentity: { ...claimInput.dispatchIdentity, hostScope: "unrelated-host" } }, { catalog: policy, state, now: NOW });
+    assert.equal(wrongDestination.response.reason, "dispatch_identity_mismatch");
+    assert.deepEqual(state, before);
+    assert.equal(handleRequest({ ...claimInput, frozenInputDigest: DIGEST_B }, { catalog: policy, state, now: NOW }).response.reason, "claim_input_mismatch");
+    assert.deepEqual(state, before);
+    const result = handleRequest(claimInput, { catalog: policy, state, now: NOW });
+    assert.equal(result.response.ok, false);
+    assert.equal(result.response.reason, "route_reevaluation_required", JSON.stringify(result.response));
+    assert.equal(result.changed, true);
+    const invalidated = state.reservations[reservation.reservationId];
+    assert.equal(invalidated.phase, "invalidated");
+    assert.equal(invalidated.claimId, null);
+    assert.equal(invalidated.claimed, undefined);
+    assert.deepEqual(invalidated.selected, reservation.selected);
+    assert.deepEqual(invalidated.decision, reservation.decision);
+    assert.deepEqual(invalidated.forecast, { marginalUsd: "1" });
+    const after = structuredClone(state);
+    const replay = handleRequest(claimInput, { catalog: policy, state, now: NOW });
+    assert.equal(replay.response.reason, "route_reevaluation_required");
+    assert.equal(replay.changed, false);
+    assert.deepEqual(state, after);
+    const oldAdmissionReplay = handleRequest({ ...nextInput, requestId: "admit-one" }, { catalog: policy, state, now: NOW });
+    assert.equal(oldAdmissionReplay.response.reason, "route_reevaluation_required");
+    const fresh = handleRequest(nextInput, { catalog: policy, state, now: NOW });
+    assert.equal(fresh.response.reason, "admitted", JSON.stringify(fresh.response));
+    assert.equal(fresh.response.decision.selected.model, "gpt-6-astra");
+    assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+  }
+});
+
+
+test("stored descriptor versions survive catalog upgrades while live selections stay strict", () => {
+  const policy = catalog({});
+  const state = attestedCapability(policy, { carrierId: "codex-astra", adapterId: "native-subagent-create", accountScope: "local", observedModel: "gpt-6-astra" });
+  const admission = admit(policy, state);
+  const reservation = state.reservations[admission.reservation.reservationId];
+  reservation.selected.carrierVersion = "v0";
+  reservation.selected.adapterVersion = "v0";
+  reservation.binding.adapterVersion = "v0";
+  reservation.binding.controls = { oldModelControl: "carrier-owned" };
+  reservation.decision.selected = structuredClone(reservation.selected);
+  reservation.decision.binding = structuredClone(reservation.binding);
+  for (const capability of Object.values(state.capabilities)) {
+    capability.carrierVersion = "v0";
+    capability.adapterVersion = "v0";
+  }
+  assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+  assert.equal(validSelected(reservation.selected), false);
+  assert.equal(validBinding(reservation.binding), false);
+  for (const historicalPolicy of ["builtin-model-routing-v2", "builtin-model-routing-gpt6-sol-v2"]) {
+    const historical = structuredClone(state);
+    const historicalReservation = historical.reservations[reservation.reservationId];
+    historicalReservation.policyDigest = historicalPolicy;
+    historicalReservation.decision.policyDigest = historicalPolicy;
+    assert.equal(validateState(historical).ok, true, historicalPolicy);
+  }
+  for (const malformedPolicy of ["builtin-model-routing-arbitrary", "builtin-model-routing--sol-v2", "builtin-model-routing-Sol-v2", "builtin-model-routing-sol-v0", "builtin-model-routing-sol-v2-extra"]) {
+    const badPolicy = structuredClone(state);
+    const badReservation = badPolicy.reservations[reservation.reservationId];
+    badReservation.policyDigest = malformedPolicy;
+    badReservation.decision.policyDigest = malformedPolicy;
+    assert.equal(validateState(badPolicy).ok, false, malformedPolicy);
+  }
+});
+
+
+test("authentic old-version adapter receipts settle immutable dispatch evidence", () => {
+  const policy = catalog({});
+  const state = attestedCapability(policy, { carrierId: "codex-astra", adapterId: "native-subagent-create", accountScope: "local", observedModel: "gpt-6-astra" });
+  const admission = admit(policy, state);
+  const claimed = claim(policy, state, admission);
+  const reservation = state.reservations[admission.reservation.reservationId];
+  reservation.selected.carrierVersion = "v0";
+  reservation.selected.adapterVersion = "v0";
+  reservation.binding.adapterVersion = "v0";
+  reservation.claimed.toolVersion = "v0";
+  reservation.decision.selected = structuredClone(reservation.selected);
+  reservation.decision.binding = structuredClone(reservation.binding);
+  const original = structuredClone(reservation);
+  const receipt = baseReceipt(reservation, { ...claimed.identity, toolVersion: "v0" }, { adapterVersion: "v0" });
+  const forged = { ...receipt, adapterVersion: "v1", toolVersion: "v1" };
+  const rejected = handleRequest(request("reconcile", { reservationId: reservation.reservationId, frozenInputDigest: reservation.frozenInputDigest, receipt: forged }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(forged) });
+  assert.equal(rejected.response.reason, "receipt_dispatch_identity_mismatch");
+  const reconciled = handleRequest(request("reconcile", { reservationId: reservation.reservationId, frozenInputDigest: reservation.frozenInputDigest, receipt }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(receipt) });
+  assert.equal(reconciled.response.ok, true, JSON.stringify(reconciled.response));
+  const settled = state.reservations[reservation.reservationId];
+  assert.equal(settled.phase, "settled");
+  assert.deepEqual(settled.selected, original.selected);
+  assert.deepEqual(settled.binding, original.binding);
+  assert.deepEqual(settled.claimed, original.claimed);
+  assert.equal(state.spendAggregates[scopeAccountingId(reservation.scope)].marginalUsd.hardAccounted, "1");
+  assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+});
+
+test("CLI persists stale claim invalidation despite refusing dispatch and releases the budget", () => {
+  const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "routing-invalidation-")));
+  try {
+    const policy = catalog({ budgets: { task: { marginalUsd: { hardAdmission: "1" } } } });
+    const state = createEmptyState();
+    const admission = admit(policy, state);
+    const reservation = state.reservations[admission.reservation.reservationId];
+    reservation.policyDigest = "builtin-model-routing-v1";
+    reservation.decision.policyDigest = reservation.policyDigest;
+    const statePath = path.join(directory, "state.json");
+    const policyPath = path.join(directory, "policy.json");
+    fs.writeFileSync(statePath, JSON.stringify(state), { mode: 0o600 });
+    fs.writeFileSync(policyPath, JSON.stringify(policy), { mode: 0o600 });
+    const options = { trustedEmbedding: true, now: NOW, home: directory, env: { RAILYARD_MODEL_STATE_PATH: statePath, RAILYARD_MODEL_POLICY_PATH: policyPath } };
+    const refused = runCli(request("claim-dispatch", {
+      reservationId: reservation.reservationId,
+      frozenInputDigest: reservation.frozenInputDigest,
+      dispatchIdentity: dispatchIdentity(reservation.binding.adapterId),
+    }), options);
+    assert.equal(refused.ok, false);
+    assert.equal(refused.reason, "route_reevaluation_required", JSON.stringify(refused));
+    const persisted = JSON.parse(fs.readFileSync(statePath, "utf8"));
+    assert.equal(persisted.reservations[reservation.reservationId].phase, "invalidated");
+    assert.equal(persisted.reservations[reservation.reservationId].claimId, null);
+    const fresh = runCli(request("admit", {
+      requestId: "current-cli-admission", frozenInputDigest: DIGEST_A,
+      forecast: { marginalUsd: "1" }, scopes: { task: "task-one", run: "run-one", project: "project-one" },
+    }), options);
+    assert.equal(fresh.reason, "admitted", JSON.stringify(fresh));
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("leased stale claims persist invalidation and release only safe stale lease capacity", () => {
+  for (const scenario of ["current-lease", "stale-empty-lease", "stale-active-lease", "stale-empty-ceiling", "stale-empty-expired", "stale-empty-slots", "stale-empty-released"]) {
+    const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "routing-slot-invalidation-")));
+    try {
+      const policy = catalog({ budgets: { task: { marginalUsd: { hardAdmission: "1" } }, project: { marginalUsd: { hardAdmission: "2" } } } });
+      const state = createEmptyState();
+      const admission = admit(policy, state, { hostScope: "child-one", scopes: { task: "child-task" } });
+      const lease = {
+        leaseId: "slot-lease", issuerScope: "allocator-one", allocatorScopes: { project: "allocator-project" }, destinationScope: "child-one", destinationAccountScope: "local", epochId: "slot-epoch", expiresAt: "2026-08-05T12:00:00.000Z",
+        carrierId: "codex-astra", adapterId: "native-subagent-create", ceiling: { marginalUsd: "2" }, maxSlots: 2, allocatorReceiptDigest: DIGEST_B,
+      };
+      const reference = { leaseId: lease.leaseId, destinationScope: "child-one", destinationAccountScope: "local" };
+      assert.equal(handleRequest(request("issue-lease", { lease }), { catalog: policy, state, now: NOW }).response.reason, "lease_issued");
+      assert.equal(handleRequest(request("accept-lease", { lease: reference }), { catalog: policy, state, now: NOW }).response.reason, "lease_accepted");
+      if (scenario === "stale-active-lease") {
+        const active = admit(policy, state, { requestId: "other-active-work", hostScope: "child-one", scopes: { task: "other-task" } });
+        assert.equal(handleRequest(request("claim-slot", {
+          reservationId: active.reservation.reservationId, frozenInputDigest: DIGEST_A, lease: reference,
+          dispatchIdentity: dispatchIdentity("native-subagent-create", { hostScope: "child-one", sessionId: "other-session" }),
+        }), { catalog: policy, state, now: NOW }).response.reason, "delegated_slot_claimed");
+      }
+      const storedLease = state.leases[lease.leaseId];
+      if (scenario === "stale-empty-ceiling") storedLease.remainingCeiling.marginalUsd = "0";
+      if (scenario === "stale-empty-expired") {
+        storedLease.issuedAt = new Date(NOW - 2000).toISOString();
+        storedLease.expiresAt = new Date(NOW - 1000).toISOString();
+      }
+      if (scenario === "stale-empty-slots") storedLease.slotsClaimed = storedLease.maxSlots;
+      if (scenario === "stale-empty-released") {
+        storedLease.released = true;
+        storedLease.releasedAt = new Date(NOW).toISOString();
+        storedLease.remainingCeiling.marginalUsd = "0";
+      }
+      if (["stale-empty-ceiling", "stale-empty-expired", "stale-empty-slots", "stale-empty-released"].includes(scenario)) {
+        const beforeRejectedClaim = structuredClone(state);
+        const currentRefusal = handleRequest(request("claim-slot", {
+          reservationId: admission.reservation.reservationId, frozenInputDigest: DIGEST_A, lease: reference,
+          dispatchIdentity: dispatchIdentity("native-subagent-create", { hostScope: "child-one" }),
+        }), { catalog: policy, state, now: NOW });
+        assert.equal(currentRefusal.response.reason, scenario === "stale-empty-ceiling" ? "lease_ceiling_exceeded" : "lease_unavailable");
+        assert.deepEqual(state, beforeRejectedClaim, "current-route refusal must roll back its provisional claim");
+      }
+      const beforeLease = structuredClone(state.leases[lease.leaseId]);
+      const reservation = state.reservations[admission.reservation.reservationId];
+      if (scenario === "current-lease") {
+        reservation.selected.model = "retired-native-model";
+        reservation.decision.selected.model = reservation.selected.model;
+      } else policy.providers.codex.locality = "same_region";
+      const statePath = path.join(directory, "state.json");
+      const policyPath = path.join(directory, "policy.json");
+      fs.writeFileSync(statePath, JSON.stringify(state), { mode: 0o600 });
+      fs.writeFileSync(policyPath, JSON.stringify(policy), { mode: 0o600 });
+      const options = { trustedEmbedding: true, now: NOW, home: directory, env: { RAILYARD_MODEL_STATE_PATH: statePath, RAILYARD_MODEL_POLICY_PATH: policyPath } };
+      const refused = runCli(request("claim-slot", {
+        reservationId: reservation.reservationId, frozenInputDigest: DIGEST_A, lease: reference,
+        dispatchIdentity: dispatchIdentity("native-subagent-create", { hostScope: "child-one" }),
+      }), options);
+      assert.equal(refused.ok, false);
+      assert.equal(refused.reason, "route_reevaluation_required", JSON.stringify(refused));
+      const persisted = JSON.parse(fs.readFileSync(statePath, "utf8"));
+      assert.equal(persisted.reservations[reservation.reservationId].phase, "invalidated");
+      assert.equal(persisted.reservations[reservation.reservationId].claimId, null);
+      assert.deepEqual(persisted.reservations[reservation.reservationId].forecast, { marginalUsd: "1" });
+      assert.equal(persisted.leases[lease.leaseId].slotsClaimed, beforeLease.slotsClaimed);
+      assert.deepEqual(persisted.leases[lease.leaseId].allocations, beforeLease.allocations);
+      if (scenario.startsWith("stale-empty-")) {
+        assert.equal(refused.leaseReleased, true);
+        assert.equal(persisted.leases[lease.leaseId].released, true);
+        assert.equal(persisted.leases[lease.leaseId].remainingCeiling.marginalUsd, "0");
+        assert.equal(runCli(request("issue-lease", { lease: { ...lease, leaseId: "current-slot-lease" } }), options).reason, "lease_issued");
+      } else {
+        assert.deepEqual(persisted.leases[lease.leaseId], beforeLease);
+        if (scenario === "stale-active-lease") {
+          assert.equal(refused.leaseReleaseRequired, true);
+          assert.equal(runCli(request("release-lease", { lease: reference }), options).reason, "lease_released");
+          assert.equal(runCli(request("issue-lease", { lease: { ...lease, leaseId: "current-slot-lease", ceiling: { marginalUsd: "1" } } }), options).reason, "lease_issued");
+          const released = JSON.parse(fs.readFileSync(statePath, "utf8"));
+          assert.deepEqual(released.leases[lease.leaseId].allocations, beforeLease.allocations);
+        }
+      }
+      const fresh = runCli(request("admit", {
+        requestId: "fresh-slot-admission", frozenInputDigest: DIGEST_A, hostScope: "child-one",
+        forecast: { marginalUsd: "1" }, scopes: { task: "child-task" },
+      }), options);
+      assert.equal(fresh.reason, "admitted", JSON.stringify(fresh));
+      if (scenario === "current-lease") {
+        const claimedFresh = runCli(request("claim-slot", {
+          reservationId: fresh.reservation.reservationId, frozenInputDigest: DIGEST_A, lease: reference,
+          dispatchIdentity: dispatchIdentity("native-subagent-create", { hostScope: "child-one" }),
+        }), options);
+        assert.equal(claimedFresh.reason, "delegated_slot_claimed", JSON.stringify(claimedFresh));
+      }
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  }
 });

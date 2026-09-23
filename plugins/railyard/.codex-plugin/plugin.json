@@ -1,6 +1,6 @@
 {
   "name": "railyard",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "Lean automatic workflow selection, deliberate model and reasoning effort, native delegation, selected CE delivery, and explicit fleet orchestration.",
   "author": {
     "name": "Claire Novotny LLC",
@@ -14,7 +14,7 @@
   "interface": {
     "displayName": "Railyard",
     "shortDescription": "Deliberate model and effort, lean delivery, and fleet orchestration",
-    "longDescription": "Railyard supplies a concise startup routing charter and deterministic dispatch checks. Routine work runs natively; selected Compound Engineering workflows own planning, debugging, publishing, and PR follow-through. Model and reasoning effort are chosen together, with Astra Max as a baseline candidate for substantial engineering. Fleet/account placement, targeted review, Oracle, audit, and runtime cleanup remain available when explicitly needed.",
+    "longDescription": "Railyard supplies a concise startup routing charter and deterministic dispatch checks. Routine work runs natively; selected Compound Engineering workflows own planning, debugging, publishing, and PR follow-through. Model and reasoning effort are chosen together, with GPT-6 Sol at medium as the ordinary engineering candidate and Astra reserved for work needing stronger judgment. Fleet/account placement, targeted review, Oracle, audit, and runtime cleanup remain available when explicitly needed.",
     "developerName": "Claire Novotny LLC",
     "category": "Productivity",
     "capabilities": [

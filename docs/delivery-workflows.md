@@ -53,11 +53,12 @@ flowchart TD
 ## Choose model and effort together
 
 For each assignment, deliberately choose both the model and reasoning effort.
-Astra Max (`gpt-6-astra`, `max`) is the baseline candidate for substantive
-engineering. Deterministic tools handle mechanical operations directly.
-Another model or lower effort is appropriate when comparable completed work
-supports the tradeoff, a specialty calls for it, or the user prioritizes
-latency. Per-token prices alone do not establish cost per successful task.
+GPT-6 Sol at `medium` is the baseline candidate for ordinary Codex
+engineering. Raise effort to `high` for demanding work; use Astra when a
+specific task needs its added depth. Use GPT-6 Luna for bounded, repeatable
+work when the active dispatch surface supports it. Deterministic tools handle
+mechanical operations directly. Compare accepted assignments, including
+retries and repairs, before treating a lower token price as a lower task cost.
 
 Explicit inheritance is valid when the parent's model and effort suit the
 assignment. For a native full-history child, use the supported inheritance
@@ -143,9 +144,9 @@ data cannot create a callable adapter or a trust-domain bridge.
 
 Keep user configuration outside repositories and plugin caches. An explicit
 `RAILYARD_MODEL_POLICY_PATH` selects that catalog exactly; missing or invalid
-selected policy does not silently fall back. The configured fleet, Claude,
-GLM, and Oracle lanes remain advanced capabilities subject to current host
-evidence, not inferred live availability.
+selected policy does not silently fall back. The configured fleet, Claude, and Oracle lanes require current host evidence.
+GLM is unavailable as a strict route until a verified current selector and
+supported effort can be bound to a callable adapter.
 
 Use `audit` or a retrospective when requested or when a concrete lesson makes
 it worthwhile. Compare complete assignments, including children, retries,

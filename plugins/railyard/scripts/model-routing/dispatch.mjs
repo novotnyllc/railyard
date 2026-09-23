@@ -64,7 +64,6 @@ export function handleRequest(input, {
   trustedCapabilityAttestor,
   trustedReceiptImporter,
   trustedTaskAuthorityAttestor,
-  trustedRuntimeAttestor,
   trustedTransportAttestor,
   fixedReceiptProducers,
   controllerRuntime,
@@ -84,13 +83,14 @@ export function handleRequest(input, {
   // caller's state only once it answers ok.  A command that mutates and then
   // refuses (a burned authority on a rejected claim, a partially settled
   // reconcile) therefore leaves nothing behind, for embeddings as well as for
-  // runCli — which already discarded a refused write before it reached disk.
+  // runCli. The sole refusal that commits is authenticated invalidation of a
+  // never-dispatched stale reservation, which releases its budget atomically.
   const working = mutatesState ? structuredClone(state) : state;
 
   let response;
   if (command === "validate") response = result(true, "validated", { config: catalogValidation.policy, state: { digest: stateValidation.digest } });
-  else if (command === "resolve") response = resolveInternal(input, { catalog, state: working, now, trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers });
-  else if (command === "admit") response = admitInternal(input, { catalog, state: working, now, trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers, controllerRuntime, requireControllerRuntime });
+  else if (command === "resolve") response = resolveInternal(input, { catalog, state: working, now, trustedTransportAttestor, fixedReceiptProducers });
+  else if (command === "admit") response = admitInternal(input, { catalog, state: working, now, trustedTransportAttestor, fixedReceiptProducers, controllerRuntime, requireControllerRuntime });
   else if (command === "claim-dispatch") response = claimInternal(input, { catalog, state: working, now, controllerRuntime, requireControllerRuntime });
   else if (command === "mint-task-authority") response = mintTaskAuthorityInternal(input, { catalog, state: working, now, trustedTaskAuthorityAttestor, controllerRuntime, requireControllerRuntime });
   else if (command === "issue-lease") response = issueLeaseInternal(input, { catalog, state: working, now });
@@ -107,12 +107,15 @@ export function handleRequest(input, {
   else if (command === "refresh") response = refreshInternal(input, { catalog, state: working, now, trustedCapabilityAttestor });
   else if (command?.startsWith("learning.")) response = learningInternal(command, working);
   else response = error("unknown_command");
-  const changed = response.ok && response.stateChanged === true;
+  const invalidatedStaleReservation = ["claim-dispatch", "claim-slot"].includes(command)
+    && response.ok === false && response.reason === "route_reevaluation_required"
+    && response.stateChanged === true && response.reservation?.phase === "invalidated";
+  const changed = (response.ok || invalidatedStaleReservation) && response.stateChanged === true;
   if (changed) {
     const postMutation = validateState(working);
     if (!postMutation.ok) return { response: error("state_mutation_invalid", { field: postMutation.field }), state, changed: false };
   }
-  if (mutatesState && response.ok) commit(state, working);
+  if (mutatesState && (response.ok || invalidatedStaleReservation)) commit(state, working);
   if (Object.hasOwn(response, "stateChanged")) delete response.stateChanged;
   return { response, state, changed };
 }

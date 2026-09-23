@@ -9,7 +9,7 @@ const PRO_LABEL = /^(?:6\s*)?Pro$/i;
 
 function observedModelForLabel(label) {
   if (MODEL_LABELS.has(label)) return BROWSER_MODEL;
-  if (label === "GPT-5.6 Sol") return "gpt-5.6-sol";
+  if (label === "GPT-6 Sol") return "gpt-6-sol";
   if (/^GPT-5\.5(?:\b|\s)/i.test(label || "")) return "gpt-5.5";
   return "unknown";
 }

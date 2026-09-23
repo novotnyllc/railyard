@@ -117,13 +117,13 @@ test("configured Jev advice is advertised without exposing credentials or sendin
 test("startup requires deliberate allocation and explains native fork constraints", (t) => {
   const { out } = run(fixture(t));
   assert.match(out, /Choose model AND reasoning effort/);
-  assert.match(out, /Astra Max is the baseline candidate/);
-  assert.match(out, /substantive\n  Codex work/);
-  assert.match(out, /For Claude Code, consider Fable 5\.1 with a deliberately chosen\n  effort/);
+  assert.match(out, /GPT-6 Sol at medium effort is the ordinary Codex/);
+  assert.match(out, /baseline; raise effort or select Astra for a specific need/);
+  assert.match(out, /For Claude Code, consider Fable 5\.1 with a deliberately chosen effort/);
   assert.match(out, /Deliberate inheritance is valid/);
   assert.match(out, /omit model\/effort\n  overrides on full-history native forks/);
   assert.match(out, /Respect fixed-role tool controls/);
-  assert.match(out, /deterministic tools directly\n  for mechanical work/);
+  assert.match(out, /deterministic tools directly for mechanical work/);
   assert.doesNotMatch(out, /cheap-model child|worker tier by default|Every subagent.*explicit model/);
 });
 

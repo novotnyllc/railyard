@@ -35,7 +35,7 @@ The following is an illustrative inspection result, not a measured model compari
 ```text
 learning=enabled outcomes=37 aggregates=9
 work_class=implementation.mechanical samples=8
-route=codex-astra effort=max adjustment=-12%
+route=codex-6-sol effort=medium adjustment=-12%
 eligibility=unchanged privacy=unchanged budget_floor=unchanged
 ```
 

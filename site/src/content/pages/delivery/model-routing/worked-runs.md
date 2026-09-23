@@ -13,7 +13,7 @@ Consider a structured-logging migration with forty similar call sites and one su
 
 Use deterministic searches and transformations where the replacement is fully specified. Native agents can independently inspect the affected behavior and the flush seam while one owner integrates shared changes.
 
-For substantive agent work, consider Astra Max first and choose both model and reasoning effort deliberately. The mechanical-looking lane still needs judgment if log semantics differ across sites; the flush lane needs enough context to reason about cancellation and ordering. Neither the number of files nor a model's per-token rate establishes the best allocation.
+For substantive agent work, consider GPT-6 Sol at `medium` first and choose both model and reasoning effort deliberately. A bounded call-site lane may suit Luna, while the flush seam may justify Astra at `high` if its ordering behavior needs stronger judgment. Neither the number of files nor a model's per-token rate establishes the best allocation.
 
 | Work | Allocation decision | Acceptance evidence |
 | --- | --- | --- |

@@ -25,7 +25,7 @@ node "$RAILYARD_PLUGIN_ROOT/hooks/run-log.js" note \
 
 Model and effort choices should be evaluated against comparable accepted results. Include all subagents, retries, repairs, verification, elapsed time, and available usage data. A lower per-token rate or slower quota burn does not establish a lower cost per completed task.
 
-Astra Max is a baseline candidate for substantive engineering, not a claim of universal cost superiority. Missing or incomparable cost data should be reported explicitly.
+GPT-6 Sol at `medium` is the ordinary engineering candidate, not a claim of universal cost superiority. Astra and higher effort can fit harder work when the full accepted outcome supports them. Missing or incomparable cost data should be reported explicitly.
 
 ## Optional learning
 

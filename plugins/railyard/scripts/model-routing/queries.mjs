@@ -54,7 +54,13 @@ export function statusInternal(state, now, catalog = null) {
   }
   return result(true, "status", {
     readiness,
-    reservations: Object.values(state.reservations).map((record) => ({ reservationId: record.reservationId, phase: record.phase, scope: record.scope, selected: record.selected })),
+    reservations: Object.values(state.reservations).map((record) => ({
+      reservationId: record.reservationId,
+      phase: record.phase,
+      scope: record.scope,
+      selected: clone(record.selected),
+      effectiveRoute: clone(record.currentRoute || { selected: record.selected, policyDigest: record.policyDigest }),
+    })),
     spend: clone(state.spendAggregates),
     learning: { enabled: catalog?.learning?.enabled !== false && state.learningControl.disabled !== true, outcomes: Object.keys(state.learningOutcomes).length, aggregates: Object.keys(state.learningAggregates).length },
   });

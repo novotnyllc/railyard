@@ -4,13 +4,16 @@ Choose the model and reasoning effort together for each assignment. A skill
 cannot change the current session's model. It can guide a supported child
 selection or deliberately keep the parent's settings.
 
-Use **Astra at `max` as the baseline candidate for substantive engineering**.
-This is a starting hypothesis, not a claim that Max is always cheapest or
-best. Preserve an explicit user selection. Choose another supported model or
-effort when comparable completed work supports the tradeoff, the work needs a
-specialist, or the user prioritizes latency. Run deterministic tools directly
-for mechanical operations; do not create a model worker merely because its
-per-token rate looks lower.
+Use **GPT-6 Sol at `medium` as the baseline candidate for ordinary substantive
+engineering when the active execution surface exposes it**. Raise Sol to
+`high` when task complexity, ambiguity, or the verification burden warrants
+it. Use GPT-6 Luna at `low` or `medium` for bounded, repetitive work. Escalate
+to Astra only for clearly hard or high-risk work, or when accepted-outcome
+evidence shows Sol is insufficient. The native tool schema and routing source
+advertise Sol and Luna selectors; backend execution remains unverified until
+observed. Preserve an explicit user selection. Run deterministic tools directly for mechanical
+operations; do not create a model worker merely because its per-token rate
+looks lower. `max` is an explicit escalation, not an ordinary default.
 
 Judge cost and elapsed time through acceptance of the whole assignment,
 including child agents, unsuccessful attempts, repeated reads, retries, and
@@ -19,20 +22,41 @@ cost per accepted task. Higher effort can reduce wasted actions; it can also
 cost more on short work. Use existing outcomes and logs when available, without
 adding a benchmarking framework or mandatory artifacts to ordinary delivery.
 
-## Current Codex native controls
+## GPT-6 family and current Codex native controls
 
-The native `spawn_agent` tool exposed for this update (2026-09-14) advertises:
+OpenAI's API guidance describes `gpt-6-sol` as its demanding coding and
+agentic-work model and `gpt-6-luna` as its focused, high-volume model. Sol and
+Luna support `none`, `low`, `medium`, `high`, `xhigh`, and `max`; Astra does
+not support `none` and otherwise supports `low` through `max`. These published
+API capabilities do not prove that a particular native dispatch surface exposes
+the same selectors. Check the active schema before dispatch.
+
+OpenAI's published GPT-6 API rates are $2 input / $10 output per million
+tokens for Sol, and $0.10 input / $0.50 output for Luna. The release labels
+both as 50% lower than the prior promotional prices. Luna's published output
+change, $1.20 to $0.50, is actually 58.3% lower; an exact half would be $0.60.
+Record the published cells without treating that label as exact output-rate
+arithmetic. Sources: [GPT-6 Sol and Luna release](https://openai.com/index/introducing-gpt-6-sol-and-luna/),
+[model guidance](https://developers.openai.com/api/docs/guides/latest-model).
+
+Do not encode a broad GPT-5.5-over-Fable-5.1 rule. OpenAI's GPT-5.5 release
+does not compare against Fable 5.1. The later GPT-6 release reports targeted
+results: Sol at xhigh scores 33.2% on AutomationBench versus 31.4% for Fable
+5.1 with Opus 5 fallback, and says Sol matches Fable 5.1 xhigh on FrontierCode
+at lower cost. Those are vendor-reported, workload-specific comparisons, not a
+universal family ranking.
+
+The current routing policy permits these exposed native `spawn_agent` selectors:
 
 | Model selector | Supported reasoning efforts |
 | --- | --- |
+| `gpt-6-sol` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
+| `gpt-6-luna` | `low`, `medium`, `high`, `xhigh`, `max` |
 | `gpt-6-astra` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
 | `gpt-daybreak-blue-latest` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
-| `gpt-5.6-terra` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
-| `gpt-5.6-luna` | `low`, `medium`, `high`, `xhigh`, `max` |
-| `combo/grok-unified-4.6` | `low`, `medium`, `high`, `xhigh` |
 
-Recheck the active tool schema before dispatch: this is a dated capability
-snapshot, not an availability promise for every account, host, or harness.
+Recheck the active tool schema before dispatch: this is a capability snapshot,
+not an availability promise for every account, host, or harness.
 Daybreak is a candidate for relevant defensive security work when the active
 surface exposes it; it is not an automatic replacement for a user-selected
 model. Model names do not establish a universal implementation/review ranking.
@@ -50,14 +74,30 @@ constraints are part of allocation:
   `Allocation: inherit model and reasoning effort; <reason>.` in the brief.
   This records intent; it does not reveal otherwise unknown parent settings.
 
-A substantive bounded assignment can request Astra Max explicitly:
+If the local hook snapshot lags a model release, include
+`Allocation: model update override; <reason>.` in the brief with explicit
+`model` and `reasoning_effort` and compatible limited/no history. This bypasses
+only the hook's unknown-model or unsupported-effort snapshot checks. It does
+not enable retired routes, bypass history constraints, or verify backend
+support. The native tool schema and backend remain authoritative; report a
+rejected pair without silently substituting another allocation.
+
+A native follow-up exposes no effort field. When the next assignment warrants
+lower or higher effort, the current child can spawn a successor with the chosen
+pair and enough context; its parent can also make that handoff. Use no or
+limited history for an explicit new pair. Finish or interrupt the old child
+before giving the successor the same write scope. This changes the allocation
+for the continuing work without claiming that the original child changed its
+own effort.
+
+A deliberately selected Astra child for difficult investigation can use:
 
 ```json
 {
-  "task_name": "repair_importer",
-  "message": "Repair the importer retry bug in the assigned files, run the relevant checks, and return the result. Allocation: gpt-6-astra at max for substantive debugging. Include the concrete failure and file scope in this brief.",
+  "task_name": "investigate_importer",
+  "message": "Investigate the importer concurrency failure and return a causal explanation with focused verification. Allocation: gpt-6-astra at high; the failure spans multiple concurrency boundaries. Include the concrete failure and file scope in this brief.",
   "model": "gpt-6-astra",
-  "reasoning_effort": "max",
+  "reasoning_effort": "high",
   "fork_turns": "none"
 }
 ```
@@ -121,9 +161,20 @@ the request or deliberate inheritance and say actual values are unverified.
 No banner, extra acknowledgement, or separate audit artifact is required for
 ordinary native work.
 
-A follow-up message does not itself change a running agent's model or effort.
-Use a supported new dispatch or an explicitly exposed continuation control for
-a change, and disclose the changed selection. Do not invent a mid-task switch.
+Re-evaluate continuations under the current routing rules. Native subagent
+follow-up has no model or effort control, so a changed allocation requires a
+fresh dispatch. For an existing Codex task, use explicit `model` and `thinking`
+controls on `send_message_to_thread` when its current schema supports the
+resolved pair. See [continuation routing](model-routing.md#continuing-after-a-policy-change)
+for saved-route authentication and stale-claim handling.
+
+In a standard, single-agent GPT-6 Responses API conversation, append a
+`configuration_update` input item before the next user message to change
+reasoning effort without changing the request-level `reasoning.effort`; the
+latest update remains effective until replaced. Do not put two updates adjacent
+to each other. Automatic compaction and automatic truncation are incompatible
+with this feature; after explicit compaction, append a new update before the
+next user message. See [Change reasoning mid-conversation](https://developers.openai.com/api/docs/guides/reasoning).
 
 ## Claude Code allocation
 

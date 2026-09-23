@@ -270,9 +270,12 @@ export function validClaudeFamily(value) {
 }
 
 export function validPolicyDigest(value) {
-  // Historical records remain readable/accounted after the built-in policy
-  // changes. Dispatch/settlement still compare against their current policy.
-  return value === DEFAULT_POLICY.digest || value === "builtin-model-routing-v1" || validDigest(value);
+  return value === DEFAULT_POLICY.digest || validDigest(value);
+}
+
+// Historical policy identities authenticate saved bindings, never select a route.
+export function validHistoricalPolicyDigest(value) {
+  return validPolicyDigest(value) || (validId(value) && /^builtin-model-routing-(?:[a-z][a-z0-9]*(?:-[a-z0-9]+)*-)?v[1-9][0-9]*$/.test(value));
 }
 
 export function validIsoInstant(value) {
