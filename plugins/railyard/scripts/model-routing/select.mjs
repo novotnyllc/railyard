@@ -529,7 +529,7 @@ export function defaultRoute(request, { trustedTransportAttestor } = {}) {
   // price claim: subscription and API costs are tracked separately by policy.
   const mechanical = ["implementation.mechanical", "implementation.bounded_fix"].includes(request.role);
   const repeatable = mechanical && request.workShape?.repetition === "high" && request.workShape?.semanticRisk === "low";
-  const highRisk = request.risk === "high" || request.risk === "critical";
+  const highRisk = request.risk === "high" || request.risk === "critical" || request.role?.startsWith("security.");
   const defaultModel = mechanical && !highRisk ? "gpt-6-luna" : "gpt-6-sol";
   const model = request.model || defaultModel;
   const effort = request.effort || ((model === "gpt-6-luna")

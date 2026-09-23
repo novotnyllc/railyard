@@ -2645,6 +2645,65 @@ test("Oracle auth failure is negatively cached and lifecycle success creates a r
   assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
 });
 
+test("historical lifecycle settlement keeps a review obligation across policy changes", () => {
+  const policy = catalog({
+    extraProviders: {
+      lifecycle: { carrierId: "oracle-homebrew-lifecycle", executionSurface: "local_host", account: "local", locality: "local_only", retention: "none" },
+    },
+    extraModels: {
+      lifecycle: { provider: "lifecycle", carrierId: "oracle-homebrew-lifecycle", requestedModel: "oracle-homebrew-lifecycle", efforts: ["high"], roles: ["lifecycle.oracle"] },
+      followup: { provider: "codex", carrierId: "codex-astra", requestedModel: "gpt-6-astra", efforts: ["max"], roles: ["review.deep"] },
+    },
+    extraRoles: {
+      "lifecycle.oracle": { tiers: [["lifecycle"]] },
+      "review.deep": { tiers: [["followup"]] },
+    },
+  });
+  const state = attestedCapability(policy, { carrierId: "codex-astra", adapterId: "native-subagent-create", accountScope: "local", observedModel: "gpt-6-astra" });
+  const refreshed = handleRequest(request("refresh", { capability: { carrierId: "oracle-homebrew-lifecycle", adapterId: "oracle-homebrew-lifecycle", hostScope: "local", accountScope: "local", state: "host_capability_attested" } }), { catalog: policy, state, now: NOW, trustedCapabilityAttestor: refreshAttestor({ observedModel: "oracle-homebrew-lifecycle" }) });
+  assert.equal(refreshed.response.reason, "capability_refreshed", JSON.stringify(refreshed.response));
+
+  const lifecycle = admit(policy, state, { requestId: "historical-lifecycle", role: "lifecycle.oracle", adapterId: "oracle-homebrew-lifecycle", dispatchKind: "lifecycle_action", scopes: { task: "lifecycle-task" }, forecast: {} });
+  const lifecycleIdentity = dispatchIdentity("oracle-homebrew-lifecycle", { sessionId: "historical-lifecycle-session" });
+  const lifecycleClaim = claim(policy, state, lifecycle, { identity: lifecycleIdentity });
+  const historical = state.reservations[lifecycle.reservation.reservationId];
+  historical.policyDigest = "builtin-model-routing-v1";
+  historical.decision.policyDigest = historical.policyDigest;
+  assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+
+  const lifecycleReceipt = baseReceipt(lifecycleClaim.response.reservation, lifecycleIdentity, {
+    receiptId: "historical-lifecycle-receipt", producer: "oracle-homebrew-lifecycle", measuredUsage: {}, measuredBilled: false,
+    chargedMeters: { marginalUsd: 0, codexCredits: 0, openaiApiSpend: 0 }, originalHostDigest: DIGEST_A, recordedAt: "2026-08-04T12:00:00.000Z", expiresAt: "2026-08-05T12:00:00.000Z", outputTrusted: false, reason: null, freshReviewRequired: true, beforeVersion: "0.17.0", afterVersion: "0.17.1", formula: "steipete/tap/oracle",
+  });
+  const settled = handleRequest(request("reconcile", { reservationId: lifecycle.reservation.reservationId, frozenInputDigest: DIGEST_A, receipt: lifecycleReceipt }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(lifecycleReceipt) });
+  assert.equal(settled.response.reason, "reconciled", JSON.stringify(settled.response));
+  const requirement = Object.values(state.lifecycleReviewRequirements)[0];
+  assert.equal(requirement.policyDigest, policyDigest(policy));
+  assert.notEqual(requirement.policyDigest, historical.policyDigest);
+
+  // A later policy rotation must not make this outstanding review disappear.
+  requirement.policyDigest = "builtin-model-routing-v1";
+  assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+  const review = admit(policy, state, { requestId: "current-review", role: "review.deep", adapterId: "native-subagent-create", dispatchKind: "subagent_create", scopes: { task: "review-task" }, forecast: {} });
+  const reviewIdentity = dispatchIdentity("native-subagent-create", { sessionId: "review-session" });
+  const withoutRequirement = handleRequest(request("claim-dispatch", { reservationId: review.reservation.reservationId, frozenInputDigest: DIGEST_A, dispatchIdentity: reviewIdentity }), { catalog: policy, state, now: NOW });
+  assert.equal(withoutRequirement.response.reason, "fresh_post_lifecycle_review_required");
+  assert.equal(state.reservations[review.reservation.reservationId].phase, "reserved");
+  const reviewClaim = claim(policy, state, review, { identity: reviewIdentity, fields: { postLifecycleRequirementId: requirement.requirementId } });
+  assert.equal(reviewClaim.response.reservation.postLifecycleRequirementId, requirement.requirementId);
+  const noStartReceipt = baseReceipt(reviewClaim.response.reservation, reviewIdentity, { receiptId: "review-no-start", status: "no_start", measuredUsage: {}, measuredBilled: false });
+  assert.equal(handleRequest(request("reconcile", { reservationId: review.reservation.reservationId, frozenInputDigest: DIGEST_A, receipt: noStartReceipt }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(noStartReceipt) }).response.reason, "reconciled");
+  assert.equal(state.lifecycleReviewRequirements[requirement.requirementId].reviewClaimId, undefined);
+  assert.equal(state.lifecycleReviewRequirements[requirement.requirementId].fulfilled, false);
+
+  const retry = admit(policy, state, { requestId: "current-review-retry", role: "review.deep", adapterId: "native-subagent-create", dispatchKind: "subagent_create", scopes: { task: "review-retry-task" }, forecast: {} });
+  const retryIdentity = dispatchIdentity("native-subagent-create", { sessionId: "review-retry-session" });
+  const retryClaim = claim(policy, state, retry, { identity: retryIdentity, fields: { postLifecycleRequirementId: requirement.requirementId } });
+  const successReceipt = baseReceipt(retryClaim.response.reservation, retryIdentity, { receiptId: "review-success", measuredUsage: {}, measuredBilled: false });
+  assert.equal(handleRequest(request("reconcile", { reservationId: retry.reservation.reservationId, frozenInputDigest: DIGEST_A, receipt: successReceipt }), { catalog: policy, state, now: NOW, trustedReceiptImporter: trustedReceiptImporter(successReceipt) }).response.reason, "reconciled");
+  assert.equal(state.lifecycleReviewRequirements[requirement.requirementId].fulfilled, true);
+});
+
 test("the public CLI accepts only a fixed Oracle receipt reference and settles an adapter-emitted private artifact", () => {
   const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "model-routing-fixed-cli-")));
   try {
@@ -3001,6 +3060,12 @@ test("native defaults resolve current GPT-6 models and explicit Astra never sile
     assert.equal(result.response.reason, "resolved");
     assert.equal(result.response.decision.selected.model, role === "implementation.mechanical" ? "gpt-6-luna" : "gpt-6-sol");
     assert.equal(result.response.decision.binding.adapterId, "native-subagent-create");
+  }
+  for (const role of ["implementation.hard", "security.review"]) {
+    const result = handleRequest(request("resolve", { role }), { now: NOW });
+    assert.equal(result.response.reason, "resolved");
+    assert.equal(result.response.decision.selected.model, "gpt-6-sol");
+    assert.equal(result.response.decision.selected.effort, "high");
   }
   for (const effort of ["low", "medium", "high"]) {
     const result = handleRequest(request("resolve", { model: "gpt-6-astra", effort }), { now: NOW });

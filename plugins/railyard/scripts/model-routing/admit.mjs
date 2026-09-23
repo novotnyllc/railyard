@@ -367,11 +367,12 @@ export function claimInternal(request, context) {
   if (!authority.ok) return error(authority.reason);
   let lifecycleRequirement = null;
   if (reservation.decision.role === "review" || reservation.decision.role.startsWith("review.")) {
-    const pending = Object.values(state.lifecycleReviewRequirements).filter((item) => item.fulfilled !== true && Date.parse(item.expiresAt) > now && item.hostScope === identity.hostScope && item.accountScope === identity.accountScope && item.policyDigest === reservation.policyDigest);
+    // A later policy change cannot erase an outstanding lifecycle review.
+    const pending = Object.values(state.lifecycleReviewRequirements).filter((item) => item.fulfilled !== true && Date.parse(item.expiresAt) > now && item.hostScope === identity.hostScope && item.accountScope === identity.accountScope);
     if (pending.length > 0) {
       if (!validId(request.postLifecycleRequirementId)) return error("fresh_post_lifecycle_review_required");
       lifecycleRequirement = state.lifecycleReviewRequirements[request.postLifecycleRequirementId];
-      if (!lifecycleRequirement || lifecycleRequirement.fulfilled || Date.parse(lifecycleRequirement.expiresAt) <= now || lifecycleRequirement.hostScope !== identity.hostScope || lifecycleRequirement.accountScope !== identity.accountScope || lifecycleRequirement.policyDigest !== reservation.policyDigest || lifecycleRequirement.reviewClaimId !== undefined) return error("fresh_post_lifecycle_review_required");
+      if (!lifecycleRequirement || lifecycleRequirement.fulfilled || Date.parse(lifecycleRequirement.expiresAt) <= now || lifecycleRequirement.hostScope !== identity.hostScope || lifecycleRequirement.accountScope !== identity.accountScope || lifecycleRequirement.reviewClaimId !== undefined) return error("fresh_post_lifecycle_review_required");
     }
   }
   reservation.phase = "claimed";

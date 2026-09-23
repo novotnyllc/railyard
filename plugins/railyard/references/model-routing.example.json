@@ -47,7 +47,7 @@
         "max",
         "ultra"
       ],
-      "effort": "max"
+      "effort": "high"
     },
     "daybreak_blue": {
       "provider": "codex_daybreak_blue",

@@ -26,6 +26,7 @@ import {
   addSpent,
   normalUsage,
 } from "./budget.mjs";
+import { validateCatalog } from "./catalog.mjs";
 import {
   settlementDisclosure,
 } from "./disclosure.mjs";
@@ -381,12 +382,15 @@ export function reconcileInternal(request, context) {
   if (["settled", "no_start"].includes(receipt.status)) recordOracleNegative(state, reservation, receipt, catalog, now);
   if (receipt.status === "settled") recordOracleReceiptCapability(state, reservation, receipt, imported.importer, now);
   if (reservation.selected.carrierId === "oracle-homebrew-lifecycle" && receipt.status === "settled" && receipt.reason === null) {
-    const requirementId = opaqueId("fresh-review", { reservationId: reservation.reservationId, claimId: reservation.claimId, policyDigest: reservation.policyDigest });
+    // A lifecycle action may have started under an older policy. Its review
+    // requirement follows the policy used for current admissions.
+    const currentPolicyDigest = validateCatalog(catalog).policy.digest;
+    const requirementId = opaqueId("fresh-review", { reservationId: reservation.reservationId, claimId: reservation.claimId, policyDigest: currentPolicyDigest });
     state.lifecycleReviewRequirements[requirementId] ||= {
       requirementId,
       hostScope: reservation.claimed.hostScope,
       accountScope: reservation.claimed.accountScope,
-      policyDigest: reservation.policyDigest,
+      policyDigest: currentPolicyDigest,
       lifecycleReservationId: reservation.reservationId,
       lifecycleClaimId: reservation.claimId,
       createdAt: nowIso(now),
@@ -394,11 +398,17 @@ export function reconcileInternal(request, context) {
       fulfilled: false,
     };
   }
-  if (receipt.status === "settled" && (receipt.reason === undefined || receipt.reason === null) && reservation.postLifecycleRequirementId) {
+  if (["settled", "no_start"].includes(receipt.status) && reservation.postLifecycleRequirementId) {
     const requirement = state.lifecycleReviewRequirements[reservation.postLifecycleRequirementId];
     if (requirement && requirement.reviewClaimId === reservation.claimId) {
-      requirement.fulfilled = true;
-      requirement.fulfilledAt = nowIso(now);
+      if (receipt.status === "settled" && (receipt.reason === undefined || receipt.reason === null)) {
+        requirement.fulfilled = true;
+        requirement.fulfilledAt = nowIso(now);
+      } else {
+        // A terminal review with no usable result must not consume the only
+        // claim slot for the required retry.
+        delete requirement.reviewClaimId;
+      }
     }
   }
   reservation.receiptIds.push(receipt.receiptId);
