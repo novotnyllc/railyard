@@ -186,16 +186,16 @@ per accepted task. Re-check before relying on them.
 The derived indices reproduce the catalog's existing Claude-side numbers
 exactly, which is the intended check on the method.
 
-### Meter: `codex-sub` — reference model `gpt-5.6-sol` promotional
+### Meter: `codex-sub` — reference work unit: prior Sol promotional pricing
 
 | Model | Input | Output | Work unit | Index | Planning index |
 | --- | --- | --- | --- | --- | --- |
-| `gpt-5.6-sol` promotional reference | 4.00 | 20.00 | 27.60 | **100** | 100 |
+| Prior Sol promotional reference | 4.00 | 20.00 | 27.60 | **100** | 100 |
 | `gpt-6-sol` | 2.00 | 10.00 | 13.80 | **50** | **50** |
 | `gpt-6-luna` | 0.10 | 0.50 | 0.69 | **3** | **3** |
 
 OpenAI's GPT-6 release publishes $2/$10 for Sol and $0.10/$0.50 for Luna per
-million input/output tokens, against promotional GPT-5.6 cells of $4/$20 and
+million input/output tokens, against prior promotional cells of $4/$20 and
 $0.20/$1.20. It calls both transitions 50% cheaper. Sol and Luna input are
 exact halvings; Luna output, $1.20 to $0.50, is a 58.3% reduction, not an exact
 half (which would be $0.60). These are the published cells used above, not a
@@ -213,7 +213,7 @@ consequences worth holding onto:
 ## What this changes
 
 1. **Use `gpt-6-sol: 50` and `gpt-6-luna: 3` as provisional
-   `relativeCostIndex` values.** They are normalized to the prior GPT-5.6 Sol
+   `relativeCostIndex` values.** They are normalized to the prior Sol
    promotional work unit (27.60), so they remain within the same API meter and
    do not compare Codex to Claude pricing.
 

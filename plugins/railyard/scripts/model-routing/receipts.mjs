@@ -36,7 +36,6 @@ import {
   releaseLeaseAllocation,
 } from "./leases.mjs";
 import {
-  ADAPTER_DESCRIPTORS,
   ADAPTER_RECEIPT_ATTESTOR,
   CARRIER_DESCRIPTORS,
   CONTRACT_VERSION,
@@ -228,12 +227,11 @@ export function recordOracleNegative(state, reservation, receipt, catalog, now) 
   if (reservation.selected.carrierId !== "oracle-browser") return;
   const reason = receipt.reason || (receipt.authReadiness === "auth_context_unavailable" ? "auth_context_unavailable" : null);
   if (!negativeClassFor(reason)) return;
-  const adapter = ADAPTER_DESCRIPTORS[reservation.binding.adapterId];
   recordNegativeCapability(state, {
     carrierId: reservation.selected.carrierId,
     carrierVersion: reservation.selected.carrierVersion,
     adapterId: reservation.binding.adapterId,
-    adapterVersion: adapter.version,
+    adapterVersion: reservation.binding.adapterVersion,
     hostScope: reservation.claimed.hostScope,
     accountScope: reservation.claimed.accountScope,
     policyDigest: reservation.policyDigest,
@@ -244,7 +242,6 @@ export function recordOracleNegative(state, reservation, receipt, catalog, now) 
 
 export function recordOracleReceiptCapability(state, reservation, receipt, imported, now) {
   if (reservation.selected.carrierId !== "oracle-browser" || receipt.status !== "settled" || receipt.reason !== null || receipt.authReadiness !== "fresh_success") return;
-  const adapter = ADAPTER_DESCRIPTORS[reservation.binding.adapterId];
   const observedModel = receipt.observedModel || "unknown";
   // `live_carrier_verified` asserts the router saw which model actually
   // answered.  A receipt that authenticated but reported no model identity is
@@ -260,7 +257,7 @@ export function recordOracleReceiptCapability(state, reservation, receipt, impor
     carrierId: reservation.selected.carrierId,
     carrierVersion: reservation.selected.carrierVersion,
     adapterId: reservation.binding.adapterId,
-    adapterVersion: adapter.version,
+    adapterVersion: reservation.binding.adapterVersion,
     hostScope: reservation.claimed.hostScope,
     accountScope: reservation.claimed.accountScope,
     policyDigest: reservation.policyDigest,
@@ -307,9 +304,15 @@ export function reconcileInternal(request, context) {
   if (!isObject(request.receipt) || !validId(request.reservationId)) return error("invalid_reconciliation_receipt");
   const reservation = state.reservations[request.reservationId];
   if (!reservation) return error("reservation_unknown");
-  const adapter = ADAPTER_DESCRIPTORS[reservation.binding.adapterId];
-  if (!adapter) return error("untrusted_receipt");
-  if (adapter.version !== reservation.binding.adapterVersion || CARRIER_DESCRIPTORS[reservation.selected.carrierId]?.version !== reservation.selected.carrierVersion) return error("adapter_version_changed");
+  // Settlement verifies the immutable dispatch identity and trusted receipt
+  // attestation. A carrier removed from today's routing catalog still owes
+  // accounting for work that already ran; it cannot gain dispatch permission
+  // from this receipt-only descriptor.
+  const adapter = {
+    version: reservation.binding.adapterVersion,
+    receiptProducer: reservation.claimed?.toolId,
+  };
+  if (!reservation.claimed || !validId(adapter.receiptProducer)) return error("untrusted_receipt");
   if (request.frozenInputDigest !== reservation.frozenInputDigest || reservation.claimed?.frozenInputDigest !== reservation.frozenInputDigest) return error("receipt_input_mismatch");
   const imported = importTrustedReceipt(request.receipt, reservation, adapter, trustedReceiptImporter, now);
   if (!imported.ok) return error(imported.reason);

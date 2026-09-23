@@ -232,7 +232,7 @@ export function pruneEligibleState(state, now) {
     if (removeOldest(state.learningAggregates)) continue;
     const cutoff = now - ELIGIBLE_RETENTION_MS;
     const terminal = Object.entries(state.reservations)
-      .filter(([, reservation]) => ["settled", "no_start"].includes(reservation.phase) && Date.parse(reservation.updatedAt) <= cutoff)
+      .filter(([, reservation]) => ["settled", "no_start", "invalidated"].includes(reservation.phase) && Date.parse(reservation.updatedAt) <= cutoff)
       .sort(([, left], [, right]) => left.updatedAt.localeCompare(right.updatedAt));
     if (terminal.length === 0) break;
     const [reservationId] = terminal[0];

@@ -185,6 +185,22 @@ stateful no-config operation is a `reconcile` receipt with
 it records only bounded route-independent local demand learning, never a
 fabricated carrier/model route effect.
 
+## Continuing after a policy change
+
+Re-evaluate work-starting continuations under the current routing rules. For
+`task_message`, `priorRoute` authenticates the original reservation, claim,
+destination, and adapter. When `reservation.currentRoute` exists, use its
+model, carrier, effort, and policy for the fresh current-policy decision.
+Send the resulting supported pair through explicit `model` and `thinking`
+controls on the Codex task message.
+
+A settled receipt keeps its original dispatch identity. An authenticated claim
+against a stale, never-dispatched reservation atomically invalidates that
+reservation, releases its forecast budget, and returns
+`route_reevaluation_required`. Re-resolve and re-admit under the current policy
+before claiming dispatch again. Native subagent follow-up has no allocation
+overrides, so a changed allocation requires a fresh dispatch.
+
 ## Built-in no-config policy
 
 No catalog means no provider probe, availability assertion, or required

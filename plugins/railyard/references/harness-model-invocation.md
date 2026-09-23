@@ -35,7 +35,7 @@ the same selectors. Check the active schema before dispatch.
 
 OpenAI's published GPT-6 API rates are $2 input / $10 output per million
 tokens for Sol, and $0.10 input / $0.50 output for Luna. The release labels
-both as 50% lower than GPT-5.6 promotional prices. Luna's published output
+both as 50% lower than the prior promotional prices. Luna's published output
 change, $1.20 to $0.50, is actually 58.3% lower; an exact half would be $0.60.
 Record the published cells without treating that label as exact output-rate
 arithmetic. Sources: [GPT-6 Sol and Luna release](https://openai.com/index/introducing-gpt-6-sol-and-luna/),
@@ -145,10 +145,12 @@ the request or deliberate inheritance and say actual values are unverified.
 No banner, extra acknowledgement, or separate audit artifact is required for
 ordinary native work.
 
-Native subagent follow-up has no model or effort control. For an existing Codex
-task, `send_message_to_thread` may expose `model` and `thinking`; use those
-only when its current schema supports the requested pair. This is a new task
-continuation control, not a mid-conversation API effort update.
+Re-evaluate continuations under the current routing rules. Native subagent
+follow-up has no model or effort control, so a changed allocation requires a
+fresh dispatch. For an existing Codex task, use explicit `model` and `thinking`
+controls on `send_message_to_thread` when its current schema supports the
+resolved pair. See [continuation routing](model-routing.md#continuing-after-a-policy-change)
+for saved-route authentication and stale-claim handling.
 
 In a standard, single-agent GPT-6 Responses API conversation, append a
 `configuration_update` input item before the next user message to change

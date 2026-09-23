@@ -29,7 +29,7 @@ Native children are the default for internal subtasks. The optional strict resol
 
 Choose the interactive session for the conversation and the delegated route for the bounded work unit. A model name without effort is incomplete.
 
-Astra Max (`codex-astra`, `gpt-6-astra`, `max`) is the baseline candidate for substantive engineering. Choose another supported pair when accepted task outcomes, a specialist capability, constraints, or an explicit latency preference support it. Deterministic tools can handle mechanical work directly; there is no default cheap-model ladder.
+GPT-6 Sol at `medium` is the baseline candidate for ordinary substantive engineering when the active surface exposes it. Use Luna at `low` or `medium` for bounded work and select Astra when the task needs its stronger judgment. Choose model and effort using current capabilities, constraints, and accepted task outcomes. Deterministic tools can handle mechanical work directly; there is no default cheap-model ladder.
 
 Deliberate inheritance of both model and effort is valid when the active tool supports it. Current native Codex full-history forks inherit and reject overrides; changing either setting requires a supported limited-history or no-history fork with a sufficient brief. Check the actual tool schema before dispatch, and distinguish the intended selection from runtime metadata that verifies execution.
 
@@ -37,16 +37,7 @@ Deliberate inheritance of both model and effort is valid when the active tool su
 
 Claude Code reaches Codex models through the supported rescue forwarder or a direct `codex exec` worker. Codex reaches Claude subscription review through the maintained Compound Engineering `claude -p` adapter. Either harness reaches a ChatGPT Pro second opinion through the admitted Oracle route. A visible provider-owned task is available only when the user explicitly requests task creation; an unavailable transport does not authorize creating one as a fallback. Supported task handoffs retain their bounded contract and identity-bound receipt.
 
-GLM-5.2 is a Codex-only route through `zai_litellm`:
-
-```sh
-codex exec -m glm-5.2 \
-  -c model_provider=zai_litellm \
-  -c model_reasoning_effort=high \
-  '<bounded scout brief>'
-```
-
-The scout profile uses `high`; the engineer profile uses `xhigh` in the same explicit effort field. Its billing surface is Z.ai Coding Plan credits, a distinct meter that is not converted into USD or combined with another subscription meter.
+Resolve each handoff against the current policy and available carriers. When a saved route is stale, re-evaluate the assignment under those rules and prepare a current eligible route before dispatch.
 
 ## Subscription review keeps first-party custody
 

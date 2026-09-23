@@ -83,7 +83,8 @@ export function handleRequest(input, {
   // caller's state only once it answers ok.  A command that mutates and then
   // refuses (a burned authority on a rejected claim, a partially settled
   // reconcile) therefore leaves nothing behind, for embeddings as well as for
-  // runCli — which already discarded a refused write before it reached disk.
+  // runCli. The sole refusal that commits is authenticated invalidation of a
+  // never-dispatched stale reservation, which releases its budget atomically.
   const working = mutatesState ? structuredClone(state) : state;
 
   let response;
@@ -106,12 +107,15 @@ export function handleRequest(input, {
   else if (command === "refresh") response = refreshInternal(input, { catalog, state: working, now, trustedCapabilityAttestor });
   else if (command?.startsWith("learning.")) response = learningInternal(command, working);
   else response = error("unknown_command");
-  const changed = response.ok && response.stateChanged === true;
+  const invalidatedStaleReservation = ["claim-dispatch", "claim-slot"].includes(command)
+    && response.ok === false && response.reason === "route_reevaluation_required"
+    && response.stateChanged === true && response.reservation?.phase === "invalidated";
+  const changed = (response.ok || invalidatedStaleReservation) && response.stateChanged === true;
   if (changed) {
     const postMutation = validateState(working);
     if (!postMutation.ok) return { response: error("state_mutation_invalid", { field: postMutation.field }), state, changed: false };
   }
-  if (mutatesState && response.ok) commit(state, working);
+  if (mutatesState && (response.ok || invalidatedStaleReservation)) commit(state, working);
   if (Object.hasOwn(response, "stateChanged")) delete response.stateChanged;
   return { response, state, changed };
 }

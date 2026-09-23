@@ -522,6 +522,7 @@ export function candidateSort(left, right) {
 }
 
 export function defaultRoute(request, { trustedTransportAttestor } = {}) {
+  if (request.harness !== undefined && request.harness !== "codex") return { ok: false, reason: "cross_harness_adapter_required" };
   // Sol is the no-config default. Luna handles bounded repetitive work, while
   // Astra remains an explicit escalation. This ranks work shape, not a token
   // price claim: subscription and API costs are tracked separately by policy.
@@ -552,7 +553,6 @@ export function defaultRoute(request, { trustedTransportAttestor } = {}) {
       : { ok: false, reason: "unsupported_adapter" };
   if (!selection.ok) return selection;
   const provider = { executionSurface: "codex", carrierId, account: "codex-sub", harness: "codex" };
-  if (request.harness !== undefined && request.harness !== "codex") return { ok: false, reason: "cross_harness_adapter_required" };
   const transport = transportDecision(request, adapterResult.adapter, trustedTransportAttestor, provider);
   if (!transport.ok) return { ok: false, reason: transport.reason };
   return {

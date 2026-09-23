@@ -34,7 +34,7 @@ export function spentFor(state, scope, meter) {
 export function reservedFor(state, scope, meter) {
   let total = 0n;
   for (const reservation of Object.values(state.reservations || {})) {
-    if (!(reservation.scopes || [reservation.scope]).some((candidate) => candidate.kind === scope.kind && candidate.id === scope.id) || ["settled", "no_start"].includes(reservation.phase)) continue;
+    if (!(reservation.scopes || [reservation.scope]).some((candidate) => candidate.kind === scope.kind && candidate.id === scope.id) || ["settled", "no_start", "invalidated"].includes(reservation.phase)) continue;
     const lease = reservation.leaseId ? state.leases?.[reservation.leaseId] : null;
     if (lease && (lease.allocatorScopes || []).some((candidate) => candidate.kind === scope.kind && candidate.id === scope.id)) continue;
     const value = reservation.forecast?.[meter];

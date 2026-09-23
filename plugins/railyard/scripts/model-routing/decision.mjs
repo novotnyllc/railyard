@@ -24,6 +24,7 @@ import {
   ACTIVE_CLAIM_PHASES,
   ADAPTER_DESCRIPTORS,
   DEFAULT_POLICY,
+  CARRIER_DESCRIPTORS,
 } from "./registries.mjs";
 import {
   validatePriorRoute,
@@ -268,11 +269,31 @@ export function isAllowedMidTaskEffortChange(request, decision, prior) {
     && allowedInheritedAdapterTransition(prior.binding.adapterId, decision.binding.adapterId, decision.selected.carrierId, decision.binding.dispatchKind);
 }
 
+export function effectiveContinuationRoute(reservation) {
+  return reservation.currentRoute ? { ...reservation, ...reservation.currentRoute } : reservation;
+}
+
+// Historical bindings authenticate the destination. Selection always uses the
+// current policy; task messages expose controls to apply its new allocation.
+export function needsRouteReevaluation(prior, decision) {
+  const carrier = CARRIER_DESCRIPTORS[prior.selected.carrierId];
+  return prior.policyDigest !== decision.policy.digest || !carrier
+    || (carrier.transport === "selector-native" && carrier.requestedModel !== prior.selected.model);
+}
+
+export function isAllowedRouteReevaluation(request, decision, prior) {
+  return needsRouteReevaluation(prior, decision)
+    && request.dispatchKind === "task_message"
+    && decision.binding.adapterId === "codex-task-message"
+    && allowedInheritedAdapterTransition(prior.binding.adapterId, decision.binding.adapterId, decision.selected.carrierId, decision.binding.dispatchKind);
+}
+
 export function inheritedRouteIssue(request, state, decision, catalog) {
   if (!["task_message", "subagent_message", "subagent_followup"].includes(request.dispatchKind)) return null;
   if (!validatePriorRoute(request.priorRoute)) return "prior_route_unknown";
   if (!validDispatchIdentity(request.dispatchIdentity, ADAPTER_DESCRIPTORS[decision.binding.adapterId]?.receiptProducer) || request.dispatchIdentity.dispatchKind !== decision.binding.dispatchKind || request.dispatchIdentity.toolVersion !== decision.binding.adapterVersion) return "prior_destination_identity_required";
-  const prior = state.reservations[request.priorRoute.reservationId];
+  const storedPrior = state.reservations[request.priorRoute.reservationId];
+  const prior = storedPrior && effectiveContinuationRoute(storedPrior);
   if (!prior || !ACTIVE_CLAIM_PHASES.has(prior.phase) || prior.claimId !== request.priorRoute.claimId) return "prior_route_unknown";
   const currentWorkClassDigest = decision.workClassDigest;
   if (!validDigest(currentWorkClassDigest) || !validDigest(request.priorWorkClassDigest) || !validDigest(request.priorRoute.workClassDigest) || !validDigest(prior.workClassDigest)) return "prior_work_class_unknown";
@@ -285,7 +306,12 @@ export function inheritedRouteIssue(request, state, decision, catalog) {
   const currentR52Digest = decision.binding.r52?.digest || "not_applicable";
   const declaredR52Digest = request.priorRoute.r52Digest || "not_applicable";
   if (priorR52Digest !== currentR52Digest || declaredR52Digest !== priorR52Digest) return "prior_r52_binding_mismatch";
-  if (prior.policyDigest !== decision.policy.digest || request.priorRoute.policyDigest !== decision.policy.digest || prior.selected.carrierId !== request.priorRoute.carrierId || prior.selected.model !== request.priorRoute.model || prior.selected.effort !== request.priorRoute.effort || prior.binding.adapterId !== request.priorRoute.adapterId || prior.binding.adapterVersion !== request.priorRoute.adapterVersion) return "prior_route_binding_mismatch";
+  if (request.priorRoute.policyDigest !== prior.policyDigest || prior.selected.carrierId !== request.priorRoute.carrierId || prior.selected.model !== request.priorRoute.model || prior.selected.effort !== request.priorRoute.effort || prior.binding.adapterId !== request.priorRoute.adapterId || prior.binding.adapterVersion !== request.priorRoute.adapterVersion) return "prior_route_binding_mismatch";
+  if (isAllowedRouteReevaluation(request, decision, prior)) return null;
+  if (needsRouteReevaluation(prior, decision)
+    && (decision.selected.carrierId !== prior.selected.carrierId
+      || decision.selected.model !== prior.selected.model
+      || decision.selected.effort !== prior.selected.effort)) return "route_reevaluation_required";
   const effortChanged = prior.selected.effort !== decision.selected.effort;
   if (decision.selected.carrierId !== prior.selected.carrierId
     || decision.selected.model !== prior.selected.model
