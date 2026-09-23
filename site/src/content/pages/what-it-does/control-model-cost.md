@@ -7,7 +7,7 @@ nav_order: 10
 
 # Control model cost
 
-Compare model and effort choices by accepted task outcomes and total cost and time, including children, retries, and repairs. Astra Max is the baseline candidate for substantive engineering; a lower per-call price alone does not establish better efficiency.
+Compare model and effort choices by accepted task outcomes and total cost and time, including children, retries, and repairs. GPT-6 Sol at `medium` is the ordinary engineering candidate; a lower per-call price alone does not establish better efficiency.
 
 ## Easy path
 
@@ -21,7 +21,7 @@ Railyard itself is free and open source (MIT); you pay only your own Claude/Code
 
 ## Illustrative comparison
 
-For a migration with mechanical edits and a difficult semantic seam, use deterministic edits where suitable and choose a model/effort pair for the reasoning work. An alternative to Astra Max may fit a specialist need, a measured task outcome, or an explicit latency preference. Evaluate the whole accepted result before claiming savings; this example reports no benchmark result. [Read the worked examples](/delivery/model-routing/worked-runs/).
+For a migration with mechanical edits and a difficult semantic seam, use deterministic edits where suitable and choose a model/effort pair for the reasoning work. Start with Sol at `medium` for ordinary reasoning; use Astra at `high` when the seam needs stronger judgment. Evaluate the whole accepted result before claiming savings; this example reports no benchmark result. [Read the worked examples](/delivery/model-routing/worked-runs/).
 
 ## What happens
 

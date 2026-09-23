@@ -7,13 +7,15 @@ nav_order: 2
 
 # Models, effort, and carriers
 
-Select the model and reasoning effort as one decision. Astra Max is the baseline candidate for substantive engineering. Different settings need a reason grounded in the assignment, comparable completed outcomes, a specialist capability, or the user's priorities. There is no built-in assumption that a lower model tier or lower effort completes work more cheaply.
+Select the model and reasoning effort as one decision. GPT-6 Sol at `medium` is the ordinary engineering candidate. Different settings need a reason grounded in the assignment, comparable completed outcomes, a specialist capability, or the user's priorities. There is no built-in assumption that a lower model tier or lower effort completes work more cheaply.
 
 ## Native choices
 
 | Choice | Supported use |
 | --- | --- |
-| `gpt-6-astra` at `max` | Baseline candidate for substantive engineering, including implementation, coordination, and review |
+| `gpt-6-sol` at `medium` | Ordinary substantive engineering, including implementation and coordination |
+| `gpt-6-luna` at `low` or `medium` | Bounded work whose scope and acceptance check are clear |
+| `gpt-6-astra` at `high` | Work needing stronger judgment; increase effort only for a specific need |
 | Explicit inheritance | The parent's model and reasoning effort suit the child; state that reason and use the supported inheritance path |
 | Another model or effort | The active harness supports both settings and the assignment justifies the selection |
 | Fixed specialist role | Use the role's authoritative model and effort without forbidden overrides |
@@ -29,7 +31,7 @@ The configured routing system retains specialized carriers for explicit account,
 
 | Carrier or adapter | Boundary |
 | --- | --- |
-| `codex-astra` / native subagent | Native Astra selection when exposed by the current harness |
+| `codex-6-sol`, `codex-6-luna`, `codex-astra` / native subagent | Native selection when the current harness exposes the chosen model and effort |
 | Configured alternate native models | Must match the current supported model and effort controls |
 | `codex-task-create` / `codex-task-message` | Visible task transport; creation requires the user's explicit request and verified destination capability |
 | Configured GLM task profiles | Codex-only profile transport, subject to host attestation; not an invented native model selector |

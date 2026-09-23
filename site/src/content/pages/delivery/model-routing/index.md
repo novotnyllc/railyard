@@ -8,7 +8,7 @@ has_children: true
 
 # Model routing
 
-Choose model and reasoning effort together for each assignment. Astra Max (`gpt-6-astra`, `max`) is the baseline candidate for substantive engineering. Use deterministic tools directly for mechanical operations, and choose another model or effort when comparable successful work, a specialist need, or a user preference supports the tradeoff.
+Choose model and reasoning effort together for each assignment. GPT-6 Sol at `medium` is the ordinary engineering candidate. Use deterministic tools directly for mechanical operations, Luna for suitable bounded work, and Astra at `high` when stronger judgment is needed. Choose `max` only when the assignment supports it.
 
 This is an allocation policy, not a claim that Max is always cheaper or faster. Compare the complete assignment, including children, retries, repairs, and verification. Per-token prices and quota consumed per minute cannot establish cost per correctly completed task.
 
@@ -16,10 +16,10 @@ This is an allocation policy, not a claim that Max is always cheaper or faster. 
 
 Routine work uses native tools and bounded subagents. Explicit suitable inheritance is allowed: state why the parent's model and reasoning effort fit the child. Native full-history forks inherit their settings; an override requires a supported limited-history or no-history fork with sufficient context. A fixed specialist role uses its authoritative settings without forbidden overrides.
 
-The built-in substantial-work candidate is:
+The ordinary native candidate is:
 
 ```text
-model=gpt-6-astra effort=max carrier=codex-astra
+model=gpt-6-sol effort=medium carrier=codex-6-sol
 ```
 
 This names the requested candidate, not an observed live dispatch. The current harness must expose the required controls and capability. An unsupported or unavailable model, effort, role, fork combination, or adapter is disclosed without a silent fallback.

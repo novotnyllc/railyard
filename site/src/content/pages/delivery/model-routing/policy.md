@@ -7,7 +7,7 @@ nav_order: 3
 
 # Own your routing policy
 
-A user-owned catalog is useful when explicit account, fleet, privacy, or budget choices need to be repeatable. Routine native execution does not require one. The shipped starting point uses Astra Max as the substantial-work candidate and keeps specialist routes explicit.
+A user-owned catalog is useful when explicit account, fleet, privacy, or budget choices need to be repeatable. Routine native execution does not require one. The shipped starting point uses GPT-6 Sol at `medium` for ordinary engineering and keeps specialist routes explicit.
 
 A catalog describes eligible choices. Fixed Railyard adapters own executable commands, transport boundaries, and receipt validation. Catalog data cannot make an unsupported model callable or authorize a new visible task.
 
@@ -39,7 +39,7 @@ An illustrative native role uses the same baseline candidate as the source examp
 
 ```text
 role=implementation
-model=gpt-6-astra effort=max carrier=codex-astra
+model=gpt-6-sol effort=medium carrier=codex-6-sol
 ```
 
 Select a specialist such as Daybreak Blue only when the task and current harness support it. Do not treat a catalog row or a cached discovery record as current live dispatch evidence. Any permitted alternative is disclosed; an unavailable requested selection is never silently replaced.

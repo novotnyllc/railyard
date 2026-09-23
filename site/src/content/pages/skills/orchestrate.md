@@ -37,4 +37,4 @@ Ships in the `railyard` plugin.
 
 ## Proof point
 
-An actual orchestrated run records each lane's selected model and effort, readiness, claim, returned evidence, and terminal state against the frozen contract. Astra Max is the baseline candidate for substantive engineering; another supported pair or deliberate inheritance needs an assignment-specific reason. Report unavailable routes without silent substitution.
+An actual orchestrated run records each lane's selected model and effort, readiness, claim, returned evidence, and terminal state against the frozen contract. GPT-6 Sol at `medium` is the ordinary engineering candidate; use Astra when the lane needs stronger judgment. Another supported pair or deliberate inheritance needs an assignment-specific reason. Report unavailable routes without silent substitution.

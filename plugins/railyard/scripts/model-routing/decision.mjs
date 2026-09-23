@@ -278,6 +278,7 @@ export function effectiveContinuationRoute(reservation) {
 export function needsRouteReevaluation(prior, decision) {
   const carrier = CARRIER_DESCRIPTORS[prior.selected.carrierId];
   return prior.policyDigest !== decision.policy.digest || !carrier
+    || prior.selected.carrierVersion !== carrier.version
     || (carrier.transport === "selector-native" && carrier.requestedModel !== prior.selected.model);
 }
 

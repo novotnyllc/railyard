@@ -224,7 +224,7 @@ export function admitInternal(request, context) {
       budget: { kind: "top_up", forecast: adjustment.value, warningCount: budget.warnings.length },
     });
     if (!actionReceipt) return error("invalid_action_receipt");
-    if (effortChanged || currentRoute.selected.model !== resolved.decision.selected.model) active.routeLearningEligible = false;
+    if (reevaluated || effortChanged || currentRoute.selected.model !== resolved.decision.selected.model) active.routeLearningEligible = false;
     if (reevaluated || effortChanged || active.currentRoute) {
       // Keep the original execution binding intact for settlement while later
       // messages authenticate against the latest continuation allocation.

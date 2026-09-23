@@ -2185,52 +2185,70 @@ test("terminal receipts cannot reopen settled work, and an epoch cannot seal acr
   assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
 });
 
-test("create-to-message routing inherits only the exact model, effort, policy, and approved adapter transition", () => {
-  const policy = catalog({ budgets: { task: { marginalUsd: { hardAdmission: "5" } } } });
-  const state = createEmptyState();
-  const authority = {
-    authorityId: "authority-msg", objectiveEpoch: "epoch-msg", objectiveDigest: DIGEST_A, senderOwner: "owner-msg", accountScope: "local", carrierId: "codex-astra", adapterId: "codex-task-create", policyDigest: policyDigest(policy),
-    destinationScope: "host-msg", destinationClass: "visible_task", maxTaskCount: 1, currentTurn: "turn-msg", expiresAt: "2026-08-05T12:00:00.000Z", explicitUserInstructionDigest: DIGEST_B,
-  };
-  mintAuthority(policy, state, authority);
-  const admission = admit(policy, state, { adapterId: "codex-task-create", dispatchKind: "task_create", scopes: { task: "message-task" }, taskAuthorityId: authority.authorityId, objectiveEpoch: authority.objectiveEpoch, objectiveDigest: authority.objectiveDigest, instructionDigest: authority.explicitUserInstructionDigest, senderOwner: authority.senderOwner, destinationScope: "host-msg", destinationClass: "visible_task", currentTurn: "turn-msg" });
-  const created = claim(policy, state, admission, { identity: dispatchIdentity("codex-task-create", { hostScope: "host-msg", sessionId: "task-msg" }), fields: { taskAuthorityId: authority.authorityId } });
-  const priorRoute = {
-    reservationId: admission.reservation.reservationId,
-    claimId: created.response.claimId,
-    carrierId: "codex-astra",
-    model: "gpt-6-astra",
-    effort: "max",
-    adapterId: "codex-task-create",
-    adapterVersion: "v1",
-    policyDigest: policyDigest(policy),
-    hostScope: "host-msg",
-    accountScope: "local",
-    sessionId: "task-msg",
-    toolId: "codex-task",
-    toolVersion: "v1",
-    workClassDigest: admission.reservation.workClassDigest,
-  };
-  const neutral = handleRequest(request("resolve", {
-    adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "message-neutral", priorRoute,
-    priorWorkClassDigest: admission.reservation.workClassDigest,
-    dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }) },
-  }), { catalog: policy, state, now: NOW });
-  assert.equal(neutral.response.reason, "resolved");
-  const crossedDestination = handleRequest(request("resolve", {
-    adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "message-crossed", priorRoute,
-    priorWorkClassDigest: admission.reservation.workClassDigest,
-    dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "wrong-session" }) },
-  }), { catalog: policy, state, now: NOW });
-  assert.equal(crossedDestination.response.reason, "prior_destination_identity_mismatch");
-  const adjustment = handleRequest(request("admit", {
-    adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "adjust_active", requestId: "message-adjust", activeReservationId: admission.reservation.reservationId,
-    frozenInputDigest: DIGEST_A, forecast: { marginalUsd: "1" }, scopes: { task: "message-task" }, priorRoute,
-    priorWorkClassDigest: admission.reservation.workClassDigest,
-    dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }) },
-  }), { catalog: policy, state, now: NOW });
-  assert.equal(adjustment.response.reason, "active_budget_adjusted");
-});
+for (const staleCarrierVersion of [false, true]) {
+  test(`create-to-message routing preserves bindings and refreshes carrier version when stale=${staleCarrierVersion}`, () => {
+    const policy = catalog({ budgets: { task: { marginalUsd: { hardAdmission: "5" } } } });
+    const state = createEmptyState();
+    const authority = {
+      authorityId: "authority-msg", objectiveEpoch: "epoch-msg", objectiveDigest: DIGEST_A, senderOwner: "owner-msg", accountScope: "local", carrierId: "codex-astra", adapterId: "codex-task-create", policyDigest: policyDigest(policy),
+      destinationScope: "host-msg", destinationClass: "visible_task", maxTaskCount: 1, currentTurn: "turn-msg", expiresAt: "2026-08-05T12:00:00.000Z", explicitUserInstructionDigest: DIGEST_B,
+    };
+    mintAuthority(policy, state, authority);
+    const admission = admit(policy, state, { adapterId: "codex-task-create", dispatchKind: "task_create", scopes: { task: "message-task" }, taskAuthorityId: authority.authorityId, objectiveEpoch: authority.objectiveEpoch, objectiveDigest: authority.objectiveDigest, instructionDigest: authority.explicitUserInstructionDigest, senderOwner: authority.senderOwner, destinationScope: "host-msg", destinationClass: "visible_task", currentTurn: "turn-msg" });
+    const created = claim(policy, state, admission, { identity: dispatchIdentity("codex-task-create", { hostScope: "host-msg", sessionId: "task-msg" }), fields: { taskAuthorityId: authority.authorityId } });
+    const priorRoute = {
+      reservationId: admission.reservation.reservationId,
+      claimId: created.response.claimId,
+      carrierId: "codex-astra",
+      model: "gpt-6-astra",
+      effort: "max",
+      adapterId: "codex-task-create",
+      adapterVersion: "v1",
+      policyDigest: policyDigest(policy),
+      hostScope: "host-msg",
+      accountScope: "local",
+      sessionId: "task-msg",
+      toolId: "codex-task",
+      toolVersion: "v1",
+      workClassDigest: admission.reservation.workClassDigest,
+    };
+    const original = state.reservations[admission.reservation.reservationId];
+    if (staleCarrierVersion) {
+      original.selected.carrierVersion = "v0";
+      original.decision.selected.carrierVersion = "v0";
+    }
+    const originalSelected = structuredClone(original.selected);
+    const neutral = handleRequest(request("resolve", {
+      adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "message-neutral", priorRoute,
+      priorWorkClassDigest: admission.reservation.workClassDigest,
+      dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }) },
+    }), { catalog: policy, state, now: NOW });
+    assert.equal(neutral.response.reason, "resolved");
+    const crossedDestination = handleRequest(request("resolve", {
+      adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "message-crossed", priorRoute,
+      priorWorkClassDigest: admission.reservation.workClassDigest,
+      dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "wrong-session" }) },
+    }), { catalog: policy, state, now: NOW });
+    assert.equal(crossedDestination.response.reason, "prior_destination_identity_mismatch");
+    const adjustment = handleRequest(request("admit", {
+      adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "adjust_active", requestId: "message-adjust", activeReservationId: admission.reservation.reservationId,
+      frozenInputDigest: DIGEST_A, forecast: { marginalUsd: "1" }, scopes: { task: "message-task" }, priorRoute,
+      priorWorkClassDigest: admission.reservation.workClassDigest,
+      dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }) },
+    }), { catalog: policy, state, now: NOW });
+    assert.equal(adjustment.response.reason, "active_budget_adjusted");
+    const continued = state.reservations[admission.reservation.reservationId];
+    assert.deepEqual(continued.selected, originalSelected, "settlement preserves the original carrier version");
+    if (staleCarrierVersion) {
+      assert.equal(continued.currentRoute.selected.carrierVersion, CARRIER_DESCRIPTORS["codex-astra"].version);
+      assert.equal(continued.routeLearningEligible, false, "version reevaluation must not train on mixed carrier versions");
+      assert.equal(continued.currentRoute.policyDigest, priorRoute.policyDigest, "version drift alone triggers reevaluation");
+      assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+    } else {
+      assert.equal(continued.currentRoute, undefined, "unchanged descriptor needs no continuation override");
+    }
+  });
+}
 
 test("a GPT-6 visible task can change effort through an active task-message adjustment only", () => {
   const policy = catalog({

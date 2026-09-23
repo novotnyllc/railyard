@@ -22,7 +22,7 @@ This request names the outcome. Routine implementation runs natively; `railyard:
 ## What happens
 
 1. Use native tools for routine work and automatically select CE stages when they help. Resolve CE only when a selected stage needs it.
-2. For delegated work, choose model and reasoning effort together. Astra Max is the baseline candidate for substantive engineering; deliberate inheritance is supported. Use native children unless the user explicitly requests a visible task.
+2. For delegated work, choose model and reasoning effort together. GPT-6 Sol at `medium` is the ordinary engineering candidate; use Astra for a task that needs stronger judgment. Deliberate inheritance is supported. Use native children unless the user explicitly requests a visible task.
 3. Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR.
 4. CE owns the review settlement and CI loop. Optional specialist reviews, including [Thermos](/skills/thermos/), feed findings to that owner before the authorized merge.
 5. Check the merged commit for reachability from the base branch, complete required release or deployment steps, and verify the actual consumer. For plugins, this includes required marketplace publication, a supported manager update, and installed-runtime verification.
@@ -30,7 +30,7 @@ This request names the outcome. Routine implementation runs natively; `railyard:
 Illustrative evidence fields for a native Codex run; fill them from actual observations:
 
 ```text
-allocation=codex-astra model=gpt-6-astra effort=max
+allocation=codex-6-sol model=gpt-6-sol effort=medium
 observed_allocation=<runtime evidence or unverified>
 review_and_ci=<CE disposition>
 merge=<observed merge commit> ancestry=<check result>
