@@ -181,6 +181,7 @@ test("model-update override passes an unknown explicit pair to the native backen
   assert.equal(accepted.log[0].modelUpdateOverride, true);
   assert.equal(run(native({ model: "gpt-6-next", reasoning_effort: "medium" })).code, 2);
   assert.equal(run(native({ model: "gpt-5.6-sol", reasoning_effort: "medium", message })).code, 2);
+  assert.equal(run(native({ model: "combo/grok-unified-4.6", reasoning_effort: "medium", message })).code, 2);
   assert.equal(run(native({ model: "gpt-6-next", reasoning_effort: " medium ", message })).code, 2);
   assert.equal(run(native({ model: "gpt-6-next", reasoning_effort: "medium", message, fork_turns: "all" })).code, 2);
 });
@@ -188,6 +189,7 @@ test("model-update override passes an unknown explicit pair to the native backen
 test("retired model families cannot dispatch natively or through an external provider", () => {
   for (const model of [
     "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "openai/gpt-5.6-sol",
+    "combo/grok-unified-4.6",
     "glm-5.2", "glm-5.2-flash", "glm-5.2-air", "zai/glm-5.2",
     "z-ai/glm-5.2-flash", "openrouter/z-ai/glm-5.2", "ZAI/GLM-5.2-AIR",
     "glm-5.2[1m]", "glm-5.2:batch", "zai/glm-5.2[1m]", "zai/glm-5.2:batch",
