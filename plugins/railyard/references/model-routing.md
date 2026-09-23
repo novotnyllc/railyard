@@ -757,20 +757,25 @@ has a distinct `oracle-homebrew-lifecycle` carrier/adapter bound to
 `lifecycle_action` on `local_host`; a lifecycle wrapper must use that exact
 claim, never reuse an Oracle review claim. A successful lifecycle receipt proves
 the fixed zero charged-meter surface and sets `freshReviewRequired:true`. The
-router then creates an unfulfilled host/account/policy-bound review requirement.
-A subsequent review claim must name that requirement and cannot settle it
-without matching identity and policy.
+router then creates an unfulfilled review requirement for that host and account,
+recording the current policy digest as provenance. Later policy changes do not
+waive the requirement. A subsequent review claim must name it; an authenticated
+successful settlement fulfills it, while a terminal no-start or failed review
+releases its claim slot for retry.
 
 The route’s requested identity is `chatgpt_current_pro`; its execution surface
 is `chatgpt_standard`. The v2 browser adapter uses Oracle 0.20.3 or later,
 explicit `gpt-6-pro`, the Latest picker, and verified Pro thinking. Browser Pro
-is distinct from a native Astra allocation. V1 Sol capability records cannot attest this
-v2 control set. Historical v1 records remain readable and retain their original
-accounting and provenance; status marks their capability stale. Attempting to
-claim, inspect for dispatch, or reconcile them through the v2 adapter returns
-`adapter_version_changed`. Do not rewrite the old model identity or discard
-an outstanding liability to manufacture a new route. A new route requires a
-fresh decision and the corresponding v2 evidence. Browser auth can remain `unknown` for one policy-admitted
-normal attempt. A login/account-selection result is
+is distinct from a native Astra allocation. V1 browser capability records cannot
+attest this v2 control set. Historical v1 records remain readable and retain
+their original accounting and provenance; status marks their capability stale.
+A fresh claim against an unclaimed v1 reservation requires route re-evaluation,
+and `inspect-claim` will not verify its old adapter for new dispatch. An
+authenticated receipt for work already claimed under v1 can still reconcile
+against that claim's original producer and adapter version. Do not rewrite the
+old model identity or discard an outstanding liability to manufacture a new
+route. New work requires a fresh decision and the corresponding v2 evidence.
+Browser auth can remain `unknown` for one policy-admitted normal attempt. A
+login/account-selection result is
 `auth_context_unavailable`: stop without interaction, credential changes, or
 API fallback. `oracle-api` is unsupported by this contract.
