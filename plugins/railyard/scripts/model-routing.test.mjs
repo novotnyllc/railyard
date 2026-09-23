@@ -40,7 +40,8 @@ import {
 } from "./model-routing.mjs";
 import { claudeIdentitySatisfied, fallbackSetDigest } from "./model-routing/select.mjs";
 import { CLAUDE_AGENT_MODEL_ALIASES, validateClaudeModelEffort } from "./model-routing/claude.mjs";
-import { validBinding, validSelected } from "./model-routing/state-schema.mjs";
+import { validActionModel, validActionReceipt, validBinding, validSelected } from "./model-routing/state-schema.mjs";
+import { validModel, validStoredModel } from "./model-routing/bounds.mjs";
 import { build as buildOracle, dispatch as dispatchOracle, oracleSessionSlug } from "../skills/oracle/scripts/oracle-route.mjs";
 
 const NOW = Date.parse("2026-08-04T12:00:00.000Z");
@@ -2447,6 +2448,11 @@ test("work-class inheritance is exact and neutral or active adjustments emit ide
   const adjustmentReceipt = adjusted.response.actionReceipt;
   assert.equal(adjustmentReceipt.actionId, "work-class-adjust-action");
   assert.equal(adjustmentReceipt.startsWork, true);
+  const historicalReceipt = structuredClone(adjustmentReceipt);
+  historicalReceipt.requested.model = "example/unknown-model";
+  historicalReceipt.actual.model = "example/unknown-model";
+  assert.equal(validActionReceipt(historicalReceipt), false);
+  assert.equal(validActionReceipt(historicalReceipt, { stored: true }), true);
   assert.equal(adjustmentReceipt.inheritanceReason, "intentional_same_class_inheritance");
   assert.equal(adjustmentReceipt.fallbackReason, "not_applicable");
   assert.deepEqual(adjustmentReceipt.budget, { kind: "top_up", forecast: { marginalUsd: "1" }, warningCount: 0 });
@@ -3879,7 +3885,7 @@ test("invalidating stale undispatched routes releases tight budgets atomically a
 });
 
 
-test("stored descriptor versions survive catalog upgrades while live selections stay strict", () => {
+test("stored route evidence survives catalog upgrades while live selections stay strict", () => {
   const policy = catalog({});
   const state = attestedCapability(policy, { carrierId: "codex-astra", adapterId: "native-subagent-create", accountScope: "local", observedModel: "gpt-6-astra" });
   const admission = admit(policy, state);
@@ -3910,6 +3916,43 @@ test("stored descriptor versions survive catalog upgrades while live selections 
     badReservation.policyDigest = malformedPolicy;
     badReservation.decision.policyDigest = malformedPolicy;
     assert.equal(validateState(badPolicy).ok, false, malformedPolicy);
+  }
+  const storedModel = "example/unknown-model";
+  assert.equal(validModel(storedModel), false);
+  assert.equal(validStoredModel(storedModel), true);
+  assert.equal(validActionModel({ model: storedModel, effort: "max" }), false);
+  assert.equal(validActionModel({ model: storedModel, effort: "max" }, { stored: true }), true);
+  assert.equal(validStoredModel("example//unknown-model"), false);
+  assert.equal(validStoredModel(`example/${"x".repeat(128)}`), false);
+  reservation.selected.model = storedModel;
+  reservation.decision.selected.model = storedModel;
+  for (const facet of Object.values(reservation.decision.disclosure.requested)) {
+    if (facet.value === "gpt-6-astra") facet.value = storedModel;
+  }
+  for (const facet of Object.values(reservation.decision.disclosure.configured)) {
+    if (facet.value === "gpt-6-astra") facet.value = storedModel;
+  }
+  for (const facet of Object.values(reservation.decision.disclosure.observed)) {
+    if (facet.value === "gpt-6-astra") facet.value = storedModel;
+  }
+  assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
+  assert.equal(validSelected(reservation.selected, { stored: true }), true);
+  assert.equal(validSelected(reservation.selected), false);
+
+  const currentDescriptorRoute = structuredClone(reservation.selected);
+  currentDescriptorRoute.carrierVersion = CARRIER_DESCRIPTORS[currentDescriptorRoute.carrierId].version;
+  currentDescriptorRoute.adapterVersion = ADAPTER_DESCRIPTORS[currentDescriptorRoute.adapterId].version;
+  assert.equal(validSelected(currentDescriptorRoute), false);
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "routing-stored-model-"));
+  try {
+    const statePath = path.join(directory, "state.json");
+    fs.writeFileSync(statePath, JSON.stringify(state), { mode: 0o600 });
+    const loaded = loadStateForCli({ state: { path: statePath }, config: { path: path.join(directory, "catalog.json") } });
+    assert.equal(loaded.ok, true, JSON.stringify(loaded));
+    assert.deepEqual(loaded.state, state);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
   }
 });
 

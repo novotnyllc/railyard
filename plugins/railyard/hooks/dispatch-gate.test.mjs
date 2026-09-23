@@ -174,15 +174,17 @@ test("native model and effort validation uses this tool's capability pairs", () 
 });
 
 test("model-update override passes an unknown explicit pair to the native backend", () => {
-  const message = "Allocation: model update override; the user authorized checking the newly exposed native selector.\nProbe the exact requested pair and report the backend result.";
-  const accepted = run(native({ model: "gpt-6-next", reasoning_effort: "medium", message }));
-  assert.equal(accepted.code, 0, accepted.err);
-  assert.equal(accepted.log[0].capability, "native_backend_unverified");
-  assert.equal(accepted.log[0].modelUpdateOverride, true);
-  assert.equal(run(native({ model: "gpt-6-next", reasoning_effort: "medium" })).code, 2);
+  const message = "Allocation: model update override; the local native snapshot may be stale.\nProbe the exact requested pair and report the backend result.";
+  for (const model of ["gpt-6-next", "example/unknown-model"]) {
+    const accepted = run(native({ model, reasoning_effort: "medium", message }));
+    assert.equal(accepted.code, 0, accepted.err);
+    assert.equal(accepted.log[0].capability, "native_backend_unverified");
+    assert.equal(accepted.log[0].modelUpdateOverride, true);
+    assert.equal(run(native({ model, reasoning_effort: "medium" })).code, 2);
+    assert.equal(run(native({ model, reasoning_effort: " medium ", message })).code, 2);
+    assert.equal(run(native({ model, reasoning_effort: "medium", message, fork_turns: "all" })).code, 2);
+  }
   assert.equal(run(native({ model: "bad model name", reasoning_effort: "medium", message })).code, 2);
-  assert.equal(run(native({ model: "gpt-6-next", reasoning_effort: " medium ", message })).code, 2);
-  assert.equal(run(native({ model: "gpt-6-next", reasoning_effort: "medium", message, fork_turns: "all" })).code, 2);
 });
 
 test("unknown models require a verified native pair or an explicit external provider", () => {

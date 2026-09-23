@@ -113,6 +113,15 @@ export function validModel(value) {
   return typeof value === "string" && MODEL_RE.test(value) && !value.startsWith("-") && !value.includes("/") && !value.includes("\\") && !value.includes("@") && !value.includes("--");
 }
 
+// Stored evidence can outlive the live model grammar. Keep the historical
+// syntax bounded while allowing provider-qualified identifiers to remain
+// readable; selection continues to use validModel.
+export function validStoredModel(value) {
+  return typeof value === "string"
+    && value.length <= 128
+    && (validModel(value) || (value.includes("/") && value.split("/").every(validModel)));
+}
+
 export function validDigest(value) {
   return typeof value === "string" && DIGEST_RE.test(value);
 }
