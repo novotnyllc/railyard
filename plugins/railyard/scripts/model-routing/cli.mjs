@@ -202,7 +202,6 @@ export function runCli(input, options = {}) {
       trustedCapabilityAttestor: options.trustedCapabilityAttestor,
       trustedReceiptImporter: options.trustedReceiptImporter,
       trustedTaskAuthorityAttestor: options.trustedTaskAuthorityAttestor,
-      trustedRuntimeAttestor: options.trustedRuntimeAttestor,
       trustedTransportAttestor: options.trustedTransportAttestor,
       fixedReceiptProducers: options.fixedReceiptProducers,
       controllerRuntime: options.controllerRuntime,

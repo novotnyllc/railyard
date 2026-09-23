@@ -1,10 +1,14 @@
 # Model routing contract v1
 
 Choose model and effort deliberately for ordinary native work using the
-[allocation guide](harness-model-invocation.md). Astra Max is the baseline
-candidate for substantive engineering; explicit user choices and suitable
-inheritance remain authoritative. Native dispatch does not need an admission
-ledger, charter, or routine routing CLI call.
+[allocation guide](harness-model-invocation.md). GPT-6 Sol at medium is the
+baseline for ordinary substantive **Codex task** work; use high when task need
+warrants it, Luna at low or medium for bounded repetitive work, and Astra only
+for clear hard or high-risk escalation. Native subagent creation has a separate
+roster: unavailable Sol/Luna native selectors fail visibly. Select Astra for a
+child only when warranted by the assignment. Explicit user choices
+and suitable inheritance remain authoritative. Native dispatch does not need
+an admission ledger, charter, or routine routing CLI call.
 
 This reference describes the optional strict resolver for configured fleet,
 budget, privacy, and fixed-adapter work. Its exact wire version is
@@ -52,12 +56,11 @@ An outbound-work request supplies only content-free control data:
   "command": "resolve",
   "callerKind": "deliver",
   "role": "implementation",
-  "adapterId": "native-subagent-create",
-  "dispatchKind": "subagent_create",
+  "adapterId": "codex-task-create",
+  "dispatchKind": "task_create",
   "budgetEffect": "start",
-  "model": "gpt-6-astra",
-  "effort": "max",
-  "contextFork": "none",
+  "model": "gpt-6-sol",
+  "effort": "medium",
   "workShape": {
     "ambiguity": "low",
     "novelty": "low",
@@ -90,10 +93,7 @@ changed class evidence returns `prior_work_class_unknown` or
 model, effort, or active-budget top-up.
 
 `runtime` and `transport` are reserved input names, not caller-controlled
-facts: caller JSON for either is rejected. The legacy configured
-`codex-terra-runtime` substitute requires a fixed trusted host-runtime
-attestor. That legacy Luna/Terra mechanism is not used by the Astra default,
-and its fixed baseline is not measured availability. A trusted transport
+facts: caller JSON for either is rejected. A trusted transport
 attestor selects any native versus visible-task bridge path; configuration or
 a request boolean cannot manufacture that evidence.
 
@@ -187,19 +187,23 @@ fabricated carrier/model route effect.
 
 ## Built-in no-config policy
 
-No catalog means no provider probe, availability assertion, automatic model
-substitution, or required implementation-harness change. A substantial
-engineering, orchestration, or review request proposes `gpt-6-astra` at `max`.
-The built-in digest is `builtin-model-routing-astra-max-v1`; it deliberately
-changes when the default policy changes so old decisions are not reused as the
-new policy.
+No catalog means no provider probe, availability assertion, or required
+implementation-harness change. Ordinary substantive Codex task work proposes
+`gpt-6-sol` at `medium`. Complex or difficult work can select Sol at `high`;
+bounded repetitive work can select Luna at `low` or `medium`; Astra is a clear
+hard or high-risk escalation. Native creation currently lacks Sol and Luna
+selectors, so its default and
+explicit requests for those models fail visibly. Deliberately select a supported
+Astra allocation only when the assignment warrants it. The built-in
+digest changes with this policy so old decisions are not reused as the new
+policy.
 
 `model` and `effort` preserve caller requirements exactly. Naming a model
 requires a concrete effort (`effort_required` if omitted). A requested effort
-also applies when the model is omitted, using Astra as the candidate. An
+also applies when the model is omitted, using Sol as the candidate. An
 unsupported pair returns `native_model_unsupported` or `effort_unsupported`;
-it does not replace the model or lower effort. The older
-`explicitModelRequirement:true` flag now requires the concrete `model` field.
+it does not replace the model or lower effort. `explicitModelRequirement:true`
+requires the concrete `model` field.
 
 This baseline does not emit `implementationEngine`. An explicit model request
 or configured Codex implementation route emits
@@ -210,7 +214,7 @@ the incompatibility; do not use CE's `prefer` behavior to switch harnesses.
 A no-config request from a Claude harness returns
 `cross_harness_adapter_required` instead of inventing a cross-harness route.
 
-Astra Max is a candidate, not an assertion that Max always wins. Evaluate cost
+A default is a starting policy, not an assertion that it always wins. Evaluate cost
 and elapsed time to an accepted result across the whole assignment, including
 children, unsuccessful attempts, repeated reads, retries, and repairs. Use
 existing outcomes; do not substitute a per-token price or quota-per-hour
@@ -222,10 +226,10 @@ tradeoff, or relevant specialist can justify another model and effort.
 
 [`scripts/model-routing/native.mjs`](../scripts/model-routing/native.mjs)
 exports the small, dependency-free capability check used by the native gate.
-Its 2026-09-14 adapter snapshot includes Astra, Daybreak, and Terra through
-`ultra`, Luna through `max`, and `combo/grok-unified-4.6` through `xhigh`.
+Its permitted native-subagent roster includes Astra and Daybreak through
+`ultra`.
 All begin at `low` and include `medium` and `high`; see the
-[exact roster and fork rules](harness-model-invocation.md#current-codex-native-controls).
+[exact roster and fork rules](harness-model-invocation.md#gpt-6-family-and-current-codex-native-controls).
 
 The active tool schema is authoritative. A provider catalog or
 `models_cache.json` may include models the current native tool does not expose;
@@ -291,9 +295,9 @@ top-level keys only: `providers`, `models`, `roles`, `privacy`, `budgets`,
 - `budgets` has task/run/project meter limits. A meter rule may contain
   `soft`, `hardAdmission`, or `strict` canonical amounts.
 
-The [`example catalog`](model-routing.example.json) uses Astra Max for
-substantial native work and records the supported efforts of the five current
-native alternatives. Those alternatives are not a cost-ranked ladder. Explicit
+The [`example catalog`](model-routing.example.json) uses Sol medium for
+ordinary substantive task work, with high and Astra escalation selected by task
+need. Unavailable Sol/Luna native-subagent requests fail visibly. Those alternatives are not a cost-ranked ladder. Explicit
 `model` requirements select matching catalog entries ahead of role-tier
 preferences; the selected entry still has to satisfy its declared role,
 privacy, harness, and capability restrictions. Unsupported requirements never
@@ -302,7 +306,7 @@ limits, or automatic cross-family reviewers in the example.
 
 Default role tiers can contain policy-authorized fallback candidates. A lower
 tier selected after ineligibility is disclosed as
-`configured_model_substitute`; refusal-gated and legacy Terra substitutions
+`configured_model_substitute`; refusal-gated substitutions
 keep their more specific reasons. An explicit requested model cannot be
 replaced by any of them. Review provenance must identify the model that
 actually supplied the opinion. Same-model diversity is not cross-family
@@ -311,31 +315,17 @@ review; configure a supported independent reviewer deliberately when needed.
 Provider `harness` and request `harness`/`crossHarnessReason` classify the
 invocation, not availability. A different harness requires a concrete reason
 and a supported adapter. Credentials, capabilities, and accounting do not
-transfer merely because the model name is present. The optional GLM adapter
-still needs its own provider configuration and callable evidence; its legacy
-fixed profile is not a current native role.
+transfer merely because the model name is present.
 
-### Migrating an existing owner catalog
+GLM is unavailable as a strict route until a verified current selector and
+supported effort can be bound to a callable adapter. Use GLM as a family name;
+there is no verified stable latest-model alias, and a catalog label cannot
+promise automatic upgrades. See the [Z.ai model guide](https://docs.z.ai/guides/llm/glm-5.3)
+and [API model identifiers](https://docs.z.ai/api-reference/llm/chat-completion).
 
-Do not overwrite an existing catalog with the example. Preserve a backup and
-apply only the intended policy changes:
-
-1. Add a `codex_astra` provider using the owner's existing Codex account,
-   locality, retention, and harness values, with `carrierId:"codex-astra"`.
-2. Add an `astra` model with `requestedModel:"gpt-6-astra"`, `effort:"max"`,
-   and the supported `low`, `medium`, `high`, `xhigh`, `max`, `ultra` efforts.
-3. Point the intended substantial engineering, orchestration, and review roles
-   to that baseline. Preserve explicit specialist or alternative-provider
-   selections and unrelated custom roles. Remove unbenchmarked automatic cost
-   ordering only where it conflicts with that chosen policy.
-4. Keep unrelated provider/account identifiers, budgets, privacy constraints,
-   discovery settings, learning preferences, and custom values intact.
-   `codex-terra` represents the current explicit Terra selector; the older
-   `codex-terra-runtime` row remains available for intentionally retained fleet
-   adapters and must not be reinterpreted as live native evidence.
-5. Validate the candidate catalog and review its selected pairs before applying
-   it. Source upgrades do not migrate user configuration automatically. Existing
-   provider entries may remain useful without being callable by native spawn.
+Configure `codex-6-sol` for ordinary substantive task work, `codex-6-luna` for
+bounded work, and `codex-astra` for deliberate escalation. Validate the catalog
+against the active execution surface before using its selected pairs.
 
 Catalog data is declarative, credential-free, and cannot define a profile,
 provider command, flag, executable, endpoint, path, prompt, source, host, or
@@ -393,28 +383,23 @@ Catalog fields may reference them; they cannot extend them.
 | `claude-session-create` | Claude Code `Agent` session | family-alias `model`; effort inherits or comes from the subagent definition | the stored v1 `banner-only` label is legacy metadata, not an effort control or proof |
 | `native-subagent-message` | existing subagent message | none | `none` or `adjust_active`, never a fake spawn claim |
 | `native-subagent-followup` | work-starting follow-up | none today | fresh resolved route/inheritance only |
-| `configured-profile-task-create` | separately callable profile task | carrier-owned fixed profile | GLM only after host attestation |
 | `claude-cli-via-task` / `claude-cli-via-worker` | CE-owned Claude review path | selector controller/worker plus CE slot binding | composite controller and Claude-child accounting |
 | `oracle-browser` | fixed Oracle browser advisor | fixed route | selected-route local attestation only |
 | `oracle-homebrew-lifecycle` | fixed local Oracle lifecycle action | fixed lifecycle carrier | separate lifecycle claim; successful mutation requires a fresh review |
 
 | Carrier | Transport and fixed facts | Availability truth |
 | --- | --- | --- |
-| `codex-astra` | `gpt-6-astra`, Low/Medium/High/Xhigh/Max/Ultra | baseline candidate; actual availability remains unknown |
-| `codex-terra` | `gpt-5.6-terra`, Low/Medium/High/Xhigh/Max/Ultra | explicit selector; no Luna-substitution condition |
-| `codex-luna` | `gpt-5.6-luna`, Low/Medium/High/Xhigh/Max | current native snapshot; configured restrictions still apply |
-| `codex-grok` | `combo/grok-unified-4.6`, Low/Medium/High/Xhigh | current native snapshot; provider routing does not prove execution |
+| `codex-6-sol` | `gpt-6-sol`, Low/Medium/High/Xhigh/Max/Ultra | verified for `codex-task-create` and `codex-task-message`; unavailable to native subagent creation |
+| `codex-6-luna` | `gpt-6-luna`, Low/Medium/High/Xhigh/Max | verified for `codex-task-create` and `codex-task-message`; unavailable to native subagent creation |
+| `codex-astra` | `gpt-6-astra`, Low/Medium/High/Xhigh/Max/Ultra | verified task selector and the available native-subagent escalation selector |
 | `codex-daybreak-blue` | `gpt-daybreak-blue-latest`, Low/Medium/High/Xhigh/Max/Ultra | the strict configured path requires a fresh local availability cache |
-| `codex-sol` | legacy configured `gpt-5.6-sol` selector | not exposed by the current native override snapshot |
-| `codex-terra-runtime` | legacy runtime-attested Terra substitution | needs separately bound runtime and capability evidence |
-| `glm-5-2-scout` / `glm-5-2-engineer` | legacy separately callable profiles | unsupported until their own callable adapter is attested; not native agent roles |
 | `claude-ce-review` | CE Claude `-p` review adapter | unsupported until the compatible CE adapter is attested |
 | `oracle-browser` | `chatgpt_current_pro` channel on `chatgpt_standard` | Oracle v2 controls require their own current capability evidence |
 | `oracle-homebrew-lifecycle` | local Oracle install/upgrade lifecycle | separate v2 lifecycle evidence and claim |
 
 Supported efforts describe a surface, not a recommended effort for each model.
-The catalog validates known carrier ranges, so Luna `ultra` and Grok `max`
-are rejected. Catalogs, native tools, CLI adapters, and browser models are
+The catalog validates known carrier ranges, so Luna `ultra` is rejected.
+Catalogs, native tools, CLI adapters, and browser models are
 separate surfaces; validate the one that will execute the work. A current
 native roster does not prove that an older configured adapter is available.
 
@@ -461,10 +446,8 @@ The cache says only that this local Codex model list exposed the selector at a
 checked time. It does not prove authorization for a particular task, live
 carrier behavior, model output, or a successful security canary.
 
-The current GLM profile facts (`glm-5.2`, High/xhigh, `zai_litellm`, and the
-200,000-token ceiling) are scoped host evidence, not a reusable default or
-entitlement claim. The resolver never treats a loopback bridge as local
-inference, provider entitlement, or live usage proof.
+A loopback bridge does not establish local inference, provider entitlement, or
+live usage proof. Model and effort require current adapter evidence.
 
 The public stdin CLI has a closed receipt bridge only for `oracle-browser` and
 `oracle-homebrew-lifecycle`. It accepts a `receiptId` reference matching a
@@ -564,7 +547,6 @@ requested-versus-actual model/effort, inheritance/fallback reasons, and either
 content. The only reason values are `budget_neutral_message` and
 `active_budget_top_up`; inheritance is `not_applicable` or the exact
 `intentional_same_class_inheritance`; fallback is `not_applicable`,
-`implementation_model_substitute`, or
 `higher_ranked_candidate_cannot_fit_hard_constraint`. A neutral message has
 `startsWork:false`; an active top-up has `startsWork:true`. Repeating the same
 neutral request derives the same receipt; repeating
@@ -577,7 +559,7 @@ second top-up.
 objective, source of truth, scope, constraints, authorization, acceptance, and
 stop condition. It returns a carrier-neutral invariant object/digest plus a
 separate source-owned presentation overlay. The only presentation families are
-`gpt_sol`, `opus`, `fable`, `sonnet`, `haiku`, `glm`, and `oracle`. Their closed instructions use,
+`gpt_sol`, `opus`, `fable`, `sonnet`, `haiku`, and `oracle`. Their closed instructions use,
 respectively, a lean bounded brief; the complete specification with explicit
 scope/delegation/progress limits; autonomy, pause, evidence, and long-run-memory
 boundaries; repository standards plus plan/impact/risk/verification; or a
@@ -669,7 +651,7 @@ node --test plugins/railyard/scripts/model-routing.test.mjs
 ```
 
 It exercises catalog and state validation, the Daybreak positive/negative/
-unknown 24-hour cache path, Astra Max defaults, explicit pair preservation,
+unknown 24-hour cache path, Sol medium defaults, explicit pair preservation,
 native/provider capability boundaries, catalog role constraints, reason-class
 negative caches, learning limits, R28 decision/settlement/replay disclosure,
 authority and bridge identity binding, work-class/action-receipt invariants,
@@ -704,9 +686,9 @@ the route. It is a replacement of execution mechanism, not a rewrite of CE.
 
 | Unchanged CE instruction | Permitted AU replacement | What returns to CE |
 | --- | --- | --- |
-| plan research/deepening helper | claimed `glm-5-2-scout` separate task | the ordinary CE research/evidence artifact |
-| debug bounded investigation helper | claimed `glm-5-2-scout` separate task | the ordinary CE investigation input/evidence artifact |
-| already-legitimized bounded execution step | claimed `glm-5-2-engineer` separate task | the ordinary CE executor outcome artifact |
+| plan research/deepening helper | claimed `codex-6-sol` task route with the selected effort | the ordinary CE research/evidence artifact |
+| debug bounded investigation helper | claimed `codex-6-sol` task route with the selected effort | the ordinary CE investigation input/evidence artifact |
+| already-legitimized bounded execution step | claimed `codex-6-sol` or `codex-6-luna` task route with the selected effort | the ordinary CE executor outcome artifact |
 | code/doc/POV/PR read-only review seam | claimed `claude-ce-review` through its supported CE Claude `-p` path, or Oracle only where the closed role/carrier pair permits it | the ordinary seam-specific review receipt/findings artifact |
 
 A configured `review.cross_family` role asks another model family for an
@@ -738,8 +720,7 @@ expand filesystem/network scope.
 
 For Claude, use only the supported CE-owned `claude -p` adapter bound to the
 claimed slot. Railyard's deliver skill does not construct an alternate Claude
-command or supervisor. For GLM, use only the callable separate-task profile;
-never pass GLM to a selector or native-subagent API. If that path or CE seam is
+command or supervisor. If the selected path or CE seam is
 not attested, return `transport_unsupported` and use the frozen disclosed
 fallback or required-route block. Do not inspect or alter a CE installed cache
 to make it appear supported.
@@ -767,7 +748,7 @@ without matching identity and policy.
 The route’s requested identity is `chatgpt_current_pro`; its execution surface
 is `chatgpt_standard`. The v2 browser adapter uses Oracle 0.20.3 or later,
 explicit `gpt-6-pro`, the Latest picker, and verified Pro thinking. Browser Pro
-is distinct from native Astra Max. V1 Sol capability records cannot attest this
+is distinct from a native Astra allocation. V1 Sol capability records cannot attest this
 v2 control set. Historical v1 records remain readable and retain their original
 accounting and provenance; status marks their capability stale. Attempting to
 claim, inspect for dispatch, or reconcile them through the v2 adapter returns

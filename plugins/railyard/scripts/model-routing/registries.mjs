@@ -4,7 +4,7 @@
  * catalog data may reference these identifiers but never define one.
  */
 
-import { NATIVE_MODEL_EFFORTS } from "./native.mjs";
+import { CODEX_TASK_MODEL_EFFORTS, NATIVE_SUBAGENT_MODEL_EFFORTS } from "./native.mjs";
 
 export const CONTRACT_VERSION = "railyard/model-routing/v1";
 
@@ -186,7 +186,7 @@ export const ACTION_RECEIPT_REASONS = new Set(["budget_neutral_message", "active
 
 export const ACTION_INHERITANCE_REASONS = new Set(["not_applicable", "intentional_same_class_inheritance"]);
 
-export const ACTION_FALLBACK_REASONS = new Set(["not_applicable", "implementation_model_substitute", "configured_model_substitute", "higher_ranked_candidate_cannot_fit_hard_constraint", "review_refusal_substitute"]);
+export const ACTION_FALLBACK_REASONS = new Set(["not_applicable", "configured_model_substitute", "higher_ranked_candidate_cannot_fit_hard_constraint", "review_refusal_substitute"]);
 
 export const FIXED_LOCAL_PROBE_ATTESTOR = "railyard-fixed-local-probe-v1";
 
@@ -198,12 +198,11 @@ export const TASK_AUTHORITY_ATTESTOR = "railyard-task-authority-attestor-v1";
 
 export const TRANSPORT_ATTESTOR = "railyard-transport-attestor-v1";
 
-export const RUNTIME_ATTESTOR = "railyard-runtime-attestor-v1";
 
 export const CE_SEAMS = freeze({
-  "ce-plan.execution": freeze({ skill: "ce-plan", artifactSchema: "railyard/ce-plan-execution-input/v1", roles: ["research", "investigation", "implementation", "implementation.bounded_fix"], carriers: ["glm-5-2-scout", "glm-5-2-engineer", "codex-luna", "codex-astra"] }),
-  "ce-work.execution": freeze({ skill: "ce-work", artifactSchema: "railyard/ce-work-execution-input/v1", roles: ["implementation", "implementation.bounded_fix", "implementation.mechanical"], carriers: ["glm-5-2-engineer", "codex-luna", "codex-astra"] }),
-  "ce-debug.execution": freeze({ skill: "ce-debug", artifactSchema: "railyard/ce-debug-diagnosis/v1", roles: ["investigation", "research"], carriers: ["codex-daybreak-blue", "glm-5-2-scout", "codex-luna", "codex-astra"] }),
+  "ce-plan.execution": freeze({ skill: "ce-plan", artifactSchema: "railyard/ce-plan-execution-input/v1", roles: ["research", "investigation", "implementation", "implementation.bounded_fix"], carriers: ["codex-6-luna", "codex-6-sol", "codex-astra"] }),
+  "ce-work.execution": freeze({ skill: "ce-work", artifactSchema: "railyard/ce-work-execution-input/v1", roles: ["implementation", "implementation.bounded_fix", "implementation.mechanical"], carriers: ["codex-6-luna", "codex-6-sol", "codex-astra"] }),
+  "ce-debug.execution": freeze({ skill: "ce-debug", artifactSchema: "railyard/ce-debug-diagnosis/v1", roles: ["investigation", "research"], carriers: ["codex-daybreak-blue", "codex-6-luna", "codex-6-sol", "codex-astra"] }),
   // codex-daybreak-blue is admitted ONLY so a refusal-triggered substitute can
   // be reached; it is not a cross-family reviewer. The catalog gates it behind
   // `afterRefusalOnly`, and the decision records `review_refusal_substitute`, so
@@ -254,17 +253,6 @@ export const ADAPTER_DESCRIPTORS = freeze({
     controls: freeze({ model: "model", effort: "thinking" }),
     visibleTask: true,
     receiptProducer: "codex-task",
-  }),
-  "configured-profile-task-create": freeze({
-    version: "v1",
-    dispatchKinds: ["task_create"],
-    budgetEffect: "start",
-    startsWork: true,
-    controls: freeze({ profile: "carrier-owned" }),
-    visibleTask: true,
-    requiresTaskAuthority: true,
-    requiresCallableAttestation: true,
-    receiptProducer: "configured-profile-task",
   }),
   "native-subagent-create": freeze({
     version: "v1",
@@ -349,43 +337,30 @@ export const CARRIER_DESCRIPTORS = freeze({
     transport: "selector-native",
     requestedModel: "gpt-6-astra",
     executionSurface: "codex",
-    efforts: NATIVE_MODEL_EFFORTS["gpt-6-astra"],
+    efforts: NATIVE_SUBAGENT_MODEL_EFFORTS["gpt-6-astra"],
     adapters: ["native-subagent-create", "codex-task-create", "codex-task-message", "native-subagent-message", "native-subagent-followup"],
     roles: NATIVE_WORK_ROLES,
   }),
-  "codex-terra": freeze({
+  // GPT-6 Sol and Luna are verified on Codex task creation and task messages.
+  // They are deliberately absent from native-subagent adapters until that
+  // separate tool exposes the same selectors.
+  "codex-6-luna": freeze({
     version: "v1",
     transport: "selector-native",
-    requestedModel: "gpt-5.6-terra",
+    requestedModel: "gpt-6-luna",
     executionSurface: "codex",
-    efforts: NATIVE_MODEL_EFFORTS["gpt-5.6-terra"],
-    adapters: ["native-subagent-create", "codex-task-create", "codex-task-message", "native-subagent-message", "native-subagent-followup"],
+    efforts: CODEX_TASK_MODEL_EFFORTS["gpt-6-luna"],
+    adapters: ["codex-task-create", "codex-task-message"],
     roles: NATIVE_WORK_ROLES,
   }),
-  "codex-grok": freeze({
+  "codex-6-sol": freeze({
     version: "v1",
     transport: "selector-native",
-    requestedModel: "combo/grok-unified-4.6",
+    requestedModel: "gpt-6-sol",
     executionSurface: "codex",
-    efforts: NATIVE_MODEL_EFFORTS["combo/grok-unified-4.6"],
-    adapters: ["native-subagent-create", "codex-task-create", "codex-task-message", "native-subagent-message", "native-subagent-followup"],
+    efforts: CODEX_TASK_MODEL_EFFORTS["gpt-6-sol"],
+    adapters: ["codex-task-create", "codex-task-message"],
     roles: NATIVE_WORK_ROLES,
-  }),
-  "codex-luna": freeze({
-    version: "v1",
-    transport: "selector-native",
-    requestedModel: "gpt-5.6-luna",
-    efforts: ["low", "medium", "high", "xhigh", "max"],
-    adapters: ["native-subagent-create", "codex-task-create", "codex-task-message", "native-subagent-message", "native-subagent-followup"],
-    roles: NATIVE_WORK_ROLES,
-  }),
-  "codex-sol": freeze({
-    version: "v1",
-    transport: "selector-native",
-    requestedModel: "gpt-5.6-sol",
-    efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
-    adapters: ["native-subagent-create", "codex-task-create", "codex-task-message", "native-subagent-message", "native-subagent-followup"],
-    roles: ["investigation", "research", "orchestration", "review", "review.code", "review.plan", "review.primary", "review.cross_family", "review.deep", "review.architecture", "review.long_context", "review.adversarial", "implementation.hard", "security.review", "security.threat-model", "security.trust", "security.redaction", "security.signing", "security.attack-shape", "security.audit"],
   }),
   "codex-daybreak-blue": freeze({
     version: "v1",
@@ -400,39 +375,6 @@ export const CARRIER_DESCRIPTORS = freeze({
     // not attested, so Daybreak carries them too - matching its standing
     // preference for deep technical work.
     roles: NATIVE_WORK_ROLES,
-  }),
-  "codex-terra-runtime": freeze({
-    version: "v1",
-    transport: "selector-native",
-    requestedModel: null,
-    efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
-    adapters: ["native-subagent-create", "codex-task-create", "codex-task-message", "native-subagent-message", "native-subagent-followup"],
-    roles: ["implementation", "implementation.fix", "implementation.mechanical", "implementation.medium", "implementation.long-running"],
-    runtimeVerifiedOnly: true,
-  }),
-  "glm-5-2-scout": freeze({
-    version: "v1",
-    transport: "separate-task-profile",
-    requestedModel: "glm-5.2",
-    efforts: ["high"],
-    adapters: ["configured-profile-task-create"],
-    roles: ["research", "investigation", "review.secondary"],
-    fixedProfile: "glm-5-2-scout",
-    contextLimit: 200000,
-    requiresCallableAttestation: true,
-    cooperativeOnly: true,
-  }),
-  "glm-5-2-engineer": freeze({
-    version: "v1",
-    transport: "separate-task-profile",
-    requestedModel: "glm-5.2",
-    efforts: ["xhigh"],
-    adapters: ["configured-profile-task-create"],
-    roles: ["implementation.mechanical", "implementation.bounded_fix", "implementation.cross-harness"],
-    fixedProfile: "glm-5-2-engineer",
-    contextLimit: 200000,
-    requiresCallableAttestation: true,
-    cooperativeOnly: true,
   }),
   "claude-ce-review": freeze({
     version: "v1",
@@ -488,7 +430,7 @@ export const CARRIER_DESCRIPTORS = freeze({
 });
 
 export const DEFAULT_POLICY = freeze({
-  digest: "builtin-model-routing-astra-max-v1",
+  digest: "builtin-model-routing-gpt6-sol-v1",
   source: "config-default",
 });
 
@@ -507,9 +449,6 @@ export const PRESENTATION_OVERLAYS = freeze({
   ]) }),
   haiku: freeze({ id: "haiku", format: "mechanical_task_brief", instructions: freeze([
     "State the exact mechanical change, its smallest verification check, and the stop condition.",
-  ]) }),
-  glm: freeze({ id: "glm", format: "repository_engineering_brief", instructions: freeze([
-    "State repository standards and boundaries, the plan, expected impact and risks, verification evidence, and the stop condition.",
   ]) }),
   oracle: freeze({ id: "oracle", format: "self_contained_one_shot_brief", instructions: freeze([
     "Provide one self-contained briefing with the complete selected file context, acceptance evidence, and stop condition.",

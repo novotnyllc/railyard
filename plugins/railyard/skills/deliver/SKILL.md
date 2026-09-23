@@ -132,10 +132,10 @@ by the delivery request.
 ## Allocate only when delegating
 
 Before each agent assignment, choose model AND reasoning effort through
-`railyard:model-routing`. Use Astra Max as the baseline candidate for substantive
-engineering; use task outcomes, constraints, or an explicit latency preference
-to justify another capable combination. This is not a claim that Max always
-costs less. Deterministic tools can perform mechanical work directly; do not
+`railyard:model-routing`. Use GPT-6 Sol at medium effort as the ordinary Codex
+baseline; raise effort for demanding work and select Astra when a specific
+task needs its added depth. Compare complete accepted outcomes, including
+retries and repairs. Deterministic tools can perform mechanical work directly; do not
 spawn an agent just to move that work to a cheaper model.
 
 Deliberate inheritance is a valid allocation. For native Codex dispatch, state

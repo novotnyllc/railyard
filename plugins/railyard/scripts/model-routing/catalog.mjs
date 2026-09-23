@@ -70,16 +70,13 @@ export function presentationOverlayFor({ carrierId, model, effort }) {
   const carrier = CARRIER_DESCRIPTORS[carrierId];
   if (!carrier || !carrier.efforts.includes(effort)) return null;
   let family;
-  if (["codex-astra", "codex-terra", "codex-grok", "codex-luna", "codex-sol", "codex-terra-runtime", "codex-daybreak-blue"].includes(carrierId)) {
+  if (["codex-astra", "codex-6-luna", "codex-6-sol", "codex-daybreak-blue"].includes(carrierId)) {
     if (carrier.requestedModel && model !== carrier.requestedModel) return null;
     family = "gpt_sol";
   } else if (CARRIER_DESCRIPTORS[carrierId]?.modelFamily === "claude") {
     const parsed = parseClaudeFamily(model);
     if (!parsed) return null;
     family = parsed.family;
-  } else if (["glm-5-2-scout", "glm-5-2-engineer"].includes(carrierId)) {
-    if (model !== "glm-5.2") return null;
-    family = "glm";
   } else if (carrierId === "oracle-browser") {
     if (model !== "chatgpt_current_pro") return null;
     family = "oracle";

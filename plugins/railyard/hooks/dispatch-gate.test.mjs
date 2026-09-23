@@ -129,7 +129,7 @@ test("captured Codex 0.154.0 PreToolUse envelope validates child controls", () =
     tool_input: {
       task_name: "contract_probe",
       message: "Read-only synthetic contract canary. Reply with CHILD_FIXTURE_COMPLETE; perform no tools.",
-      model: "gpt-5.6-terra",
+      model: "gpt-6-astra",
       reasoning_effort: "high",
       fork_turns: "none",
     },
@@ -137,7 +137,7 @@ test("captured Codex 0.154.0 PreToolUse envelope validates child controls", () =
   };
   const result = run(payload);
   assert.equal(result.code, 0, result.err);
-  assert.equal(result.log[0].model, "gpt-5.6-terra");
+  assert.equal(result.log[0].model, "gpt-6-astra");
   assert.equal(result.log[0].effort, "high");
   assert.equal(result.log[0].phase, "pre_tool_use");
   assert.equal(result.out, "");
@@ -157,12 +157,12 @@ test("native explicit pair passes with no-history and limited-history task brief
 test("native model and effort validation uses this tool's capability pairs", () => {
   for (const [model, reasoning_effort] of [
     ["gpt-6-astra", "ultra"], ["gpt-daybreak-blue-latest", "ultra"],
-    ["gpt-5.6-terra", "max"], ["gpt-5.6-luna", "max"], ["combo/grok-unified-4.6", "xhigh"],
+    ["gpt-6-astra", "low"], ["gpt-6-astra", "max"],
   ]) assert.equal(run(native({ model, reasoning_effort })).code, 0, model);
   for (const [model, reasoning_effort] of [
-    ["gpt-5.6-luna", "ultra"], ["combo/grok-unified-4.6", "max"],
+    ["gpt-6-astra", "none"], ["combo/grok-unified-4.6", "max"],
     ["gpt-6-astra", "turbo"], ["gpt-6-astra", 7], ["gpt-6-astra", {}],
-    ["gpt-6-astra", " max "], ["gpt-5.6-sol", "max"], ["glm-5.2", "high"],
+    ["gpt-6-astra", " max "], ["unsupported-native-model", "max"], ["custom-external-model", "high"],
   ]) {
     const r = run(native({ model, reasoning_effort }));
     assert.equal(r.code, 2, `${model} ${JSON.stringify(reasoning_effort)}`);
@@ -171,9 +171,23 @@ test("native model and effort validation uses this tool's capability pairs", () 
   }
 });
 
-test("unsupported pair gives the supported effort choices without downgrading", () => {
-  const r = run(native({ model: "combo/grok-unified-4.6", reasoning_effort: "max" }));
-  assert.match(r.err, /low, medium, high, xhigh/);
+test("retired model family cannot dispatch natively or through an external provider", () => {
+  for (const model of ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "openai/gpt-5.6-sol"]) {
+    for (const input of [
+      native({ model, reasoning_effort: "high" }),
+      { tool_name: "Bash", tool_input: { command: `codex exec -m ${model} -c model_reasoning_effort=high -c model_provider=example` } },
+    ]) {
+      const result = run(input);
+      assert.equal(result.code, 2, model);
+      assert.match(result.err, /model .* is retired/);
+      assert.deepEqual(result.log, []);
+    }
+  }
+});
+
+test("unsupported effort gives the supported choices without downgrading", () => {
+  const r = run(native({ model: "gpt-6-astra", reasoning_effort: "none" }));
+  assert.match(r.err, /low, medium, high, xhigh, max/);
   assert.match(r.err, /no fallback was applied/);
   assert.equal(r.out, "");
 });
@@ -405,12 +419,12 @@ test("CLI dispatch records explicit controls and separates unverified external c
     ts: undefined, event: "dispatch", phase: "pre_tool_use", tool: "Bash", session_id: "cli-parent",
     harness: "codex", allocation: "explicit", model: "gpt-6-astra", effort: "max", reasoning_effort: "max", capability: "known_pair",
   });
-  const external = run({ tool_name: "Bash", tool_input: { command: "codex exec -m glm-5.2 -c model_reasoning_effort=xhigh -c model_provider=example" } });
+  const external = run({ tool_name: "Bash", tool_input: { command: "codex exec -m custom-external-model -c model_reasoning_effort=xhigh -c model_provider=example" } });
   assert.equal(external.code, 0, external.err);
   assert.equal(external.log[0].capability, "runtime_unverified");
   assert.equal(external.log[0].provider, "example");
-  assert.equal(external.log[0].model, "glm-5.2");
-  const missingProvider = run({ tool_name: "Bash", tool_input: { command: "codex exec -m glm-5.2 -c model_reasoning_effort=xhigh" } });
+  assert.equal(external.log[0].model, "custom-external-model");
+  const missingProvider = run({ tool_name: "Bash", tool_input: { command: "codex exec -m custom-external-model -c model_reasoning_effort=xhigh" } });
   assert.equal(missingProvider.code, 2);
   assert.match(missingProvider.err, /model_provider/);
   assert.deepEqual(missingProvider.log, []);
@@ -418,7 +432,7 @@ test("CLI dispatch records explicit controls and separates unverified external c
 
 test("CLI known effort mismatch blocks, including with an external provider selected", () => {
   for (const extra of ["", " -c model_provider=example"]) {
-    const r = run({ tool_name: "Bash", tool_input: { command: "codex exec -m gpt-5.6-luna -c model_reasoning_effort=ultra" + extra } });
+    const r = run({ tool_name: "Bash", tool_input: { command: "codex exec -m gpt-6-astra -c model_reasoning_effort=none" + extra } });
     assert.equal(r.code, 2);
     assert.match(r.err, /low, medium, high, xhigh, max/);
   }
@@ -426,17 +440,17 @@ test("CLI known effort mismatch blocks, including with an external provider sele
 
 test("CLI model flag wins over config.model in either order and across exec", () => {
   for (const command of [
-    'codex exec -m gpt-5.6-luna -c model="gpt-6-astra" -c model_reasoning_effort="ultra"',
-    'codex exec -c model="gpt-6-astra" --model=gpt-5.6-luna -c model_reasoning_effort="ultra"',
-    "codex -m gpt-5.6-luna exec -c model=gpt-6-astra -c model_reasoning_effort=ultra",
-    "codex -c model=gpt-6-astra exec -m gpt-5.6-luna -c model_reasoning_effort=ultra",
-    "codex -m gpt-5.6-luna -c model=gpt-6-astra exec -c model_reasoning_effort=ultra",
-    "codex -c model=gpt-6-astra --model=gpt-5.6-luna exec -c model_reasoning_effort=ultra",
-    "codex -m gpt-6-astra exec -m gpt-5.6-luna -c model=gpt-6-astra -c model_reasoning_effort=ultra",
+    'codex exec -m gpt-6-astra -c model="custom-model" -c model_reasoning_effort="none"',
+    'codex exec -c model="custom-model" --model=gpt-6-astra -c model_reasoning_effort="none"',
+    "codex -m gpt-6-astra exec -c model=custom-model -c model_reasoning_effort=none",
+    "codex -c model=custom-model exec -m gpt-6-astra -c model_reasoning_effort=none",
+    "codex -m gpt-6-astra -c model=custom-model exec -c model_reasoning_effort=none",
+    "codex -c model=custom-model --model=gpt-6-astra exec -c model_reasoning_effort=none",
+    "codex -m custom-model exec -m gpt-6-astra -c model=custom-model -c model_reasoning_effort=none",
   ]) {
     const result = run({ tool_name: "Bash", tool_input: { command } });
     assert.equal(result.code, 2, command);
-    assert.match(result.err, /reasoning_effort for 'gpt-5\.6-luna'/, command);
+    assert.match(result.err, /reasoning_effort for 'gpt-6-astra'/, command);
     assert.match(result.err, /low, medium, high, xhigh, max/, command);
     assert.deepEqual(result.log, [], command);
   }
@@ -444,11 +458,11 @@ test("CLI model flag wins over config.model in either order and across exec", ()
 
 test("CLI logs the effective model flag rather than a later config.model", () => {
   for (const command of [
-    "codex exec --model=gpt-6-astra -c model=gpt-5.6-luna -c model_reasoning_effort=ultra",
-    "codex exec -c model=gpt-5.6-luna -m gpt-6-astra -c model_reasoning_effort=ultra",
-    "codex -m gpt-6-astra exec -c model=gpt-5.6-luna -c model_reasoning_effort=ultra",
-    "codex -c model=gpt-5.6-luna exec -m gpt-6-astra -c model_reasoning_effort=ultra",
-    "codex -m gpt-5.6-luna exec -m gpt-6-astra -c model=gpt-5.6-luna -c model_reasoning_effort=ultra",
+    "codex exec --model=gpt-6-astra -c model=custom-model -c model_reasoning_effort=ultra",
+    "codex exec -c model=custom-model -m gpt-6-astra -c model_reasoning_effort=ultra",
+    "codex -m gpt-6-astra exec -c model=custom-model -c model_reasoning_effort=ultra",
+    "codex -c model=custom-model exec -m gpt-6-astra -c model_reasoning_effort=ultra",
+    "codex -m custom-model exec -m gpt-6-astra -c model=custom-model -c model_reasoning_effort=ultra",
   ]) {
     const result = run({ tool_name: "Bash", tool_input: { command } });
     assert.equal(result.code, 0, `${command}: ${result.err}`);
@@ -481,10 +495,10 @@ test("a refused compound CLI invocation records no allowed dispatches", () => {
 test("codex exec parsing requires explicit model and effort", () => {
   const parsed = run({
     tool_name: "exec_command",
-    tool_input: { cmd: "/usr/local/bin/codex exec --model=glm-5.2 -c model_reasoning_effort=high -c model_provider=test-provider" },
+    tool_input: { cmd: "/usr/local/bin/codex exec --model=custom-external-model -c model_reasoning_effort=high -c model_provider=test-provider" },
   });
   assert.equal(parsed.code, 0);
-  assert.equal(parsed.log[0].model, "glm-5.2");
+  assert.equal(parsed.log[0].model, "custom-external-model");
   assert.equal(parsed.log[0].reasoning_effort, "high");
 
   const incomplete = run({ tool_name: "shell", tool_input: { command: "codex exec 'no explicit flags'" } });
@@ -495,23 +509,23 @@ test("codex exec parsing requires explicit model and effort", () => {
 
   const redirected = run({
     tool_name: "Bash",
-    tool_input: { command: "codex exec >worker.log -m gpt-5.6-luna -c model_reasoning_effort=max" },
+    tool_input: { command: "codex exec >worker.log -m gpt-6-astra -c model_reasoning_effort=max" },
   });
   assert.equal(redirected.code, 0);
-  assert.equal(redirected.log[0].model, "gpt-5.6-luna");
+  assert.equal(redirected.log[0].model, "gpt-6-astra");
   assert.equal(redirected.log[0].reasoning_effort, "max");
 
   const globalOptions = run({
     tool_name: "Bash",
-    tool_input: { command: "codex -c model_reasoning_effort=max exec -m gpt-5.6-luna" },
+    tool_input: { command: "codex -c model_reasoning_effort=max exec -m gpt-6-astra" },
   });
   assert.equal(globalOptions.code, 0);
-  assert.equal(globalOptions.log[0].model, "gpt-5.6-luna");
+  assert.equal(globalOptions.log[0].model, "gpt-6-astra");
   assert.equal(globalOptions.log[0].reasoning_effort, "max");
 
   const promptOptions = run({
     tool_name: "Bash",
-    tool_input: { command: "codex exec -c model_reasoning_effort=max -- --model=gpt-5.6-luna" },
+    tool_input: { command: "codex exec -c model_reasoning_effort=max -- --model=gpt-6-astra" },
   });
   assert.equal(promptOptions.code, 2);
   assert.match(promptOptions.err, /model/);
@@ -521,10 +535,10 @@ test("codex exec parsing requires explicit model and effort", () => {
 test("codex exec parsing recognizes environment and command wrappers", () => {
   const prefixed = run({
     tool_name: "Bash",
-    tool_input: { command: "CODEX_HOME=/tmp env -i CODEX_HOME=/tmp codex exec -m gpt-5.6-luna -c model_reasoning_effort=max" },
+    tool_input: { command: "CODEX_HOME=/tmp env -i CODEX_HOME=/tmp codex exec -m gpt-6-astra -c model_reasoning_effort=max" },
   });
   assert.equal(prefixed.code, 0);
-  assert.equal(prefixed.log[0].model, "gpt-5.6-luna");
+  assert.equal(prefixed.log[0].model, "gpt-6-astra");
   assert.equal(prefixed.log[0].reasoning_effort, "max");
 
   const commandWrapper = run({
@@ -537,10 +551,10 @@ test("codex exec parsing recognizes environment and command wrappers", () => {
 
   const windowsPath = run({
     tool_name: "Bash",
-    tool_input: { command: "C:\\Tools\\codex.exe exec -m gpt-5.6-luna -c model_reasoning_effort=max" },
+    tool_input: { command: "C:\\Tools\\codex.exe exec -m gpt-6-astra -c model_reasoning_effort=max" },
   });
   assert.equal(windowsPath.code, 0);
-  assert.equal(windowsPath.log[0].model, "gpt-5.6-luna");
+  assert.equal(windowsPath.log[0].model, "gpt-6-astra");
 });
 
 test("codex exec parsing recognizes shell substitutions and groups", () => {
@@ -657,10 +671,10 @@ test("codex exec parsing recognizes argv shell payloads", () => {
 
   const allowed = run({
     tool_name: "shell",
-    tool_input: { command: ["codex", "exec", "--model=gpt-5.6-luna", "-c", "model_reasoning_effort=max"] },
+    tool_input: { command: ["codex", "exec", "--model=gpt-6-astra", "-c", "model_reasoning_effort=max"] },
   });
   assert.equal(allowed.code, 0);
-  assert.equal(allowed.log[0].model, "gpt-5.6-luna");
+  assert.equal(allowed.log[0].model, "gpt-6-astra");
   assert.equal(allowed.log[0].reasoning_effort, "max");
 });
 
@@ -889,11 +903,11 @@ test("the Bash hook exits when its runner leaves stdin open", async () => {
   const r = await runWithOpenStdin({
     tool_name: "exec_command",
     session_id: "sess-open-stdin",
-    tool_input: { cmd: "codex exec -m gpt-5.6-luna -c model_reasoning_effort=max" },
+    tool_input: { cmd: "codex exec -m gpt-6-astra -c model_reasoning_effort=max" },
   });
   assert.equal(r.code, 0);
   assert.equal(r.err, "");
-  assert.equal(r.log[0].model, "gpt-5.6-luna");
+  assert.equal(r.log[0].model, "gpt-6-astra");
   assert.equal(r.log[0].reasoning_effort, "max");
 });
 
@@ -901,11 +915,11 @@ test("the Bash hook waits for a chunked JSON payload before parsing", async () =
   const r = await runWithChunkedOpenStdin({
     tool_name: "exec_command",
     session_id: "sess-chunked-stdin",
-    tool_input: { cmd: "codex exec -m gpt-5.6-luna -c model_reasoning_effort=max" },
+    tool_input: { cmd: "codex exec -m gpt-6-astra -c model_reasoning_effort=max" },
   });
   assert.equal(r.code, 0);
   assert.equal(r.err, "");
-  assert.equal(r.log[0].model, "gpt-5.6-luna");
+  assert.equal(r.log[0].model, "gpt-6-astra");
   assert.equal(r.log[0].reasoning_effort, "max");
 });
 
@@ -913,11 +927,11 @@ test("the Bash hook does not finalize an incomplete payload after a timer gap", 
   const r = await runWithChunkedOpenStdin({
     tool_name: "exec_command",
     session_id: "sess-gapped-chunked-stdin",
-    tool_input: { cmd: "codex exec -m gpt-5.6-luna -c model_reasoning_effort=max" },
+    tool_input: { cmd: "codex exec -m gpt-6-astra -c model_reasoning_effort=max" },
   }, 80);
   assert.equal(r.code, 0);
   assert.equal(r.err, "");
-  assert.equal(r.log[0].model, "gpt-5.6-luna");
+  assert.equal(r.log[0].model, "gpt-6-astra");
   assert.equal(r.log[0].reasoning_effort, "max");
 });
 

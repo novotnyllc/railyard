@@ -25,12 +25,19 @@ not an execution carrier, capability attestation, or budget decision.
 1. Preserve explicit user model/effort choices and applicable repository
    constraints. Identify the work, acceptance condition, and need for parallel
    execution or specialization.
-2. In Codex, use **Astra at `max` as the baseline candidate for substantive engineering**.
-   Choose another supported model or effort when comparable accepted work
-   supports it, a specialist fits the assignment, or the user prioritizes
-   latency. In Claude Code, consider Fable 5.1 for substantial work and choose
-   its effort deliberately; do not copy Codex's effort defaults across models.
-   Use deterministic tools directly for mechanical work.
+2. In Codex, use **GPT-6 Sol at `medium` as the baseline candidate for
+   ordinary substantive engineering**. Raise Sol to `high` when the task's
+   complexity, ambiguity, or verification burden requires it. Use GPT-6 Luna
+   at `low` or `medium` for bounded, repetitive work. Escalate to Astra only
+   for clearly hard or high-risk work, or when the accepted outcome evidence
+   shows that Sol is insufficient. Preserve an explicit user selection and
+   use deterministic tools directly for mechanical work. Do not make `max`
+   the default. In Claude Code, consider Fable 5.1 for substantial work and
+   choose its effort deliberately; do not copy Codex's effort defaults across
+   models.
+   Native creation currently lacks GPT-6 Sol and Luna selectors. Those requests
+   fail visibly. Select Astra deliberately only when the work warrants it;
+   otherwise use suitable inheritance or work in the current task.
 3. Check the active dispatch tool's model selectors, effort values, history
    constraints, and any authoritative fixed-role binding. A provider catalog
    or working CLI route is not proof of a native override.
@@ -43,9 +50,10 @@ not an execution carrier, capability attestation, or budget decision.
    outcomes and logs; no routine benchmark, charter, or retrospective artifact
    is required.
 
-There is no unbenchmarked cheap-model ladder. Astra Max is a baseline candidate,
-not a universal winner. Inheritance is an explicit allocation choice, not a
-substitute for considering the assignment.
+Published token rates are a routing input, not accepted-outcome evidence. Use
+them as a heuristic only within the same billing surface, then compare the
+whole assignment's accepted cost and elapsed time. Inheritance is an explicit
+allocation choice, not a substitute for considering the assignment.
 
 The [native invocation reference](../../references/harness-model-invocation.md)
 contains the dated roster and dispatch examples. The active tool schema wins
@@ -77,7 +85,10 @@ available, otherwise label actual model/effort as unverified.
 
 Internal subtasks use native subagents. A user-visible task requires an
 explicit user request to create one; routing or orchestration alone does not
-authorize it. Follow-up text does not change a running agent's allocation.
+authorize it. A native subagent follow-up has no effort control. An existing
+Codex task may expose `model` and `thinking` on its supported continuation
+surface; inspect that live schema before using it. Neither native continuation
+control is the Responses API's GPT-6 `configuration_update` mechanism.
 
 ## Optional strict resolver
 

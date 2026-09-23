@@ -1015,6 +1015,7 @@ const ROLE_ALLOCATION = /^[ \t]*Allocation:[ \t]*role configuration;[ \t]*\S[^\r
 const V2_FIELDS = new Set(["task_name", "message", "fork_turns", "model", "reasoning_effort"]);
 
 function nativePair(model, effort) {
+  if (/(?:^|\/)gpt-5\.6(?:-|$)/i.test(String(model))) return { ok: false, reason: "model_retired" };
   try {
     // This module contains only the verified native capability snapshot.
     return require("../scripts/model-routing/native.mjs").validateNativeModelEffort(model, effort);
@@ -1024,6 +1025,7 @@ function nativePair(model, effort) {
 }
 
 function allocationError(result, model) {
+  if (result.reason === "model_retired") return `model '${clip(model)}' is retired. Choose a current model and supported reasoning effort.`;
   if (result.reason === "effort_unsupported") {
     return `reasoning_effort for '${clip(model)}' must be one of: ${result.supportedEfforts.join(", ")}. Keep the requested model and choose a supported effort; no fallback was applied.`;
   }

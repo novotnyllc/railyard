@@ -31,6 +31,7 @@ import {
   actionReceiptFor,
   allowedInheritedAdapterTransition,
   decisionFromCandidate,
+  isAllowedMidTaskEffortChange,
   resolveInternal,
 } from "./decision.mjs";
 import {
@@ -118,8 +119,31 @@ export function reservationFromDecision(request, decision, scopes, forecast, now
   return reservation;
 }
 
+function activeReservationMatchesPriorRoute(request, active) {
+  const prior = request.priorRoute;
+  const identity = request.dispatchIdentity;
+  const claimed = active?.claimed;
+  return prior !== undefined
+    && active?.reservationId === prior.reservationId
+    && active.claimId === prior.claimId
+    && claimed !== undefined
+    && active.binding.hostScope === prior.hostScope
+    && active.binding.accountScope === prior.accountScope
+    && claimed.hostScope === prior.hostScope
+    && claimed.accountScope === prior.accountScope
+    && claimed.sessionId === prior.sessionId
+    && claimed.toolId === prior.toolId
+    && claimed.toolVersion === prior.toolVersion
+    && identity !== undefined
+    && identity.hostScope === claimed.hostScope
+    && identity.accountScope === claimed.accountScope
+    && identity.sessionId === claimed.sessionId
+    && identity.toolId === claimed.toolId
+    && identity.toolVersion === claimed.toolVersion;
+}
+
 export function admitInternal(request, context) {
-  const { catalog, state, now, trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers, controllerRuntime, requireControllerRuntime } = context;
+  const { catalog, state, now, trustedTransportAttestor, fixedReceiptProducers, controllerRuntime, requireControllerRuntime } = context;
   if (!validId(request.requestId)) return error("request_id_required");
   const existing = Object.values(state.reservations).find((record) => record.requestId === request.requestId);
   const requestDigest = stableDigest({ ...request, command: undefined });
@@ -143,6 +167,20 @@ export function admitInternal(request, context) {
   if (!validDigest(request.frozenInputDigest)) return error("frozen_input_digest_required");
   const scopes = scopeFor(request);
   if (!scopes) return error("invalid_budget_scope");
+  // An already admitted effort change remains replayable after a later change
+  // updates the active route's effective effort. Its original request was
+  // fully validated before it was recorded; re-resolving it against the newer
+  // route would turn a harmless retry into a false binding mismatch.
+  if (request.budgetEffect === "adjust_active" && validId(request.activeReservationId)) {
+    const active = state.reservations[request.activeReservationId];
+    if (active && !activeReservationMatchesPriorRoute(request, active)) return error("prior_route_binding_mismatch");
+    const previous = active?.adjustments?.[request.requestId];
+    if (previous) {
+      const adjustmentDigest = stableDigest({ ...request, command: undefined });
+      if (previous.requestDigest !== adjustmentDigest) return error("request_id_conflict");
+      return result(true, "active_adjustment_replayed", { reservation: clone(active), adjustment: clone(previous), actionReceipt: clone(previous.actionReceipt) });
+    }
+  }
   const resolved = resolveInternal(request, context);
   if (!resolved.ok) return resolved;
   if (resolved.decision.binding.budgetEffect === "none") return error("budget_neutral_admission_not_allowed");
@@ -150,8 +188,15 @@ export function admitInternal(request, context) {
     if (!validId(request.activeReservationId)) return error("active_reservation_required");
     const active = state.reservations[request.activeReservationId];
     if (!active || !["claimed", "started"].includes(active.phase)) return error("active_attempt_unknown");
+    if (!activeReservationMatchesPriorRoute(request, active)) return error("prior_route_binding_mismatch");
     if (!validDigest(active.workClassDigest) || active.workClassDigest !== resolved.decision.workClassDigest) return error("prior_work_class_changed_requires_fresh_route");
-    if (stableDigest(active.scopes) !== stableDigest(scopes) || active.policyDigest !== resolved.decision.policy.digest || active.selected.carrierId !== resolved.decision.selected.carrierId || active.selected.model !== resolved.decision.selected.model || active.selected.effort !== resolved.decision.selected.effort || !allowedInheritedAdapterTransition(active.binding.adapterId, resolved.decision.binding.adapterId, active.selected.carrierId, resolved.decision.binding.dispatchKind)) return error("context_override_conflict");
+    const effortChanged = active.selected.effort !== resolved.decision.selected.effort;
+    if (stableDigest(active.scopes) !== stableDigest(scopes)
+      || active.policyDigest !== resolved.decision.policy.digest
+      || active.selected.carrierId !== resolved.decision.selected.carrierId
+      || active.selected.model !== resolved.decision.selected.model
+      || (effortChanged && !isAllowedMidTaskEffortChange(request, resolved.decision, active))
+      || !allowedInheritedAdapterTransition(active.binding.adapterId, resolved.decision.binding.adapterId, active.selected.carrierId, resolved.decision.binding.dispatchKind)) return error("context_override_conflict");
     const adjustmentDigest = stableDigest({ ...request, command: undefined });
     active.adjustments ||= {};
     const previous = active.adjustments[request.requestId];
@@ -173,6 +218,14 @@ export function admitInternal(request, context) {
       budget: { kind: "top_up", forecast: adjustment.value, warningCount: budget.warnings.length },
     });
     if (!actionReceipt) return error("invalid_action_receipt");
+    if (effortChanged) {
+      // This is the active route for later task-message continuations.  Keep
+      // the persisted decision's selected bytes in lockstep with the
+      // reservation, while retaining the original reservation/claim and its
+      // accumulated forecast.
+      active.selected.effort = resolved.decision.selected.effort;
+      active.decision.selected.effort = resolved.decision.selected.effort;
+    }
     active.adjustments[request.requestId] = { requestDigest: adjustmentDigest, forecast: adjustment.value, at: nowIso(now), actionReceipt };
     active.updatedAt = nowIso(now);
     return result(true, "active_budget_adjusted", { reservation: clone(active), adjustment: clone(active.adjustments[request.requestId]), actionReceipt: clone(actionReceipt), stateChanged: true });
@@ -180,7 +233,7 @@ export function admitInternal(request, context) {
   const forecast = normalizeForecast(request.forecast || {});
   if (!forecast.ok) return error(forecast.reason);
   const policy = validateCatalog(catalog).policy;
-  const candidates = configuredCandidates(catalog, request, state, now, policy.digest, { trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers });
+  const candidates = configuredCandidates(catalog, request, state, now, policy.digest, { trustedTransportAttestor, fixedReceiptProducers });
   const configured = candidates.filter((candidate) => candidate.ok).sort(candidateSort);
   const ineligible = candidates.filter((candidate) => !candidate.ok).map((candidate) => ({ modelAlias: candidate.alias, reason: candidate.reason }));
   const rejectedByBudget = [];

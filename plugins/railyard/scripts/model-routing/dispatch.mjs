@@ -64,7 +64,6 @@ export function handleRequest(input, {
   trustedCapabilityAttestor,
   trustedReceiptImporter,
   trustedTaskAuthorityAttestor,
-  trustedRuntimeAttestor,
   trustedTransportAttestor,
   fixedReceiptProducers,
   controllerRuntime,
@@ -89,8 +88,8 @@ export function handleRequest(input, {
 
   let response;
   if (command === "validate") response = result(true, "validated", { config: catalogValidation.policy, state: { digest: stateValidation.digest } });
-  else if (command === "resolve") response = resolveInternal(input, { catalog, state: working, now, trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers });
-  else if (command === "admit") response = admitInternal(input, { catalog, state: working, now, trustedRuntimeAttestor, trustedTransportAttestor, fixedReceiptProducers, controllerRuntime, requireControllerRuntime });
+  else if (command === "resolve") response = resolveInternal(input, { catalog, state: working, now, trustedTransportAttestor, fixedReceiptProducers });
+  else if (command === "admit") response = admitInternal(input, { catalog, state: working, now, trustedTransportAttestor, fixedReceiptProducers, controllerRuntime, requireControllerRuntime });
   else if (command === "claim-dispatch") response = claimInternal(input, { catalog, state: working, now, controllerRuntime, requireControllerRuntime });
   else if (command === "mint-task-authority") response = mintTaskAuthorityInternal(input, { catalog, state: working, now, trustedTaskAuthorityAttestor, controllerRuntime, requireControllerRuntime });
   else if (command === "issue-lease") response = issueLeaseInternal(input, { catalog, state: working, now });

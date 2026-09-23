@@ -52,9 +52,7 @@ existing fleet configuration alone does not authorize cross-host work.
 - Router state: `railyard:model-routing` `status` succeeds; a configured
   catalog, if any, validates.
 - Credential presence for capabilities relevant to the diagnosis — existence
-  only, never values: `gh auth status`; `ZAI_API_KEY`/`LITELLM_PROXY_API_KEY` when the
-  Codex `zai_litellm` provider is configured (plus the proxy actually
-  responding on its port); `op` sign-in when one-password is installed; any
+  only, never values: `gh auth status`; `op` sign-in when one-password is installed; any
   key an installed skill's docs name. Missing → report where to set it
   (dotfiles env or 1Password via the one-password skill); never solicit a
   secret in chat.

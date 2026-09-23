@@ -100,8 +100,9 @@ reasoning effort were selected, whether a child needed more context, whether a
 review or verification repeated unchanged work, and which retries or repairs
 were necessary. Compare complete accepted assignments including subagents,
 retries, and repairs. Per-call prices and quota per hour do not establish cost
-per correctly completed task. Astra Max is a baseline candidate for substantial
-agentic work, not proof of a universal efficiency optimum.
+per correctly completed task. Sol at medium effort is the ordinary Codex
+baseline; neither that default nor a higher effort proves a universal
+efficiency optimum.
 
 Use recorded reasons and actual runtime outcomes. PreToolUse log entries prove
 that the gate allowed an attempt, not that the child started or completed. A

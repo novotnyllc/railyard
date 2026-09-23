@@ -32,8 +32,7 @@ Collect the current state before asking anything:
   (`~/.config/railyard/model-routing.json`).
 - Credential presence for whatever the installed plugins actually need —
   check existence only, never read or print a value: `gh auth status` for
-  GitHub; `ZAI_API_KEY` and `LITELLM_PROXY_API_KEY` when the Codex
-  `zai_litellm` GLM provider is configured; `op` sign-in state when the
+  GitHub; `op` sign-in state when the
   one-password skill is installed; any other key an installed skill's own
   docs name. A missing key is reported with *where to set it* (shell
   environment via dotfiles, or 1Password injected through the one-password
@@ -99,11 +98,10 @@ choice needed for the requested setup; local-only setup skips fleet questions.
 - **Codex remote-control host** [none] — only for a native-Windows
   destination driven by Codex Desktop; skipping disables nothing else.
 - **Model-routing catalog** [none — built-in defaults] — the no-config
-  profile considers Astra Max first for substantial agentic engineering. Choose
-  model and effort together; explicit inheritance is supported when justified.
-  Verify the active catalog and adapter before dispatch. A smaller model or
-  lower effort needs workload evidence or an explicit latency preference, not
-  an assumption of lower total cost. Preserve user overrides when migrating
+  profile considers GPT-6 Sol at medium effort first for ordinary Codex work.
+  Choose model and effort together; explicit inheritance is supported when justified.
+  Verify the active catalog and adapter before dispatch. Raise effort or select
+  Astra for a specific need rather than by default. Preserve user overrides when migrating
   existing catalogs; do not replace unrelated providers, accounts, or budgets.
 - **Oracle** [skip] — if the user has ChatGPT Pro and wants Oracle reviews,
   record availability per the oracle skill's cached-detection rules.

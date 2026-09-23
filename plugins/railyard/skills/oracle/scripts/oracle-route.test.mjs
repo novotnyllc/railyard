@@ -289,7 +289,7 @@ test("Latest accepts only the exact supported picker labels and does not accept 
     metadata.browser.modelSelection.resolvedLabel = label;
     assert.deepEqual(evaluateBrowserSession(metadata, "[browser] Thinking time: Pro\nAnswer:\n"), { observedModel: "gpt-6-pro", reason: null }, label);
   }
-  for (const [label, model] of [["GPT-5.6 Sol", "gpt-5.6-sol"], ["Latest GPT-6", "unknown"], ["GPT-6 Pro", "unknown"]]) {
+  for (const [label, model] of [["GPT-6 Sol", "gpt-6-sol"], ["Latest GPT-6", "unknown"], ["GPT-6 Pro", "unknown"]]) {
     metadata.browser.modelSelection.resolvedLabel = label;
     assert.deepEqual(evaluateBrowserSession(metadata, "[browser] Thinking time: Pro\nAnswer:\n"), { observedModel: model, reason: "oracle_observed_model_mismatch" }, label);
   }
@@ -315,7 +315,7 @@ test("thinking metadata must confirm Pro when present and cannot be rescued by a
     { ...selection, status: "unverified" },
     { ...selection, verified: false },
     { ...selection, strictFailClosed: false },
-    { ...selection, resolvedLabel: "5.6 Pro" },
+    { ...selection, resolvedLabel: "Invalid Pro" },
     { ...selection, resolvedLabel: "Pro Extended" },
     { ...selection, source: "answer" },
   ]) {
@@ -371,7 +371,7 @@ test("a valid legacy Sol bundle is rejected before claiming or invoking the carr
   const prepared = claimPrepared(value);
   const manifestPath = path.join(value.stateRoot, "bundles", prepared.sessionId, "manifest.json");
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  manifest.arguments.model = "gpt-5.6-sol";
+  manifest.arguments.model = "gpt-6-sol";
   delete manifest.inputDigest;
   manifest.inputDigest = stableDigest(manifest);
   fs.writeFileSync(manifestPath, JSON.stringify(manifest), { mode: 0o600 });
@@ -385,7 +385,7 @@ test("a valid legacy Sol bundle is rejected before claiming or invoking the carr
   }), /frozen_model_binding_unsupported/);
   assert.equal(calls, 0);
   assert.equal(fs.existsSync(privateClaimPath(value)), false);
-  assert.equal(JSON.parse(fs.readFileSync(manifestPath, "utf8")).arguments.model, "gpt-5.6-sol");
+  assert.equal(JSON.parse(fs.readFileSync(manifestPath, "utf8")).arguments.model, "gpt-6-sol");
 });
 
 test("settled review writes a private bounded finding artifact and router receipt, then removes the bundle", () => {
@@ -735,34 +735,6 @@ test("reattach uses the same verified claim and stores findings without a new di
   assert.equal(fs.readFileSync(result.resultArtifact.path, "utf8"), "Reattached finding.\n");
   assert.equal(fs.existsSync(path.join(value.stateRoot, "bundles", prepared.sessionId)), false);
   assert.equal(calls, 3);
-});
-
-test("a detached Sol receipt is preserved and cannot be relabeled by the current carrier", () => {
-  const value = fixture();
-  claimPrepared(value);
-  const inspectClaim = privateInspector(value);
-  const started = dispatch(value.input, {
-    root: value.stateRoot,
-    inspectClaim,
-    resolveCarrier: () => fakeCarrier,
-    revalidateCarrier: () => {},
-    run: (_binary, args) => args[0] === "--dry-run"
-      ? { status: 0, stdout: "dry", stderr: "" }
-      : { status: null, stdout: "", stderr: "", error: { code: "ETIMEDOUT" } },
-  });
-  const receiptPath = path.join(value.stateRoot, "receipts", `${started.receiptId}.json`);
-  const legacy = { ...started, adapterVersion: "v1", toolVersion: "v1", adapterModelControl: "gpt-5.6-sol", documentedProductLabel: "GPT-5.6 Sol + Pro thinking" };
-  fs.writeFileSync(receiptPath, JSON.stringify(legacy), { mode: 0o600 });
-  let calls = 0;
-  assert.throws(() => reattach(value.input, {
-    root: value.stateRoot,
-    inspectClaim: () => { calls += 1; },
-    resolveCarrier: () => { calls += 1; return fakeCarrier; },
-    run: () => { calls += 1; },
-  }), /session_model_binding_unsupported/);
-  assert.equal(calls, 0);
-  assert.deepEqual(JSON.parse(fs.readFileSync(receiptPath, "utf8")), legacy);
-  assert.equal(fs.existsSync(`${privateClaimPath(value)}.reattach`), false);
 });
 
 test("reattach fails closed when its session lacks durable Pro evidence", () => {

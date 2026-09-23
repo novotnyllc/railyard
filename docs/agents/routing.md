@@ -23,8 +23,8 @@ or audit artifacts.
   handoffs and bounded waits are intermediate states, not delivery completion.
 - Choose model AND reasoning effort for each agent assignment through
   `railyard:model-routing`; routine native tool use needs no intake ritual.
-  Astra Max is the baseline candidate for substantive engineering, with other
-  choices justified by the task, outcomes, or user constraints. Mechanical
+  GPT-6 Sol at medium effort is the baseline for ordinary Codex engineering;
+  raise effort for demanding work and reserve Astra for a specific need. Mechanical
   operations can use deterministic tools directly.
 - When `TYPESAFE_API_KEY` is present, use `railyard:jev` by default for bounded
   model-and-effort selection, workflow choice, evidence selection, work priority,

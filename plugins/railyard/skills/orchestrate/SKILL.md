@@ -59,9 +59,8 @@ is a fallback for a missing event surface or a concrete recovery question.
 
 Before each agent assignment, use `railyard:model-routing` to deliberately
 select model AND reasoning effort for the actual scope, risks, context, and
-user constraints. Astra Max is the baseline candidate for substantive
-engineering. Change that choice when comparable completed work, capability
-needs, or an explicit latency preference supports it. Lower per-call cost does
+user constraints. GPT-6 Sol at medium effort is the ordinary Codex baseline.
+Raise effort or use Astra for a specific capability need. Lower per-call cost does
 not establish lower cost to an accepted result; include retries and repairs in
 any efficiency comparison. Do not launch a cheap-model child for an operation
 a deterministic tool can complete directly.
