@@ -2308,7 +2308,14 @@ test("a GPT-6 visible task can change effort through an active task-message adju
 
   assert.equal(state.reservations[admission.reservation.reservationId].routeLearningEligible, false);
   assert.equal(state.reservations[admission.reservation.reservationId].selected.effort, "low");
-  const secondPriorRoute = { ...priorRoute, effort: "high" };
+  const recoveredStatus = handleRequest(request("status"), { catalog: policy, state: JSON.parse(JSON.stringify(state)), now: NOW });
+  const recoveredRoute = recoveredStatus.response.reservations.find((record) => record.reservationId === admission.reservation.reservationId);
+  assert.equal(recoveredRoute.selected.effort, "low", "status retains the original settlement allocation");
+  assert.equal(recoveredRoute.effectiveRoute.selected.effort, "high");
+  assert.equal(recoveredRoute.effectiveRoute.policyDigest, policyDigest(policy));
+  const unchangedRoute = recoveredStatus.response.reservations.find((record) => record.reservationId === secondAdmission.reservation.reservationId);
+  assert.deepEqual(unchangedRoute.effectiveRoute.selected, unchangedRoute.selected);
+  const secondPriorRoute = { ...priorRoute, effort: recoveredRoute.effectiveRoute.selected.effort, policyDigest: recoveredRoute.effectiveRoute.policyDigest };
   const beforeOmittedHigh = structuredClone(state);
   assert.equal(handleRequest(omittedEffort(secondPriorRoute, "high"), { catalog: policy, state, now: NOW }).response.reason, "prior_route_binding_mismatch");
   assert.deepEqual(state, beforeOmittedHigh);
@@ -3672,13 +3679,17 @@ for (const historicalPolicy of ["builtin-model-routing-v1", "builtin-model-routi
     assert.equal(historical.selected.model, "retired-native-model");
     assert.equal(state.reservations[historical.reservationId].routeLearningEligible, false);
     assert.equal(historical.policyDigest, historicalPolicy);
-    const continued = state.reservations[historical.reservationId];
+    const recoveredStatus = handleRequest(request("status"), { catalog: policy, state: JSON.parse(JSON.stringify(state)), now: NOW });
+    const recoveredRoute = recoveredStatus.response.reservations.find((record) => record.reservationId === historical.reservationId);
+    assert.equal(recoveredRoute.selected.model, "retired-native-model");
+    assert.equal(recoveredRoute.effectiveRoute.selected.model, "gpt-6-sol");
+    assert.equal(recoveredRoute.effectiveRoute.policyDigest, policyDigest(policy));
     const currentPriorRoute = {
       ...priorRoute,
-      carrierId: continued.currentRoute.selected.carrierId,
-      model: continued.currentRoute.selected.model,
-      effort: continued.currentRoute.selected.effort,
-      policyDigest: continued.currentRoute.policyDigest,
+      carrierId: recoveredRoute.effectiveRoute.selected.carrierId,
+      model: recoveredRoute.effectiveRoute.selected.model,
+      effort: recoveredRoute.effectiveRoute.selected.effort,
+      policyDigest: recoveredRoute.effectiveRoute.policyDigest,
     };
     const raised = handleRequest(request("admit", {
       adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "adjust_active", requestId: "message-adjust-again", activeReservationId: historical.reservationId,
