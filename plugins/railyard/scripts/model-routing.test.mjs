@@ -2223,7 +2223,8 @@ for (const staleCarrierVersion of [false, true]) {
       priorWorkClassDigest: admission.reservation.workClassDigest,
       dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }) },
     }), { catalog: policy, state, now: NOW });
-    assert.equal(neutral.response.reason, "resolved");
+    assert.equal(neutral.response.reason, staleCarrierVersion ? "route_reevaluation_required" : "resolved");
+    if (staleCarrierVersion) assert.equal(original.currentRoute, undefined, "read-only resolution cannot move a stale route");
     const crossedDestination = handleRequest(request("resolve", {
       adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "message-crossed", priorRoute,
       priorWorkClassDigest: admission.reservation.workClassDigest,
@@ -3711,8 +3712,8 @@ for (const historicalPolicy of ["builtin-model-routing-v1", "builtin-model-routi
       priorWorkClassDigest: historical.workClassDigest,
       dispatchIdentity: dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }),
     }), { catalog: policy, state, now: NOW });
-    assert.equal(unchanged.response.reason, "resolved", JSON.stringify(unchanged.response));
-    assert.deepEqual(state, unchangedState, "unchanged allocation resolves without mutating historical state");
+    assert.equal(unchanged.response.reason, "route_reevaluation_required", JSON.stringify(unchanged.response));
+    assert.deepEqual(state, unchangedState, "read-only resolution cannot refresh a historical policy binding");
     policy.models.luna.efforts = ["high", "max"];
     const effortOnly = handleRequest(request("resolve", {
       adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "message-effort-only", priorRoute,

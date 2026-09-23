@@ -310,10 +310,7 @@ export function inheritedRouteIssue(request, state, decision, catalog) {
   if (priorR52Digest !== currentR52Digest || declaredR52Digest !== priorR52Digest) return "prior_r52_binding_mismatch";
   if (request.priorRoute.policyDigest !== prior.policyDigest || prior.selected.carrierId !== request.priorRoute.carrierId || prior.selected.model !== request.priorRoute.model || prior.selected.effort !== request.priorRoute.effort || prior.binding.adapterId !== request.priorRoute.adapterId || prior.binding.adapterVersion !== request.priorRoute.adapterVersion) return "prior_route_binding_mismatch";
   if (isAllowedRouteReevaluation(request, decision, prior)) return null;
-  if (needsRouteReevaluation(prior, decision)
-    && (decision.selected.carrierId !== prior.selected.carrierId
-      || decision.selected.model !== prior.selected.model
-      || decision.selected.effort !== prior.selected.effort)) return "route_reevaluation_required";
+  if (needsRouteReevaluation(prior, decision)) return "route_reevaluation_required";
   const effortChanged = prior.selected.effort !== decision.selected.effort;
   if (decision.selected.carrierId !== prior.selected.carrierId
     || decision.selected.model !== prior.selected.model
