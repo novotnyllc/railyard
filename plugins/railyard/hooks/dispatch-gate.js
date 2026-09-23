@@ -1016,7 +1016,6 @@ const ROLE_ALLOCATION = /^[ \t]*Allocation:[ \t]*role configuration;[ \t]*\S[^\r
 const V2_FIELDS = new Set(["task_name", "message", "fork_turns", "model", "reasoning_effort"]);
 
 function nativePair(model, effort) {
-  if (/(?:^|\/)(?:gpt-5\.6|glm-5\.2|grok-unified-4\.6)(?:[-\[:]|$)/i.test(String(model))) return { ok: false, reason: "model_retired" };
   try {
     // This module contains only the verified native capability snapshot.
     return require("../scripts/model-routing/native.mjs").validateNativeModelEffort(model, effort);
@@ -1026,7 +1025,6 @@ function nativePair(model, effort) {
 }
 
 function allocationError(result, model) {
-  if (result.reason === "model_retired") return `model '${clip(model)}' is retired. Choose a current model and supported reasoning effort.`;
   if (result.reason === "effort_unsupported") {
     return `reasoning_effort for '${clip(model)}' must be one of: ${result.supportedEfforts.join(", ")}. Keep the requested model and choose a supported effort; no fallback was applied.`;
   }
@@ -1091,7 +1089,7 @@ function validateNative(args, input, tool) {
   if (!result.ok && modelUpdateOverride && ["native_model_unsupported", "effort_unsupported"].includes(result.reason)) {
     // The local snapshot can lag a model release. The explicit override passes
     // the pair through to the native tool, whose current schema and backend
-    // remain authoritative; it never turns a retired route back on.
+    // remain authoritative.
     if (typeof args.model !== "string" || args.model.length > 128 || !/^[A-Za-z0-9._/+:-]+$/.test(args.model)
       || typeof args.reasoning_effort !== "string" || !/^[a-z][a-z0-9_-]{0,31}$/.test(args.reasoning_effort)) {
       return { error: "model update override requires one explicit model and reasoning_effort token; no fallback was applied." };

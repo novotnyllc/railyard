@@ -110,9 +110,6 @@ export function validRole(value) {
 }
 
 export function validModel(value) {
-  // This exact provider-qualified selector is a model ID exposed by the
-  // native adapter. It does not authorize arbitrary slash-containing paths.
-  if (value === "combo/grok-unified-4.6") return true;
   return typeof value === "string" && MODEL_RE.test(value) && !value.startsWith("-") && !value.includes("/") && !value.includes("\\") && !value.includes("@") && !value.includes("--");
 }
 

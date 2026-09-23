@@ -587,19 +587,19 @@ test("native model capabilities distinguish exposed overrides from broader provi
   assert.equal(validateNativeModelEffort("gpt-6-sol", "ultra").ok, true);
   assert.equal(validateNativeModelEffort("gpt-6-luna", "max").ok, true);
   assert.equal(validateNativeModelEffort("gpt-6-luna", "ultra").reason, "effort_unsupported");
-  assert.equal(validateNativeModelEffort("gpt-5.6-terra", "ultra").reason, "native_model_unsupported");
+  assert.equal(validateNativeModelEffort("example/unknown-model", "ultra").reason, "native_model_unsupported");
   assert.equal(validateNativeModelEffort("gpt-daybreak-blue-latest", "ultra").ok, true);
   assert.equal(validateNativeModelEffort("gpt-6-astra", "max").ok, true);
   assert.equal(validateNativeModelEffort("gpt-6-astra", "invalid").reason, "effort_unsupported");
-  for (const model of ["gpt-5.6-sol", "gpt-5.6-luna", "combo/grok-unified-4.6", "cursor/composer-2.5", "__proto__", undefined]) {
+  for (const model of ["unknown-native-model", "cursor/composer-2.5", "__proto__", undefined]) {
     assert.equal(validateNativeModelEffort(model, "max").reason, "native_model_unsupported");
   }
   assert.equal(validateNativeModelEffort("gpt-6-astra", undefined).reason, "effort_unsupported");
   assert.throws(() => NATIVE_SUBAGENT_MODEL_EFFORTS["gpt-6-astra"].push("ultra"), TypeError);
 });
 
-test("retired models have no carrier, native route, or task route", () => {
-  for (const model of ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]) {
+test("unknown models have no carrier, native route, or task route", () => {
+  for (const model of ["unknown-native-model", "gpt-6-unavailable"]) {
     assert.equal(validateNativeModelEffort(model, "medium").reason, "native_model_unsupported");
     assert.equal(validateCodexTaskModelEffort(model, "medium").reason, "task_model_unsupported");
     assert.equal(Object.values(CARRIER_DESCRIPTORS).some((carrier) => carrier.requestedModel === model), false);
@@ -607,7 +607,6 @@ test("retired models have no carrier, native route, or task route", () => {
     assert.equal(result.response.reason, "task_model_unsupported");
     assert.equal(result.response.decision, undefined);
   }
-  assert.equal(Object.keys(CARRIER_DESCRIPTORS).some((id) => id.startsWith("glm") || id.includes("terra")), false);
 });
 
 test("ordinary GPT-6 Sol task routes support implementation and investigation CE seams", () => {
@@ -3622,7 +3621,7 @@ test("cost ranks within a meter and is not a discriminator across meters", () =>
 });
 
 
-test("historical retired route state stays readable and authentic receipts settle original accounting", () => {
+test("stale route state stays readable and authentic receipts settle original accounting", () => {
   for (const retiredAdapter of [false, true]) {
     const policy = catalog({});
     const state = attestedCapability(policy, { carrierId: "codex-astra", adapterId: "native-subagent-create", accountScope: "local", observedModel: "gpt-6-astra" });
@@ -3630,13 +3629,13 @@ test("historical retired route state stays readable and authentic receipts settl
     const claimed = claim(policy, state, admission);
     const reservation = state.reservations[admission.reservation.reservationId];
     reservation.selected.carrierId = "codex-sol";
-    reservation.selected.model = "gpt-5.6-sol";
+    reservation.selected.model = "gpt-6-unavailable";
     reservation.policyDigest = "builtin-model-routing-v2";
     reservation.decision.policyDigest = reservation.policyDigest;
     reservation.decision.selected = structuredClone(reservation.selected);
     state.capabilities.capability_one.carrierId = "codex-sol";
-    state.capabilities.capability_one.observedModel = "gpt-5.6-sol";
-    state.capabilities.capability_one.resolvedModelDigest = stableDigest("gpt-5.6-sol");
+    state.capabilities.capability_one.observedModel = "gpt-6-unavailable";
+    state.capabilities.capability_one.resolvedModelDigest = stableDigest("gpt-6-unavailable");
     if (retiredAdapter) {
       reservation.binding.adapterId = "configured-profile-task-create";
       reservation.selected.adapterId = reservation.binding.adapterId;
