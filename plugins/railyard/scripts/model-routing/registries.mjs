@@ -341,16 +341,15 @@ export const CARRIER_DESCRIPTORS = freeze({
     adapters: ["native-subagent-create", "codex-task-create", "codex-task-message", "native-subagent-message", "native-subagent-followup"],
     roles: NATIVE_WORK_ROLES,
   }),
-  // GPT-6 Sol and Luna are verified on Codex task creation and task messages.
-  // They are deliberately absent from native-subagent adapters until that
-  // separate tool exposes the same selectors.
+  // The current native subagent and Codex task tools expose Sol and Luna.
+  // Keep their effort rosters separate so a future surface change is explicit.
   "codex-6-luna": freeze({
     version: "v1",
     transport: "selector-native",
     requestedModel: "gpt-6-luna",
     executionSurface: "codex",
     efforts: CODEX_TASK_MODEL_EFFORTS["gpt-6-luna"],
-    adapters: ["codex-task-create", "codex-task-message"],
+    adapters: ["native-subagent-create", "codex-task-create", "codex-task-message", "native-subagent-message", "native-subagent-followup"],
     roles: NATIVE_WORK_ROLES,
   }),
   "codex-6-sol": freeze({
@@ -359,7 +358,7 @@ export const CARRIER_DESCRIPTORS = freeze({
     requestedModel: "gpt-6-sol",
     executionSurface: "codex",
     efforts: CODEX_TASK_MODEL_EFFORTS["gpt-6-sol"],
-    adapters: ["codex-task-create", "codex-task-message"],
+    adapters: ["native-subagent-create", "codex-task-create", "codex-task-message", "native-subagent-message", "native-subagent-followup"],
     roles: NATIVE_WORK_ROLES,
   }),
   "codex-daybreak-blue": freeze({

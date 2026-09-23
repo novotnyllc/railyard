@@ -41,7 +41,8 @@ import { validateCodexTaskModelEffort, validateNativeModelEffort } from "./nativ
 import { CLAUDE_AGENT_MODEL_ALIASES, CLAUDE_REVIEW_SEAM_EFFORTS, validateClaudeModelEffort } from "./claude.mjs";
 
 export function adapterFor(request, carrier) {
-  const adapterId = request.adapterId || carrier.adapters[0];
+  const adapterId = request.adapterId || carrier.adapters.find((id) =>
+    !request.dispatchKind || ADAPTER_DESCRIPTORS[id]?.dispatchKinds.includes(request.dispatchKind));
   const adapter = ADAPTER_DESCRIPTORS[adapterId];
   if (!adapter) return { ok: false, reason: "unsupported_adapter", adapterId };
   if (!carrier.adapters.includes(adapterId)) return { ok: false, reason: "carrier_adapter_mismatch", adapterId };
@@ -528,16 +529,9 @@ export function defaultRoute(request, { trustedTransportAttestor } = {}) {
   // price claim: subscription and API costs are tracked separately by policy.
   const mechanical = ["implementation.mechanical", "implementation.bounded_fix"].includes(request.role);
   const repeatable = mechanical && request.workShape?.repetition === "high" && request.workShape?.semanticRisk === "low";
-  // `adapterId` is optional. A declared native creation kind therefore has
-  // the same verified-spawn boundary whether the caller supplies the default
-  // adapter name or leaves it for `adapterFor` to select.
-  const nativeSpawn = request.adapterId === "native-subagent-create"
-    || (request.adapterId === undefined && request.dispatchKind === "subagent_create");
-  // Native spawn cannot substitute an older generation for a GPT-6 default.
   const highRisk = request.risk === "high" || request.risk === "critical";
   const defaultModel = mechanical && !highRisk ? "gpt-6-luna" : "gpt-6-sol";
   const model = request.model || defaultModel;
-  if (nativeSpawn && request.model === undefined) return { ok: false, reason: "native_model_unsupported" };
   const effort = request.effort || ((model === "gpt-6-luna")
     ? (repeatable ? "low" : "medium")
     : (request.role === "implementation.hard" || highRisk ? "high" : "medium"));

@@ -35,9 +35,8 @@ not an execution carrier, capability attestation, or budget decision.
    the default. In Claude Code, consider Fable 5.1 for substantial work and
    choose its effort deliberately; do not copy Codex's effort defaults across
    models.
-   Native creation currently lacks GPT-6 Sol and Luna selectors. Those requests
-   fail visibly. Select Astra deliberately only when the work warrants it;
-   otherwise use suitable inheritance or work in the current task.
+   Native creation advertises GPT-6 Sol and Luna in the tool schema and routing
+   source; a live backend run remains unverified until observed.
 3. Check the active dispatch tool's model selectors, effort values, history
    constraints, and any authoritative fixed-role binding. A provider catalog
    or working CLI route is not proof of a native override.
@@ -62,6 +61,10 @@ if it changes. For current Codex `spawn_agent`:
 - Explicit `model` and `reasoning_effort` overrides require
   `fork_turns:"none"` or a supported positive history-count string. Supply a
   sufficient brief for that context boundary.
+- If the local hook snapshot lags a model release, include
+  `Allocation: model update override; <reason>.` with the explicit pair. This
+  bypasses only unknown-model/unsupported-effort snapshot checks; retired-route
+  and history restrictions remain. It does not prove backend support.
 - Full history (`fork_turns` omitted or `"all"`) disallows either override.
   For deliberate inheritance through the lean gate, use explicit
   `fork_turns:"all"`, omit both overrides, and put

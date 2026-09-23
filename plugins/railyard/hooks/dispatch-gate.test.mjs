@@ -158,9 +158,11 @@ test("native model and effort validation uses this tool's capability pairs", () 
   for (const [model, reasoning_effort] of [
     ["gpt-6-astra", "ultra"], ["gpt-daybreak-blue-latest", "ultra"],
     ["gpt-6-astra", "low"], ["gpt-6-astra", "max"],
+    ["gpt-6-sol", "medium"], ["gpt-6-sol", "ultra"],
+    ["gpt-6-luna", "low"], ["gpt-6-luna", "max"],
   ]) assert.equal(run(native({ model, reasoning_effort })).code, 0, model);
   for (const [model, reasoning_effort] of [
-    ["gpt-6-astra", "none"], ["combo/grok-unified-4.6", "max"],
+    ["gpt-6-astra", "none"], ["gpt-6-luna", "ultra"], ["combo/grok-unified-4.6", "max"],
     ["gpt-6-astra", "turbo"], ["gpt-6-astra", 7], ["gpt-6-astra", {}],
     ["gpt-6-astra", " max "], ["unsupported-native-model", "max"], ["custom-external-model", "high"],
   ]) {
@@ -169,6 +171,18 @@ test("native model and effort validation uses this tool's capability pairs", () 
     assert.match(r.err, /reasoning_effort|model/);
     assert.equal(r.log.length, 0);
   }
+});
+
+test("model-update override passes an unknown explicit pair to the native backend without reviving retired models", () => {
+  const message = "Allocation: model update override; the user authorized checking the newly exposed native selector.\nProbe the exact requested pair and report the backend result.";
+  const accepted = run(native({ model: "gpt-6-next", reasoning_effort: "medium", message }));
+  assert.equal(accepted.code, 0, accepted.err);
+  assert.equal(accepted.log[0].capability, "native_backend_unverified");
+  assert.equal(accepted.log[0].modelUpdateOverride, true);
+  assert.equal(run(native({ model: "gpt-6-next", reasoning_effort: "medium" })).code, 2);
+  assert.equal(run(native({ model: "gpt-5.6-sol", reasoning_effort: "medium", message })).code, 2);
+  assert.equal(run(native({ model: "gpt-6-next", reasoning_effort: " medium ", message })).code, 2);
+  assert.equal(run(native({ model: "gpt-6-next", reasoning_effort: "medium", message, fork_turns: "all" })).code, 2);
 });
 
 test("retired model families cannot dispatch natively or through an external provider", () => {

@@ -283,6 +283,7 @@ export function needsRouteReevaluation(prior, decision) {
 
 export function isAllowedRouteReevaluation(request, decision, prior) {
   return needsRouteReevaluation(prior, decision)
+    && decision.binding.budgetEffect === "adjust_active"
     && request.dispatchKind === "task_message"
     && decision.binding.adapterId === "codex-task-message"
     && allowedInheritedAdapterTransition(prior.binding.adapterId, decision.binding.adapterId, decision.selected.carrierId, decision.binding.dispatchKind);

@@ -1,11 +1,13 @@
 /**
- * Verified Codex adapter override surfaces. A model appearing in a cache or
- * provider catalog does not extend either surface. The native subagent tool
- * and the Codex task tools expose different model selectors, so keeping their
- * rosters separate prevents a task-only selector from slipping into spawn.
+ * Advertised Codex adapter override surfaces. A model appearing in a cache or
+ * provider catalog does not extend either surface. Keep the native subagent
+ * and Codex task rosters separate so a task-only selector cannot slip into
+ * spawn if their tool schemas diverge.
  */
 export const NATIVE_SUBAGENT_MODEL_EFFORTS = Object.freeze({
   "gpt-6-astra": Object.freeze(["low", "medium", "high", "xhigh", "max", "ultra"]),
+  "gpt-6-sol": Object.freeze(["low", "medium", "high", "xhigh", "max", "ultra"]),
+  "gpt-6-luna": Object.freeze(["low", "medium", "high", "xhigh", "max"]),
   "gpt-daybreak-blue-latest": Object.freeze(["low", "medium", "high", "xhigh", "max", "ultra"]),
 });
 

@@ -2,11 +2,11 @@
 
 Choose model and effort deliberately for ordinary native work using the
 [allocation guide](harness-model-invocation.md). GPT-6 Sol at medium is the
-baseline for ordinary substantive **Codex task** work; use high when task need
+baseline for ordinary substantive Codex work; use high when task need
 warrants it, Luna at low or medium for bounded repetitive work, and Astra only
-for clear hard or high-risk escalation. Native subagent creation has a separate
-roster: unavailable Sol/Luna native selectors fail visibly. Select Astra for a
-child only when warranted by the assignment. Explicit user choices
+for clear hard or high-risk escalation. Native subagent creation advertises
+Sol and Luna in its tool schema and routing source; backend execution remains
+unverified until observed. Explicit user choices
 and suitable inheritance remain authoritative. Native dispatch does not need
 an admission ledger, charter, or routine routing CLI call.
 
@@ -207,10 +207,9 @@ No catalog means no provider probe, availability assertion, or required
 implementation-harness change. Ordinary substantive Codex task work proposes
 `gpt-6-sol` at `medium`. Complex or difficult work can select Sol at `high`;
 bounded repetitive work can select Luna at `low` or `medium`; Astra is a clear
-hard or high-risk escalation. Native creation currently lacks Sol and Luna
-selectors, so its default and
-explicit requests for those models fail visibly. Deliberately select a supported
-Astra allocation only when the assignment warrants it. The built-in
+hard or high-risk escalation. Native creation uses the same Sol baseline and
+advertises Sol/Luna selectors; the active schema and backend decide whether a
+requested pair can run. The built-in
 digest changes with this policy so old decisions are not reused as the new
 policy.
 
@@ -313,7 +312,8 @@ top-level keys only: `providers`, `models`, `roles`, `privacy`, `budgets`,
 
 The [`example catalog`](model-routing.example.json) uses Sol medium for
 ordinary substantive task work, with high and Astra escalation selected by task
-need. Unavailable Sol/Luna native-subagent requests fail visibly. Those alternatives are not a cost-ranked ladder. Explicit
+need. These native selectors are advertised, with live execution unverified
+until observed. Explicit
 `model` requirements select matching catalog entries ahead of role-tier
 preferences; the selected entry still has to satisfy its declared role,
 privacy, harness, and capability restrictions. Unsupported requirements never
@@ -405,8 +405,8 @@ Catalog fields may reference them; they cannot extend them.
 
 | Carrier | Transport and fixed facts | Availability truth |
 | --- | --- | --- |
-| `codex-6-sol` | `gpt-6-sol`, Low/Medium/High/Xhigh/Max/Ultra | verified for `codex-task-create` and `codex-task-message`; unavailable to native subagent creation |
-| `codex-6-luna` | `gpt-6-luna`, Low/Medium/High/Xhigh/Max | verified for `codex-task-create` and `codex-task-message`; unavailable to native subagent creation |
+| `codex-6-sol` | `gpt-6-sol`, Low/Medium/High/Xhigh/Max/Ultra | advertised by native subagent creation and Codex task controls; live backend execution unverified |
+| `codex-6-luna` | `gpt-6-luna`, Low/Medium/High/Xhigh/Max | advertised by native subagent creation and Codex task controls; live backend execution unverified |
 | `codex-astra` | `gpt-6-astra`, Low/Medium/High/Xhigh/Max/Ultra | verified task selector and the available native-subagent escalation selector |
 | `codex-daybreak-blue` | `gpt-daybreak-blue-latest`, Low/Medium/High/Xhigh/Max/Ultra | the strict configured path requires a fresh local availability cache |
 | `claude-ce-review` | CE Claude `-p` review adapter | unsupported until the compatible CE adapter is attested |

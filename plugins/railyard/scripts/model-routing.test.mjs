@@ -584,11 +584,14 @@ function r52Readiness() {
 test("native model capabilities distinguish exposed overrides from broader provider catalogs", () => {
   assert.equal(validateNativeModelEffort("gpt-6-astra", "max").ok, true);
   assert.equal(validateNativeModelEffort("gpt-6-astra", "ultra").ok, true);
+  assert.equal(validateNativeModelEffort("gpt-6-sol", "ultra").ok, true);
+  assert.equal(validateNativeModelEffort("gpt-6-luna", "max").ok, true);
+  assert.equal(validateNativeModelEffort("gpt-6-luna", "ultra").reason, "effort_unsupported");
   assert.equal(validateNativeModelEffort("gpt-5.6-terra", "ultra").reason, "native_model_unsupported");
   assert.equal(validateNativeModelEffort("gpt-daybreak-blue-latest", "ultra").ok, true);
   assert.equal(validateNativeModelEffort("gpt-6-astra", "max").ok, true);
   assert.equal(validateNativeModelEffort("gpt-6-astra", "invalid").reason, "effort_unsupported");
-  for (const model of ["gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-luna", "combo/grok-unified-4.6", "cursor/composer-2.5", "__proto__", undefined]) {
+  for (const model of ["gpt-5.6-sol", "gpt-5.6-luna", "combo/grok-unified-4.6", "cursor/composer-2.5", "__proto__", undefined]) {
     assert.equal(validateNativeModelEffort(model, "max").reason, "native_model_unsupported");
   }
   assert.equal(validateNativeModelEffort("gpt-6-astra", undefined).reason, "effort_unsupported");
@@ -819,7 +822,7 @@ test("Claude CE review routes reject unverified configured and observed model-ef
   assert.deepEqual(observedUnknownResponse.rejectedAlternatives, [{ modelAlias: "selected", reason: "claude_model_unverified" }]);
 });
 
-test("default allocation preserves requested pairs and keeps task-only GPT-6 selectors out of native spawn", () => {
+test("default allocation preserves requested pairs across native spawn and task creation", () => {
   for (const [model, effort] of [["gpt-6-astra", "low"], ["gpt-6-astra", "medium"], ["gpt-6-astra", "high"]]) {
     const resolved = handleRequest(request("resolve", { model, effort }), { now: NOW });
     assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
@@ -830,20 +833,24 @@ test("default allocation preserves requested pairs and keeps task-only GPT-6 sel
     assert.equal(resolved.response.decision.requestedVsActual.observedModel, "unknown");
   }
   const effortOnly = handleRequest(request("resolve", { effort: "medium" }), { now: NOW });
-  assert.equal(effortOnly.response.reason, "native_model_unsupported");
+  assert.equal(effortOnly.response.reason, "resolved");
+  assert.equal(effortOnly.response.decision.selected.model, "gpt-6-sol");
+  assert.equal(effortOnly.response.decision.selected.effort, "medium");
   for (const [model, effort] of [["gpt-6-sol", "high"], ["gpt-6-luna", "medium"]]) {
     const resolved = handleRequest(request("resolve", { model, effort, adapterId: "codex-task-create", dispatchKind: "task_create" }), { now: NOW });
     assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
     assert.equal(resolved.response.decision.selected.model, model);
     assert.equal(resolved.response.decision.selected.effort, effort);
   }
-  assert.equal(handleRequest(request("resolve", { model: "gpt-6-sol", effort: "high" }), { now: NOW }).response.reason, "carrier_adapter_mismatch");
+  const nativeSol = handleRequest(request("resolve", { model: "gpt-6-sol", effort: "high" }), { now: NOW }).response;
+  assert.equal(nativeSol.reason, "resolved");
+  assert.equal(nativeSol.decision.binding.adapterId, "native-subagent-create");
   for (const [model, effort] of [["gpt-6-astra", "none"]]) {
     const rejected = handleRequest(request("resolve", { model, effort }), { now: NOW });
     assert.equal(rejected.response.reason, "invalid_effort");
     assert.equal(rejected.response.decision, undefined);
   }
-  assert.equal(handleRequest(request("resolve", { model: "gpt-6-sol", effort: "max" }), { now: NOW }).response.reason, "carrier_adapter_mismatch");
+  assert.equal(handleRequest(request("resolve", { model: "gpt-6-sol", effort: "max" }), { now: NOW }).response.reason, "resolved");
   assert.equal(handleRequest(request("resolve", { model: "gpt-6-astra" }), { now: NOW }).response.reason, "effort_required");
   assert.equal(handleRequest(request("resolve", { explicitModelRequirement: true }), { now: NOW }).response.reason, "explicit_model_required");
 });
@@ -983,7 +990,8 @@ test("omitted native adapter fields select and admit a subagent without configur
 test("omitted native adapter fields select and admit a subagent for supported configured Codex carriers", () => {
   const cases = [
     ["codex-astra", "gpt-6-astra", "implementation", "max"],
-    ["codex-astra", "gpt-6-astra", "implementation", "max"],
+    ["codex-6-sol", "gpt-6-sol", "implementation", "max"],
+    ["codex-6-luna", "gpt-6-luna", "implementation.mechanical", "low"],
     ["codex-daybreak-blue", "gpt-daybreak-blue-latest", "implementation", "max"],
   ];
   for (const [carrierId, model, role, effort] of cases) {
@@ -1022,14 +1030,14 @@ test("omitted native adapter fields select and admit a subagent for supported co
   }
 });
 
-test("configured native creation refuses unsupported model and effort pairs before admission", () => {
+test("configured native creation refuses unsupported effort pairs before admission", () => {
   for (const [carrierId, model, role, effort, reason] of [
-    ["codex-6-sol", "gpt-6-sol", "implementation.hard", "max", "carrier_adapter_mismatch"],
+    ["codex-6-luna", "gpt-6-luna", "implementation.mechanical", "ultra", "effort_unsupported"],
   ]) {
     const policy = {
       schemaVersion: 1,
       providers: { codex: { carrierId, executionSurface: "codex", account: "local" } },
-      models: { selected: { provider: "codex", carrierId, requestedModel: model, effort: "max" } },
+      models: { selected: { provider: "codex", carrierId, requestedModel: model, effort: "low" } },
       roles: { [role]: { tiers: [["selected"]] } },
     };
     const state = createEmptyState();
@@ -1046,19 +1054,6 @@ test("configured native creation refuses unsupported model and effort pairs befo
         assert.equal(refused.changed, false);
         assert.deepEqual(state, before);
       }
-    }
-    if (carrierId === "codex-6-sol") {
-      const visible = { ...fields, adapterId: "codex-task-create", dispatchKind: "task_create" };
-      const resolved = handleRequest({ ...visible, command: "resolve" }, context);
-      assert.equal(resolved.response.reason, "resolved", JSON.stringify(resolved.response));
-      assert.equal(resolved.response.decision.selected.model, model);
-      assert.equal(resolved.response.decision.binding.adapterId, "codex-task-create");
-      const blocked = handleRequest({
-        ...visible, command: "admit", requestId: "legacy-visible", frozenInputDigest: DIGEST_A, scopes: { task: "visible-task" }, forecast: {},
-      }, context);
-      assert.equal(blocked.response.reason, "visible_task_authority_required");
-      assert.equal(blocked.changed, false);
-      assert.deepEqual(state, before);
     }
   }
 });
@@ -1099,7 +1094,7 @@ test("the built-in route supports explicit native allocation and task messages f
   assert.equal(validateState(state).ok, true);
 });
 
-test("no-config task defaults use GPT-6 Sol or Luna while native spawn fails visibly", () => {
+test("no-config task and native spawn defaults use GPT-6 Sol or Luna", () => {
   const task = (fields) => handleRequest(request("resolve", {
     adapterId: "codex-task-create", dispatchKind: "task_create", harness: "codex", ...fields,
   }), { now: NOW }).response;
@@ -1125,16 +1120,19 @@ test("no-config task defaults use GPT-6 Sol or Luna while native spawn fails vis
   assert.equal(mechanicalTask.decision.selected.effort, "low");
 
   const mechanicalSpawn = handleRequest(request("resolve", { role: "implementation.mechanical" }), { now: NOW }).response;
-  assert.equal(mechanicalSpawn.reason, "native_model_unsupported");
-  assert.equal(mechanicalSpawn.decision, undefined);
+  assert.equal(mechanicalSpawn.reason, "resolved");
+  assert.equal(mechanicalSpawn.decision.selected.model, "gpt-6-luna");
+  assert.equal(mechanicalSpawn.decision.selected.effort, "low");
+  assert.equal(mechanicalSpawn.decision.binding.adapterId, "native-subagent-create");
 });
 
 test("no-config Claude native requests report the harness boundary before Codex model defaults", () => {
   for (const adapterId of ["native-subagent-create", undefined]) {
     for (const harness of ["claude", "codex", undefined]) {
       const resolved = handleRequest(request("resolve", { adapterId, harness }), { now: NOW }).response;
-      assert.equal(resolved.reason, harness === "claude" ? "cross_harness_adapter_required" : "native_model_unsupported", `${adapterId}/${harness}`);
-      assert.equal(resolved.decision, undefined);
+      assert.equal(resolved.reason, harness === "claude" ? "cross_harness_adapter_required" : "resolved", `${adapterId}/${harness}`);
+      if (harness === "claude") assert.equal(resolved.decision, undefined);
+      else assert.equal(resolved.decision.binding.adapterId, "native-subagent-create");
     }
   }
 });
@@ -1161,7 +1159,8 @@ test("an omitted adapter honors an explicit native subagent dispatch kind", () =
     dispatchKind: "subagent_create",
     role: "implementation",
   }), { now: NOW }).response;
-  assert.equal(resolved.reason, "native_model_unsupported");
+  assert.equal(resolved.reason, "resolved");
+  assert.equal(resolved.decision.binding.adapterId, "native-subagent-create");
 
   const explicitTaskAdapter = handleRequest(request("resolve", {
     adapterId: "codex-task-create",
@@ -2989,11 +2988,12 @@ test("protected inspect-claim ignores caller path and XDG overrides", () => {
   }
 });
 
-test("native defaults fail visibly and explicit Astra never silently falls back", () => {
+test("native defaults resolve current GPT-6 models and explicit Astra never silently falls back", () => {
   for (const role of ["implementation", "implementation.fix", "review", "orchestration", "implementation.mechanical"]) {
     const result = handleRequest(request("resolve", { role }), { now: NOW });
-    assert.equal(result.response.reason, "native_model_unsupported");
-    assert.equal(result.response.decision, undefined);
+    assert.equal(result.response.reason, "resolved");
+    assert.equal(result.response.decision.selected.model, role === "implementation.mechanical" ? "gpt-6-luna" : "gpt-6-sol");
+    assert.equal(result.response.decision.binding.adapterId, "native-subagent-create");
   }
   for (const effort of ["low", "medium", "high"]) {
     const result = handleRequest(request("resolve", { model: "gpt-6-astra", effort }), { now: NOW });
@@ -3612,6 +3612,25 @@ for (const historicalPolicy of ["builtin-model-routing-v1", "builtin-model-routi
       workClassDigest: admission.reservation.workClassDigest,
     };
     const historical = state.reservations[admission.reservation.reservationId];
+    historical.policyDigest = historicalPolicy;
+    historical.decision.policyDigest = historicalPolicy;
+    priorRoute.policyDigest = historicalPolicy;
+    const unchangedState = structuredClone(state);
+    const unchanged = handleRequest(request("resolve", {
+      adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "message-unchanged", priorRoute,
+      priorWorkClassDigest: historical.workClassDigest,
+      dispatchIdentity: dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }),
+    }), { catalog: policy, state, now: NOW });
+    assert.equal(unchanged.response.reason, "resolved", JSON.stringify(unchanged.response));
+    assert.deepEqual(state, unchangedState, "unchanged allocation resolves without mutating historical state");
+    policy.models.luna.efforts = ["high", "max"];
+    const effortOnly = handleRequest(request("resolve", {
+      adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "message-effort-only", priorRoute,
+      effort: "high", priorWorkClassDigest: historical.workClassDigest,
+      dispatchIdentity: dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }),
+    }), { catalog: policy, state, now: NOW });
+    assert.equal(effortOnly.response.reason, "route_reevaluation_required", JSON.stringify(effortOnly.response));
+    assert.deepEqual(state, unchangedState, "read-only effort changes cannot mutate historical state");
     historical.selected.carrierId = "retired-native-carrier";
     historical.selected.model = "retired-native-model";
     historical.decision.selected = structuredClone(historical.selected);
@@ -3627,9 +3646,9 @@ for (const historicalPolicy of ["builtin-model-routing-v1", "builtin-model-routi
       priorWorkClassDigest: admission.reservation.workClassDigest,
       dispatchIdentity: { ...dispatchIdentity("codex-task-message", { hostScope: "host-msg", sessionId: "task-msg" }) },
     }), { catalog: policy, state, now: NOW });
-    assert.equal(neutral.response.reason, "resolved", JSON.stringify(neutral.response));
-    assert.equal(neutral.response.decision.selected.model, "gpt-6-sol");
-    assert.equal(neutral.response.decision.policy.digest, policyDigest(policy));
+    assert.equal(neutral.response.reason, "route_reevaluation_required", JSON.stringify(neutral.response));
+    assert.equal(historical.currentRoute, undefined, "read-only resolution does not apply a new allocation");
+    assert.equal(historical.selected.model, "retired-native-model");
     const tampered = handleRequest(request("resolve", {
       adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "tampered-policy", priorRoute: { ...priorRoute, policyDigest: DIGEST_B },
       priorWorkClassDigest: historical.workClassDigest,

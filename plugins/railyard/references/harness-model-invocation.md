@@ -9,11 +9,9 @@ engineering when the active execution surface exposes it**. Raise Sol to
 `high` when task complexity, ambiguity, or the verification burden warrants
 it. Use GPT-6 Luna at `low` or `medium` for bounded, repetitive work. Escalate
 to Astra only for clearly hard or high-risk work, or when accepted-outcome
-evidence shows Sol is insufficient. Native subagent creation currently lacks
-Sol and Luna selectors. Such requests fail visibly. Choose Astra for a native
-child only when the task warrants that deliberate allocation; otherwise use
-suitable full-history inheritance or perform the work in the current task. Preserve an
-explicit user selection. Run deterministic tools directly for mechanical
+evidence shows Sol is insufficient. The native tool schema and routing source
+advertise Sol and Luna selectors; backend execution remains unverified until
+observed. Preserve an explicit user selection. Run deterministic tools directly for mechanical
 operations; do not create a model worker merely because its per-token rate
 looks lower. `max` is an explicit escalation, not an ordinary default.
 
@@ -52,6 +50,8 @@ The current routing policy permits these exposed native `spawn_agent` selectors:
 
 | Model selector | Supported reasoning efforts |
 | --- | --- |
+| `gpt-6-sol` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
+| `gpt-6-luna` | `low`, `medium`, `high`, `xhigh`, `max` |
 | `gpt-6-astra` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
 | `gpt-daybreak-blue-latest` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
 
@@ -73,6 +73,14 @@ constraints are part of allocation:
   `fork_turns:"all"`, omit both override fields, and include
   `Allocation: inherit model and reasoning effort; <reason>.` in the brief.
   This records intent; it does not reveal otherwise unknown parent settings.
+
+If the local hook snapshot lags a model release, include
+`Allocation: model update override; <reason>.` in the brief with explicit
+`model` and `reasoning_effort` and compatible limited/no history. This bypasses
+only the hook's unknown-model or unsupported-effort snapshot checks. It does
+not enable retired routes, bypass history constraints, or verify backend
+support. The native tool schema and backend remain authoritative; report a
+rejected pair without silently substituting another allocation.
 
 A deliberately selected Astra child for difficult investigation can use:
 
