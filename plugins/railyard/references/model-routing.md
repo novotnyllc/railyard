@@ -398,7 +398,7 @@ Catalog fields may reference them; they cannot extend them.
 | `native-subagent-create` | native subagent | `model`, `reasoning_effort` | `contextFork` is `"none"` or `"1"`-`"999"` only |
 | `claude-session-create` | Claude Code `Agent` session | family-alias `model`; effort inherits or comes from the subagent definition | the stored v1 `banner-only` label is legacy metadata, not an effort control or proof |
 | `native-subagent-message` | existing subagent message | none | `none` or `adjust_active`, never a fake spawn claim |
-| `native-subagent-followup` | work-starting follow-up | none today | fresh resolved route/inheritance only |
+| `native-subagent-followup` | work-starting follow-up | none today; start a successor with `native-subagent-create` to change effort | fresh resolved route/inheritance only |
 | `claude-cli-via-task` / `claude-cli-via-worker` | CE-owned Claude review path | selector controller/worker plus CE slot binding | composite controller and Claude-child accounting |
 | `oracle-browser` | fixed Oracle browser advisor | fixed route | selected-route local attestation only |
 | `oracle-homebrew-lifecycle` | fixed local Oracle lifecycle action | fixed lifecycle carrier | separate lifecycle claim; successful mutation requires a fresh review |
