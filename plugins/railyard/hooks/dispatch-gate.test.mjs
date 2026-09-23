@@ -171,10 +171,16 @@ test("native model and effort validation uses this tool's capability pairs", () 
   }
 });
 
-test("retired model family cannot dispatch natively or through an external provider", () => {
-  for (const model of ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "openai/gpt-5.6-sol"]) {
+test("retired model families cannot dispatch natively or through an external provider", () => {
+  for (const model of [
+    "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "openai/gpt-5.6-sol",
+    "glm-5.2", "glm-5.2-flash", "glm-5.2-air", "zai/glm-5.2",
+    "z-ai/glm-5.2-flash", "openrouter/z-ai/glm-5.2", "ZAI/GLM-5.2-AIR",
+    "glm-5.2[1m]", "glm-5.2:batch", "zai/glm-5.2[1m]", "zai/glm-5.2:batch",
+  ]) {
     for (const input of [
       native({ model, reasoning_effort: "high" }),
+      { tool_name: "Bash", tool_input: { command: `codex exec -m ${model} -c model_reasoning_effort=high` } },
       { tool_name: "Bash", tool_input: { command: `codex exec -m ${model} -c model_reasoning_effort=high -c model_provider=example` } },
     ]) {
       const result = run(input);
@@ -182,6 +188,15 @@ test("retired model family cannot dispatch natively or through an external provi
       assert.match(result.err, /model .* is retired/);
       assert.deepEqual(result.log, []);
     }
+  }
+});
+
+test("retired model family matching preserves other external model versions", () => {
+  for (const model of ["glm-5.20", "zai/glm-5.20"]) {
+    const result = run({ tool_name: "Bash", tool_input: { command: `codex exec -m ${model} -c model_reasoning_effort=high -c model_provider=example` } });
+    assert.equal(result.code, 0, result.err);
+    assert.equal(result.log[0].model, model);
+    assert.equal(result.log[0].capability, "runtime_unverified");
   }
 });
 

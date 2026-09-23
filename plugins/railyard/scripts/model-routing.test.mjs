@@ -1128,6 +1128,22 @@ test("no-config task defaults use GPT-6 Sol or Luna while native spawn fails vis
   assert.equal(mechanicalSpawn.decision, undefined);
 });
 
+test("high-risk mechanical and bounded task defaults escalate to Sol high", () => {
+  for (const role of ["implementation.mechanical", "implementation.bounded_fix"]) {
+    for (const risk of ["high", "critical"]) {
+      for (const repetition of ["low", "high"]) {
+        const resolved = handleRequest(request("resolve", {
+          adapterId: "codex-task-create", dispatchKind: "task_create", harness: "codex", role, risk,
+          workShape: { ...request("resolve").workShape, repetition },
+        }), { now: NOW }).response;
+        assert.equal(resolved.reason, "resolved", JSON.stringify(resolved));
+        assert.equal(resolved.decision.selected.model, "gpt-6-sol", `${role}/${risk}/${repetition}`);
+        assert.equal(resolved.decision.selected.effort, "high", `${role}/${risk}/${repetition}`);
+      }
+    }
+  }
+});
+
 test("an omitted adapter honors an explicit native subagent dispatch kind", () => {
   const resolved = handleRequest(request("resolve", {
     adapterId: undefined,
@@ -2202,7 +2218,7 @@ test("a GPT-6 visible task can change effort through an active task-message adju
       codex_astra: { carrierId: "codex-astra", executionSurface: "codex", account: "local", locality: "external", retention: "provider_default" },
     },
     extraModels: {
-      astra: { provider: "codex_astra", carrierId: "codex-astra", requestedModel: "gpt-6-astra", efforts: ["low", "medium", "high"], roles: ["implementation"], relativeCostIndex: 10 },
+      astra: { provider: "codex_astra", carrierId: "codex-astra", requestedModel: "gpt-6-astra", effort: "medium", efforts: ["low", "medium", "high"], roles: ["implementation"], relativeCostIndex: 10 },
     },
     extraRoles: { implementation: { tiers: [{ models: ["astra"], softPriorities: ["cost"] }] } },
   });
@@ -2248,6 +2264,12 @@ test("a GPT-6 visible task can change effort through an active task-message adju
   }), { catalog: policy, state, now: NOW });
   assert.equal(crossReservation.response.reason, "prior_route_binding_mismatch");
   assert.equal(state.reservations[secondAdmission.reservation.reservationId].forecast.marginalUsd, "1");
+  const omittedEffort = (route, suffix) => request("admit", {
+    ...baseAdjustment, requestId: `gpt6-omitted-effort-${suffix}`, actionId: `gpt6-omitted-effort-${suffix}`, priorRoute: route,
+  });
+  const beforeOmittedLow = structuredClone(state);
+  assert.equal(handleRequest(omittedEffort(priorRoute, "low"), { catalog: policy, state, now: NOW }).response.reason, "prior_route_binding_mismatch");
+  assert.deepEqual(state, beforeOmittedLow);
   const raisedInput = request("admit", { ...baseAdjustment, requestId: "gpt6-effort-high", actionId: "gpt6-effort-high", model: "gpt-6-astra", effort: "high", priorRoute });
   const raised = handleRequest(raisedInput, { catalog: policy, state, now: NOW });
   assert.equal(raised.response.reason, "active_budget_adjusted", JSON.stringify(raised.response));
@@ -2264,12 +2286,30 @@ test("a GPT-6 visible task can change effort through an active task-message adju
   delete state.reservations[secondAdmission.reservation.reservationId].adjustments;
 
   const secondPriorRoute = { ...priorRoute, effort: "high" };
+  const beforeOmittedHigh = structuredClone(state);
+  assert.equal(handleRequest(omittedEffort(secondPriorRoute, "high"), { catalog: policy, state, now: NOW }).response.reason, "prior_route_binding_mismatch");
+  assert.deepEqual(state, beforeOmittedHigh);
   const loweredInput = request("admit", { ...baseAdjustment, requestId: "gpt6-effort-medium", actionId: "gpt6-effort-medium", model: "gpt-6-astra", effort: "medium", priorRoute: secondPriorRoute });
   const lowered = handleRequest(loweredInput, { catalog: policy, state, now: NOW });
   assert.equal(lowered.response.reason, "active_budget_adjusted", JSON.stringify(lowered.response));
   assert.equal(state.reservations[admission.reservation.reservationId].selected.effort, "medium");
   assert.equal(state.reservations[admission.reservation.reservationId].forecast.marginalUsd, "3");
   assert.equal(handleRequest(loweredInput, { catalog: policy, state, now: NOW }).response.reason, "active_adjustment_replayed");
+
+  for (const phase of ["started", "settled", "no_start", "ambiguous"]) {
+    const replayState = structuredClone(state);
+    const active = replayState.reservations[admission.reservation.reservationId];
+    const receipt = baseReceipt(active, identity, { receiptId: `effort-replay-${phase}`, status: phase, measuredUsage: phase === "settled" ? { marginalUsd: "1" } : {} });
+    const reconciled = handleRequest(request("reconcile", {
+      reservationId: active.reservationId, frozenInputDigest: active.frozenInputDigest, receipt,
+    }), { catalog: policy, state: replayState, now: NOW, trustedReceiptImporter: trustedReceiptImporter(receipt) });
+    assert.equal(reconciled.response.ok, true, JSON.stringify(reconciled.response));
+    assert.equal(replayState.reservations[active.reservationId].phase, phase);
+    const beforeReplay = structuredClone(replayState);
+    const replay = handleRequest(loweredInput, { catalog: policy, state: replayState, now: NOW });
+    assert.equal(replay.response.reason, phase === "started" ? "active_adjustment_replayed" : "active_attempt_unknown", phase);
+    assert.deepEqual(replayState, beforeReplay);
+  }
 
   const currentPriorRoute = { ...priorRoute, effort: "medium" };
   const modelChange = handleRequest(request("admit", { ...baseAdjustment, requestId: "gpt6-model-change", actionId: "gpt6-model-change", model: "gpt-6-luna", effort: "max", priorRoute: currentPriorRoute }), { catalog: policy, state, now: NOW });

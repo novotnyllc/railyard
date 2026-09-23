@@ -32,14 +32,6 @@
       "harness": "codex",
       "locality": "external",
       "retention": "provider_default"
-    },
-    "codex_grok": {
-      "carrierId": "codex-grok",
-      "executionSurface": "codex",
-      "account": "codex-account",
-      "harness": "codex",
-      "locality": "external",
-      "retention": "provider_default"
     }
   },
   "models": {
@@ -96,17 +88,6 @@
         "ultra"
       ],
       "effort": "medium"
-    },
-    "grok": {
-      "provider": "codex_grok",
-      "carrierId": "codex-grok",
-      "requestedModel": "combo/grok-unified-4.6",
-      "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh"
-      ]
     }
   },
   "roles": {

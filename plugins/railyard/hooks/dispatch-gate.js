@@ -1015,7 +1015,7 @@ const ROLE_ALLOCATION = /^[ \t]*Allocation:[ \t]*role configuration;[ \t]*\S[^\r
 const V2_FIELDS = new Set(["task_name", "message", "fork_turns", "model", "reasoning_effort"]);
 
 function nativePair(model, effort) {
-  if (/(?:^|\/)gpt-5\.6(?:-|$)/i.test(String(model))) return { ok: false, reason: "model_retired" };
+  if (/(?:^|\/)(?:gpt-5\.6|glm-5\.2)(?:[-\[:]|$)/i.test(String(model))) return { ok: false, reason: "model_retired" };
   try {
     // This module contains only the verified native capability snapshot.
     return require("../scripts/model-routing/native.mjs").validateNativeModelEffort(model, effort);

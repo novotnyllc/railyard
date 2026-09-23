@@ -533,12 +533,13 @@ export function defaultRoute(request, { trustedTransportAttestor } = {}) {
   const nativeSpawn = request.adapterId === "native-subagent-create"
     || (request.adapterId === undefined && request.dispatchKind === "subagent_create");
   // Native spawn cannot substitute an older generation for a GPT-6 default.
-  const defaultModel = mechanical ? "gpt-6-luna" : "gpt-6-sol";
+  const highRisk = request.risk === "high" || request.risk === "critical";
+  const defaultModel = mechanical && !highRisk ? "gpt-6-luna" : "gpt-6-sol";
   const model = request.model || defaultModel;
   if (nativeSpawn && request.model === undefined) return { ok: false, reason: "native_model_unsupported" };
   const effort = request.effort || ((model === "gpt-6-luna")
     ? (repeatable ? "low" : "medium")
-    : (request.role === "implementation.hard" || request.risk === "high" || request.risk === "critical" ? "high" : "medium"));
+    : (request.role === "implementation.hard" || highRisk ? "high" : "medium"));
   const carrierId = Object.keys(CARRIER_DESCRIPTORS).find((id) => CARRIER_DESCRIPTORS[id].requestedModel === model);
   const carrier = CARRIER_DESCRIPTORS[carrierId];
   if (!carrier) return { ok: false, reason: "task_model_unsupported" };

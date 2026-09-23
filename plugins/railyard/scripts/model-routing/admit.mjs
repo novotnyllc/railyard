@@ -173,7 +173,8 @@ export function admitInternal(request, context) {
   // route would turn a harmless retry into a false binding mismatch.
   if (request.budgetEffect === "adjust_active" && validId(request.activeReservationId)) {
     const active = state.reservations[request.activeReservationId];
-    if (active && !activeReservationMatchesPriorRoute(request, active)) return error("prior_route_binding_mismatch");
+    if (!active || !["claimed", "started"].includes(active.phase)) return error("active_attempt_unknown");
+    if (!activeReservationMatchesPriorRoute(request, active)) return error("prior_route_binding_mismatch");
     const previous = active?.adjustments?.[request.requestId];
     if (previous) {
       const adjustmentDigest = stableDigest({ ...request, command: undefined });

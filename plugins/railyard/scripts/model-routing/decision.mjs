@@ -258,6 +258,7 @@ export function allowedInheritedAdapterTransition(previousAdapterId, nextAdapter
 // native subagent follow-ups, which expose no override controls.
 export function isAllowedMidTaskEffortChange(request, decision, prior) {
   return request.dispatchKind === "task_message"
+    && request.effort !== undefined
     && decision.binding.adapterId === "codex-task-message"
     && decision.binding.budgetEffect === "adjust_active"
     && ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna"].includes(decision.selected.model)
