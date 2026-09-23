@@ -3728,7 +3728,7 @@ for (const historicalPolicy of ["builtin-model-routing-v1", "builtin-model-routi
     assert.equal(effortOnly.response.reason, "route_reevaluation_required", JSON.stringify(effortOnly.response));
     assert.deepEqual(state, unchangedState, "read-only effort changes cannot mutate historical state");
     historical.selected.carrierId = "retired-native-carrier";
-    historical.selected.model = "retired-native-model";
+    historical.selected.model = "example/unknown-model";
     historical.decision.selected = structuredClone(historical.selected);
     historical.policyDigest = historicalPolicy;
     historical.decision.policyDigest = historical.policyDigest;
@@ -3744,7 +3744,7 @@ for (const historicalPolicy of ["builtin-model-routing-v1", "builtin-model-routi
     }), { catalog: policy, state, now: NOW });
     assert.equal(neutral.response.reason, "route_reevaluation_required", JSON.stringify(neutral.response));
     assert.equal(historical.currentRoute, undefined, "read-only resolution does not apply a new allocation");
-    assert.equal(historical.selected.model, "retired-native-model");
+    assert.equal(historical.selected.model, "example/unknown-model");
     const tampered = handleRequest(request("resolve", {
       adapterId: "codex-task-message", dispatchKind: "task_message", budgetEffect: "none", actionId: "tampered-policy", priorRoute: { ...priorRoute, policyDigest: DIGEST_B },
       priorWorkClassDigest: historical.workClassDigest,
@@ -3765,12 +3765,12 @@ for (const historicalPolicy of ["builtin-model-routing-v1", "builtin-model-routi
     }), { catalog: policy, state, now: NOW });
     assert.equal(adjustment.response.reason, "active_budget_adjusted", JSON.stringify(adjustment.response));
     assert.equal(adjustment.response.decision.selected.model, "gpt-6-sol");
-    assert.equal(historical.selected.model, "retired-native-model");
+    assert.equal(historical.selected.model, "example/unknown-model");
     assert.equal(state.reservations[historical.reservationId].routeLearningEligible, false);
     assert.equal(historical.policyDigest, historicalPolicy);
     const recoveredStatus = handleRequest(request("status"), { catalog: policy, state: JSON.parse(JSON.stringify(state)), now: NOW });
     const recoveredRoute = recoveredStatus.response.reservations.find((record) => record.reservationId === historical.reservationId);
-    assert.equal(recoveredRoute.selected.model, "retired-native-model");
+    assert.equal(recoveredRoute.selected.model, "example/unknown-model");
     assert.equal(recoveredRoute.effectiveRoute.selected.model, "gpt-6-sol");
     assert.equal(recoveredRoute.effectiveRoute.policyDigest, policyDigest(policy));
     const currentPriorRoute = {
@@ -3790,7 +3790,7 @@ for (const historicalPolicy of ["builtin-model-routing-v1", "builtin-model-routi
     assert.equal(raised.response.reason, "active_budget_adjusted", JSON.stringify(raised.response));
     assert.equal(raised.response.decision.selected.effort, "max");
     assert.equal(state.reservations[historical.reservationId].currentRoute.selected.effort, "max");
-    assert.equal(state.reservations[historical.reservationId].selected.model, "retired-native-model");
+    assert.equal(state.reservations[historical.reservationId].selected.model, "example/unknown-model");
     assert.equal(state.reservations[historical.reservationId].policyDigest, historicalPolicy);
     assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state)));
   });
