@@ -303,6 +303,42 @@ test("reap does not treat a reused owner PID as conclusive absence", () => {
   assert.deepEqual(result.verification.missingEvidence, ["owner-identity-changed"]);
 });
 
+test("recycle's known replacement birth in the owner PID lets residue be reaped", () => {
+  const replacement = { pid: 100, startTime: "2026-08-02T16:01:00.000Z" };
+  const run = (ownerReplacement) => {
+    const snapshot = snapshotFixture();
+    const signals = [];
+    const reader = sequenceReader(new Map([
+      [100, [{ state: "present", identity: { ...snapshot.owner, startTime: replacement.startTime } }]],
+      [200, [
+        { state: "present", identity: snapshot.targets[0] },
+        { state: "present", identity: snapshot.targets[0] },
+        { state: "absent" },
+      ]],
+    ]));
+    const outcome = reapSnapshot(snapshot, {
+      platform: "darwin",
+      uid: 501,
+      readIdentity: reader.readIdentity,
+      signalProcess: (...args) => signals.push(args),
+      sleep: () => {},
+      lock: unlocked(),
+      ownerReplacement,
+    });
+    return { ...outcome, signals };
+  };
+
+  const accepted = run(replacement);
+  assert.equal(accepted.exitCode, EXIT_CODES.healthy);
+  assert.equal(accepted.result.verification.ownerProof, "replaced");
+  assert.deepEqual(accepted.signals, [[200, "SIGTERM"]]);
+
+  const otherBirth = run({ pid: 100, startTime: "2026-08-02T16:02:00.000Z" });
+  assert.equal(otherBirth.exitCode, EXIT_CODES.refused);
+  assert.deepEqual(otherBirth.result.verification.missingEvidence, ["owner-identity-changed"]);
+  assert.deepEqual(otherBirth.signals, []);
+});
+
 test("reap refuses PID reuse and every required identity drift without signaling", () => {
   const snapshot = snapshotFixture();
   const target = snapshot.targets[0];

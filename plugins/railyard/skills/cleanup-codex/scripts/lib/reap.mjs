@@ -73,6 +73,8 @@ export function reapSnapshot(snapshot, {
   graceMs = DEFAULT_GRACE_MS,
   postSignalMs = DEFAULT_POST_SIGNAL_MS,
   lock = createMutationLock({ uid }),
+  // Recycle only: the exact new birth that now holds the owner's PID.
+  ownerReplacement = null,
 } = {}) {
   const result = emptyReapResult(platform);
   let exitCode = EXIT_CODES.refused;
@@ -107,12 +109,22 @@ export function reapSnapshot(snapshot, {
     }
 
     const ownerObservation = readIdentity(snapshot.owner.pid);
-    if (ownerObservation?.state === "present" && validObservedIdentity(ownerObservation.identity)) {
-      const changed = identityDifferences(snapshot.owner, ownerObservation.identity);
-      refuse(changed.length ? "owner-identity-changed" : "owner-still-live");
+    const replacedByKnownBirth = Boolean(ownerReplacement)
+      && ownerObservation?.state === "present"
+      && validObservedIdentity(ownerObservation.identity)
+      && ownerObservation.identity.pid === ownerReplacement.pid
+      && ownerObservation.identity.startTime === ownerReplacement.startTime
+      && ownerReplacement.startTime !== snapshot.owner.startTime;
+    if (replacedByKnownBirth) {
+      result.verification.ownerProof = "replaced";
+    } else {
+      if (ownerObservation?.state === "present" && validObservedIdentity(ownerObservation.identity)) {
+        const changed = identityDifferences(snapshot.owner, ownerObservation.identity);
+        refuse(changed.length ? "owner-identity-changed" : "owner-still-live");
+      }
+      if (ownerObservation?.state !== "absent") refuse("owner-evidence-unavailable");
+      result.verification.ownerProof = "absent";
     }
-    if (ownerObservation?.state !== "absent") refuse("owner-evidence-unavailable");
-    result.verification.ownerProof = "absent";
 
     const active = [];
     for (const target of snapshot.targets) {

@@ -376,6 +376,7 @@ export function recycleServer(options, deps) {
         || canonicalPathOrRefuse(restarted.socketPath, deps.canonicalPath, "managed-restart-invalid") !== socket
       ) refuse("managed-restart-invalid");
       // A reused PID is a valid replacement only with a different birth.
+      let ownerReplacement = null;
       if (restarted.pid === snapshot.owner.pid) {
         let startTime = restarted.processStartTime ?? null;
         if (!startTime) {
@@ -385,6 +386,7 @@ export function recycleServer(options, deps) {
             : null;
         }
         if (!startTime || startTime === snapshot.owner.startTime) refuse("managed-restart-invalid");
+        ownerReplacement = { pid: restarted.pid, startTime };
       }
       if (typeof restarted.managedCodexPath === "string") {
         // A native restart may activate a newer managed release.
@@ -405,7 +407,7 @@ export function recycleServer(options, deps) {
       }
       replacementPid = restarted.pid;
       result.verification.actions.push({ kind: "native-daemon-restart", oldPid: snapshot.owner.pid, newPid: replacementPid });
-      const residue = deps.reapResidue(snapshot);
+      const residue = deps.reapResidue(snapshot, { ownerReplacement });
       if (residue?.exitCode !== EXIT_CODES.healthy) {
         refuse(safeFailureCode(
           residue?.result?.verification?.missingEvidence?.[0],

@@ -524,7 +524,7 @@ export function createDefaultRecycleDependencies({
         readPidRecord: () => readNativePidRecord({ fsApi, codexHome, uid }),
       });
     },
-    reapResidue(snapshot) {
+    reapResidue(snapshot, { ownerReplacement = null } = {}) {
       return reapSnapshot(snapshot, {
         platform: "darwin",
         uid,
@@ -534,6 +534,7 @@ export function createDefaultRecycleDependencies({
         graceMs,
         postSignalMs,
         lock: { acquire: () => () => {} },
+        ownerReplacement,
       });
     },
     stopUnmanaged(snapshot) {
