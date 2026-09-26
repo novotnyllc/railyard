@@ -875,6 +875,18 @@ function verifyMerge(command) {
   }
 }
 
+// A user who explicitly directs a merge (including an admin bypass of branch
+// protection) can skip CE settlement for that one command. The override must
+// be an inline assignment on the merge command itself, never ambient process
+// env, so it cannot linger as a blanket bypass and stays visible in the
+// command the user approved.
+const OVERRIDE_NAME = "RAILYARD_MERGE_OVERRIDE";
+const OVERRIDE_VALUE = "user-approved";
+function userOverride(command) {
+  return Boolean(command.env) && Object.hasOwn(command.env, OVERRIDE_NAME) &&
+    command.env[OVERRIDE_NAME] === OVERRIDE_VALUE;
+}
+
 function handlePayload(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return;
   if (input.hook_event_name && input.hook_event_name !== "PreToolUse") return;
@@ -883,7 +895,11 @@ function handlePayload(input) {
   if (!text) return;
   const requestedCwd = [args.working_directory, args.workdir, args.cwd, input.cwd]
     .find((value) => typeof value === "string" && value);
-  const commands = mergeCommands(stripHeredocs(text), requestedCwd);
+  const detected = mergeCommands(stripHeredocs(text), requestedCwd);
+  const commands = detected.filter((command) => !userOverride(command));
+  if (detected.length !== commands.length) {
+    process.stderr.write(`[railyard] Merge allowed by ${OVERRIDE_NAME}=${OVERRIDE_VALUE} without CE settlement.\n`);
+  }
   if (!commands.length) return;
   try {
     if (commands.length !== 1) throw new Error("merge one PR per command with that PR's CE snapshot");
@@ -891,7 +907,8 @@ function handlePayload(input) {
   } catch (error) {
     const why = String(error?.message || error).split("\n")[0];
     process.stderr.write("[railyard] Merge refused: " + why +
-      ". Have ce-babysit-pr complete readiness and save its final snapshot stdout beside state.json; then retry the pinned merge.\n");
+      ". Have ce-babysit-pr complete readiness and save its final snapshot stdout beside state.json; then retry the pinned merge." +
+      ` Only when the user explicitly directs this merge without CE settlement, prefix the merge command with ${OVERRIDE_NAME}=${OVERRIDE_VALUE}.\n`);
     process.exitCode = 2;
   }
 }
