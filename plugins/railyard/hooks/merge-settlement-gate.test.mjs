@@ -672,7 +672,21 @@ gated("any other override value is ignored", () => {
 });
 
 gated("the override covers only its own command, not a second merge in the same text", () => {
-  refused(run(bash(`${OVERRIDE} ${adminMerge}; gh pr merge 8 --squash`), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+  refused(run(bash(`${OVERRIDE} ${adminMerge}; gh pr merge 8 --squash`), { noPath: true }), /one PR per command/);
+});
+
+gated("an override on a shell wrapper does not cover two merges inside it", () => {
+  refused(run(bash(`${OVERRIDE} bash -lc 'gh pr merge 7 --squash; gh pr merge 8 --squash'`), { noPath: true }), /one PR per command/);
+});
+
+gated("an override on a wrapper around a single merge applies to that merge", () => {
+  const result = run(bash(`${OVERRIDE} bash -lc 'gh pr merge 7 --squash --admin'`), { noPath: true });
+  assert.equal(result.code, 0, result.err);
+  assert.deepEqual(result.calls, []);
+});
+
+gated("the override does not admit a raw GraphQL merge", () => {
+  refused(run(bash(`${OVERRIDE} gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}'`), { noPath: true }), /mergePullRequest is unsupported/);
 });
 
 gated("refusals name the user-approved override for explicitly directed merges", () => {

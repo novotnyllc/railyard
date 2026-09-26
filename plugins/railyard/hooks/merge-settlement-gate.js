@@ -876,15 +876,20 @@ function verifyMerge(command) {
 }
 
 // A user who explicitly directs a merge (including an admin bypass of branch
-// protection) can skip CE settlement for that one command. The override must
-// be an inline assignment on the merge command itself, never ambient process
-// env, so it cannot linger as a blanket bypass and stays visible in the
-// command the user approved.
+// protection) can skip CE settlement for that one merge. The override must be
+// an inline assignment in the command text, never ambient process env, so it
+// cannot linger as a blanket bypass and stays visible in the command the user
+// approved. It applies only when the text holds exactly one merge — a wrapper
+// such as `bash -c` would otherwise pass it to every merge inside — and only to
+// the supported `gh pr merge` and REST forms; raw GraphQL and unresolved merge
+// forms keep their refusals.
 const OVERRIDE_NAME = "RAILYARD_MERGE_OVERRIDE";
 const OVERRIDE_VALUE = "user-approved";
-function userOverride(command) {
-  return Boolean(command.env) && Object.hasOwn(command.env, OVERRIDE_NAME) &&
-    command.env[OVERRIDE_NAME] === OVERRIDE_VALUE;
+function userOverride(commands) {
+  if (commands.length !== 1) return false;
+  const [command] = commands;
+  return (command.kind === "pr" || command.kind === "api") &&
+    Object.hasOwn(command.env, OVERRIDE_NAME) && command.env[OVERRIDE_NAME] === OVERRIDE_VALUE;
 }
 
 function handlePayload(input) {
@@ -895,12 +900,12 @@ function handlePayload(input) {
   if (!text) return;
   const requestedCwd = [args.working_directory, args.workdir, args.cwd, input.cwd]
     .find((value) => typeof value === "string" && value);
-  const detected = mergeCommands(stripHeredocs(text), requestedCwd);
-  const commands = detected.filter((command) => !userOverride(command));
-  if (detected.length !== commands.length) {
-    process.stderr.write(`[railyard] Merge allowed by ${OVERRIDE_NAME}=${OVERRIDE_VALUE} without CE settlement.\n`);
-  }
+  const commands = mergeCommands(stripHeredocs(text), requestedCwd);
   if (!commands.length) return;
+  if (userOverride(commands)) {
+    process.stderr.write(`[railyard] Merge allowed by ${OVERRIDE_NAME}=${OVERRIDE_VALUE} without CE settlement.\n`);
+    return;
+  }
   try {
     if (commands.length !== 1) throw new Error("merge one PR per command with that PR's CE snapshot");
     verifyMerge(commands[0]);
