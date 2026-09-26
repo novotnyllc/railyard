@@ -1159,6 +1159,16 @@ test("desktop recycle waits for complete evidence before accepting the relaunche
   assert.equal(failed.result.verification.after, null);
 });
 
+test("desktop first pass refuses a descendant that reparented out of the server tree", () => {
+  const harness = desktopHarness();
+  const moved = harness.state.get(201).identity;
+  harness.state.set(201, { state: "present", identity: { ...moved, parentPid: 1 } });
+  const { result, exitCode } = recycleDesktop(desktopOptions(), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.refused);
+  assert.ok(result.verification.missingEvidence.includes("snapshot-tree-changed"));
+  assert.equal(result.verification.mutationAttempted, false);
+});
+
 test("desktop recycle fails with a recovery code when the host app will not quit", () => {
   const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
   const harness = desktopHarness({ hostQuits: false });

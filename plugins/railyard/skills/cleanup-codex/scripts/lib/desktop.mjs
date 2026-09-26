@@ -224,7 +224,8 @@ export function desktopTreeSnapshot({ inventory, owner, readIdentity, uid, now, 
       continue;
     }
     const identity = observation.identity;
-    if (identityDifferences(recorded, identity, ["pid", "uid", "startTime", "processGroupId"]).length) {
+    // A reparented descendant has left the server's tree.
+    if (identityDifferences(recorded, identity, ["pid", "parentPid", "uid", "startTime", "processGroupId"]).length) {
       refuse("snapshot-tree-changed");
     }
     if (identity.uid !== uid) {
