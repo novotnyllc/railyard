@@ -638,7 +638,11 @@ export function desktopRelaunchedFixture() {
   return fixture;
 }
 
-export function desktopHarness({ hostQuits = true, limits = { soft: 256, hard: "unlimited" } } = {}) {
+export function desktopHarness({
+  hostQuits = true,
+  limits = { soft: 256, hard: "unlimited" },
+  incompleteRelaunchPolls = 0,
+} = {}) {
   const fixture = desktopInventoryFixture();
   const byPid = new Map(fixture.processes.map((record) => [record.pid, record]));
   const state = new Map();
@@ -654,6 +658,10 @@ export function desktopHarness({ hostQuits = true, limits = { soft: 256, hard: "
     collectInventory() {
       if (!relaunched) return fixture;
       const next = desktopRelaunchedFixture();
+      if (incompleteRelaunchPolls > 0) {
+        incompleteRelaunchPolls -= 1;
+        next.descriptors[14100] = { complete: false, count: null, highest: null };
+      }
       for (const record of next.processes) {
         if (!state.has(record.pid)) state.set(record.pid, { state: "present", identity: liveIdentity(record) });
       }

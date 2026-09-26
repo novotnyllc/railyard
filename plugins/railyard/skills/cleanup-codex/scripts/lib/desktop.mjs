@@ -356,9 +356,12 @@ function goneOrReused(expected, observation) {
 
 function findRelaunched(inventory, oldHost, oldOwner, uid, now) {
   const classified = classifyInventory(inventory, { now });
+  // An incomplete inventory is not proof of a healthy replacement; keep polling.
+  if (!classified.result.verification.complete) return null;
   const byPid = new Map((inventory.processes ?? []).map((item) => [item.pid, item]));
   for (const server of classified.result.verification.servers) {
     if (server.classification !== "gui" || server.uid !== uid || server.pid === oldOwner.pid) continue;
+    if (server.missingEvidence?.length) continue;
     const host = findDesktopHost(server, byPid);
     if (!host || host.record.executable !== oldHost.executable) continue;
     if (host.record.pid === oldHost.pid && host.record.startTime === oldHost.startTime) continue;

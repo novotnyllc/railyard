@@ -1145,6 +1145,20 @@ test("confirmed desktop recycle quits, reaps exact residue, and relaunches", () 
   assert.ok(result.warnings.some((warning) => warning.code === "desktop-launchd-maxfiles-low"));
 });
 
+test("desktop recycle waits for complete evidence before accepting the relaunched server", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const transient = desktopHarness({ incompleteRelaunchPolls: 2 });
+  const recovered = recycleDesktop(desktopOptions({ confirmation: token }), transient.deps);
+  assert.equal(recovered.exitCode, EXIT_CODES.healthy, JSON.stringify(recovered.result.verification.missingEvidence));
+  assert.deepEqual(recovered.result.verification.after.descriptors, { count: 40, highest: 52 });
+
+  const stuck = desktopHarness({ incompleteRelaunchPolls: Number.POSITIVE_INFINITY });
+  const failed = recycleDesktop(desktopOptions({ confirmation: token }), stuck.deps);
+  assert.notEqual(failed.exitCode, EXIT_CODES.healthy);
+  assert.equal(failed.result.status, "failed");
+  assert.equal(failed.result.verification.after, null);
+});
+
 test("desktop recycle fails with a recovery code when the host app will not quit", () => {
   const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
   const harness = desktopHarness({ hostQuits: false });
