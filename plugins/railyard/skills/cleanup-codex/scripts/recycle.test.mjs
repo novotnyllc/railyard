@@ -1325,6 +1325,34 @@ test("desktop recycle never quits an app that restarted during the idle check", 
   assert.deepEqual(harness.calls.quit, []);
 });
 
+test("a child started while the locked idle probe ran still counts as busy", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness();
+  const collect = harness.deps.collectInventory;
+  let calls = 0;
+  harness.deps.collectInventory = () => {
+    const inventory = collect();
+    calls += 1;
+    if (calls < 2) return inventory;
+    // The second read happens after the activity probe: a new turn spawned a child.
+    return {
+      ...inventory,
+      processes: inventory.processes.concat(processRecord({
+        pid: 300,
+        parentPid: 13125,
+        processGroupId: 300,
+        startTime: new Date(NOW - 2_000).toISOString(),
+        executable: "/bin/zsh",
+        rawCommand: "/bin/zsh -lc make test",
+      })),
+    };
+  };
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.refused);
+  assert.ok(result.verification.idle.reasons.includes("recent-app-server-child"));
+  assert.deepEqual(harness.calls.quit, []);
+});
+
 test("desktop recycle fails with a recovery code when the host app will not quit", () => {
   const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
   const harness = desktopHarness({ hostQuits: false });

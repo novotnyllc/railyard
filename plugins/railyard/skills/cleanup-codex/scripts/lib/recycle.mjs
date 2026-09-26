@@ -376,18 +376,22 @@ export function recycleServer(options, deps) {
         || canonicalPathOrRefuse(restarted.socketPath, deps.canonicalPath, "managed-restart-invalid") !== socket
       ) refuse("managed-restart-invalid");
       // A reused PID is a valid replacement only with a different birth.
-      let ownerReplacement = null;
-      if (restarted.pid === snapshot.owner.pid) {
-        let startTime = restarted.processStartTime ?? null;
-        if (!startTime) {
-          const observed = deps.readIdentity(restarted.pid);
-          startTime = observed?.state === "present" && validObservedIdentity(observed.identity)
-            ? observed.identity.startTime
-            : null;
-        }
-        if (!startTime || startTime === snapshot.owner.startTime) refuse("managed-restart-invalid");
-        ownerReplacement = { pid: restarted.pid, startTime };
+      // Bind the replacement's birth so a reused PID (owner or old target) is
+      // recognized instead of mistaken for residue.
+      let replacementStartTime = restarted.processStartTime ?? null;
+      if (!replacementStartTime) {
+        const observed = deps.readIdentity(restarted.pid);
+        replacementStartTime = observed?.state === "present" && validObservedIdentity(observed.identity)
+          ? observed.identity.startTime
+          : null;
       }
+      if (restarted.pid === snapshot.owner.pid
+        && (!replacementStartTime || replacementStartTime === snapshot.owner.startTime)) {
+        refuse("managed-restart-invalid");
+      }
+      const ownerReplacement = replacementStartTime
+        ? { pid: restarted.pid, startTime: replacementStartTime }
+        : null;
       if (typeof restarted.managedCodexPath === "string") {
         // A native restart may activate a newer managed release.
         const managedPath = canonicalPathOrRefuse(

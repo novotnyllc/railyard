@@ -73,7 +73,8 @@ export function reapSnapshot(snapshot, {
   graceMs = DEFAULT_GRACE_MS,
   postSignalMs = DEFAULT_POST_SIGNAL_MS,
   lock = createMutationLock({ uid }),
-  // Recycle only: the exact new birth that now holds the owner's PID.
+  // Recycle only: the exact new birth of the replacement server, which may
+  // hold the owner's PID or an old target's PID.
   ownerReplacement = null,
 } = {}) {
   const result = emptyReapResult(platform);
@@ -129,6 +130,17 @@ export function reapSnapshot(snapshot, {
     const active = [];
     for (const target of snapshot.targets) {
       const observation = readIdentity(target.pid);
+      if (
+        ownerReplacement
+        && target.pid === ownerReplacement.pid
+        && observation?.state === "present"
+        && validObservedIdentity(observation.identity)
+        && observation.identity.startTime === ownerReplacement.startTime
+        && ownerReplacement.startTime !== target.startTime
+      ) {
+        result.skipped.push({ pid: target.pid, reasons: ["replaced-by-recycle"] });
+        continue;
+      }
       const skipped = skippedIdentity(target.pid, observation, target);
       if (!skipped) active.push(target);
       else if (skipped.reasons[0] === "already-absent") result.skipped.push(skipped);

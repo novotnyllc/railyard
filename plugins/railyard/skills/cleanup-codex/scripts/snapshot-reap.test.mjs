@@ -339,6 +339,29 @@ test("recycle's known replacement birth in the owner PID lets residue be reaped"
   assert.deepEqual(otherBirth.signals, []);
 });
 
+test("recycle's replacement birth in an old target PID is skipped, not refused", () => {
+  const snapshot = snapshotFixture();
+  const target = snapshot.targets[0];
+  const replacement = { pid: target.pid, startTime: "2026-08-02T16:01:00.000Z" };
+  const signals = [];
+  const reader = sequenceReader(new Map([
+    [100, [{ state: "absent" }]],
+    [target.pid, [{ state: "present", identity: { ...target, startTime: replacement.startTime } }]],
+  ]));
+  const { result, exitCode } = reapSnapshot(snapshot, {
+    platform: "darwin",
+    uid: 501,
+    readIdentity: reader.readIdentity,
+    signalProcess: (...args) => signals.push(args),
+    sleep: () => {},
+    lock: unlocked(),
+    ownerReplacement: replacement,
+  });
+  assert.equal(exitCode, EXIT_CODES.healthy, JSON.stringify(result.verification.missingEvidence));
+  assert.deepEqual(signals, []);
+  assert.deepEqual(result.skipped.map((item) => item.reasons[0]), ["replaced-by-recycle"]);
+});
+
 test("reap refuses PID reuse and every required identity drift without signaling", () => {
   const snapshot = snapshotFixture();
   const target = snapshot.targets[0];

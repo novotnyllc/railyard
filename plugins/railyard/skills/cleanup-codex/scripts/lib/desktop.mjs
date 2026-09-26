@@ -514,11 +514,14 @@ export function recycleDesktop(options, deps) {
     // Quitting interrupts any running turn, so only an idle app is recycled.
     const idleSeconds = options.idleSeconds ?? DEFAULT_DESKTOP_IDLE_SECONDS;
     if (!Number.isInteger(idleSeconds) || idleSeconds < 0) refuse("invalid-idle-seconds");
-    const checkIdle = (inventory) => {
+    // The process tree is read after the activity probe, so a child started
+    // while the probe ran is still seen.
+    const checkIdle = (inventorySource) => {
       let activity = null;
       try {
         activity = deps.readDesktopActivity?.() ?? null;
       } catch {}
+      const inventory = typeof inventorySource === "function" ? inventorySource() : inventorySource;
       const reasons = desktopBusyReasons({
         activity,
         inventory,
@@ -575,7 +578,7 @@ export function recycleDesktop(options, deps) {
       role: pid === lockedSnapshot.owner.pid ? "server" : "descendant",
     }));
     assertGuiPreserved(evidence.otherGui, deps.readIdentity);
-    checkIdle(lockedInventory);
+    checkIdle(() => deps.collectInventory());
     // The app can restart on its own during the idle check; quit only the bound births.
     const stillBound = (expected, fields) => {
       let observation;
