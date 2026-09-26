@@ -30,6 +30,32 @@ export const DEFAULT_POST_SIGNAL_MS = 100;
 
 export const DEFAULT_MIN_SOFT_NOFILE = 8_192;
 
+export const DESKTOP_RECEIPT_SCHEMA = "cleanup-codex-desktop-recycle-receipt-v1";
+
+// Bounded waits for a desktop recycle: the app's graceful quit, then its
+// relaunch through a fresh app-server appearing in the process table.
+export const DEFAULT_DESKTOP_QUIT_TIMEOUT_MS = 30_000;
+
+export const DEFAULT_DESKTOP_RELAUNCH_TIMEOUT_MS = 90_000;
+
+export const DEFAULT_DESKTOP_POLL_MS = 1_000;
+
+// A desktop recycle only proceeds when Codex has been quiet this long: no
+// rollout written, no new app-server child, and the app not in front.
+export const DEFAULT_DESKTOP_IDLE_SECONDS = 300;
+
+export const LSAPPINFO = "/usr/bin/lsappinfo";
+
+export const SQLITE3 = "/usr/bin/sqlite3";
+
+export const LAUNCHCTL = "/bin/launchctl";
+
+export const OSASCRIPT = "/usr/bin/osascript";
+
+export const OPEN = "/usr/bin/open";
+
+export const PLUTIL = "/usr/bin/plutil";
+
 export const DEFAULT_READY_TIMEOUT_MS = 10_000;
 
 export const DEFAULT_READY_POLL_MS = 100;

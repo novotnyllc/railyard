@@ -8,19 +8,31 @@ import test from "node:test";
 
 import {
   EXIT_CODES,
+  createDefaultDesktopDependencies,
+  desktopBusyReasons,
+  readDesktopActivity,
   createDefaultRecycleDependencies,
+  desktopRecommendations,
+  parseCliArgs,
+  readLaunchdMaxfiles,
   recycleConfirmationToken,
+  recycleDesktop,
   recycleServer,
+  restartManagedDaemon,
   runCli,
 } from "./cleanup-codex.mjs";
 
 import {
   ATTESTOR,
   LAUNCHER,
+  NOW,
   RECYCLE_SOCKET,
   addApplicableParent,
   confirmedRecycleOptions,
   daemonSample,
+  desktopHarness,
+  desktopInventoryFixture,
+  desktopOptions,
   exactIdentity,
   inventory,
   liveIdentity,
@@ -105,7 +117,7 @@ test("managed recycle requires four stable exact pre-mutation samples and never 
   assert.equal(harness.calls.readyContext.executable, "/usr/local/bin/codex");
 });
 
-test("managed recycle fails closed without a receipt-bound native compare-and-swap", () => {
+test("managed recycle refuses before mutation when no restart adapter is wired", () => {
   const harness = recycleHarness();
   delete harness.deps.restartManagedExact;
 
@@ -114,7 +126,7 @@ test("managed recycle fails closed without a receipt-bound native compare-and-sw
   assert.equal(exitCode, EXIT_CODES.refused);
   assert.equal(result.verification.mutationAttempted, false);
   assert.ok(result.verification.receipt);
-  assert.ok(result.verification.missingEvidence.includes("managed-restart-exact-pid-unsupported"));
+  assert.ok(result.verification.missingEvidence.includes("managed-restart-unavailable"));
   assert.equal(harness.calls.restart, 0);
 });
 
@@ -140,7 +152,7 @@ test("missing or conflicting managed evidence never falls through to unmanaged s
   assert.equal(conflicting.calls.stop, 0);
 });
 
-test("attestor absence and mismatched old-PID attestation refuse before mutation", () => {
+test("a token issued with an attestor cannot confirm without one, and mismatched attestation refuses", () => {
   const absent = recycleHarness();
   assert.equal(recycleServer({ ...confirmedRecycleOptions(), attestorPath: null }, absent.deps).exitCode, EXIT_CODES.refused);
   assert.equal(absent.calls.restart, 0);
@@ -643,16 +655,37 @@ test("default daemon adapter reads the native PID record and ignores an exact pr
     });
     assert.equal(evidence.managedExecutable.path, canonicalExecutable);
 
+    // Codex 0.157+ omits `backend` for an unmanaged daemon.
     omitBackend = true;
-    assert.throws(
-      () => dependencies.sampleDaemonEvidence({
-        socket: canonicalSocket,
-        executable: { path: canonicalExecutable },
-        ownerPid: owner.pid,
-      }),
-      (error) => error.code === "daemon-version-invalid",
-    );
+    assert.equal(dependencies.sampleDaemonEvidence({
+      socket: canonicalSocket,
+      executable: { path: canonicalExecutable },
+      ownerPid: owner.pid,
+    }).version.backend, null);
     omitBackend = false;
+
+    // Codex 0.157+ PID records may carry identity details beside the pair.
+    fs.writeFileSync(pidRecord, JSON.stringify({
+      pid: 500,
+      processStartTime: "2026-08-02T16:00:00.000Z",
+      processIdentity: { bootTime: 1 },
+      executableIdentity: { digest: [1, 2, 3] },
+    }), { mode: 0o600 });
+    assert.equal(dependencies.sampleDaemonEvidence({
+      socket: canonicalSocket,
+      executable: { path: canonicalExecutable },
+      ownerPid: owner.pid,
+    }).pidRecord.state, "valid");
+    fs.writeFileSync(pidRecord, JSON.stringify({
+      pid: 500,
+      processStartTime: "2026-08-02T16:00:00.000Z",
+      unexpected: true,
+    }), { mode: 0o600 });
+    assert.equal(dependencies.sampleDaemonEvidence({
+      socket: canonicalSocket,
+      executable: { path: canonicalExecutable },
+      ownerPid: owner.pid,
+    }).pidRecord.state, "invalid");
 
     for (const failure of [
       { error: Object.assign(new Error("timed out"), { code: "ETIMEDOUT" }) },
@@ -957,4 +990,451 @@ test("applicable parent identity must be gone after recycle", () => {
   const failed = recycleServer(parentBoundOptions(), survivor.deps);
   assert.equal(failed.exitCode, EXIT_CODES.failed);
   assert.ok(failed.result.verification.missingEvidence.includes("old-parent-survivor"));
+});
+
+test("managed recycle without an attestor reports the limit as unverified and still recycles", () => {
+  const harness = recycleHarness();
+  const { result, exitCode } = recycleServer(
+    confirmedRecycleOptions({ attestorPath: null }),
+    harness.deps,
+  );
+
+  assert.equal(exitCode, EXIT_CODES.healthy);
+  assert.equal(harness.calls.restart, 1);
+  assert.deepEqual(harness.calls.attest, []);
+  assert.equal(result.verification.nofileLimit, "unverified");
+  assert.equal(result.verification.receipt.attestor, null);
+  assert.equal(result.verification.before.softNofile, "unverified");
+  assert.equal(result.verification.after.softNofile, "unverified");
+  assert.ok(result.warnings.some((warning) => warning.code === "nofile-limit-unverified"));
+});
+
+test("unmanaged recycle without an attestor requires the same executable as the old server", () => {
+  const options = confirmedRecycleOptions({ unmanaged: true, launcher: LAUNCHER, attestorPath: null });
+  const harness = recycleHarness({ mode: "unmanaged" });
+  const { result, exitCode } = recycleServer(options, harness.deps);
+
+  assert.equal(exitCode, EXIT_CODES.healthy);
+  assert.deepEqual(harness.calls.attestLauncher, []);
+  assert.equal(harness.calls.stop, 1);
+  assert.equal(harness.calls.launch, 1);
+  assert.equal(result.verification.nofileLimit, "unverified");
+
+  const drifted = recycleHarness({ mode: "unmanaged" });
+  drifted.replacement.executable = "/usr/local/bin/other-codex";
+  const outcome = recycleServer(options, drifted.deps);
+  assert.equal(outcome.exitCode, EXIT_CODES.failed);
+  assert.ok(outcome.result.verification.missingEvidence.includes("replacement-identity-invalid"));
+});
+
+test("managed restart distinguishes a reused PID by its birth", () => {
+  const sameBirth = recycleHarness();
+  const restart = sameBirth.deps.restartManagedExact;
+  sameBirth.deps.restartManagedExact = (context) => ({
+    ...restart(context),
+    pid: 500,
+    processStartTime: context.expectedIdentity.startTime,
+  });
+  const rejected = recycleServer(confirmedRecycleOptions(), sameBirth.deps);
+  assert.ok(rejected.result.verification.missingEvidence.includes("managed-restart-invalid"));
+
+  const newBirth = recycleHarness();
+  const restartNew = newBirth.deps.restartManagedExact;
+  newBirth.deps.restartManagedExact = (context) => ({
+    ...restartNew(context),
+    pid: 500,
+    processStartTime: "2026-08-02T16:01:00.000Z",
+  });
+  const accepted = recycleServer(confirmedRecycleOptions(), newBirth.deps);
+  assert.ok(!accepted.result.verification.missingEvidence.includes("managed-restart-invalid"));
+  assert.ok(accepted.result.verification.actions.some((action) => action.kind === "native-daemon-restart" && action.newPid === 500));
+});
+
+test("a desktop quit that reports failure but still lands is waited out and relaunched", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness({ quitReportsOk: false });
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.healthy, JSON.stringify(result.verification.missingEvidence));
+  assert.deepEqual(harness.calls.launch, ["com.openai.codex"]);
+});
+
+test("managed restart that activates a newer release binds the replacement to it", () => {
+  const newer = "/usr/local/Cellar/codex/0.158.0/bin/codex";
+  const fixture = recycleInventoryFixture();
+  const base = daemonSample(fixture);
+  const replacementSample = daemonSample(fixture, "pid", {
+    version: { status: "running", backend: "pid", socketPath: RECYCLE_SOCKET, managedCodexPath: newer },
+    socketOwners: [{ pid: 900, uid: 501 }],
+    managedExecutable: { path: newer, dev: 1, ino: 9 },
+    pidRecord: {
+      state: "valid",
+      uid: 501,
+      regular: true,
+      symlink: false,
+      pid: 900,
+      processStartTime: "2026-08-02T16:01:00.000Z",
+    },
+  });
+  const configure = (harness) => {
+    const fileIdentity = harness.deps.fileIdentity;
+    harness.deps.fileIdentity = (value) => value === newer
+      ? { ...fileIdentity("/usr/local/bin/codex"), path: newer, ino: 9, digest: "d".repeat(64) }
+      : fileIdentity(value);
+    const restart = harness.deps.restartManagedExact;
+    harness.deps.restartManagedExact = (context) => ({ ...restart(context), managedCodexPath: newer });
+    harness.replacement.executable = newer;
+    return harness;
+  };
+  const harness = configure(recycleHarness({ sampleOverrides: [base, base, base, base, replacementSample] }));
+  const { result, exitCode } = recycleServer(confirmedRecycleOptions(), harness.deps);
+
+  assert.equal(exitCode, EXIT_CODES.healthy, JSON.stringify(result.verification.missingEvidence));
+  assert.equal(harness.calls.readyContext.executable, newer);
+  assert.equal(result.verification.after.identity.executable, newer);
+});
+
+test("native restart adapter rechecks the PID record and falls back to it for the new pid", () => {
+  const expectedIdentity = { pid: 500, startTime: "2026-08-02T15:00:00.000Z" };
+  const calls = [];
+  let record = { state: "valid", pid: 500, processStartTime: expectedIdentity.startTime };
+  const runner = (file, args, options) => {
+    calls.push({ file, args, options });
+    record = { state: "valid", pid: 900, processStartTime: "2026-08-02T16:01:00.000Z" };
+    return {
+      status: 0,
+      stdout: JSON.stringify({
+        status: "restarted",
+        backend: "pid",
+        managedCodexPath: "/usr/local/bin/codex",
+        managedCodexVersion: "0.157.1",
+        socketPath: RECYCLE_SOCKET,
+      }),
+      stderr: "",
+    };
+  };
+  const restarted = restartManagedDaemon({
+    runner,
+    executable: "/usr/local/bin/codex",
+    expectedIdentity,
+    readPidRecord: () => record,
+  });
+  assert.equal(restarted.pid, 900);
+  assert.equal(restarted.status, "restarted");
+  assert.deepEqual(calls[0].args, ["app-server", "daemon", "restart"]);
+  assert.ok(calls[0].options.timeout > 75_000);
+
+  const conflicting = restartManagedDaemon({
+    runner: () => assert.fail("restart must not run after PID record drift"),
+    executable: "/usr/local/bin/codex",
+    expectedIdentity,
+    readPidRecord: () => ({ state: "valid", pid: 501, processStartTime: expectedIdentity.startTime }),
+  });
+  assert.deepEqual(conflicting, { status: "refused", failureCode: "managed-pid-record-conflict" });
+
+  const harness = recycleHarness();
+  harness.deps.restartManagedExact = () => conflicting;
+  const { result, exitCode } = recycleServer(confirmedRecycleOptions(), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.refused);
+  assert.equal(result.verification.mutationAttempted, false);
+  assert.ok(result.verification.missingEvidence.includes("managed-pid-record-conflict"));
+});
+
+test("desktop first pass binds the host app and returns a token without mutation", () => {
+  const harness = desktopHarness();
+  const { result, exitCode } = recycleDesktop(desktopOptions(), harness.deps);
+
+  assert.equal(exitCode, EXIT_CODES.refused);
+  assert.deepEqual(result.verification.missingEvidence, ["confirmation-required"]);
+  assert.equal(result.verification.mutationAttempted, false);
+  const receipt = result.verification.receipt;
+  assert.match(receipt.confirmationToken, /^RECYCLE [0-9a-f]{64}$/);
+  assert.equal(receipt.host.pid, 13007);
+  assert.equal(receipt.host.bundleId, "com.openai.codex");
+  assert.equal(receipt.server.pid, 13125);
+  assert.deepEqual(receipt.targets.map((target) => target.pid), [200, 201]);
+  assert.deepEqual(result.verification.launchdMaxfiles, { soft: 256, hard: "unlimited" });
+  assert.deepEqual(result.skipped, [{ pid: 202, reasons: ["identity-unavailable"], startTime: "2026-08-02T15:00:00.000Z" }]);
+  assert.deepEqual(harness.calls.quit, []);
+  assert.equal(harness.calls.lock, 0);
+
+  const again = recycleDesktop(desktopOptions(), desktopHarness().deps);
+  assert.equal(again.result.verification.receipt.confirmationToken, receipt.confirmationToken);
+});
+
+test("confirmed desktop recycle quits, reaps exact residue, and relaunches", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness();
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+
+  assert.equal(exitCode, EXIT_CODES.healthy, JSON.stringify(result.verification.missingEvidence));
+  assert.deepEqual(harness.calls.order, ["quit", "reap", "launch"]);
+  assert.deepEqual(harness.calls.quit, ["com.openai.codex"]);
+  assert.deepEqual(harness.calls.reaped, [[200, 201]]);
+  assert.equal(harness.calls.lock, 1);
+  assert.equal(result.verification.after.hostPid, 14000);
+  assert.equal(result.verification.after.pid, 14100);
+  assert.deepEqual(result.verification.after.descriptors, { count: 40, highest: 52 });
+  assert.equal(result.verification.guiPreserved, true);
+  assert.equal(harness.state.get(8100).state, "present");
+  assert.ok(result.warnings.some((warning) => warning.code === "desktop-launchd-maxfiles-low"));
+});
+
+test("desktop recycle waits for complete evidence before accepting the relaunched server", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const transient = desktopHarness({ incompleteRelaunchPolls: 2 });
+  const recovered = recycleDesktop(desktopOptions({ confirmation: token }), transient.deps);
+  assert.equal(recovered.exitCode, EXIT_CODES.healthy, JSON.stringify(recovered.result.verification.missingEvidence));
+  assert.deepEqual(recovered.result.verification.after.descriptors, { count: 40, highest: 52 });
+
+  const stuck = desktopHarness({ incompleteRelaunchPolls: Number.POSITIVE_INFINITY });
+  const failed = recycleDesktop(desktopOptions({ confirmation: token }), stuck.deps);
+  assert.notEqual(failed.exitCode, EXIT_CODES.healthy);
+  assert.equal(failed.result.status, "failed");
+  assert.equal(failed.result.verification.after, null);
+});
+
+test("desktop first pass refuses a descendant that reparented out of the server tree", () => {
+  const harness = desktopHarness();
+  const moved = harness.state.get(201).identity;
+  harness.state.set(201, { state: "present", identity: { ...moved, parentPid: 1 } });
+  const { result, exitCode } = recycleDesktop(desktopOptions(), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.refused);
+  assert.ok(result.verification.missingEvidence.includes("snapshot-tree-changed"));
+  assert.equal(result.verification.mutationAttempted, false);
+});
+
+test("desktop recycle reports the locked snapshot's selection when descendants churn", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness();
+  const collect = harness.deps.collectInventory;
+  let first = true;
+  harness.deps.collectInventory = () => {
+    const inventory = collect();
+    if (!first) return inventory;
+    first = false;
+    // Descendant 201 exits between the first pass and the locked inventory.
+    harness.state.set(201, { state: "absent" });
+    return { ...inventory, processes: inventory.processes.filter((record) => record.pid !== 201) };
+  };
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.healthy, JSON.stringify(result.verification.missingEvidence));
+  assert.deepEqual(harness.calls.reaped, [[200]]);
+  assert.deepEqual(result.verification.receipt.selectedPids, [200, 13125]);
+  assert.deepEqual(result.selected.map((item) => item.pid), [200, 13125]);
+  assert.deepEqual(result.verification.before.targetPids, [200]);
+});
+
+test("desktop recycle refuses while Codex is busy or the app is in front", () => {
+  const recent = { complete: true, latestActivityMs: NOW - 60_000, frontmostBundleId: "com.apple.Terminal" };
+  const busy = recycleDesktop(desktopOptions(), desktopHarness({ activity: [recent] }).deps);
+  assert.equal(busy.exitCode, EXIT_CODES.refused);
+  assert.ok(busy.result.verification.missingEvidence.includes("desktop-busy"));
+  assert.deepEqual(busy.result.verification.idle.reasons, ["codex-activity-recent"]);
+
+  const front = { complete: true, latestActivityMs: NOW - 3_600_000, frontmostBundleId: "com.openai.codex" };
+  const frontmost = recycleDesktop(desktopOptions(), desktopHarness({ activity: [front] }).deps);
+  assert.deepEqual(frontmost.result.verification.idle.reasons, ["desktop-app-frontmost"]);
+
+  const unknown = recycleDesktop(desktopOptions(), desktopHarness({ activity: [{ complete: false }] }).deps);
+  assert.deepEqual(unknown.result.verification.idle.reasons, ["desktop-activity-unknown"]);
+
+  const idle = recycleDesktop(desktopOptions(), desktopHarness().deps);
+  assert.equal(idle.result.verification.idle.idle, true);
+  assert.ok(idle.result.verification.missingEvidence.includes("confirmation-required"));
+});
+
+test("desktop recycle rechecks idleness under the lock and never quits a busy app", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const idle = { complete: true, latestActivityMs: NOW - 3_600_000, frontmostBundleId: "com.apple.Terminal" };
+  const recent = { complete: true, latestActivityMs: NOW - 5_000, frontmostBundleId: "com.apple.Terminal" };
+  const harness = desktopHarness({ activity: [idle, recent] });
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.refused);
+  assert.ok(result.verification.missingEvidence.includes("desktop-busy"));
+  assert.equal(result.verification.mutationAttempted, false);
+  assert.deepEqual(harness.calls.quit, []);
+  assert.deepEqual(harness.calls.launch, []);
+});
+
+test("a recently started app-server child counts as activity", () => {
+  const harness = desktopHarness();
+  const child = harness.fixture.processes.find((record) => record.pid === 200);
+  child.startTime = new Date(NOW - 30_000).toISOString();
+  harness.state.set(200, { state: "present", identity: { ...harness.state.get(200).identity, startTime: child.startTime } });
+  const { result } = recycleDesktop(desktopOptions(), harness.deps);
+  assert.ok(result.verification.idle.reasons.includes("recent-app-server-child"));
+});
+
+test("desktop recycle accepts a replacement that reuses the old server PID with a new birth", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness({ relaunchServerPid: 13125 });
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.healthy, JSON.stringify(result.verification.missingEvidence));
+  assert.equal(result.verification.after.pid, 13125);
+});
+
+test("desktop recycle never reports a replacement that already exited", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness({ replacementExits: true });
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.notEqual(exitCode, EXIT_CODES.healthy);
+  assert.equal(result.verification.after, null);
+  assert.ok(result.verification.missingEvidence.includes("desktop-relaunch-timeout"));
+});
+
+test("a failed quit request is still reported as an attempted mutation", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness({ hostQuits: false, quitReportsOk: false });
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.failed);
+  assert.equal(result.verification.mutationAttempted, true);
+  assert.ok(result.verification.missingEvidence.includes("desktop-quit-request-failed"));
+  assert.deepEqual(harness.calls.launch, []);
+});
+
+test("an unparsed frontmost app leaves desktop activity unknown", () => {
+  const runner = (file, args) => {
+    if (file === "/usr/bin/sqlite3") return { status: 0, stdout: "[]", stderr: "" };
+    if (args[0] === "front") return { status: 0, stdout: "ASN:0x0-0x4e94e9:\n", stderr: "" };
+    return { status: 0, stdout: "no bundle here", stderr: "" };
+  };
+  const activity = readDesktopActivity({ runner, codexHome: "/nonexistent" });
+  assert.equal(activity.complete, false);
+  assert.deepEqual(desktopBusyReasons({ activity, inventory: { processes: [] }, serverPid: 1, bundleId: "x", nowMs: NOW, idleMs: 1 }), [
+    "desktop-activity-unknown",
+  ]);
+});
+
+test("desktop recycle never quits an app that restarted during the idle check", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness();
+  const readActivity = harness.deps.readDesktopActivity;
+  let calls = 0;
+  harness.deps.readDesktopActivity = () => {
+    calls += 1;
+    // The locked idle check runs second; the app relaunches itself meanwhile.
+    if (calls === 2) {
+      const host = harness.state.get(13007).identity;
+      harness.state.set(13007, { state: "present", identity: { ...host, startTime: "2026-08-02T16:00:30.000Z" } });
+    }
+    return readActivity();
+  };
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.refused);
+  assert.ok(result.verification.missingEvidence.includes("desktop-identity-changed"));
+  assert.deepEqual(harness.calls.quit, []);
+});
+
+test("a child started while the locked idle probe ran still counts as busy", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness();
+  const collect = harness.deps.collectInventory;
+  let calls = 0;
+  harness.deps.collectInventory = () => {
+    const inventory = collect();
+    calls += 1;
+    if (calls < 2) return inventory;
+    // The second read happens after the activity probe: a new turn spawned a child.
+    return {
+      ...inventory,
+      processes: inventory.processes.concat(processRecord({
+        pid: 300,
+        parentPid: 13125,
+        processGroupId: 300,
+        startTime: new Date(NOW - 2_000).toISOString(),
+        executable: "/bin/zsh",
+        rawCommand: "/bin/zsh -lc make test",
+      })),
+    };
+  };
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.refused);
+  assert.ok(result.verification.idle.reasons.includes("recent-app-server-child"));
+  assert.deepEqual(harness.calls.quit, []);
+});
+
+test("desktop recycle fails with a recovery code when the host app will not quit", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness({ hostQuits: false });
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+
+  assert.equal(exitCode, EXIT_CODES.failed);
+  assert.ok(result.verification.missingEvidence.includes("desktop-host-quit-timeout"));
+  assert.deepEqual(harness.calls.reaped, []);
+  assert.deepEqual(harness.calls.launch, []);
+  assert.equal(harness.state.get(13007).state, "present");
+});
+
+test("desktop recycle refuses non-GUI servers, drifted hosts, and conflicting flags", () => {
+  const detached = recycleHarness();
+  const desktopDeps = { ...desktopHarness().deps, inventory: detached.fixture, readIdentity: detached.deps.readIdentity };
+  const wrongClass = recycleDesktop(desktopOptions({ pid: 500 }), desktopDeps);
+  assert.equal(wrongClass.exitCode, EXIT_CODES.refused);
+  assert.ok(wrongClass.result.verification.missingEvidence.includes("selected-server-not-gui"));
+
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const drifted = desktopHarness();
+  const host = drifted.fixture.processes.find((record) => record.pid === 13007);
+  host.startTime = "2026-08-02T11:00:00.000Z";
+  drifted.state.set(13007, { state: "present", identity: liveIdentity(host) });
+  const mismatch = recycleDesktop(desktopOptions({ confirmation: token }), drifted.deps);
+  assert.equal(mismatch.exitCode, EXIT_CODES.refused);
+  assert.ok(mismatch.result.verification.missingEvidence.includes("confirmation-mismatch"));
+  assert.deepEqual(drifted.calls.quit, []);
+
+  assert.equal(parseCliArgs(["recycle", "--pid", "13125", "--desktop", "--unmanaged"]).error, "desktop-incompatible-arguments");
+  assert.equal(parseCliArgs(["recycle", "--pid", "13125", "--desktop", "--nofile-attestor", "/x"]).error, "desktop-incompatible-arguments");
+  assert.equal(parseCliArgs(["inspect", "--desktop"]).error, "recycle-argument-without-recycle");
+  assert.equal(parseCliArgs(["recycle", "--pid", "13125", "--desktop"]).error, null);
+});
+
+test("launchd maxfiles below the minimum warns and inspect recommends a desktop recycle", () => {
+  const high = recycleDesktop(desktopOptions(), desktopHarness({ limits: { soft: 65_536, hard: "unlimited" } }).deps);
+  assert.ok(!high.result.warnings.some((warning) => warning.code === "desktop-launchd-maxfiles-low"));
+
+  assert.deepEqual(readLaunchdMaxfiles(() => ({
+    status: 0,
+    stdout: "\tmaxfiles    256            unlimited      \n",
+    stderr: "",
+  })), { soft: 256, hard: "unlimited" });
+  assert.equal(readLaunchdMaxfiles(() => ({ status: 1, stdout: "", stderr: "" })), null);
+
+  const lines = [];
+  const exitCode = runCli(["inspect", "--json"], {
+    inventory: desktopInventoryFixture(),
+    now: Date.parse("2026-08-02T16:00:00.000Z"),
+    readLaunchdLimits: () => ({ soft: 256, hard: "unlimited" }),
+    write: (text) => lines.push(text),
+  });
+  assert.equal(exitCode, EXIT_CODES.warning);
+  const inspection = JSON.parse(lines[0]);
+  assert.deepEqual(inspection.verification.launchdMaxfiles, { soft: 256, hard: "unlimited" });
+  assert.deepEqual(inspection.recommendations.map((item) => item.code), [
+    "desktop-recycle-recommended",
+    "desktop-launchd-maxfiles-low",
+  ]);
+  assert.equal(inspection.recommendations[0].command, "recycle --pid 13125 --desktop");
+  assert.deepEqual(desktopRecommendations(inspection, { soft: 65_536, hard: "unlimited" }).map((item) => item.code), [
+    "desktop-recycle-recommended",
+  ]);
+});
+
+test("default desktop adapters issue exact quit, relaunch, and bundle lookups", () => {
+  const calls = [];
+  const runner = (file, args) => {
+    calls.push([file, ...args]);
+    if (file === "/usr/bin/plutil") return { status: 0, stdout: "com.openai.codex\n", stderr: "" };
+    return { status: 0, stdout: "", stderr: "" };
+  };
+  const deps = createDefaultDesktopDependencies({ inventory: desktopInventoryFixture(), runner, uid: 501, lock: { acquire: () => () => {} } });
+
+  assert.equal(deps.readBundleIdentifier("/Applications/ChatGPT.app"), "com.openai.codex");
+  assert.deepEqual(deps.quitApp("com.openai.codex"), { ok: true });
+  assert.deepEqual(deps.launchApp("com.openai.codex"), { ok: true });
+  assert.deepEqual(deps.quitApp('evil" to do shell script "x'), { ok: false });
+  assert.deepEqual(calls, [
+    ["/usr/bin/plutil", "-extract", "CFBundleIdentifier", "raw", "-o", "-", "/Applications/ChatGPT.app/Contents/Info.plist"],
+    ["/usr/bin/osascript", "-e", 'tell application id "com.openai.codex" to quit'],
+    ["/usr/bin/open", "-b", "com.openai.codex"],
+  ]);
 });

@@ -73,6 +73,9 @@ export function reapSnapshot(snapshot, {
   graceMs = DEFAULT_GRACE_MS,
   postSignalMs = DEFAULT_POST_SIGNAL_MS,
   lock = createMutationLock({ uid }),
+  // Recycle only: the exact new birth of the replacement server, which may
+  // hold the owner's PID or an old target's PID.
+  ownerReplacement = null,
 } = {}) {
   const result = emptyReapResult(platform);
   let exitCode = EXIT_CODES.refused;
@@ -107,16 +110,37 @@ export function reapSnapshot(snapshot, {
     }
 
     const ownerObservation = readIdentity(snapshot.owner.pid);
-    if (ownerObservation?.state === "present" && validObservedIdentity(ownerObservation.identity)) {
-      const changed = identityDifferences(snapshot.owner, ownerObservation.identity);
-      refuse(changed.length ? "owner-identity-changed" : "owner-still-live");
+    const replacedByKnownBirth = Boolean(ownerReplacement)
+      && ownerObservation?.state === "present"
+      && validObservedIdentity(ownerObservation.identity)
+      && ownerObservation.identity.pid === ownerReplacement.pid
+      && ownerObservation.identity.startTime === ownerReplacement.startTime
+      && ownerReplacement.startTime !== snapshot.owner.startTime;
+    if (replacedByKnownBirth) {
+      result.verification.ownerProof = "replaced";
+    } else {
+      if (ownerObservation?.state === "present" && validObservedIdentity(ownerObservation.identity)) {
+        const changed = identityDifferences(snapshot.owner, ownerObservation.identity);
+        refuse(changed.length ? "owner-identity-changed" : "owner-still-live");
+      }
+      if (ownerObservation?.state !== "absent") refuse("owner-evidence-unavailable");
+      result.verification.ownerProof = "absent";
     }
-    if (ownerObservation?.state !== "absent") refuse("owner-evidence-unavailable");
-    result.verification.ownerProof = "absent";
 
     const active = [];
     for (const target of snapshot.targets) {
       const observation = readIdentity(target.pid);
+      if (
+        ownerReplacement
+        && target.pid === ownerReplacement.pid
+        && observation?.state === "present"
+        && validObservedIdentity(observation.identity)
+        && observation.identity.startTime === ownerReplacement.startTime
+        && ownerReplacement.startTime !== target.startTime
+      ) {
+        result.skipped.push({ pid: target.pid, reasons: ["replaced-by-recycle"] });
+        continue;
+      }
       const skipped = skippedIdentity(target.pid, observation, target);
       if (!skipped) active.push(target);
       else if (skipped.reasons[0] === "already-absent") result.skipped.push(skipped);
