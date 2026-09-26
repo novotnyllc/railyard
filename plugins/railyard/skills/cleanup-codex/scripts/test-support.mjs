@@ -552,3 +552,181 @@ export function runHookFixture(fixture, directory) {
     lock: { acquire: () => () => {} },
   });
 }
+
+export const DESKTOP_HOST_EXECUTABLE = "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT";
+
+export const DESKTOP_SERVER_EXECUTABLE = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex";
+
+function desktopProcesses({ hostPid, serverPid, startTime }) {
+  return [
+    processRecord({
+      pid: hostPid,
+      parentPid: 1,
+      processGroupId: hostPid,
+      startTime,
+      executable: DESKTOP_HOST_EXECUTABLE,
+      rawCommand: DESKTOP_HOST_EXECUTABLE,
+    }),
+    processRecord({
+      pid: serverPid,
+      parentPid: hostPid,
+      processGroupId: hostPid,
+      startTime,
+      executable: DESKTOP_SERVER_EXECUTABLE,
+      rawCommand: `${DESKTOP_SERVER_EXECUTABLE} app-server --analytics-default-enabled`,
+    }),
+  ];
+}
+
+// A ChatGPT desktop host (13007) with a GUI app-server (13125) and three
+// descendants: an MCP server and its child, and a retitled `npm exec` process
+// whose exact identity cannot be read. A separate Codex.app hosts another GUI
+// app-server that a desktop recycle must leave alone.
+export function desktopInventoryFixture() {
+  return inventory({
+    processes: [
+      ...desktopProcesses({ hostPid: 13007, serverPid: 13125, startTime: "2026-08-02T10:00:00.000Z" }),
+      processRecord({
+        pid: 200,
+        parentPid: 13125,
+        processGroupId: 200,
+        executable: "/usr/local/bin/node",
+        rawCommand: "/usr/local/bin/node mcp-server.js",
+      }),
+      processRecord({
+        pid: 201,
+        parentPid: 200,
+        processGroupId: 200,
+        executable: "/usr/local/bin/node",
+        rawCommand: "/usr/local/bin/node worker.js",
+      }),
+      processRecord({
+        pid: 202,
+        parentPid: 13125,
+        processGroupId: 202,
+        executable: "/usr/local/bin/node",
+        rawCommand: "npm exec some-mcp",
+      }),
+      processRecord({
+        pid: 8000,
+        parentPid: 1,
+        processGroupId: 8000,
+        executable: "/Applications/Codex.app/Contents/MacOS/Codex",
+        rawCommand: "/Applications/Codex.app/Contents/MacOS/Codex",
+      }),
+      processRecord({
+        pid: 8100,
+        parentPid: 8000,
+        processGroupId: 8000,
+        executable: "/Applications/Codex.app/Contents/Resources/codex",
+        rawCommand: "/Applications/Codex.app/Contents/Resources/codex app-server",
+      }),
+    ],
+    descriptors: {
+      13125: { complete: true, count: 206, highest: 228 },
+      8100: { complete: true, count: 30, highest: 40 },
+    },
+  });
+}
+
+export function desktopRelaunchedFixture() {
+  const fixture = desktopInventoryFixture();
+  fixture.processes = fixture.processes
+    .filter((record) => ![13007, 13125, 200, 201, 202].includes(record.pid))
+    .concat(desktopProcesses({ hostPid: 14000, serverPid: 14100, startTime: "2026-08-02T16:05:00.000Z" }));
+  fixture.descriptors = { 14100: { complete: true, count: 40, highest: 52 }, 8100: fixture.descriptors[8100] };
+  return fixture;
+}
+
+export function desktopHarness({ hostQuits = true, limits = { soft: 256, hard: "unlimited" } } = {}) {
+  const fixture = desktopInventoryFixture();
+  const byPid = new Map(fixture.processes.map((record) => [record.pid, record]));
+  const state = new Map();
+  for (const pid of [13007, 13125, 200, 201, 8000, 8100]) {
+    state.set(pid, { state: "present", identity: liveIdentity(byPid.get(pid)) });
+  }
+  state.set(202, { state: "unknown" });
+  const calls = { quit: [], launch: [], reaped: [], lock: 0, order: [] };
+  let relaunched = false;
+  let clock = 0;
+  const deps = {
+    inventory: fixture,
+    collectInventory() {
+      if (!relaunched) return fixture;
+      const next = desktopRelaunchedFixture();
+      for (const record of next.processes) {
+        if (!state.has(record.pid)) state.set(record.pid, { state: "present", identity: liveIdentity(record) });
+      }
+      return next;
+    },
+    readIdentity(pid) {
+      return state.get(pid) ?? { state: "absent" };
+    },
+    readBirth(pid) {
+      const current = state.get(pid);
+      if (pid === 202) return { state: "absent" };
+      return current?.state === "present"
+        ? { state: "present", uid: current.identity.uid, startTime: current.identity.startTime }
+        : { state: "absent" };
+    },
+    readBundleIdentifier(bundlePath) {
+      assert.equal(bundlePath, "/Applications/ChatGPT.app");
+      return "com.openai.codex";
+    },
+    readLaunchdMaxfiles() {
+      return limits;
+    },
+    quitApp(bundleId) {
+      calls.quit.push(bundleId);
+      calls.order.push("quit");
+      if (hostQuits) {
+        state.set(13007, { state: "absent" });
+        state.set(13125, { state: "absent" });
+        // Orphaned MCP servers reparent to launchd.
+        const orphan = state.get(200).identity;
+        state.set(200, { state: "present", identity: { ...orphan, parentPid: 1 } });
+      }
+      return { ok: true };
+    },
+    launchApp(bundleId) {
+      calls.launch.push(bundleId);
+      calls.order.push("launch");
+      relaunched = true;
+      return { ok: true };
+    },
+    reapResidue(snapshot) {
+      calls.reaped.push(snapshot.targets.map((target) => target.pid).sort((left, right) => left - right));
+      calls.order.push("reap");
+      for (const target of snapshot.targets) state.set(target.pid, { state: "absent" });
+      return { exitCode: EXIT_CODES.healthy };
+    },
+    sleep(milliseconds) {
+      clock += milliseconds;
+    },
+    monotonicNow() {
+      return clock;
+    },
+    pollMs: 100,
+    quitTimeoutMs: 1_000,
+    relaunchTimeoutMs: 1_000,
+    lock: {
+      acquire() {
+        calls.lock += 1;
+        return () => {};
+      },
+    },
+  };
+  return { fixture, state, calls, deps };
+}
+
+export function desktopOptions(overrides = {}) {
+  return {
+    platform: "darwin",
+    uid: 501,
+    pid: 13125,
+    confirmation: null,
+    minSoftLimit: 8192,
+    now: NOW,
+    ...overrides,
+  };
+}

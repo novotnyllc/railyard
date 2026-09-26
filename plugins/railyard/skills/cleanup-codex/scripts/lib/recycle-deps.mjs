@@ -157,6 +157,10 @@ export function normalizeRecordedStartTime(value) {
   return Number.isFinite(parsed.valueOf()) ? parsed.toISOString() : null;
 }
 
+const PID_RECORD_KEYS = new Set(["pid", "processStartTime", "processIdentity", "executableIdentity"]);
+// `daemon restart` can wait up to 75 s on the daemon's operation lock.
+export const DAEMON_RESTART_TIMEOUT_MS = 120_000;
+
 export function readNativePidRecord({ fsApi, codexHome, uid }) {
   const file = path.join(codexHome, "app-server-daemon", "app-server.pid");
   let before;
@@ -191,8 +195,12 @@ export function readNativePidRecord({ fsApi, codexHome, uid }) {
     ) return { state: "invalid" };
     const parsed = JSON.parse(fsApi.readFileSync(descriptor, "utf8"));
     const processStartTime = normalizeRecordedStartTime(parsed?.processStartTime);
+    // Codex 0.157+ may add identity details beside the required pair.
+    const keys = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? Object.keys(parsed) : [];
     if (
-      !exactKeys(parsed, ["pid", "processStartTime"])
+      !keys.includes("pid")
+      || !keys.includes("processStartTime")
+      || keys.some((key) => !PID_RECORD_KEYS.has(key))
       || !Number.isInteger(parsed.pid)
       || parsed.pid <= 0
       || !processStartTime
@@ -221,16 +229,48 @@ export function nativeDaemonVersion(runner, executable) {
     ["app-server", "daemon", "version"],
     "daemon-version-unavailable",
   );
+  // Codex omits `backend` when the daemon is unmanaged.
+  const backend = Object.hasOwn(parsed, "backend") ? parsed.backend : null;
   if (
     parsed.status !== "running"
-    || !Object.hasOwn(parsed, "backend")
-    || (parsed.backend !== null && parsed.backend !== "pid")
+    || (backend !== null && backend !== "pid")
     || typeof parsed.managedCodexPath !== "string"
     || typeof parsed.socketPath !== "string"
   ) refuse("daemon-version-invalid");
   return {
     status: parsed.status,
+    backend,
+    managedCodexPath: parsed.managedCodexPath,
+    socketPath: parsed.socketPath,
+  };
+}
+
+// Native managed restart. The CLI cannot take an expected PID, so the caller
+// re-samples the daemon immediately beforehand and this adapter rechecks the
+// native PID record right before invoking it.
+export function restartManagedDaemon({ runner, executable, expectedIdentity, readPidRecord }) {
+  const record = readPidRecord();
+  if (
+    record?.state !== "valid"
+    || record.pid !== expectedIdentity.pid
+    || record.processStartTime !== expectedIdentity.startTime
+  ) return { status: "refused", failureCode: "managed-pid-record-conflict" };
+  const parsed = runForJson(
+    runner,
+    executable,
+    ["app-server", "daemon", "restart"],
+    "managed-restart-failed",
+    { timeout: DAEMON_RESTART_TIMEOUT_MS },
+  );
+  let pid = parsed.pid;
+  if (pid === undefined || pid === null) {
+    const after = readPidRecord();
+    pid = after?.state === "valid" ? after.pid : null;
+  }
+  return {
+    status: parsed.status,
     backend: parsed.backend,
+    pid,
     managedCodexPath: parsed.managedCodexPath,
     socketPath: parsed.socketPath,
   };
@@ -430,7 +470,13 @@ export function createDefaultRecycleDependencies({
     sampleDaemonEvidence({ socket, executable, ownerPid }) {
       const version = nativeDaemonVersion(runner, executable.path);
       const canonicalSocket = canonicalPath(version.socketPath);
-      const managedPath = canonicalPath(version.managedCodexPath);
+      // An unmanaged daemon may name a managed path that was never installed.
+      let managedPath = null;
+      try {
+        managedPath = canonicalPath(version.managedCodexPath);
+      } catch (error) {
+        if (version.backend === "pid") throw error;
+      }
       let managedExecutable = null;
       if (version.backend === "pid") {
         managedExecutable = fileReference(managedPath);
@@ -467,6 +513,14 @@ export function createDefaultRecycleDependencies({
         ["--launcher", launcher.path, "--json"],
         "launcher-nofile-attestation-unavailable",
       );
+    },
+    restartManagedExact({ executable, expectedIdentity }) {
+      return restartManagedDaemon({
+        runner,
+        executable,
+        expectedIdentity,
+        readPidRecord: () => readNativePidRecord({ fsApi, codexHome, uid }),
+      });
     },
     reapResidue(snapshot) {
       return reapSnapshot(snapshot, {

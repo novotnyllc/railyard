@@ -129,15 +129,27 @@ export function recycleServer(options, deps) {
     const secondSample = takeDaemonSample();
     if (stableJson(firstSample) !== stableJson(secondSample)) refuse("daemon-attestation-unstable");
 
-    if (!options.attestorPath) refuse("nofile-attestor-required");
-    const attestor = executableEvidenceOrRefuse(options.attestorPath, {
-      canonicalPath: deps.canonicalPath,
-      fileIdentity: deps.fileIdentity,
-      uid,
-      code: "nofile-attestor-invalid",
-      requireOwner: true,
-    });
-    if (typeof deps.attestNofile !== "function") refuse("nofile-attestor-unavailable");
+    // The descriptor-limit attestor is optional. Without one the limit is
+    // reported as unverified; with one, the strict attestation contract holds.
+    const attestor = options.attestorPath
+      ? executableEvidenceOrRefuse(options.attestorPath, {
+          canonicalPath: deps.canonicalPath,
+          fileIdentity: deps.fileIdentity,
+          uid,
+          code: "nofile-attestor-invalid",
+          requireOwner: true,
+        })
+      : null;
+    if (attestor && typeof deps.attestNofile !== "function") refuse("nofile-attestor-unavailable");
+    result.verification.nofileLimit = attestor ? "attested" : "unverified";
+    if (!attestor) {
+      result.warnings.push({
+        code: "nofile-limit-unverified",
+        pid: server.pid,
+        message: "descriptor limit unverified (no --nofile-attestor)",
+        authorizesAction: false,
+      });
+    }
 
     let launcher = null;
     let launcherNofileAttestation = null;
@@ -151,6 +163,10 @@ export function recycleServer(options, deps) {
         code: "unmanaged-launcher-invalid",
         requireOwner: true,
       });
+    }
+    // Without an attestor, an unmanaged replacement must run the same
+    // executable as the old server.
+    if (mode === "unmanaged" && attestor) {
       if (typeof deps.attestLauncher !== "function") refuse("launcher-attestor-unavailable");
       launcherNofileAttestation = deps.attestLauncher(launcher, {
         attestorPath: attestor.path,
@@ -177,11 +193,14 @@ export function recycleServer(options, deps) {
 
     const initialOwner = deps.readIdentity(snapshot.owner.pid);
     if (!exactSnapshotIdentityPresent(snapshot.owner, initialOwner)) refuse("recycle-identity-changed");
-    const oldNofileAttestation = deps.attestNofile(initialOwner.identity, {
-      attestorPath: attestor.path,
-    });
-    revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-    validatePidNofileAttestation(oldNofileAttestation, initialOwner.identity, 1);
+    let oldNofileAttestation = null;
+    if (attestor) {
+      oldNofileAttestation = deps.attestNofile(initialOwner.identity, {
+        attestorPath: attestor.path,
+      });
+      revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
+      validatePidNofileAttestation(oldNofileAttestation, initialOwner.identity, 1);
+    }
 
     const daemonEvidenceDigest = sha256(stableJson(secondSample));
     const authorization = {
@@ -208,7 +227,7 @@ export function recycleServer(options, deps) {
       socket: { path: socket, ownerPid: snapshot.owner.pid },
       targetPids: snapshot.targets.map((target) => target.pid),
       daemonEvidenceDigest,
-      softNofile: oldNofileAttestation.softNofile,
+      softNofile: oldNofileAttestation?.softNofile ?? "unverified",
     };
     const selectedRoles = new Map([
       [snapshot.owner.pid, "server"],
@@ -219,7 +238,7 @@ export function recycleServer(options, deps) {
       role: selectedRoles.get(pid) ?? "target",
     }));
     if (mode === "managed" && typeof deps.restartManagedExact !== "function") {
-      refuse("managed-restart-exact-pid-unsupported");
+      refuse("managed-restart-unavailable");
     }
     if (!options.confirmation) refuse("confirmation-required");
     if (options.confirmation !== receipt.confirmationToken) refuse("confirmation-mismatch");
@@ -233,7 +252,7 @@ export function recycleServer(options, deps) {
         : "mutation-lock-unavailable");
     }
     revalidateExecutableEvidence(executable, deps, uid, "selected-executable-changed");
-    revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
+    if (attestor) revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
     if (launcher) revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
     if (replacementExecutable !== executable) {
       revalidateExecutableEvidence(replacementExecutable, deps, uid, "replacement-executable-changed");
@@ -249,19 +268,22 @@ export function recycleServer(options, deps) {
 
     const freshOwner = deps.readIdentity(snapshot.owner.pid);
     if (!exactSnapshotIdentityPresent(snapshot.owner, freshOwner)) refuse("recycle-identity-changed");
-    const lockedOldNofileAttestation = deps.attestNofile(freshOwner.identity, {
-      attestorPath: attestor.path,
-    });
-    revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-    const oldSoftNofile = validatePidNofileAttestation(
-      lockedOldNofileAttestation,
-      freshOwner.identity,
-      1,
-    );
-    if (stableJson(lockedOldNofileAttestation) !== stableJson(oldNofileAttestation)) {
-      refuse("pid-nofile-attestation-changed");
+    let oldSoftNofile = "unverified";
+    if (attestor) {
+      const lockedOldNofileAttestation = deps.attestNofile(freshOwner.identity, {
+        attestorPath: attestor.path,
+      });
+      revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
+      oldSoftNofile = validatePidNofileAttestation(
+        lockedOldNofileAttestation,
+        freshOwner.identity,
+        1,
+      );
+      if (stableJson(lockedOldNofileAttestation) !== stableJson(oldNofileAttestation)) {
+        refuse("pid-nofile-attestation-changed");
+      }
     }
-    if (launcher) {
+    if (launcher && attestor) {
       revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
       const lockedLauncherNofileAttestation = deps.attestLauncher(launcher, {
         attestorPath: attestor.path,
@@ -325,7 +347,9 @@ export function recycleServer(options, deps) {
     if (mode === "managed") {
       if (typeof deps.reapResidue !== "function") refuse("residue-reaper-unavailable");
       revalidateExecutableEvidence(executable, deps, uid, "selected-executable-changed");
-      result.verification.mutationAttempted = true;
+      // The native restart cannot take an expected PID. The daemon was
+      // re-sampled just above, and the adapter rechecks the native PID record
+      // immediately before invoking it; "refused" there means nothing changed.
       let restarted;
       try {
         restarted = deps.restartManagedExact({
@@ -333,9 +357,16 @@ export function recycleServer(options, deps) {
           expectedIdentity: receipt.server,
           socketPath: socket,
         });
-      } catch {
-        refuse("managed-restart-failed");
+      } catch (error) {
+        result.verification.mutationAttempted = true;
+        refuse(error instanceof CleanupRefusal
+          ? safeFailureCode(error.code, "managed-restart-failed")
+          : "managed-restart-failed");
       }
+      if (restarted?.status === "refused") {
+        refuse(safeFailureCode(restarted.failureCode, "managed-restart-precondition-failed"));
+      }
+      result.verification.mutationAttempted = true;
       if (
         !restarted
         || restarted.status !== "restarted"
@@ -345,6 +376,23 @@ export function recycleServer(options, deps) {
         || restarted.pid === snapshot.owner.pid
         || canonicalPathOrRefuse(restarted.socketPath, deps.canonicalPath, "managed-restart-invalid") !== socket
       ) refuse("managed-restart-invalid");
+      if (typeof restarted.managedCodexPath === "string") {
+        // A native restart may activate a newer managed release.
+        const managedPath = canonicalPathOrRefuse(
+          restarted.managedCodexPath,
+          deps.canonicalPath,
+          "managed-restart-invalid",
+        );
+        if (managedPath !== executable.path) {
+          replacementExecutable = executableEvidenceOrRefuse(managedPath, {
+            canonicalPath: deps.canonicalPath,
+            fileIdentity: deps.fileIdentity,
+            uid,
+            code: "replacement-executable-invalid",
+            requireOwner: true,
+          });
+        }
+      }
       replacementPid = restarted.pid;
       result.verification.actions.push({ kind: "native-daemon-restart", oldPid: snapshot.owner.pid, newPid: replacementPid });
       const residue = deps.reapResidue(snapshot);
@@ -425,16 +473,19 @@ export function recycleServer(options, deps) {
       || !Number.isInteger(ready.directChildren)
       || ready.directChildren < 0
     ) refuse("replacement-metrics-invalid");
-    revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-    const replacementNofileAttestation = deps.attestNofile(freshReplacement.identity, {
-      attestorPath: attestor.path,
-    });
-    revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-    const replacementSoftNofile = validatePidNofileAttestation(
-      replacementNofileAttestation,
-      freshReplacement.identity,
-      options.minSoftLimit,
-    );
+    let replacementSoftNofile = "unverified";
+    if (attestor) {
+      revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
+      const replacementNofileAttestation = deps.attestNofile(freshReplacement.identity, {
+        attestorPath: attestor.path,
+      });
+      revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
+      replacementSoftNofile = validatePidNofileAttestation(
+        replacementNofileAttestation,
+        freshReplacement.identity,
+        options.minSoftLimit,
+      );
+    }
     assertOldTreeGone(snapshot, deps.readIdentity);
     assertExpectedIdentityGone(
       parent,
