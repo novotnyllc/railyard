@@ -6,9 +6,12 @@ description: Diagnose and recover macOS Codex app-servers under descriptor press
 # Cleanup Codex
 
 Use this skill when Codex slows down, hits "too many open files", or leaves
-processes behind. It runs on macOS. Every command below runs from the Railyard
-repository root; `CC` stands for
-`node plugins/railyard/skills/cleanup-codex/scripts/cleanup-codex.mjs`.
+processes behind. It runs on macOS. Define `CC` once, with `SKILL_DIR` set to
+this skill's directory:
+
+```bash
+CC() { node "$SKILL_DIR/scripts/cleanup-codex.mjs" "$@"; }
+```
 
 ## Inspect first
 

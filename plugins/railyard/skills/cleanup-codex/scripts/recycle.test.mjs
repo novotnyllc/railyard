@@ -9,6 +9,8 @@ import test from "node:test";
 import {
   EXIT_CODES,
   createDefaultDesktopDependencies,
+  desktopBusyReasons,
+  readDesktopActivity,
   createDefaultRecycleDependencies,
   desktopRecommendations,
   parseCliArgs,
@@ -1247,6 +1249,29 @@ test("desktop recycle never reports a replacement that already exited", () => {
   assert.notEqual(exitCode, EXIT_CODES.healthy);
   assert.equal(result.verification.after, null);
   assert.ok(result.verification.missingEvidence.includes("desktop-relaunch-timeout"));
+});
+
+test("a failed quit request is still reported as an attempted mutation", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness({ hostQuits: false, quitReportsOk: false });
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.failed);
+  assert.equal(result.verification.mutationAttempted, true);
+  assert.ok(result.verification.missingEvidence.includes("desktop-quit-request-failed"));
+  assert.deepEqual(harness.calls.launch, []);
+});
+
+test("an unparsed frontmost app leaves desktop activity unknown", () => {
+  const runner = (file, args) => {
+    if (file === "/usr/bin/sqlite3") return { status: 0, stdout: "[]", stderr: "" };
+    if (args[0] === "front") return { status: 0, stdout: "ASN:0x0-0x4e94e9:\n", stderr: "" };
+    return { status: 0, stdout: "no bundle here", stderr: "" };
+  };
+  const activity = readDesktopActivity({ runner, codexHome: "/nonexistent" });
+  assert.equal(activity.complete, false);
+  assert.deepEqual(desktopBusyReasons({ activity, inventory: { processes: [] }, serverPid: 1, bundleId: "x", nowMs: NOW, idleMs: 1 }), [
+    "desktop-activity-unknown",
+  ]);
 });
 
 test("desktop recycle fails with a recovery code when the host app will not quit", () => {

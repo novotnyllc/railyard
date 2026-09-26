@@ -645,6 +645,7 @@ export function desktopHarness({
   activity = [],
   relaunchServerPid = 14100,
   replacementExits = false,
+  quitReportsOk = true,
 } = {}) {
   const idleActivity = {
     complete: true,
@@ -710,7 +711,7 @@ export function desktopHarness({
         const orphan = state.get(200).identity;
         state.set(200, { state: "present", identity: { ...orphan, parentPid: 1 } });
       }
-      return { ok: true };
+      return { ok: quitReportsOk };
     },
     launchApp(bundleId) {
       calls.launch.push(bundleId);

@@ -379,8 +379,9 @@ export function readDesktopActivity({ runner = defaultRunner, codexHome, fsApi =
   const match = typeof info.stdout === "string"
     ? info.stdout.match(/bundle(?:ID|identifier)"?\s*=\s*"([^"]+)"/i)
     : null;
-  if (info.status !== 0) return activity;
-  activity.frontmostBundleId = match ? match[1] : null;
+  // An unparsed frontmost app is unknown, which counts as busy.
+  if (info.status !== 0 || !match) return activity;
+  activity.frontmostBundleId = match[1];
   activity.complete = true;
   return activity;
 }
@@ -576,7 +577,10 @@ export function recycleDesktop(options, deps) {
     assertGuiPreserved(evidence.otherGui, deps.readIdentity);
     checkIdle(lockedInventory);
 
-    // Ask the app to quit. The host is never signalled.
+    // Ask the app to quit. The host is never signalled. The quit event can
+    // land even when osascript reports failure, so record the attempt first.
+    result.verification.mutationAttempted = true;
+    result.verification.actions.push({ kind: "quit-desktop-app", bundleId: receipt.host.bundleId, hostPid: receipt.host.pid });
     let quit = null;
     try {
       quit = deps.quitApp(receipt.host.bundleId);
@@ -585,8 +589,6 @@ export function recycleDesktop(options, deps) {
     if (!quit?.ok && !goneOrReused(receipt.host, hostAfterRequest)) {
       refuse("desktop-quit-request-failed");
     }
-    result.verification.mutationAttempted = true;
-    result.verification.actions.push({ kind: "quit-desktop-app", bundleId: receipt.host.bundleId, hostPid: receipt.host.pid });
     const quitTimeoutMs = deps.quitTimeoutMs ?? DEFAULT_DESKTOP_QUIT_TIMEOUT_MS;
     const hostGone = waitUntil(deps, quitTimeoutMs, () => goneOrReused(receipt.host, deps.readIdentity(receipt.host.pid)));
     if (!hostGone) refuse("desktop-host-quit-timeout");
