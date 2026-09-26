@@ -576,6 +576,22 @@ export function recycleDesktop(options, deps) {
     }));
     assertGuiPreserved(evidence.otherGui, deps.readIdentity);
     checkIdle(lockedInventory);
+    // The app can restart on its own during the idle check; quit only the bound births.
+    const stillBound = (expected, fields) => {
+      let observation;
+      try {
+        observation = deps.readIdentity(expected.pid);
+      } catch {
+        return false;
+      }
+      return observation?.state === "present"
+        && validObservedIdentity(observation.identity)
+        && !identityDifferences(expected, observation.identity, fields).length;
+    };
+    if (!stillBound(receipt.host, HOST_IDENTITY_FIELDS)
+      || !stillBound(receipt.server, ["pid", "uid", "startTime", "executable"])) {
+      refuse("desktop-identity-changed");
+    }
 
     // Ask the app to quit. The host is never signalled. The quit event can
     // land even when osascript reports failure, so record the attempt first.

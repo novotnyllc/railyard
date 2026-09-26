@@ -1305,6 +1305,26 @@ test("an unparsed frontmost app leaves desktop activity unknown", () => {
   ]);
 });
 
+test("desktop recycle never quits an app that restarted during the idle check", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness();
+  const readActivity = harness.deps.readDesktopActivity;
+  let calls = 0;
+  harness.deps.readDesktopActivity = () => {
+    calls += 1;
+    // The locked idle check runs second; the app relaunches itself meanwhile.
+    if (calls === 2) {
+      const host = harness.state.get(13007).identity;
+      harness.state.set(13007, { state: "present", identity: { ...host, startTime: "2026-08-02T16:00:30.000Z" } });
+    }
+    return readActivity();
+  };
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.refused);
+  assert.ok(result.verification.missingEvidence.includes("desktop-identity-changed"));
+  assert.deepEqual(harness.calls.quit, []);
+});
+
 test("desktop recycle fails with a recovery code when the host app will not quit", () => {
   const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
   const harness = desktopHarness({ hostQuits: false });
