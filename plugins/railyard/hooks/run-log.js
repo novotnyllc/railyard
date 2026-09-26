@@ -21,8 +21,8 @@ const path = require("path");
 function logDir() {
   if (process.env.RAILYARD_RUN_LOG_DIR) return process.env.RAILYARD_RUN_LOG_DIR;
   const home = os.homedir();
-  // State, not config: machine-written, append-only, disposable. Mirrors
-  // scripts/model-routing/paths.mjs, including the Windows location.
+  // State, not config: machine-written, append-only, disposable.
+  // Windows uses LOCALAPPDATA.
   return process.platform === "win32"
     ? path.join(process.env.LOCALAPPDATA || home, "railyard", "state", "run-log")
     : path.join(
@@ -101,31 +101,7 @@ function entriesForSession(entries, requestedSessionId) {
     !Array.isArray(entry) && entry.session_id === requestedSessionId);
 }
 
-// Read today's entries and return true when at least one carries the given
-// event type and session id. Retained for optional diagnostic consumers;
-// a session-authored note is not proof that a carrier executed.
-// Read today entries; return true when at least one matches the event type
-// AND the current session. Fails closed: no session identity or a malformed
-// log line means no authorization.
-function hasEntry(eventType) {
-  try {
-    const file = logPath();
-    if (!fs.existsSync(file)) return false;
-    const sid = sessionId();
-    if (!sid) return false;
-    const lines = fs.readFileSync(file, "utf8").split("\n").filter(Boolean);
-    let allParsed = true;
-    let found = false;
-    for (const line of lines) {
-      try {
-        const entry = JSON.parse(line);
-        if (entry.event === eventType && entry.session_id === sid) found = true;
-      } catch { allParsed = false; }
-    }
-    return allParsed && found;
-  } catch { return false; }
-}
-module.exports = { record, clip, logPath, logDir, hasEntry, entriesForSession };
+module.exports = { record, clip, logPath, logDir, entriesForSession };
 
 if (require.main === module) {
   const [mode, arg] = process.argv.slice(2);

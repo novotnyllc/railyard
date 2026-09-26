@@ -41,18 +41,27 @@ const configPath = process.env.ORACLE_CONFIG_PATH ?? join(homedir(), ".oracle", 
 
 let current = {};
 let existed = false;
+let text;
 try {
-  current = JSON.parse(readFileSync(configPath, "utf8"));
+  text = readFileSync(configPath, "utf8");
   existed = true;
-  if (current === null || typeof current !== "object" || Array.isArray(current)) {
-    console.error(`${configPath} is not a JSON object; leaving it alone.`);
+} catch (err) {
+  if (err?.code !== "ENOENT") {
+    console.error(`${configPath} could not be read (${err?.code ?? "error"}); leaving it alone.`);
     process.exit(1);
   }
-} catch (err) {
-  if (existed) {
+}
+if (existed) {
+  try {
+    current = JSON.parse(text);
+  } catch {
     // A file that exists but does not parse is a user problem to look at, not
     // something to silently overwrite - their settings are in there.
     console.error(`${configPath} exists but is not valid JSON; leaving it alone.`);
+    process.exit(1);
+  }
+  if (current === null || typeof current !== "object" || Array.isArray(current)) {
+    console.error(`${configPath} is not a JSON object; leaving it alone.`);
     process.exit(1);
   }
 }
@@ -61,7 +70,12 @@ const added = [];
 const merged = { ...current };
 for (const [key, value] of Object.entries(DEFAULTS)) {
   if (value && typeof value === "object" && !Array.isArray(value)) {
-    const branch = { ...(merged[key] ?? {}) };
+    const existing = merged[key];
+    if (existing !== undefined && (existing === null || typeof existing !== "object" || Array.isArray(existing))) {
+      console.error(`${configPath}: "${key}" is not an object; leaving it alone.`);
+      continue;
+    }
+    const branch = { ...(existing ?? {}) };
     for (const [k, v] of Object.entries(value)) {
       if (!(k in branch)) { branch[k] = v; added.push(`${key}.${k}=${JSON.stringify(v)}`); }
     }

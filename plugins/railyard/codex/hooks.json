@@ -1,20 +1,9 @@
 {
-  "description": "Startup routing, deliberate model and effort checks, and a merge guard consuming the completed Compound Engineering result. CE alone owns review and CI settlement.",
+  "description": "Startup routing guide, a subagent dispatch log with one full-history fork check, and a merge guard consuming the completed Compound Engineering result. CE alone owns review and CI settlement.",
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "agentsspawn_agent|spawn_agent|agents__spawn_agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-gate.js\"",
-            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\dispatch-gate.js\" }",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "Bash|shell|local_shell|exec_command|unified_exec",
+        "matcher": "agentsspawn_agent|spawn_agent",
         "hooks": [
           {
             "type": "command",

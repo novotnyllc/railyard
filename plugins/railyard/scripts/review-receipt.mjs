@@ -17,10 +17,11 @@ import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 
 const DEFAULT_MIN_CLI_VERSION = "2.1.220";
-// Claude Code uses Haiku for internal summarization/title generation, so it is
-// allowed by default alongside a Claude-family expectation. Any explicit
-// --allow-aux replaces this default.
-const DEFAULT_CLAUDE_AUX = "claude-haiku-4-5-20251001";
+// Claude Code uses Haiku for internal summarization/title generation, so any
+// Haiku release is allowed by default alongside a Claude-family expectation;
+// a helper-model bump must not invalidate receipts. Any explicit --allow-aux
+// replaces this default with exact model ids.
+const DEFAULT_CLAUDE_AUX = /^claude-haiku-\d[a-z0-9-]*$/;
 
 let exitStatus;
 let expectModel;
@@ -45,11 +46,11 @@ if (!Number.isInteger(exitStatus) || !expectModel) {
   process.exit(2);
 }
 
-const auxiliaryModels = new Set(
-  allowAux.length ? allowAux : expectModel.startsWith("claude-") ? [DEFAULT_CLAUDE_AUX] : [],
-);
+const auxiliaryModels = new Set(allowAux);
+const defaultAuxiliary = !allowAux.length && expectModel.startsWith("claude-");
 const isExpected = (model) => model === expectModel;
-const isAllowedAuxiliary = (model) => auxiliaryModels.has(model);
+const isAllowedAuxiliary = (model) => typeof model === "string" &&
+  (defaultAuxiliary ? DEFAULT_CLAUDE_AUX.test(model) : auxiliaryModels.has(model));
 
 // Numeric dotted compare, zero-padded to equal length; a version that is not
 // all-numeric (prereleases, build metadata, undefined) fails closed.

@@ -24,10 +24,8 @@ Node 24, no package manager and no install step:
 
 ```sh
 node --test \
-  plugins/railyard/scripts/model-routing.test.mjs \
   plugins/railyard/skills/jev/scripts/jev-adviser.test.mjs \
   plugins/railyard/skills/orchestrate/scripts/delivery-contracts.test.mjs \
-  plugins/railyard/skills/oracle/scripts/oracle-route.test.mjs \
   plugins/railyard/skills/oracle/scripts/ensure-oracle.test.mjs \
   plugins/railyard/skills/cleanup-codex/scripts/inventory.test.mjs \
   plugins/railyard/skills/cleanup-codex/scripts/snapshot-reap.test.mjs \
@@ -36,8 +34,6 @@ node --test \
   plugins/railyard/skills/cleanup-codex/scripts/canary.test.mjs \
   plugins/railyard/hooks/lean-hooks.test.mjs \
   plugins/railyard/hooks/dispatch-gate.test.mjs \
-  plugins/railyard/hooks/route-state.test.mjs \
-  plugins/railyard/hooks/route-lifecycle.test.mjs \
   plugins/railyard/hooks/routing-charter.test.mjs \
   plugins/railyard/hooks/merge-settlement-gate.test.mjs
 ```
