@@ -879,17 +879,24 @@ function verifyMerge(command) {
 // protection) can skip CE settlement for that one merge. The override must be
 // an inline assignment in the command text, never ambient process env, so it
 // cannot linger as a blanket bypass and stays visible in the command the user
-// approved. It applies only when the text holds exactly one merge — a wrapper
-// such as `bash -c` would otherwise pass it to every merge inside — and only to
-// the supported `gh pr merge` and REST forms; raw GraphQL and unresolved merge
-// forms keep their refusals.
+// approved. It applies only to one merge site that can run only once against a
+// fixed PR: exactly one supported `gh pr merge` or REST merge in the text (a
+// wrapper such as `bash -c` would otherwise pass it to every merge inside), a
+// literal PR selector with no shell expansion, and no loop, function or fan-out
+// construct that could re-run the site. Raw GraphQL and unresolved merge forms
+// keep their refusals. Anything uncertain falls back to the CE gate.
 const OVERRIDE_NAME = "RAILYARD_MERGE_OVERRIDE";
 const OVERRIDE_VALUE = "user-approved";
-function userOverride(commands) {
-  if (commands.length !== 1) return false;
+const REPEATING = /(?:^|[\s;&|(){}'"])(?:for|while|until|select|function|xargs|parallel)(?=[\s;&|(){}'"]|$)|\(\s*\)/;
+const EXPANDING = /[$`*?[\]]/;
+function userOverride(commands, text) {
+  if (commands.length !== 1 || REPEATING.test(text)) return false;
   const [command] = commands;
-  return (command.kind === "pr" || command.kind === "api") &&
-    Object.hasOwn(command.env, OVERRIDE_NAME) && command.env[OVERRIDE_NAME] === OVERRIDE_VALUE;
+  if (command.kind !== "pr" && command.kind !== "api") return false;
+  if (!Object.hasOwn(command.env, OVERRIDE_NAME) || command.env[OVERRIDE_NAME] !== OVERRIDE_VALUE) return false;
+  const selectors = [command.ref, command.flags.get("--repo"), command.flags.get("-R")]
+    .concat(command.kind === "api" ? [command.endpoint?.join?.("/")] : []);
+  return nonempty(command.ref) && selectors.every((value) => value == null || !EXPANDING.test(String(value)));
 }
 
 function handlePayload(input) {
@@ -902,7 +909,7 @@ function handlePayload(input) {
     .find((value) => typeof value === "string" && value);
   const commands = mergeCommands(stripHeredocs(text), requestedCwd);
   if (!commands.length) return;
-  if (userOverride(commands)) {
+  if (userOverride(commands, text)) {
     process.stderr.write(`[railyard] Merge allowed by ${OVERRIDE_NAME}=${OVERRIDE_VALUE} without CE settlement.\n`);
     return;
   }

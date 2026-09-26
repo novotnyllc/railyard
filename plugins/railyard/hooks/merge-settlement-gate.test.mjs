@@ -689,6 +689,22 @@ gated("the override does not admit a raw GraphQL merge", () => {
   refused(run(bash(`${OVERRIDE} gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}'`), { noPath: true }), /mergePullRequest is unsupported/);
 });
 
+gated("the override does not cover a merge site that a loop can re-run", () => {
+  for (const text of [
+    `${OVERRIDE} bash -lc 'for pr in 7 8; do gh pr merge "$pr" --squash --admin; done'`,
+    `${OVERRIDE} bash -lc 'while read pr; do gh pr merge 7 --squash; done'`,
+    `m() { ${OVERRIDE} gh pr merge 7 --squash; }; m; m`,
+  ]) refused(run(bash(text), { noPath: true }));
+});
+
+gated("the override requires a literal PR selector", () => {
+  for (const text of [
+    `${OVERRIDE} gh pr merge --squash --admin`,
+    `${OVERRIDE} gh pr merge "$PR" --squash --admin`,
+    `${OVERRIDE} gh pr merge 7 --repo "$REPO" --squash`,
+  ]) refused(run(bash(text), { noPath: true }));
+});
+
 gated("refusals name the user-approved override for explicitly directed merges", () => {
   const result = run(bash(adminMerge), { noPath: true });
   refused(result);

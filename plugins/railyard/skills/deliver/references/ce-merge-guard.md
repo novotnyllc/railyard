@@ -48,8 +48,11 @@ RAILYARD_MERGE_OVERRIDE=user-approved gh pr merge 123 --repo OWNER/REPO --squash
 
 The override must be an inline assignment in the command text; an ambient
 environment variable is ignored and any other value is ignored. It applies
-only when the command holds exactly one `gh pr merge` or REST merge — two
-merges in one command, or a raw GraphQL merge, are still refused. Do not use it on your own initiative or
+only when the command holds exactly one `gh pr merge` or REST merge that
+names its PR literally (a number, branch or URL, with any `--repo` also
+literal) and contains no loop, function, `xargs` or `parallel` that could
+re-run it. Two merges in one command, a variable selector, or a raw GraphQL
+merge are still refused. Do not use it on your own initiative or
 because a reviewer is slow — use it only on the user's explicit instruction.
 
 The selected handoff asserts that the CE owner completed its judgment. A raw
