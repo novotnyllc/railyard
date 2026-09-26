@@ -27,7 +27,7 @@ Collect the current state before asking anything:
   resolved path for every read, write, and validation in this setup.
 - Tooling: `gh` auth state, the `gh-stack` extension and its agent skills,
   `tmux`, `jq`, `node`, and optionally `chezmoi` and `op`.
-- Oracle, read-only: `oracle --version` (0.20.3 or newer) and whether the
+- Oracle, read-only: `"${ORACLE_BIN:-oracle}" --version` (0.20.3 or newer) and whether the
   config at `ORACLE_CONFIG_PATH`, else `~/.oracle/config.json`, exists. Run
   the oracle skill's `ensure-oracle.sh` only in the install stage, since it can
   install or upgrade Oracle.
