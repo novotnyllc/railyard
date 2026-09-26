@@ -875,6 +875,30 @@ function verifyMerge(command) {
   }
 }
 
+// A user who explicitly directs a merge (including an admin bypass of branch
+// protection) can skip CE settlement for that one merge. The override must be
+// an inline assignment in the command text, never ambient process env, so it
+// cannot linger as a blanket bypass and stays visible in the command the user
+// approved. It applies only to one merge site that can run only once against a
+// fixed PR: exactly one supported `gh pr merge` or REST merge in the text (a
+// wrapper such as `bash -c` would otherwise pass it to every merge inside), a
+// literal PR selector with no shell expansion, and no loop, function or fan-out
+// construct that could re-run the site. Raw GraphQL and unresolved merge forms
+// keep their refusals. Anything uncertain falls back to the CE gate.
+const OVERRIDE_NAME = "RAILYARD_MERGE_OVERRIDE";
+const OVERRIDE_VALUE = "user-approved";
+const REPEATING = /(?:^|[\s;&|(){}'"])(?:for|while|until|select|function|xargs|parallel)(?=[\s;&|(){}'"]|$)|\(\s*\)/;
+const EXPANDING = /[$`*?[\]]/;
+function userOverride(commands, text) {
+  if (commands.length !== 1 || REPEATING.test(text)) return false;
+  const [command] = commands;
+  if (command.kind !== "pr" && command.kind !== "api") return false;
+  if (!Object.hasOwn(command.env, OVERRIDE_NAME) || command.env[OVERRIDE_NAME] !== OVERRIDE_VALUE) return false;
+  const selectors = [command.ref, command.flags.get("--repo"), command.flags.get("-R")]
+    .concat(command.kind === "api" ? [command.endpoint?.join?.("/")] : []);
+  return nonempty(command.ref) && selectors.every((value) => value == null || !EXPANDING.test(String(value)));
+}
+
 function handlePayload(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return;
   if (input.hook_event_name && input.hook_event_name !== "PreToolUse") return;
@@ -885,13 +909,18 @@ function handlePayload(input) {
     .find((value) => typeof value === "string" && value);
   const commands = mergeCommands(stripHeredocs(text), requestedCwd);
   if (!commands.length) return;
+  if (userOverride(commands, text)) {
+    process.stderr.write(`[railyard] Merge allowed by ${OVERRIDE_NAME}=${OVERRIDE_VALUE} without CE settlement.\n`);
+    return;
+  }
   try {
     if (commands.length !== 1) throw new Error("merge one PR per command with that PR's CE snapshot");
     verifyMerge(commands[0]);
   } catch (error) {
     const why = String(error?.message || error).split("\n")[0];
     process.stderr.write("[railyard] Merge refused: " + why +
-      ". Have ce-babysit-pr complete readiness and save its final snapshot stdout beside state.json; then retry the pinned merge.\n");
+      ". Have ce-babysit-pr complete readiness and save its final snapshot stdout beside state.json; then retry the pinned merge." +
+      ` Only when the user explicitly directs this merge without CE settlement, prefix the merge command with ${OVERRIDE_NAME}=${OVERRIDE_VALUE}.\n`);
     process.exitCode = 2;
   }
 }

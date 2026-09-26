@@ -34,6 +34,27 @@ For example, substitute the actual state path, PR, repository, and full head:
 RAILYARD_CE_SNAPSHOT=/absolute/ce-state/snapshot.json gh pr merge 123 --repo OWNER/REPO --squash --match-head-commit FULL_HEAD_SHA
 ```
 
+## User-directed merge override
+
+When the user explicitly directs a specific merge without CE settlement —
+for example "merge it now" or "bypass branch protection" — prefix that one
+merge command with `RAILYARD_MERGE_OVERRIDE=user-approved`. The guard then
+allows it without a snapshot, head pin, or live identity read, and `--admin`
+is permitted:
+
+```sh
+RAILYARD_MERGE_OVERRIDE=user-approved gh pr merge 123 --repo OWNER/REPO --squash --admin
+```
+
+The override must be an inline assignment in the command text; an ambient
+environment variable is ignored and any other value is ignored. It applies
+only when the command holds exactly one `gh pr merge` or REST merge that
+names its PR literally (a number, branch or URL, with any `--repo` also
+literal) and contains no loop, function, `xargs` or `parallel` that could
+re-run it. Two merges in one command, a variable selector, or a raw GraphQL
+merge are still refused. Do not use it on your own initiative or
+because a reviewer is slow — use it only on the user's explicit instruction.
+
 The selected handoff asserts that the CE owner completed its judgment. A raw
 snapshot alone is not proof of that judgment. The guard checks the snapshot's
 readiness fields, absence of actionable work and blockers, and matching latest
