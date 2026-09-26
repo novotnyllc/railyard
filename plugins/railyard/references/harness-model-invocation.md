@@ -23,7 +23,8 @@ with this page, they are correct.
 On Claude, the full effort range is `low`, `medium`, `high`, `xhigh`, `max`.
 Anthropic reports that Opus 5.5 at `medium` matches or exceeds Opus 5 at
 `high`, so don't carry Opus 5 effort habits over to Opus 5.5. Opus 5.5
-requires Claude Code 2.1.280 or later.
+requires Claude Code 2.1.280 or later; older versions resolve `opus` to an
+earlier Opus, so update Claude Code rather than pinning an old ID.
 
 For Codex, OpenAI's published API efforts are `none` through `max` for Sol and
 Luna, and `low` through `max` for Astra. Some native surfaces have also listed
