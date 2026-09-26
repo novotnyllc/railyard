@@ -1169,6 +1169,27 @@ test("desktop first pass refuses a descendant that reparented out of the server 
   assert.equal(result.verification.mutationAttempted, false);
 });
 
+test("desktop recycle reports the locked snapshot's selection when descendants churn", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness();
+  const collect = harness.deps.collectInventory;
+  let first = true;
+  harness.deps.collectInventory = () => {
+    const inventory = collect();
+    if (!first) return inventory;
+    first = false;
+    // Descendant 201 exits between the first pass and the locked inventory.
+    harness.state.set(201, { state: "absent" });
+    return { ...inventory, processes: inventory.processes.filter((record) => record.pid !== 201) };
+  };
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.healthy, JSON.stringify(result.verification.missingEvidence));
+  assert.deepEqual(harness.calls.reaped, [[200]]);
+  assert.deepEqual(result.verification.receipt.selectedPids, [200, 13125]);
+  assert.deepEqual(result.selected.map((item) => item.pid), [200, 13125]);
+  assert.deepEqual(result.verification.before.targetPids, [200]);
+});
+
 test("desktop recycle fails with a recovery code when the host app will not quit", () => {
   const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
   const harness = desktopHarness({ hostQuits: false });

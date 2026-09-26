@@ -452,7 +452,15 @@ export function recycleDesktop(options, deps) {
     if (buildDesktopReceipt(locked, lockedSnapshot, launchdMaxfiles).confirmationToken !== receipt.confirmationToken) {
       refuse("desktop-identity-changed");
     }
-    result.verification.receipt = { ...receipt, targets: lockedSnapshot.targets };
+    // Descendants churn; report what the locked snapshot will actually act on.
+    const lockedSelectedPids = [lockedSnapshot.owner.pid, ...lockedSnapshot.targets.map((target) => target.pid)]
+      .sort((left, right) => left - right);
+    result.verification.receipt = { ...receipt, targets: lockedSnapshot.targets, selectedPids: lockedSelectedPids };
+    result.verification.before.targetPids = lockedSnapshot.targets.map((target) => target.pid);
+    result.selected = lockedSelectedPids.map((pid) => ({
+      pid,
+      role: pid === lockedSnapshot.owner.pid ? "server" : "descendant",
+    }));
     assertGuiPreserved(evidence.otherGui, deps.readIdentity);
 
     // Ask the app to quit. The host is never signalled.
