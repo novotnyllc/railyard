@@ -14,7 +14,7 @@ A local edit needs the changed behavior and its focused checks. A plan request e
 Native subagents handle bounded parallel work. Fleet/account orchestration is explicit, and visible tasks are created only when the user asks for them. Routine work does not require LFG, paired review, a delivery contract, a retrospective, or cleanup.
 
 - [Lifecycle](/delivery/lifecycle/) — native work and the selected shipping path.
-- [Model routing](/delivery/model-routing/) — deliberate model and effort decisions, plus optional account and budget controls.
+- [Model routing](/delivery/model-routing/) — native model and effort choices for Claude Code and Codex.
 - [Gates](/delivery/gates/) — proportional verification and one owner for review settlement.
 - [Audit](/delivery/audit/) — optional analysis of outcomes and resource use.
 

@@ -13,9 +13,9 @@ The requested finish line determines the workflow. An explicit Deliver implement
 
 Name the behavior to change, preserve unrelated work, and use the repository's existing checks. Delegate independent bounded subtasks to native children when useful.
 
-Choose model and reasoning effort together. GPT-6 Sol at `medium` is the ordinary engineering candidate, with Astra at `high` for assignments needing stronger judgment and `max` reserved for a specific reason. Use comparable outcomes, specialist needs, and the user's latency preference to guide selection. Explicit suitable inheritance is valid. Native full-history forks inherit; model or effort overrides require a supported limited-history or no-history fork and a sufficient brief.
+Choose model and reasoning effort together. In Claude Code, Opus 5.5 at `medium` is the default for substantive subagent work, with Fable 5.1 for frontier-hard or long autonomous work. In Codex, GPT-6 Sol at `medium` is the baseline, with Astra at `high` for hard work. Omitting the model means the child inherits. See [model routing](/delivery/model-routing/).
 
-A policy selection does not prove that the current host can run it. Unsupported choices are reported explicitly, without a silent model, effort, provider, or host fallback.
+If the current host can't run a selection, report it; don't fall back to another model, effort, provider, or host without saying so.
 
 ## Select a workflow where it helps
 
@@ -43,7 +43,7 @@ This diagram shows a shipping workflow with selected review and CE settlement. P
 ### Sequence
 
 1. **Ask.** Establish the requested result and whether publishing and merging are authorized.
-2. **Route.** Choose model and reasoning effort deliberately, including suitable inheritance.
+2. **Route.** Choose model and reasoning effort deliberately, or let the child inherit.
 3. **Build.** Execute natively or use a useful selected CE workflow.
 4. **Review.** Use the review appropriate to the change; specialist lenses are optional.
 5. **Quality.** Run required repository checks and focused checks for the changed surface.

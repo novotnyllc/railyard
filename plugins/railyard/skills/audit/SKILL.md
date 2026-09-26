@@ -1,117 +1,80 @@
 ---
 name: audit
-description: "Reconstruct how a chunk of agent work actually ran — which skills routed, what decided what, how many subagents fanned out on which models and why, retries, review rounds, and whether it matched the planned shape. Use when the user asks how a run worked, to audit the last run, why a route or model was chosen, whether it ran as expected, or for a retrospective on how the work could have been done better. Reads the railyard run log, not the code diff."
+description: "Reconstruct how a run of agent work actually went (decisions, delegation, models, retries, review rounds) from the Railyard run log. Use when the user asks to audit a run, how or why it ran as it did, or for a retrospective."
 ---
 
 # Run audit
 
-Answer one question: **what were the decision points that fed one thing into
-the other?** Not an activity list — a chain. Counts are one line; decisions are
-the content.
+Answer one question: what were the decision points, and how did each feed the
+next? Report a chain, not an activity list; counts get one line.
 
-Read `../../references/run-audit.md` for the run-log location, the line
-grammar, task selection, and optional learning formats. Use native runtime
-results and task history to corroborate what the metadata log cannot observe.
+Read `../../references/run-audit.md` for the run-log location, line grammar,
+task selection, and optional learning formats.
 
 ## Scope the run
 
-First identify the requested task's exact `session_id`, or the current task's
-ID when the user means this run. Confirm it from current runtime/task metadata
-or an identified SessionStart payload. A task name or date must resolve to that
-identity before it selects log records; a shared working directory is not an
-identity. If the requested task cannot be identified, report that limitation
+Identify the requested task's exact `session_id`, or the current task's ID
+when the user means this run, from runtime/task metadata or an identified
+SessionStart payload. A task name or date must resolve to that identity; a
+shared working directory is not one. If the task cannot be identified, say so
 and use only task history whose ownership is known.
 
 Read at most the last 3 day files unless the user asks for a wider window.
-Select entries with `entriesForSession(entries, requestedSessionId)` from
-`../../hooks/run-log.js`; it matches `session_id` exactly. Never select the
-latest global `session` line and all later records: concurrent tasks interleave
-in the same daily file. Repeated startup anchors for one ID can be resumes or
-compactions; retain that task's earlier records within the requested window.
-Unidentified records remain unknown even when their timestamp or cwd is nearby.
-Include a child's separate task ID only when native parent/child evidence links
-it to the requested work, and state the additional IDs included.
+Print the log path with `node <this plugin>/hooks/run-log.js path` and select
+entries with `entriesForSession(entries, requestedSessionId)` from
+`../../hooks/run-log.js`, which matches `session_id` exactly. Concurrent tasks
+interleave in the same daily file, so never take the latest global `session`
+line and everything after it. Repeated anchors for one ID can be resumes or
+compactions; keep that task's earlier records. Include a child's separate ID
+only when native parent/child evidence links it, and name it.
 
-Print the log path with
-`node <this plugin>/hooks/run-log.js path` (resolve `../../hooks/run-log.js`
-from this file) and read the selected day files directly.
-
-Say plainly when the window is empty or the log starts mid-run — a run that
-predates the recorder, or a session whose SessionStart hook did not fire, is a
-gap to name, not to interpolate.
+Say plainly when the window is empty or the log starts mid-run; that is a gap
+to name, not to fill in.
 
 ## Sources
 
-1. **Run log** — the spine. Mechanical `session`/`dispatch`/`subagent_stop`
-   lines plus the session's own `decision`/`outcome`/`deviation` lines.
-2. **Model routing state** — what was actually admitted and claimed: the
-   `status` and `inspect-claim` commands of `railyard:model-routing`
-   when the task used that optional route (read-only; never resolve a new
-   decision during an audit).
-3. **Native runtime results and task history** — observed child starts,
-   resolved model/effort, and outcomes when available. Requested controls in a
-   PreToolUse entry alone do not prove the child used them.
+1. **Run log**: mechanical `session`/`dispatch`/`subagent_stop` lines plus the
+   session's own `decision`/`outcome`/`deviation` notes.
+2. **Native runtime results and task history**: observed child starts,
+   resolved model/effort, and outcomes. A PreToolUse `dispatch` entry shows the
+   gate allowed an attempt, not that the child ran with those settings.
 
 ## Report
 
-Text first, in this order:
+In this order:
 
-1. **The chain.** Each decision point as: what was decided, what fed it, what
-   it caused. "Intake chose orchestrate because 3 independent pieces → piece 2's
-   review found a shared-writer conflict → which spawned a fix batch → which
-   forced a second review round on pieces 1 and 2." Follow the `fed_by` /
-   `led_to` labels; where they are missing, say the link is inferred from
-   ordering.
-2. **Shape.** One line of allowed dispatch attempts by requested model/effort,
-   observed fan-out, rounds, retries, and timing. Report unobserved values as
-   unknown; the default log does not measure child concurrency or completion.
-3. **Did it work as expected.** Compare the *decision sequence* against the
-   route the intake planned — not just the counts. Name divergences plainly:
-   a phase shown to have been skipped, a model/effort change without a recorded
-   reason, a child confirmed incomplete, or a review round that repeated.
-   Missing optional completion records leave completion unknown. End with the
-   supported conclusion, including any uncertainty; do not infer failure or
-   success from absent records.
+1. **The chain.** Each decision: what was decided, what fed it, what it
+   caused. For example, "intake chose orchestrate because of 3 independent
+   pieces → piece 2's review found a shared-writer conflict → a fix batch →
+   a second review round on pieces 1 and 2." Follow `fed_by`/`led_to`; where
+   they are missing, say the link is inferred from ordering.
+2. **Shape.** One line: allowed dispatch attempts by requested model/effort,
+   observed fan-out, rounds, retries, and timing. Unobserved values are
+   unknown; the default log does not record child concurrency or completion.
+3. **Did it work as expected.** Compare the decision sequence with the planned
+   route. Name divergences: a skipped phase, a model/effort change without a
+   recorded reason, a child confirmed incomplete, a repeated review round.
+   End with the conclusion the evidence supports, including uncertainty.
 
-Then a diagram **only when the shape genuinely benefits** — a fan-out of 10+
-or a multi-phase pipeline. Small mermaid, few nodes, showing *what fed what*
-(a decision flow), never a swimlane of every event. Don't make it impossible
-to understand; text is better many times.
+Add a small mermaid decision-flow diagram only for a fan-out of 10+ or a
+multi-phase pipeline, never a swimlane of every event.
 
-## Answering follow-ups
+## Follow-ups
 
-The user will ask why. "Why did you do that?", "how did you come to that
-conclusion?", "was that right, or could it have been done better?" Answer from
-the `because` and `fed_by` fields of the decision records plus session context.
-
-When the record does not capture why, **say the record doesn't capture why**.
-Never reconstruct a plausible-sounding rationale that was not written down.
-Name missing reasons as evidence gaps; notes remain optional.
+Answer "why did you do that?" from the `because` and `fed_by` fields plus
+session context. When the record does not capture why, say so rather than
+reconstructing a rationale.
 
 ## Retrospective
 
-Run only when the user requests one or a concrete repeated failure makes a
-bounded audit useful. Substantial work, fan-out, elapsed time, and multiple
-repositories do not automatically require a retrospective, plan artifact, or
-learning file. The default hook set has no retrospective reminder.
+Run one when the user asks, or when a concrete repeated failure makes it
+useful. Pick a few questions from observed decisions and outcomes: why a model
+and effort were chosen, whether a child lacked context, whether review or
+verification repeated unchanged work, which retries or repairs were needed.
+Compare complete accepted assignments, including children, retries, and
+repairs; per-call price does not establish cost per completed task.
 
-Choose a few questions from observed decisions and outcomes: why a model and
-reasoning effort were selected, whether a child needed more context, whether a
-review or verification repeated unchanged work, and which retries or repairs
-were necessary. Compare complete accepted assignments including subagents,
-retries, and repairs. Per-call prices and quota per hour do not establish cost
-per correctly completed task. Sol at medium effort is the ordinary Codex
-baseline; neither that default nor a higher effort proves a universal
-efficiency optimum.
-
-Use recorded reasons and actual runtime outcomes. PreToolUse log entries prove
-that the gate allowed an attempt, not that the child started or completed. A
-missing outcome, token meter, or rationale stays unknown. Do not demand a
-kickoff artifact retroactively or infer a failed run from its absence.
-
-Report actionable findings in the answer. Create a durable learning or upstream
-suggestion only when requested or when it is needed to complete the authorized
-repair. Repository learning uses `compound-engineering:ce-compound` when
-selected; the optional local formats live in the reference. Never create an
-artifact merely to satisfy a closing ritual, and do not post messages or issues
-without user authorization.
+Report findings in the answer. Write a durable learning or upstream suggestion
+only when requested or needed for an authorized repair; repository learnings
+go through `compound-engineering:ce-compound`, and the local formats are in
+the reference. Posting messages or issues needs user authorization.

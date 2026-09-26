@@ -1,7 +1,7 @@
 # Native work, selected workflows, and fleet orchestration
 
 Routine work uses the harness's native tools and bounded subagents. Railyard
-adds deliberate model and reasoning-effort allocation and selects a useful
+adds deliberate model and reasoning-effort choice and selects a useful
 Compound Engineering workflow when the request benefits from one. A configured
 fleet catalog does not turn an ordinary local edit into fleet work.
 
@@ -52,32 +52,20 @@ flowchart TD
 
 ## Choose model and effort together
 
-For each assignment, deliberately choose both the model and reasoning effort.
-GPT-6 Sol at `medium` is the baseline candidate for ordinary Codex
-engineering. Raise effort to `high` for demanding work; use Astra when a
-specific task needs its added depth. Use GPT-6 Luna for bounded, repeatable
-work when the active dispatch surface supports it. Deterministic tools handle
-mechanical operations directly. Compare accepted assignments, including
-retries and repairs, before treating a lower token price as a lower task cost.
-
-Explicit inheritance is valid when the parent's model and effort suit the
-assignment. For a native full-history child, use the supported inheritance
-path and state the reason. When changing model or effort, use a supported
-limited-history or no-history fork with enough context to execute the task.
-Fixed specialist roles use their authoritative settings without forbidden
-overrides. Never silently substitute an unavailable selection.
-
-The narrow dispatch gate checks the supported allocation controls. A policy
-decision, offline test, or catalog entry does not prove a live adapter is
-available. Actual model, effort, and transport evidence remain separate from
-the request; unknown observations stay unknown.
+Choose model and reasoning effort deliberately for each assignment, as
+described in [`model-routing`](../plugins/railyard/skills/model-routing/SKILL.md).
+In Claude Code, Opus 5.5 is the default for substantive subagents and Fable
+5.1 the escalation. Deterministic tools handle mechanical operations directly.
+Dispatch prompts need no allocation marker; an omitted model inherits the
+parent's. Requested and observed model, effort, and transport are separate
+facts; unknown observations stay unknown.
 
 ## Keep one workflow owner
 
 When CE is selected, it owns its planning or implementation workflow and its
 review, feedback-resolution, CI, and watch loop. Railyard carries the user's
-requested endpoint and verifies the returned evidence. It does not add another
-watcher, force a cross-model review, or insert a parallel Claude runner.
+requested endpoint and verifies the returned evidence. It adds no second
+watcher or review gate.
 
 Thermos, Oracle, deeper review, browser checks, and debugging skills remain
 available when their perspective is useful. Required repository checks stay
@@ -86,7 +74,7 @@ when a relevant change, failure, or unresolved concern justifies it.
 
 Use `gh-stack` for related dependent PRs when useful; keep independent PRs
 independent. Resolve missing tooling at the stage that needs it through its
-supported manager. Startup does not bootstrap CE, Ponytail, or Superpowers.
+supported manager.
 
 ## Native children and visible tasks
 
@@ -122,36 +110,18 @@ becomes a prerequisite; it does not authorize silent installation or unrelated
 machine changes. Cross-project work names an integration owner for each project
 and keeps branch and working-tree ownership explicit.
 
-Provider-safe handoffs preserve privacy and transport boundaries. A matching
-model-provider label does not prove that two collaboration surfaces can decrypt
-the same payload. Use only an attested adapter, and retain the required handoff
-acknowledgement before starting mutable work. A visible provider task still
-requires the user's explicit task-creation request.
+Provider-safe handoffs preserve privacy and transport boundaries, as described
+in [provider task routing](../plugins/railyard/references/provider-task-routing.md).
+A matching model-provider label does not prove that two collaboration surfaces
+can decrypt the same payload, and a verified handoff acknowledgement comes
+before mutable work. A visible provider task still requires the user's
+explicit task-creation request.
 
-## Optional policy, accounting, and audit
-
-`railyard/model-routing/v1` remains the single configured policy for model,
-effort, account, privacy, budget, and transport controls. The normal native path
-does not require a stateful admission ledger, carrier receipt, delivery
-contract, or retrospective artifact.
-
-For configured accounting, the existing `resolve`, `admit`, `claim-dispatch`,
-and `reconcile` operations retain their constraints. A one-way claim does not
-authorize a retry spawn; reconciliation needs the adapter's identity-bound
-receipt. Unknown costs are not zero, unlike meters remain separate, and
-`strict` limits require an adapter that can enforce the exact meter. Catalog
-data cannot create a callable adapter or a trust-domain bridge.
-
-Keep user configuration outside repositories and plugin caches. An explicit
-`RAILYARD_MODEL_POLICY_PATH` selects that catalog exactly; missing or invalid
-selected policy does not silently fall back. The configured fleet, Claude, and Oracle lanes require current host evidence.
-GLM is unavailable as a strict route until a verified current selector and
-supported effort can be bound to a callable adapter.
+## Audit
 
 Use `audit` or a retrospective when requested or when a concrete lesson makes
 it worthwhile. Compare complete assignments, including children, retries,
-repairs, verification, time, and available usage data. Do not claim an Astra
-cost advantage without comparable successful outcomes. Optional local learning
+repairs, verification, time, and available usage data. Repository learnings
 cannot change privacy, expand authority, or rewrite the user's policy.
 
 ## Source skills

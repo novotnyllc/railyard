@@ -75,7 +75,7 @@ If you selected the fleet path, also confirm `roundhouse@novotnyllc` is listed. 
 
 ## Compatibility and cost
 
-Railyard supports macOS, Linux, Windows, and WSL. The minimum documented versions are Claude Code 2.1.220+ and Codex CLI 0.147.0+ with plugin marketplace support. Node 22.12+ is required for the site tooling, and Git must be available on `PATH` for repository delivery. Selected CE workflow stages use Compound Engineering 3.20.0+.
+Railyard supports macOS, Linux, Windows, and WSL. The minimum documented versions are Claude Code 2.1.280+ (for the Opus 5.5 default; older versions resolve `opus` to an earlier Opus) and Codex CLI 0.147.0+ with plugin marketplace support. Node 22.12+ is required for the site tooling, and Git must be available on `PATH` for repository delivery. Selected CE workflow stages use Compound Engineering 3.20.0+.
 
 Railyard itself is free and open source (MIT); you pay only your own Claude/Codex usage, billed exactly as any other session in that harness.
 

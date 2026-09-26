@@ -49,10 +49,10 @@ are not a measured accuracy guarantee.
 ## Ownership
 
 [Deliver](/skills/deliver/) retains the requested endpoint.
-[Model routing](/skills/model-routing/) retains compatibility, budget, privacy,
+[Model routing](/skills/model-routing/) retains compatibility, privacy,
 and dispatch checks. CE retains review settlement and CI monitoring. Jev
 cannot approve actions, dismiss findings, attest capabilities, or satisfy a
-merge guard. It is not an execution model in the routing catalog.
+merge guard. It isn't an execution model.
 
 ## Source
 

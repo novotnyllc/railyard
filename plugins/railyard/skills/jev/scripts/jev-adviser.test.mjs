@@ -74,7 +74,7 @@ function assertEnvelope(result, status, reason) {
 
 test("every CE stage in Deliver's workflow table is accepted by Jev", async () => {
   const source = readFileSync(new URL("../../deliver/SKILL.md", import.meta.url), "utf8");
-  const table = source.split("| Work to do |")[1]?.split("\n\n")[0];
+  const table = source.split("\n\n").find((block) => block.trimStart().startsWith("| Work") && block.includes("compound-engineering:"));
   assert.ok(table, "Deliver workflow table must be present");
   const workflows = [...new Set([...table.matchAll(/`(compound-engineering:[a-z-]+)`/g)].map((match) => match[1]))];
   assert.ok(workflows.length > 0, "Deliver must expose selectable CE stages");

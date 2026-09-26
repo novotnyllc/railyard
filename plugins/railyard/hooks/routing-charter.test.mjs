@@ -72,38 +72,48 @@ async function runOpenInput(home, send) {
   }
 }
 
-test("startup keeps native work, selected CE, and explicit orchestration distinct", (t) => {
+const words = (text) => text.split(/\s+/).filter(Boolean).length;
+const flat = (text) => text.replace(/\s+/g, " ");
+
+test("startup guide stays short and plain", (t) => {
   const { out } = run(fixture(t));
-  assert.match(out, /native tools for ordinary local work/);
-  assert.match(out, /Automatically select the CE/);
-  assert.match(out, /Routine fixes can stay direct/);
-  assert.match(out, /ce-commit-push-pr when\n  creating a PR or pushing user-requested commits/);
-  assert.match(out, /explicitly requested fleet\/account allocation/);
-  assert.match(out, /configured inventory alone does not activate it/);
-  assert.match(out, /native subagents for ordinary delegation/);
-  assert.match(out, /visible user-owned\n  tasks only on explicit user direction/);
-  assert.match(out, /Prefer child completion notifications; do independent work, then yield\s+only with a verified resume path or use a blocking event wait/);
-  assert.match(out, /Pass this\s+rule to children; avoid repeated status checks and duplicate work/);
-  assert.ok(Buffer.byteLength(out) < 2250, "SessionStart must stay a small route guide");
+  assert.match(out, /^Railyard routing:/);
+  assert.ok(words(out) <= 140, `SessionStart guide is ${words(out)} words`);
+  assert.doesNotMatch(out, /\b[A-Z]{4,}\b/, "no all-caps emphasis");
+  assert.doesNotMatch(out, /do not claim|Allocation:/i);
 });
 
-test("startup preserves requested delivery scope and a single CE settlement owner", (t) => {
-  const { out } = run(fixture(t));
-  assert.match(out, /preserve plan\/local-only stops/);
-  assert.match(out, /authorized delivery through merge, required release or deployment,\s+and consumer verification/);
-  assert.match(out, /CE alone\n  owns review settlement and CI\/PR monitoring/);
-  assert.match(out, /reuse its active watcher/);
-  assert.match(out, /user-invoked Deliver change includes commit, PR, merge, required release\s+or deployment, and consumer verification unless explicitly narrowed/);
-  assert.doesNotMatch(out, /independent Sol|Thermos gate|MUST dispatch|lfg_complete|carrier_started/);
+test("startup names the default models for both harnesses", (t) => {
+  const out = flat(run(fixture(t)).out);
+  assert.match(out, /Opus 5\.5/);
+  assert.match(out, /`opus`/);
+  assert.match(out, /Fable 5\.1/);
+  assert.match(out, /GPT-6 Sol at medium/);
+  assert.match(out, /Luna/);
+  assert.match(out, /Astra/);
 });
 
-test("configured Jev advice is advertised without exposing credentials or sending startup content", (t) => {
+test("startup keeps CE ownership, the deliver endpoint, and explicit-only orchestration", (t) => {
+  const out = flat(run(fixture(t)).out);
+  assert.match(out, /native tools and subagents/);
+  assert.match(out, /CE owns review settlement and CI watching/);
+  assert.match(out, /compound-engineering:ce-commit-push-pr/);
+  assert.match(out, /through merge, required release or deployment, and consumer verification unless narrowed/);
+  assert.match(out, /plan-only, local-only, and PR-only stops/);
+  assert.match(out, /CE snapshot handoff/);
+  assert.match(out, /railyard:orchestrate only for requested/);
+  assert.match(out, /user-owned tasks only when asked/);
+  assert.match(out, /completion events rather than polling/);
+});
+
+test("configured Jev adds one line without exposing credentials or startup content", (t) => {
   const home = fixture(t);
+  const base = run(home).out;
   const input = { hook_event_name: "SessionStart", prompt: "private-task-canary" };
   const { out } = run(home, { TYPESAFE_API_KEY: "test-only-secret-canary" }, input);
-  assert.match(out, /Use railyard:jev by default/);
-  assert.match(out, /offline\/privacy restrictions/);
-  assert.ok(Buffer.byteLength(out) < 2500, "configured SessionStart must remain bounded");
+  assert.equal(out.split("\n").length, base.split("\n").length + 1);
+  assert.match(out, /railyard:jev/);
+  assert.ok(words(out) <= 160);
   const recorded = JSON.stringify(entries(home));
   for (const secret of ["test-only-secret-canary", "private-task-canary"]) {
     assert.ok(!out.includes(secret));
@@ -112,26 +122,6 @@ test("configured Jev advice is advertised without exposing credentials or sendin
   for (const key of ["", "   "]) {
     assert.doesNotMatch(run(home, { TYPESAFE_API_KEY: key }).out, /railyard:jev/);
   }
-});
-
-test("startup requires deliberate allocation and explains native fork constraints", (t) => {
-  const { out } = run(fixture(t));
-  assert.match(out, /Choose model AND reasoning effort/);
-  assert.match(out, /GPT-6 Sol at medium effort is the ordinary Codex/);
-  assert.match(out, /baseline; raise effort or select Astra for a specific need/);
-  assert.match(out, /For Claude Code, consider Fable 5\.1 with a deliberately chosen effort/);
-  assert.match(out, /Deliberate inheritance is valid/);
-  assert.match(out, /omit model\/effort\n  overrides on full-history native forks/);
-  assert.match(out, /Respect fixed-role tool controls/);
-  assert.match(out, /deterministic tools directly for mechanical work/);
-  assert.doesNotMatch(out, /cheap-model child|worker tier by default|Every subagent.*explicit model/);
-});
-
-test("startup does not turn routine work into artifact or cleanup obligations", (t) => {
-  const { out } = run(fixture(t));
-  assert.match(out, /Contracts,\n  route receipts, retrospectives, and runtime cleanup are on-demand tools/);
-  assert.match(out, /not prerequisites for ordinary work/);
-  assert.doesNotMatch(out, /mandatory closing|run.*retrospective|ACTION REQUIRED|ponytail/i);
 });
 
 test("missing plugins in both empty harness roots do not bootstrap dependencies", (t) => {

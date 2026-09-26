@@ -36,7 +36,7 @@ The [Roundhouse configuration](/roundhouse/configuration/) supplies the host and
 
 When the user requests a new visible task, `list_projects` supplies the opaque project ID together with its current host and path evidence; `create_thread` consumes that same response's ID with `environment: { type: "local" }`. One fresh rematch handles a project ID that changed between listing and creation. Follow-ups, waits, payload chunks, and any authorized cleanup remain bound to the returned task. Internal bounded subtasks use native children by default.
 
-The explicitly configured route can supply a one-use task authority and bind model, effort, transport, privacy, and budget. That authority does not replace the user's task-creation request. The task returns identity and execution receipts while the source-owned controls stay fixed. Missing task capability is reported without silently creating another task or changing the selected host, account, or provider.
+The task carries the selected model and effort. Missing task capability is reported without silently creating another task or changing the selected host, account, or provider.
 
 ## Native proof
 
@@ -47,7 +47,7 @@ Illustrative result for an explicitly requested task:
 ```text
 host=host-w platform=windows transport=codex-remote-control
 project=web-app match=exact-native-path
-task=task-opaque-01 route=claimed
+task=task-opaque-01 model=gpt-6-sol effort=medium
 native_canary=passed executor_sha=sha256:12af...
 postcondition=passed archive=separate-user-directed-action
 ```

@@ -22,7 +22,7 @@ This request names the outcome. Routine implementation runs natively; `railyard:
 ## What happens
 
 1. Use native tools for routine work and automatically select CE stages when they help. Resolve CE only when a selected stage needs it.
-2. For delegated work, choose model and reasoning effort together. GPT-6 Sol at `medium` is the ordinary engineering candidate; use Astra for a task that needs stronger judgment. Deliberate inheritance is supported. Use native children unless the user explicitly requests a visible task.
+2. For delegated work, choose model and reasoning effort together: Opus 5.5 at `medium` in Claude Code, GPT-6 Sol at `medium` in Codex, escalating to Fable 5.1 or Astra for harder work. Omitting the model means the child inherits. Use native children unless the user explicitly requests a visible task.
 3. Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR.
 4. CE owns the review settlement and CI loop. Optional specialist reviews, including [Thermos](/skills/thermos/), feed findings to that owner before the authorized merge.
 5. Check the merged commit for reachability from the base branch, complete required release or deployment steps, and verify the actual consumer. For plugins, this includes required marketplace publication, a supported manager update, and installed-runtime verification.
@@ -30,7 +30,7 @@ This request names the outcome. Routine implementation runs natively; `railyard:
 Illustrative evidence fields for a native Codex run; fill them from actual observations:
 
 ```text
-allocation=codex-6-sol model=gpt-6-sol effort=medium
+model=gpt-6-sol effort=medium
 observed_allocation=<runtime evidence or unverified>
 review_and_ci=<CE disposition>
 merge=<observed merge commit> ancestry=<check result>
@@ -60,10 +60,6 @@ The first delivery is a complete one-machine path. Request fleet placement expli
 
 ## Terms used here
 
-- [Carrier](/delivery/model-routing/) — the harness or worker surface that executes a routed unit.
-- [Transport](/delivery/model-routing/) — the explicit path used to reach the selected execution surface.
-- [Adapter](/delivery/model-routing/) — the bridge that turns the route decision into a harness invocation.
-- [Work class](/delivery/model-routing/) — the role that determines the route and evidence required.
-- [Budget](/what-it-does/control-model-cost/) — the spend constraint recorded with the dispatch.
+- [Model routing](/delivery/model-routing/) — choosing the model and reasoning effort for delegated work.
 - [Thermos](/skills/thermos/) — an optional paired review that contributes findings to the CE owner.
 - [React Doctor](/delivery/gates/) — the project-appropriate browser-visible quality check for React surfaces.

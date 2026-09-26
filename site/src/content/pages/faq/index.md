@@ -14,7 +14,7 @@ Start with the outcome you need to prove. Railyard carries routing, review, merg
 
 ## Claude Code vs Codex: which harnesses are supported?
 
-Keep one owning delivery even when execution surfaces change. Claude Code and Codex are both supported; same-harness execution is the default. Cross-harness dispatch is opt-in, requires the destination Codex CLI to be set up separately, and records model, effort, carrier, and transport. The [cross-harness practice](/what-it-does/work-across-harnesses/) shows that receipt.
+Keep one owning delivery even when execution surfaces change. Claude Code and Codex are both supported; same-harness execution is the default. Cross-harness dispatch is opt-in, requires the destination Codex CLI to be set up separately, and records the harness, model, and effort. The [cross-harness practice](/what-it-does/work-across-harnesses/) shows that receipt.
 
 ## Does this work on Windows and WSL?
 
@@ -26,7 +26,7 @@ Match the receipt to the available delivery surface. A GitHub remote enables a p
 
 ## What does it cost?
 
-Railyard itself is free and open source (MIT); you pay only your own Claude/Codex usage, billed exactly as any other session in that harness. The [model routing guide](/what-it-does/control-model-cost/) explains how the route records the budget decision.
+Railyard itself is free and open source (MIT); you pay only your own Claude/Codex usage, billed exactly as any other session in that harness. The [control model cost guide](/what-it-does/control-model-cost/) explains how to choose models and efforts with cost in mind.
 
 ## What else gets installed?
 

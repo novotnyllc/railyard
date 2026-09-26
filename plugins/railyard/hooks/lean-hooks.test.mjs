@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const hookDirectory = path.dirname(fileURLToPath(import.meta.url));
 const pluginDirectory = path.resolve(hookDirectory, "..");
 const repositoryDirectory = path.resolve(pluginDirectory, "../..");
-const retiredHooks = ["routing-nudge", "railyard-retro"];
+const retiredHooks = ["routing-nudge", "railyard-retro", "route-state", "route-lifecycle"];
 
 test("retired prompt and retrospective hook scripts are not shipped", () => {
   for (const name of retiredHooks) {
