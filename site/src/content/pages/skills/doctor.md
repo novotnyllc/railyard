@@ -11,7 +11,7 @@ Diagnose the delivery system as an ownership map: observe each surface, attach e
 
 ## What it adds
 
-Doctor reports a read-only health table for the requested surface: installed plugins, relevant tools, model policy, or a concrete runtime problem. Fleet readiness, account checks, and store health are inspected when that scope is requested. An absent optional catalog or unselected specialist is not a routine delivery failure.
+Doctor reports a read-only health table for the requested surface: installed plugins, relevant tools, model policy, or a concrete runtime problem. Fleet readiness, account checks, and store health are inspected when that scope is requested. An unselected specialist is not a routine delivery failure.
 
 ## How it works
 
@@ -19,7 +19,7 @@ Each row names the observed condition, evidence source, and owning fix surface. 
 
 ```text
 > Run the read-only doctor pass and group each finding by its owning fix surface.
-row=routing-policy       state=ready     owner=model-routing
+row=model-guidance       state=ready     owner=model-routing
 row=plugin-bytes         state=ready     owner=fleet-agents
 row=github-auth          state=present   owner=delivery-tail
 row=fleet-readiness      state=unknown   owner=fleet-readiness

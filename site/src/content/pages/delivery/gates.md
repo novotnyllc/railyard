@@ -22,7 +22,7 @@ Thermos runs two lenses against the same bounded packet:
 - `thermo-nuclear-review`: correctness, security, breakage, developer experience, and feature-leak risk.
 - `thermo-nuclear-code-quality-review`: structure, duplication, maintainability, and complexity.
 
-Choose the pair or a single lens when it adds a useful perspective. Findings return to the implementation owner and the existing CE review loop. Oracle is another optional advisor when its current transport and authentication evidence support the selected route. None of these is a blanket pre-commit requirement.
+Choose the pair or a single lens when it adds a useful perspective. Findings return to the implementation owner and the existing CE review loop. [Oracle](/skills/oracle/) is another optional advisor for a second-model opinion. None of these is a blanket pre-commit requirement.
 
 The following is an example with Thermos explicitly selected. Its final review step checks existing evidence; it does not automatically dispatch another reviewer.
 
@@ -43,17 +43,15 @@ The following is an example with Thermos explicitly selected. Its final review s
 
 Use the project's existing browser and accessibility checks for the changed surface. React Doctor remains available when its analysis is useful for React work. Resolve its current invocation when selecting it; installing or running an additional scanner is not a universal docs, backend, or UI prerequisite.
 
-## Dispatch enforcement
+## Dispatch check
 
-The narrow dispatch gate checks deliberate model and reasoning-effort allocation against supported native controls. Explicit suitable inheritance is allowed. A full-history native fork cannot carry model or effort overrides; use a supported limited-history or no-history fork when changing either. Fixed specialist roles use their authoritative settings.
-
-Unsupported or unavailable selections are disclosed. An offline resolver or gate test is not evidence that the live harness emits the expected hook event or can run a selected adapter.
+A narrow dispatch hook checks native subagent model and effort arguments against the controls the harness supports. Omitting the model means the child inherits. A full-history Codex fork cannot carry model or effort overrides; use a limited-history or no-history fork to change either. Unsupported selections are disclosed; a passing hook test doesn't show that the live harness ran the selection.
 
 <span id="merge-settlement"></span>
 
 ## CE merge guard
 
-The merge guard consumes the completed CE owner's final snapshot, checks that it matches CE's latest state, and verifies the current PR head and base before a recognized `gh` merge. Missing or stale evidence refuses the merge with a recovery message. CE remains the sole review and CI owner; the guard has no reviewer wait timers or separate watcher.
+The merge guard consumes the completed CE owner's final snapshot, checks that it matches CE's latest state, and verifies the current PR head and base before a recognized `gh` merge. Only one hook process runs for each shell call, so the check stays cheap. Missing or stale evidence refuses the merge with a recovery message. CE remains the sole review and CI owner; the guard has no reviewer wait timers or separate watcher.
 
 Deliver supplies the [CE snapshot handoff](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/skills/deliver/references/ce-merge-guard.md). It requires recent evidence and an explicit head match, and covers the documented shell route rather than arbitrary API clients. The [implementation](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.js) and [tests](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.test.mjs) define its checks. Broad prompt nudges and automatic retrospective hooks are retired; cleanup remains manual.
 

@@ -13,9 +13,12 @@ remain explicit choices.
 - 🚦 **Plain-language work.** Native execution for routine changes, selected
   CE workflows for planning, debugging, review, and PR delivery when useful.
 - 🧠 **Deliberate allocation.** Choose model and reasoning effort together.
-  GPT-6 Sol at medium effort is the baseline candidate for ordinary Codex work;
-  Claude Code supports deliberate Fable 5.1 allocation. Suitable inheritance
-  is an explicit choice, and unsupported selections are disclosed.
+  In Claude Code, Opus 5.5 at medium effort handles substantive subagent work,
+  with Fable 5.1 for frontier-hard or long autonomous work, Sonnet 5 for
+  bounded edits, and Haiku 4.5 for read-only search. In Codex, GPT-6 Sol at
+  medium is the baseline, with Luna for bounded work and Astra for hard work.
+  An omitted model inherits the parent's, and unsupported selections are
+  disclosed.
 - 🔍 **One completion owner.** CE owns review settlement and CI watching for
   a selected PR workflow. An explicit Deliver implementation/fix request runs
   through merge, required release or deployment, and consumer verification;
@@ -45,11 +48,11 @@ train, clears the departure, and confirms arrival:
 | Track | Skills |
 | --- | --- |
 | Setup & health | `setup` — inspect and configure relevant prerequisites; `doctor` — diagnose and fix drift |
-| Allocation | `model-routing` — model and effort decisions, with optional configured budgets and transport controls (`railyard/model-routing/v1`) |
+| Allocation | `model-routing` — native model and reasoning-effort guidance for Claude Code and Codex |
 | Semantic decisions | `jev` — model/effort selection, workflow choice, evidence selection, work priority, and review triage; enabled by default when `TYPESAFE_API_KEY` is present |
 | Delivery | `deliver` — select native execution or one useful CE workflow and complete the authorized scope |
 | Orchestration & placement | `orchestrate` — explicit fleet/account work, cross-project coordination, and supported remote placement |
-| Specialist review | `thermos`, `thermo-nuclear-review`, `thermo-nuclear-code-quality-review`, `oracle` — when their perspective is useful |
+| Specialist review | `thermos`, `thermo-nuclear-review`, `thermo-nuclear-code-quality-review` — when their perspective is useful; `oracle` — a manual GPT-6 Pro second opinion through the ChatGPT browser |
 | Optional audit | `audit` — explain a run's decisions, outcomes, and resource use when requested or useful |
 | Runtime repair | `cleanup-codex` — inspect or repair a concrete process problem |
 
@@ -86,7 +89,7 @@ is needed. Use `--offline` to disable the helper; missing credentials, service
 errors, and uncertain judgments fall back to ordinary Railyard reasoning.
 
 Jev receives only the context and candidates explicitly supplied to its helper.
-It leaves permissions, routing policy, execution, and CE review settlement with
+It leaves permissions, model choice, execution, and CE review settlement with
 their existing owners. See the [Jev skill](plugins/railyard/skills/jev/SKILL.md)
 for examples and the request contract.
 

@@ -6,7 +6,6 @@ const read = (relative) => readFile(new URL(relative, root), 'utf8');
 const diagrams = [
   ['m2-delivery-lifecycle', 'delivery/lifecycle.md', ['Ask', 'Route', 'Build', 'Review', 'Quality', 'Publish', 'Settle', 'Merge', 'Prove', 'Learn']],
   ['m6-review-gates', 'delivery/gates.md', ['Ready', 'Gates', 'Thermos', 'Return', 'Settle', 'Review', 'Merge', 'Prove']],
-  ['m5-model-routing', 'delivery/model-routing/index.md', ['Request', 'Resolve', 'Select', 'Route', 'Admit', 'Claim', 'Carrier', 'Reconcile', 'Receipt']],
   ['m1-convergence', 'roundhouse/convergence.md', ['Poll', 'Fetch', 'Resume', 'Promote', 'Fold', 'Review', 'Verdict', 'Apply', 'Journal', 'Publish']],
   ['m7-skill-sync', 'sync/index.md', ['Publish', 'Store', 'Fast pass', 'Fold', 'Lookup', 'Manager', 'Hooks', 'Journal', 'Arrive']],
   ['m8-canary-evidence', 'roundhouse/security/canary-evidence.md', ['Apply', 'Wait', 'Liveness', 'Gate', 'Outcome']],

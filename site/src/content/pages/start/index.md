@@ -28,7 +28,7 @@ Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or pushing u
 
 Use native child agents for useful parallel work. Create visible Codex tasks only when the user explicitly requests them. Fleet or account orchestration also requires explicit scope.
 
-Choose both model and reasoning effort deliberately. GPT-6 Sol at `medium` is the ordinary engineering candidate; use Astra when the assignment needs stronger judgment. Supported inheritance can preserve a suitable parent allocation. Disclose an unavailable allocation instead of silently substituting one. The [model routing guide](/what-it-does/control-model-cost/) explains the choice.
+Choose both model and reasoning effort deliberately. In Claude Code, Opus 5.5 at `medium` is the default for substantive subagent work; in Codex, GPT-6 Sol at `medium` is the baseline. Omitting the model means the child inherits. Disclose an unavailable selection instead of silently substituting one. The [model routing guide](/delivery/model-routing/) explains the choice.
 
 ## Choose the path
 

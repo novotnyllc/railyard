@@ -7,7 +7,7 @@ nav_order: 4
 
 # Thermos
 
-Thermos is an optional review skill for a change that benefits from two practitioner lenses. It reviews a frozen diff and synthesizes one actionable findings packet for the existing review owner.
+Thermos is an optional review skill for a change that benefits from two practitioner lenses. It reviews a diff and synthesizes one actionable findings packet for the existing review owner.
 
 ## What it adds
 
@@ -15,13 +15,13 @@ Thermos runs this paired review. Its correctness lens covers breakage, security,
 
 ## How it works
 
-Both lenses receive the same frozen diff, source context, and requirement. They run in parallel when the carrier supports it; synthesis deduplicates findings for the existing workflow owner. When used in Compound Engineering (CE) delivery, the implementation lane fixes accepted findings through its existing review loop.
+Both lenses receive the same diff, source context, and requirement. They run in parallel as native subagents when the harness supports it, each with a deliberately chosen model and effort; synthesis deduplicates findings for the existing workflow owner. When used in Compound Engineering (CE) delivery, the implementation lane fixes accepted findings through its existing review loop.
 
 Illustrative review outline:
 
 ```text
-> Run the two Thermos lenses on this frozen diff and return one deduplicated findings packet.
-packet=<frozen diff and source context>
+> Run the two Thermos lenses on this diff and return one deduplicated findings packet.
+packet=<diff and source context>
 lenses=correctness,code-quality
 output=deduplicated findings with evidence
 owner=existing-workflow

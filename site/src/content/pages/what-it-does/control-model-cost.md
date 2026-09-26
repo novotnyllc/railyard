@@ -7,29 +7,25 @@ nav_order: 10
 
 # Control model cost
 
-Compare model and effort choices by accepted task outcomes and total cost and time, including children, retries, and repairs. GPT-6 Sol at `medium` is the ordinary engineering candidate; a lower per-call price alone does not establish better efficiency.
+Compare model and effort choices by accepted task outcomes and by total cost and time, including children, retries, and repairs. A lower per-call price doesn't, on its own, mean better efficiency.
 
 ## Easy path
 
 ```text
-> Choose a model and reasoning effort for this task, explain the tradeoff, and respect my budget.
+> Choose a model and reasoning effort for this task and explain the tradeoff.
 ```
 
-`railyard:model-routing` supports deliberate native allocation and configured budget controls when needed. Use deterministic tools directly for mechanical work.
+`railyard:model-routing` gives the defaults for each harness. In Claude Code, Opus 5.5 at `medium` handles substantive subagent work, Sonnet 5 takes bounded edits, and Haiku 4.5 takes read-only search. In Codex, GPT-6 Sol at `medium` is the baseline and Luna takes bounded work. Use deterministic tools directly for mechanical work.
 
-Railyard itself is free and open source (MIT); you pay only your own Claude/Codex usage, billed exactly as any other session in that harness.
+Railyard itself is free and open source (MIT). You pay only for your own Claude or Codex usage, billed like any other session in that harness.
 
 ## Illustrative comparison
 
-For a migration with mechanical edits and a difficult semantic seam, use deterministic edits where suitable and choose a model/effort pair for the reasoning work. Start with Sol at `medium` for ordinary reasoning; use Astra at `high` when the seam needs stronger judgment. Evaluate the whole accepted result before claiming savings; this example reports no benchmark result. [Read the worked examples](/delivery/model-routing/worked-runs/).
+A migration with mechanical edits and one difficult semantic seam: make the mechanical edits with deterministic tools, and give the seam to the default model at a deliberate effort. Escalate (Fable 5.1 in Claude Code, Astra in Codex) only when the seam needs it. Evaluate the whole accepted result before claiming savings; this example reports no benchmark result.
 
 ## What happens
 
-Choose both model and effort, or deliberately inherit both through a supported native mode. Configured routes can additionally apply privacy, transport, admission, and budget policy. Forecasts are planning evidence; observed usage and accepted results establish actual efficiency. Disclose an unavailable selection rather than silently substituting a cheaper route.
-
-## Proof point
-
-The [model-routing section](/delivery/model-routing/) explains allocation and the optional strict route lifecycle. Use existing run evidence to compare accepted work, total usage, elapsed time, and retries; no routine benchmark or retrospective artifact is required.
+Choose both model and effort, or let the child inherit. If a selection isn't available, say so; don't switch to a cheaper model without telling anyone. Observed usage and accepted results are what establish efficiency.
 
 ## Next
 

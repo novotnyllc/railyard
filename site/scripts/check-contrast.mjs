@@ -537,7 +537,7 @@ for (const schemeName of ['light', 'dark']) {
 }
 
 const diagramIds = [
-  'm2-delivery-lifecycle', 'm6-review-gates', 'm5-model-routing', 'm1-convergence',
+  'm2-delivery-lifecycle', 'm6-review-gates', 'm1-convergence',
   'm7-skill-sync', 'm8-canary-evidence', 'm3-trust-ratchet', 'm10-anti-rollback',
   'm9-enrollment', 'm4-trust-boundaries',
 ];
