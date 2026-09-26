@@ -373,9 +373,19 @@ export function recycleServer(options, deps) {
         || restarted.backend !== "pid"
         || !Number.isInteger(restarted.pid)
         || restarted.pid <= 0
-        || restarted.pid === snapshot.owner.pid
         || canonicalPathOrRefuse(restarted.socketPath, deps.canonicalPath, "managed-restart-invalid") !== socket
       ) refuse("managed-restart-invalid");
+      // A reused PID is a valid replacement only with a different birth.
+      if (restarted.pid === snapshot.owner.pid) {
+        let startTime = restarted.processStartTime ?? null;
+        if (!startTime) {
+          const observed = deps.readIdentity(restarted.pid);
+          startTime = observed?.state === "present" && validObservedIdentity(observed.identity)
+            ? observed.identity.startTime
+            : null;
+        }
+        if (!startTime || startTime === snapshot.owner.startTime) refuse("managed-restart-invalid");
+      }
       if (typeof restarted.managedCodexPath === "string") {
         // A native restart may activate a newer managed release.
         const managedPath = canonicalPathOrRefuse(

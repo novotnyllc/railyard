@@ -585,13 +585,10 @@ export function recycleDesktop(options, deps) {
     try {
       quit = deps.quitApp(receipt.host.bundleId);
     } catch {}
-    const hostAfterRequest = deps.readIdentity(receipt.host.pid);
-    if (!quit?.ok && !goneOrReused(receipt.host, hostAfterRequest)) {
-      refuse("desktop-quit-request-failed");
-    }
+    // Even a failed request may have delivered the quit event, so always wait.
     const quitTimeoutMs = deps.quitTimeoutMs ?? DEFAULT_DESKTOP_QUIT_TIMEOUT_MS;
     const hostGone = waitUntil(deps, quitTimeoutMs, () => goneOrReused(receipt.host, deps.readIdentity(receipt.host.pid)));
-    if (!hostGone) refuse("desktop-host-quit-timeout");
+    if (!hostGone) refuse(quit?.ok ? "desktop-host-quit-timeout" : "desktop-quit-request-failed");
     const serverGone = waitUntil(deps, quitTimeoutMs, () => goneOrReused(receipt.server, deps.readIdentity(receipt.server.pid)));
     if (!serverGone) refuse("desktop-server-survived-host");
 

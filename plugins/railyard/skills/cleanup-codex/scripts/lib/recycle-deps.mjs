@@ -262,15 +262,17 @@ export function restartManagedDaemon({ runner, executable, expectedIdentity, rea
     "managed-restart-failed",
     { timeout: DAEMON_RESTART_TIMEOUT_MS },
   );
+  // The PID record carries the replacement's birth, which tells a reused PID
+  // apart from the old server.
+  const after = readPidRecord();
+  const afterValid = after?.state === "valid";
   let pid = parsed.pid;
-  if (pid === undefined || pid === null) {
-    const after = readPidRecord();
-    pid = after?.state === "valid" ? after.pid : null;
-  }
+  if (pid === undefined || pid === null) pid = afterValid ? after.pid : null;
   return {
     status: parsed.status,
     backend: parsed.backend,
     pid,
+    processStartTime: afterValid && after.pid === pid ? after.processStartTime : null,
     managedCodexPath: parsed.managedCodexPath,
     socketPath: parsed.socketPath,
   };

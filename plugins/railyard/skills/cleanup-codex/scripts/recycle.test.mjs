@@ -1027,6 +1027,37 @@ test("unmanaged recycle without an attestor requires the same executable as the 
   assert.ok(outcome.result.verification.missingEvidence.includes("replacement-identity-invalid"));
 });
 
+test("managed restart distinguishes a reused PID by its birth", () => {
+  const sameBirth = recycleHarness();
+  const restart = sameBirth.deps.restartManagedExact;
+  sameBirth.deps.restartManagedExact = (context) => ({
+    ...restart(context),
+    pid: 500,
+    processStartTime: context.expectedIdentity.startTime,
+  });
+  const rejected = recycleServer(confirmedRecycleOptions(), sameBirth.deps);
+  assert.ok(rejected.result.verification.missingEvidence.includes("managed-restart-invalid"));
+
+  const newBirth = recycleHarness();
+  const restartNew = newBirth.deps.restartManagedExact;
+  newBirth.deps.restartManagedExact = (context) => ({
+    ...restartNew(context),
+    pid: 500,
+    processStartTime: "2026-08-02T16:01:00.000Z",
+  });
+  const accepted = recycleServer(confirmedRecycleOptions(), newBirth.deps);
+  assert.ok(!accepted.result.verification.missingEvidence.includes("managed-restart-invalid"));
+  assert.ok(accepted.result.verification.actions.some((action) => action.kind === "native-daemon-restart" && action.newPid === 500));
+});
+
+test("a desktop quit that reports failure but still lands is waited out and relaunched", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness({ quitReportsOk: false });
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.healthy, JSON.stringify(result.verification.missingEvidence));
+  assert.deepEqual(harness.calls.launch, ["com.openai.codex"]);
+});
+
 test("managed restart that activates a newer release binds the replacement to it", () => {
   const newer = "/usr/local/Cellar/codex/0.158.0/bin/codex";
   const fixture = recycleInventoryFixture();
