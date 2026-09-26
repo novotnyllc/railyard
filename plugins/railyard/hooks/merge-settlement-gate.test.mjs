@@ -641,3 +641,72 @@ gated("the documented local verification includes the same suites as CI", () => 
   assert.deepEqual(suites(readFileSync(new globalThis.URL("AGENTS.md", root), "utf8")),
     [...new Set(suites(readFileSync(new globalThis.URL(".github/workflows/validate.yml", root), "utf8")))].sort());
 });
+
+const adminMerge = `gh pr merge ${URL} --squash --admin --delete-branch`;
+const OVERRIDE = "RAILYARD_MERGE_OVERRIDE=user-approved";
+
+gated("an inline user-approved override allows an unpinned admin merge without CE evidence", () => {
+  const result = run(bash(`${OVERRIDE} ${adminMerge}`), { noPath: true, noSnapshot: true, noState: true });
+  assert.equal(result.code, 0, result.err);
+  assert.match(result.err, /allowed by RAILYARD_MERGE_OVERRIDE/);
+  assert.deepEqual(result.calls, []);
+});
+
+gated("the override applies to a merge after a cd", () => {
+  const result = run(bash(`cd /tmp && ${OVERRIDE} gh pr merge 7 --squash --admin`), { noPath: true });
+  assert.equal(result.code, 0, result.err);
+  assert.deepEqual(result.calls, []);
+});
+
+gated("an ambient override in the hook's environment does not bypass the gate", () => {
+  const setup = prepare({ noPath: true });
+  const result = spawnSync(process.execPath, [script], {
+    input: JSON.stringify(bash(adminMerge)), encoding: "utf8", timeout: 6000,
+    env: { ...setup.env, RAILYARD_MERGE_OVERRIDE: "user-approved" },
+  });
+  refused(setup.finish(result), /RAILYARD_CE_SNAPSHOT/);
+});
+
+gated("any other override value is ignored", () => {
+  refused(run(bash(`RAILYARD_MERGE_OVERRIDE=yes ${adminMerge}`), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+});
+
+gated("the override covers only its own command, not a second merge in the same text", () => {
+  refused(run(bash(`${OVERRIDE} ${adminMerge}; gh pr merge 8 --squash`), { noPath: true }), /one PR per command/);
+});
+
+gated("an override on a shell wrapper does not cover two merges inside it", () => {
+  refused(run(bash(`${OVERRIDE} bash -lc 'gh pr merge 7 --squash; gh pr merge 8 --squash'`), { noPath: true }), /one PR per command/);
+});
+
+gated("an override on a wrapper around a single merge applies to that merge", () => {
+  const result = run(bash(`${OVERRIDE} bash -lc 'gh pr merge 7 --squash --admin'`), { noPath: true });
+  assert.equal(result.code, 0, result.err);
+  assert.deepEqual(result.calls, []);
+});
+
+gated("the override does not admit a raw GraphQL merge", () => {
+  refused(run(bash(`${OVERRIDE} gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}'`), { noPath: true }), /mergePullRequest is unsupported/);
+});
+
+gated("the override does not cover a merge site that a loop can re-run", () => {
+  for (const text of [
+    `${OVERRIDE} bash -lc 'for pr in 7 8; do gh pr merge "$pr" --squash --admin; done'`,
+    `${OVERRIDE} bash -lc 'while read pr; do gh pr merge 7 --squash; done'`,
+    `m() { ${OVERRIDE} gh pr merge 7 --squash; }; m; m`,
+  ]) refused(run(bash(text), { noPath: true }));
+});
+
+gated("the override requires a literal PR selector", () => {
+  for (const text of [
+    `${OVERRIDE} gh pr merge --squash --admin`,
+    `${OVERRIDE} gh pr merge "$PR" --squash --admin`,
+    `${OVERRIDE} gh pr merge 7 --repo "$REPO" --squash`,
+  ]) refused(run(bash(text), { noPath: true }));
+});
+
+gated("refusals name the user-approved override for explicitly directed merges", () => {
+  const result = run(bash(adminMerge), { noPath: true });
+  refused(result);
+  assert.match(result.err, /explicitly directs this merge.*RAILYARD_MERGE_OVERRIDE=user-approved/);
+});
