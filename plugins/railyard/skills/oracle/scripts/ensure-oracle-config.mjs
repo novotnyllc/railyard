@@ -73,7 +73,7 @@ for (const [key, value] of Object.entries(DEFAULTS)) {
     const existing = merged[key];
     if (existing !== undefined && (existing === null || typeof existing !== "object" || Array.isArray(existing))) {
       console.error(`${configPath}: "${key}" is not an object; leaving it alone.`);
-      continue;
+      process.exit(1);
     }
     const branch = { ...(existing ?? {}) };
     for (const [k, v] of Object.entries(value)) {

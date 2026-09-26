@@ -23,7 +23,7 @@ Native subagents in the same harness are the default. Crossing harnesses is opt-
 
 ## Session model and delegated model are different
 
-Pick the interactive session for the conversation, and pick the model for each delegated unit of work. A model name without an effort is incomplete.
+Pick the interactive session for the conversation, and pick the model for each delegated unit of work. Choose an effort with the model wherever the model exposes one; Haiku 4.5 has no effort setting.
 
 - **Claude Code:** Opus 5.5 at `medium` handles substantive subagent work, Fable 5.1 is the escalation for frontier-hard or long autonomous work, Sonnet 5 takes bounded edits, and Haiku 4.5 takes read-only search.
 - **Codex:** GPT-6 Sol at `medium` is the baseline, Luna takes bounded work, and Astra takes hard work.

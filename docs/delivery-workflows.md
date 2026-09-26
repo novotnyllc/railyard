@@ -121,7 +121,7 @@ explicit task-creation request.
 
 Use `audit` or a retrospective when requested or when a concrete lesson makes
 it worthwhile. Compare complete assignments, including children, retries,
-repairs, verification, time, and available usage data. Optional local learning
+repairs, verification, time, and available usage data. Repository learnings
 cannot change privacy, expand authority, or rewrite the user's policy.
 
 ## Source skills

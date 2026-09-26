@@ -27,7 +27,8 @@ Collect the current state before asking anything:
   resolved path for every read, write, and validation in this setup.
 - Tooling: `gh` auth state, the `gh-stack` extension and its agent skills,
   `tmux`, `jq`, `node`, and optionally `chezmoi` and `op`.
-- Oracle availability, per the oracle skill's cached-detection rules.
+- Oracle: whether `oracle` 0.20.3 or newer resolves (the oracle skill.s
+  `ensure-oracle.sh`) and whether `~/.oracle/config.json` exists.
 - Credential presence for what the installed plugins need, checked for
   existence only: `gh auth status`, `op` sign-in when the one-password skill is
   installed, and any key an installed skill's docs name. Report a missing key
@@ -63,9 +64,8 @@ Railyard is not blanket consent to install other things.
 
 After a Codex update, verify the installed plugin version and source bytes,
 then inspect its hook commands and hashes. Enable and trust only the validated
-SessionStart routing charter and native dispatch gate, plus the shell dispatch
-gate when `codex exec` is in use and the CE merge guard when PR delivery is
-selected; validate the merge guard's
+SessionStart routing charter and native dispatch gate, plus the CE merge
+guard when PR delivery is selected; validate the merge guard's
 [snapshot handoff](../deliver/references/ce-merge-guard.md) before activating
 it. A plugin update alone does not enable hooks; keep existing disabled states
 unless the user authorized activation.
