@@ -7,10 +7,13 @@
  * same machinery as `reap`.
  */
 
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 
 import {
+  DEFAULT_DESKTOP_IDLE_SECONDS,
   DEFAULT_DESKTOP_POLL_MS,
   DEFAULT_DESKTOP_QUIT_TIMEOUT_MS,
   DEFAULT_DESKTOP_RELAUNCH_TIMEOUT_MS,
@@ -20,10 +23,12 @@ import {
   DESKTOP_RECEIPT_SCHEMA,
   EXIT_CODES,
   LAUNCHCTL,
+  LSAPPINFO,
   OPEN,
   OSASCRIPT,
   PLUTIL,
   SNAPSHOT_SCHEMA,
+  SQLITE3,
 } from "./constants.mjs";
 import {
   childrenByParent,
@@ -159,6 +164,7 @@ export function emptyDesktopResult(platform) {
       missingEvidence: [],
       mode: "desktop",
       launchdMaxfiles: null,
+      idle: null,
       receipt: null,
       before: null,
       actions: [],
@@ -337,6 +343,67 @@ export function buildDesktopReceipt(evidence, snapshot, launchdMaxfiles) {
   };
 }
 
+// Read-only signals that Codex work is running: the newest rollout write or
+// thread update in Codex's state database, and which app is frontmost.
+// Anything unreadable leaves `complete` false, which counts as busy.
+export function readDesktopActivity({ runner = defaultRunner, codexHome, fsApi = fs } = {}) {
+  const activity = { complete: false, latestActivityMs: null, frontmostBundleId: null };
+  const database = path.join(codexHome, "state_5.sqlite");
+  const query = safeRun(runner, SQLITE3, [
+    "-readonly",
+    "-json",
+    `file:${database}?mode=ro`,
+    "SELECT rollout_path, updated_at_ms FROM threads WHERE archived = 0 ORDER BY updated_at_ms DESC LIMIT 50",
+  ], { timeout: 5_000 });
+  if (query.status !== 0 || typeof query.stdout !== "string") return activity;
+  let rows;
+  try {
+    rows = query.stdout.trim() ? JSON.parse(query.stdout) : [];
+  } catch {
+    return activity;
+  }
+  if (!Array.isArray(rows)) return activity;
+  let latest = 0;
+  for (const row of rows) {
+    if (Number.isFinite(row?.updated_at_ms)) latest = Math.max(latest, row.updated_at_ms);
+    if (typeof row?.rollout_path !== "string") continue;
+    try {
+      latest = Math.max(latest, fsApi.statSync(row.rollout_path).mtimeMs);
+    } catch {}
+  }
+  activity.latestActivityMs = latest;
+  const front = safeRun(runner, LSAPPINFO, ["front"], { timeout: 5_000 });
+  const asn = typeof front.stdout === "string" ? front.stdout.trim() : "";
+  if (front.status !== 0 || !/^ASN:[0-9a-fx-]+:?$/i.test(asn)) return activity;
+  const info = safeRun(runner, LSAPPINFO, ["info", "-only", "bundleid", asn], { timeout: 5_000 });
+  const match = typeof info.stdout === "string"
+    ? info.stdout.match(/bundle(?:ID|identifier)"?\s*=\s*"([^"]+)"/i)
+    : null;
+  if (info.status !== 0) return activity;
+  activity.frontmostBundleId = match ? match[1] : null;
+  activity.complete = true;
+  return activity;
+}
+
+// Reasons the desktop app looks busy; empty means idle enough to recycle.
+export function desktopBusyReasons({ activity, inventory, serverPid, bundleId, nowMs, idleMs }) {
+  const reasons = [];
+  if (!activity?.complete) return ["desktop-activity-unknown"];
+  if (Number.isFinite(activity.latestActivityMs) && nowMs - activity.latestActivityMs < idleMs) {
+    reasons.push("codex-activity-recent");
+  }
+  if (activity.frontmostBundleId && activity.frontmostBundleId === bundleId) {
+    reasons.push("desktop-app-frontmost");
+  }
+  const processes = Array.isArray(inventory?.processes) ? inventory.processes : [];
+  const recentChild = descendantsOf(serverPid, childrenByParent(processes)).descendants.some((item) => {
+    const started = Date.parse(item.startTime ?? "");
+    return !Number.isFinite(started) || nowMs - started < idleMs;
+  });
+  if (recentChild) reasons.push("recent-app-server-child");
+  return reasons;
+}
+
 function waitUntil(deps, timeoutMs, probe) {
   const deadline = deps.monotonicNow() + timeoutMs;
   for (;;) {
@@ -361,14 +428,32 @@ function findRelaunched(inventory, oldHost, oldOwner, uid, now) {
   if (!classified.result.verification.complete) return null;
   const byPid = new Map((inventory.processes ?? []).map((item) => [item.pid, item]));
   for (const server of classified.result.verification.servers) {
-    if (server.classification !== "gui" || server.uid !== uid || server.pid === oldOwner.pid) continue;
+    if (server.classification !== "gui" || server.uid !== uid) continue;
     if (server.missingEvidence?.length) continue;
+    const serverRecord = byPid.get(server.pid);
+    // A reused PID with a new birth is a valid replacement.
+    if (!serverRecord || (server.pid === oldOwner.pid && serverRecord.startTime === oldOwner.startTime)) continue;
     const host = findDesktopHost(server, byPid);
     if (!host || host.record.executable !== oldHost.executable) continue;
     if (host.record.pid === oldHost.pid && host.record.startTime === oldHost.startTime) continue;
-    return { server, host: host.record };
+    return { server, serverRecord, host: host.record };
   }
   return null;
+}
+
+// The replacement host and server must still be the processes the inventory saw.
+function relaunchStillLive(relaunched, readIdentity) {
+  return [relaunched.host, relaunched.serverRecord].every((record) => {
+    let observation;
+    try {
+      observation = readIdentity(record.pid);
+    } catch {
+      return false;
+    }
+    return observation?.state === "present"
+      && validObservedIdentity(observation.identity)
+      && !identityDifferences(record, observation.identity, ["pid", "uid", "startTime", "executable"]).length;
+  });
 }
 
 export function recycleDesktop(options, deps) {
@@ -425,6 +510,33 @@ export function recycleDesktop(options, deps) {
       pid,
       role: pid === evidence.server.pid ? "server" : "descendant",
     }));
+    // Quitting interrupts any running turn, so only an idle app is recycled.
+    const idleSeconds = options.idleSeconds ?? DEFAULT_DESKTOP_IDLE_SECONDS;
+    if (!Number.isInteger(idleSeconds) || idleSeconds < 0) refuse("invalid-idle-seconds");
+    const checkIdle = (inventory) => {
+      let activity = null;
+      try {
+        activity = deps.readDesktopActivity?.() ?? null;
+      } catch {}
+      const reasons = desktopBusyReasons({
+        activity,
+        inventory,
+        serverPid: receipt.server.pid,
+        bundleId: receipt.host.bundleId,
+        nowMs: options.now ?? Date.now(),
+        idleMs: idleSeconds * 1000,
+      });
+      result.verification.idle = {
+        idle: reasons.length === 0,
+        idleSeconds,
+        reasons,
+        lastActivityAt: Number.isFinite(activity?.latestActivityMs) && activity.latestActivityMs > 0
+          ? new Date(activity.latestActivityMs).toISOString()
+          : null,
+      };
+      if (reasons.length) refuse("desktop-busy");
+    };
+    checkIdle(deps.inventory);
     if (!options.confirmation) refuse("confirmation-required");
     if (options.confirmation !== receipt.confirmationToken) refuse("confirmation-mismatch");
 
@@ -462,6 +574,7 @@ export function recycleDesktop(options, deps) {
       role: pid === lockedSnapshot.owner.pid ? "server" : "descendant",
     }));
     assertGuiPreserved(evidence.otherGui, deps.readIdentity);
+    checkIdle(lockedInventory);
 
     // Ask the app to quit. The host is never signalled.
     let quit = null;
@@ -505,7 +618,8 @@ export function recycleDesktop(options, deps) {
       deps.relaunchTimeoutMs ?? DEFAULT_DESKTOP_RELAUNCH_TIMEOUT_MS,
       () => {
         try {
-          return findRelaunched(deps.collectInventory(), receipt.host, receipt.server, uid, now);
+          const found = findRelaunched(deps.collectInventory(), receipt.host, receipt.server, uid, now);
+          return found && relaunchStillLive(found, deps.readIdentity) ? found : null;
         } catch {
           return null;
         }
@@ -532,6 +646,7 @@ export function recycleDesktop(options, deps) {
     }
     assertExpectedIdentityGone(receipt.host, deps.readIdentity, "old-host-survivor", "old-host-verification-unknown");
     assertGuiPreserved(evidence.otherGui, deps.readIdentity);
+    if (!relaunchStillLive(relaunched, deps.readIdentity)) refuse("replacement-identity-changed");
 
     result.verification.after = {
       hostPid: relaunched.host.pid,
@@ -587,8 +702,10 @@ export function createDefaultDesktopDependencies({
   quitTimeoutMs = DEFAULT_DESKTOP_QUIT_TIMEOUT_MS,
   relaunchTimeoutMs = DEFAULT_DESKTOP_RELAUNCH_TIMEOUT_MS,
   pollMs = DEFAULT_DESKTOP_POLL_MS,
+  env = process.env,
 } = {}) {
   readIdentity ??= (pid) => collectExactProcessIdentity(pid, { runner });
+  const codexHome = path.resolve(env.CODEX_HOME || path.join(os.homedir(), ".codex"));
   return {
     inventory,
     collectInventory: () => collectMacOSInventory({ runner, platform: "darwin" }),
@@ -596,6 +713,7 @@ export function createDefaultDesktopDependencies({
     readBundleIdentifier: (bundlePath) => readBundleIdentifier(runner, bundlePath),
     readLaunchdMaxfiles: () => readLaunchdMaxfiles(runner),
     readBirth: (pid) => processBirthObservation(pid, runner),
+    readDesktopActivity: () => readDesktopActivity({ runner, codexHome }),
     // The bundle id is validated against BUNDLE_ID, so it cannot break out of
     // the AppleScript string literal.
     quitApp(bundleId) {

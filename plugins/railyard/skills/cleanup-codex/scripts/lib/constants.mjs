@@ -40,6 +40,14 @@ export const DEFAULT_DESKTOP_RELAUNCH_TIMEOUT_MS = 90_000;
 
 export const DEFAULT_DESKTOP_POLL_MS = 1_000;
 
+// A desktop recycle only proceeds when Codex has been quiet this long: no
+// rollout written, no new app-server child, and the app not in front.
+export const DEFAULT_DESKTOP_IDLE_SECONDS = 300;
+
+export const LSAPPINFO = "/usr/bin/lsappinfo";
+
+export const SQLITE3 = "/usr/bin/sqlite3";
+
 export const LAUNCHCTL = "/bin/launchctl";
 
 export const OSASCRIPT = "/usr/bin/osascript";

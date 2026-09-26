@@ -23,6 +23,7 @@ import {
 import {
   ATTESTOR,
   LAUNCHER,
+  NOW,
   RECYCLE_SOCKET,
   addApplicableParent,
   confirmedRecycleOptions,
@@ -1188,6 +1189,64 @@ test("desktop recycle reports the locked snapshot's selection when descendants c
   assert.deepEqual(result.verification.receipt.selectedPids, [200, 13125]);
   assert.deepEqual(result.selected.map((item) => item.pid), [200, 13125]);
   assert.deepEqual(result.verification.before.targetPids, [200]);
+});
+
+test("desktop recycle refuses while Codex is busy or the app is in front", () => {
+  const recent = { complete: true, latestActivityMs: NOW - 60_000, frontmostBundleId: "com.apple.Terminal" };
+  const busy = recycleDesktop(desktopOptions(), desktopHarness({ activity: [recent] }).deps);
+  assert.equal(busy.exitCode, EXIT_CODES.refused);
+  assert.ok(busy.result.verification.missingEvidence.includes("desktop-busy"));
+  assert.deepEqual(busy.result.verification.idle.reasons, ["codex-activity-recent"]);
+
+  const front = { complete: true, latestActivityMs: NOW - 3_600_000, frontmostBundleId: "com.openai.codex" };
+  const frontmost = recycleDesktop(desktopOptions(), desktopHarness({ activity: [front] }).deps);
+  assert.deepEqual(frontmost.result.verification.idle.reasons, ["desktop-app-frontmost"]);
+
+  const unknown = recycleDesktop(desktopOptions(), desktopHarness({ activity: [{ complete: false }] }).deps);
+  assert.deepEqual(unknown.result.verification.idle.reasons, ["desktop-activity-unknown"]);
+
+  const idle = recycleDesktop(desktopOptions(), desktopHarness().deps);
+  assert.equal(idle.result.verification.idle.idle, true);
+  assert.ok(idle.result.verification.missingEvidence.includes("confirmation-required"));
+});
+
+test("desktop recycle rechecks idleness under the lock and never quits a busy app", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const idle = { complete: true, latestActivityMs: NOW - 3_600_000, frontmostBundleId: "com.apple.Terminal" };
+  const recent = { complete: true, latestActivityMs: NOW - 5_000, frontmostBundleId: "com.apple.Terminal" };
+  const harness = desktopHarness({ activity: [idle, recent] });
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.refused);
+  assert.ok(result.verification.missingEvidence.includes("desktop-busy"));
+  assert.equal(result.verification.mutationAttempted, false);
+  assert.deepEqual(harness.calls.quit, []);
+  assert.deepEqual(harness.calls.launch, []);
+});
+
+test("a recently started app-server child counts as activity", () => {
+  const harness = desktopHarness();
+  const child = harness.fixture.processes.find((record) => record.pid === 200);
+  child.startTime = new Date(NOW - 30_000).toISOString();
+  harness.state.set(200, { state: "present", identity: { ...harness.state.get(200).identity, startTime: child.startTime } });
+  const { result } = recycleDesktop(desktopOptions(), harness.deps);
+  assert.ok(result.verification.idle.reasons.includes("recent-app-server-child"));
+});
+
+test("desktop recycle accepts a replacement that reuses the old server PID with a new birth", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness({ relaunchServerPid: 13125 });
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.healthy, JSON.stringify(result.verification.missingEvidence));
+  assert.equal(result.verification.after.pid, 13125);
+});
+
+test("desktop recycle never reports a replacement that already exited", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness({ replacementExits: true });
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.notEqual(exitCode, EXIT_CODES.healthy);
+  assert.equal(result.verification.after, null);
+  assert.ok(result.verification.missingEvidence.includes("desktop-relaunch-timeout"));
 });
 
 test("desktop recycle fails with a recovery code when the host app will not quit", () => {

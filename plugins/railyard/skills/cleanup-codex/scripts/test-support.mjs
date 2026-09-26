@@ -629,12 +629,12 @@ export function desktopInventoryFixture() {
   });
 }
 
-export function desktopRelaunchedFixture() {
+export function desktopRelaunchedFixture({ serverPid = 14100 } = {}) {
   const fixture = desktopInventoryFixture();
   fixture.processes = fixture.processes
     .filter((record) => ![13007, 13125, 200, 201, 202].includes(record.pid))
-    .concat(desktopProcesses({ hostPid: 14000, serverPid: 14100, startTime: "2026-08-02T16:05:00.000Z" }));
-  fixture.descriptors = { 14100: { complete: true, count: 40, highest: 52 }, 8100: fixture.descriptors[8100] };
+    .concat(desktopProcesses({ hostPid: 14000, serverPid, startTime: "2026-08-02T16:05:00.000Z" }));
+  fixture.descriptors = { [serverPid]: { complete: true, count: 40, highest: 52 }, 8100: fixture.descriptors[8100] };
   return fixture;
 }
 
@@ -642,7 +642,16 @@ export function desktopHarness({
   hostQuits = true,
   limits = { soft: 256, hard: "unlimited" },
   incompleteRelaunchPolls = 0,
+  activity = [],
+  relaunchServerPid = 14100,
+  replacementExits = false,
 } = {}) {
+  const idleActivity = {
+    complete: true,
+    latestActivityMs: NOW - 3_600_000,
+    frontmostBundleId: "com.apple.Terminal",
+  };
+  const activityQueue = [...activity];
   const fixture = desktopInventoryFixture();
   const byPid = new Map(fixture.processes.map((record) => [record.pid, record]));
   const state = new Map();
@@ -657,14 +666,18 @@ export function desktopHarness({
     inventory: fixture,
     collectInventory() {
       if (!relaunched) return fixture;
-      const next = desktopRelaunchedFixture();
+      const next = desktopRelaunchedFixture({ serverPid: relaunchServerPid });
       if (incompleteRelaunchPolls > 0) {
         incompleteRelaunchPolls -= 1;
-        next.descriptors[14100] = { complete: false, count: null, highest: null };
+        next.descriptors[relaunchServerPid] = { complete: false, count: null, highest: null };
       }
       for (const record of next.processes) {
-        if (!state.has(record.pid)) state.set(record.pid, { state: "present", identity: liveIdentity(record) });
+        if (!state.has(record.pid) || state.get(record.pid).state === "absent") {
+          state.set(record.pid, { state: "present", identity: liveIdentity(record) });
+        }
       }
+      // The replacement exits right after the inventory saw it.
+      if (replacementExits) state.set(relaunchServerPid, { state: "absent" });
       return next;
     },
     readIdentity(pid) {
@@ -683,6 +696,9 @@ export function desktopHarness({
     },
     readLaunchdMaxfiles() {
       return limits;
+    },
+    readDesktopActivity() {
+      return activityQueue.length ? activityQueue.shift() : idleActivity;
     },
     quitApp(bundleId) {
       calls.quit.push(bundleId);

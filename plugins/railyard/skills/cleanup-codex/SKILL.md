@@ -37,11 +37,15 @@ CC recycle --pid <gui-pid> --desktop
 CC recycle --pid <gui-pid> --desktop --confirm '<token>'
 ```
 
-This asks the app to quit, waits up to 30 seconds, reaps leftovers of the old
-server's tree that still match their recorded identities, and reopens the app by
-bundle id. The app is never force-killed: if it does not quit (say, a dialog is
-open), the command stops with `desktop-host-quit-timeout`. Confirming closes the
-user's desktop session, so say so first.
+Both passes run only when the app is idle: no Codex rollout or thread update
+for 5 minutes, no app-server child started in that window, and the app not frontmost. Otherwise
+the command refuses with `desktop-busy` and lists why; retry once the work in the
+app has finished. The check repeats under the lock just before quitting.
+
+When idle, it asks the app to quit, waits up to 30 seconds, reaps leftovers of
+the old server's tree that still match their recorded identities, and reopens
+the app by bundle id. The app is never force-killed: if it does not quit (say, a
+dialog is open), the command stops with `desktop-host-quit-timeout`.
 
 The usual root cause is launchd's default `maxfiles` soft limit of 256, which
 the app inherits, so a recycle only resets the count. The lasting fix is a root

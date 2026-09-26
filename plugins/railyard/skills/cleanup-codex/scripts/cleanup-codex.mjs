@@ -262,6 +262,12 @@ export function renderHuman(result) {
     lines.push(`mode: ${receipt.mode}`);
     if (receipt.mode === "desktop") {
       lines.push(`desktop app: ${receipt.host.bundleId} host pid ${receipt.host.pid} (${receipt.host.bundlePath})`);
+      const idle = result.verification.idle;
+      if (idle) {
+        lines.push(idle.idle
+          ? `idle: yes (no Codex activity for ${idle.idleSeconds}s; last at ${idle.lastActivityAt ?? "unknown"})`
+          : `idle: no (${idle.reasons.join(", ")}); retry when Codex work in the app has finished`);
+      }
     } else {
       lines.push(`descriptor limit: ${result.verification.nofileLimit ?? "attested"}`);
     }
@@ -298,7 +304,7 @@ export function usage() {
     "Recycle is two-pass: the first pass prints a confirmation token; rerun the same command with --confirm TOKEN.",
     "Detached servers restart through `codex app-server daemon restart` by default, or with --unmanaged",
     "and --launcher PATH (or RAILYARD_CODEX_BIN). --nofile-attestor PATH is optional; without it the limit is unverified.",
-    "--desktop quits and relaunches the ChatGPT/Codex app hosting a GUI app-server.",
+    "--desktop quits and relaunches the ChatGPT/Codex app hosting a GUI app-server, only when it has been idle for 5 minutes.",
     "Threshold options: --fd-count-warn, --highest-fd-warn, --age-hours-warn, --descendant-warn",
     "Exit codes: 0 healthy, 1 warning, 2 refused/invalid, 3 attempted cleanup verification failure.",
   ].join("\n");
