@@ -26,8 +26,7 @@ availability, or task state changes; do not repeat the same unchanged request.
 Use allocation mode before a substantive model-and-effort selection. Explicit user
 choices and deterministic lookups need no inference. Do not ask Jev to
 approve actions, certify tests, dismiss findings, authorize a merge, or
-generate implementation code. It is not an execution model or a carrier in
-the strict routing catalog.
+generate implementation code. It is an adviser, not an execution model.
 
 ## Prepare and call
 
@@ -40,9 +39,9 @@ the strict routing catalog.
    repository, transcripts, configuration, or credential stores for you.
 3. Supply locally checked eligible `candidates` with stable IDs. For
    allocation, include complete model and reasoning-effort pairs, availability,
-   and relevant accepted-task evidence; do not invent a cheap-model ladder.
-   Keep GPT-6 Sol at medium effort as the ordinary Codex baseline candidate when eligible,
-   and consider Fable 5.1 deliberately for Claude Code. Honor fixed roles.
+   and relevant accepted-task evidence. Draw them from the
+   [model-routing](../model-routing/SKILL.md) guidance rather than inventing
+   a cheap-model ladder.
 4. Resolve `SKILL_DIR` to this loaded skill's absolute directory, then run:
 
    ```sh
@@ -67,10 +66,9 @@ examples, bounds, failure states, and probability semantics.
 ## Keep ownership explicit
 
 For workflow selection, pass the suggestion back to `railyard:deliver` and
-preserve the requested endpoint. For allocation, continue through
-`railyard:model-routing`; its strict resolver remains content-free and
-retains all admission, budget, and authority checks. A Jev candidate ID is
-not a reservation, capability attestation, or dispatch receipt.
+preserve the requested endpoint. For allocation, apply the chosen pair
+through `railyard:model-routing` and the active dispatch tool. A Jev candidate
+ID is not a reservation, capability attestation, or dispatch receipt.
 
 For review triage, offer only next investigations, such as reproducing a
 failure, examining a relevant code path, or obtaining missing evidence.

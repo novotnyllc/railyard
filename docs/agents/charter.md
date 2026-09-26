@@ -7,8 +7,8 @@ becomes a verified, delivered result, on any machine in the fleet.
 
 Deciding and driving work —
 
-- *Routing* — which model, effort, budget, and transport carry a unit of work
-  (`model-routing` and its `railyard/model-routing/v1` contract).
+- *Routing* — which model and reasoning effort carry a unit of work
+  (`model-routing`), and transport-safe provider handoffs.
 - *Delivery* — driving one software change through the right workflow to
   merge and post-merge proof (`deliver`).
 - *Orchestration and placement* — decomposing objectives across tasks,
