@@ -1419,6 +1419,26 @@ test("launchd maxfiles below the minimum warns and inspect recommends a desktop 
   ]);
 });
 
+test("a GUI server past launchd's soft limit is not treated as capped", () => {
+  const fixture = desktopInventoryFixture();
+  fixture.descriptors[13125] = { complete: true, count: 243, highest: 316 };
+  const lines = [];
+  runCli(["inspect", "--json"], {
+    inventory: fixture,
+    now: Date.parse("2026-08-02T16:00:00.000Z"),
+    readLaunchdLimits: () => ({ soft: 256, hard: "unlimited" }),
+    write: (text) => lines.push(text),
+  });
+  const inspection = JSON.parse(lines[0]);
+  assert.ok(inspection.warnings.some((warning) => warning.code === "highest-fd-pressure"));
+  assert.deepEqual(inspection.recommendations, []);
+
+  const harness = desktopHarness();
+  harness.deps.inventory.descriptors[13125] = { complete: true, count: 243, highest: 316 };
+  const { result } = recycleDesktop(desktopOptions(), harness.deps);
+  assert.ok(!result.warnings.some((warning) => warning.code === "desktop-launchd-maxfiles-low"));
+});
+
 test("default desktop adapters issue exact quit, relaunch, and bundle lookups", () => {
   const calls = [];
   const runner = (file, args) => {

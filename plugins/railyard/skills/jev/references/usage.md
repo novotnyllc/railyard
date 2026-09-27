@@ -38,11 +38,11 @@ For an illustrative workflow decision:
 }
 ```
 
-Supported workflow values are `native` and `compound-engineering:` followed
-by `ce-brainstorm`, `ce-debug`, `ce-plan`, `ce-work`, `ce-code-review`,
-`ce-test-browser`, `ce-commit-push-pr`, `ce-babysit-pr`,
-`ce-resolve-pr-feedback`, `ce-compound`, or `lfg`. Availability is checked by
-the caller, not inferred from this list.
+A `workflow` value is `native` or a skill reference in `plugin:skill` form,
+using lowercase letters, digits, and hyphens, with at most 64 characters per
+part. Copy the name from the skills your session lists. The helper checks
+only the format. Plugins add and rename skills, so the caller decides which
+skills are loaded, and Railyard keeps no roster that could drift.
 
 For an illustrative allocation comparison:
 
@@ -57,7 +57,10 @@ For an illustrative allocation comparison:
 }
 ```
 
-These model pairs illustrate the format, not a roster or a benchmark.
+In Claude Code, draw the pairs from the same guidance, for example `opus` at
+`medium` against `fable` at `high`. Use `"reasoning_effort": null` for a
+model with no effort setting, such as `haiku`. These model pairs illustrate
+the format, not a roster or a benchmark.
 `requiredCandidateId` restricts the question to that supplied candidate and
 `no_match`. Usually bypass inference when the user already chose an allocation.
 The helper validates shape, not provider availability or native tool support.

@@ -90,6 +90,32 @@ test("every CE stage in Deliver's workflow table is accepted by Jev", async () =
   }
 });
 
+test("workflow names are caller-supplied skill references, not a hard-coded CE roster", async () => {
+  // Installed plugins add and rename skills; any loaded plugin:skill reference is accepted.
+  for (const workflow of ["native", "compound-engineering:ce-simplify-code", "compound-engineering:ce-future-stage", "railyard:deliver"]) {
+    const provider = fakeProvider();
+    const value = { mode: "workflow", state: "Choose the next loaded workflow.",
+      candidates: [{ id: "stage", workflow, description: "Loaded in this session, checked by the caller." }] };
+    const result = await advise(value, { apiKey: SECRET, fetchImpl: provider.fetchImpl });
+    assert.equal(result.status, "recommended", `${workflow}: ${result.reason}`);
+    assert.ok(JSON.parse(provider.calls[0].options.body).questions.selection.criteria.stage.startsWith(`Workflow: ${workflow}. `));
+  }
+});
+
+test("allocation accepts an explicit null effort for a model without an effort setting", async () => {
+  const provider = fakeProvider();
+  const value = { mode: "allocation", state: "Read-only search across the repository for one symbol.",
+    candidates: [
+      { id: "haiku", model: "haiku", reasoning_effort: null, description: "Read-only search; no effort setting." },
+      { id: "opus_medium", model: "opus", reasoning_effort: "medium", description: "Default substantive pair." },
+    ] };
+  const result = await advise(value, { apiKey: SECRET, fetchImpl: provider.fetchImpl });
+  assertEnvelope(result, "recommended", "thresholds_met");
+  const criteria = JSON.parse(provider.calls[0].options.body).questions.selection.criteria;
+  assert.equal(criteria.haiku, "Model: haiku. Reasoning effort: not configurable. Read-only search; no effort setting.");
+  assert.ok(criteria.opus_medium.startsWith("Model: opus. Reasoning effort: medium. "));
+});
+
 test("CLI invocation through file or directory symlinks returns its JSON result", (t) => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "jev-cli-links-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -202,7 +228,12 @@ const invalidInputs = [
   ["too many candidates", () => ({ ...input(), candidates: Array.from({ length: 17 }, (_, i) => ({ id: `option_${i}`, workflow: "native", description: "available" })) })],
   ["sparse candidates", () => ({ ...input(), candidates: new Array(2) })],
   ["unknown candidate field", () => { const value = input(); value.candidates[0].command = "run"; return value; }],
-  ["unknown workflow", () => { const value = input(); value.candidates[0].workflow = "shell:anything"; return value; }],
+  ...[
+    "", "compound-engineering:", ":ce-plan", "ce-plan", "Compound-Engineering:ce-plan",
+    "compound-engineering:ce plan", "a:b:c", "../skills:ce-plan", "native\n", "rm -rf /",
+    `compound-engineering:${"a".repeat(65)}`, null, ["native"],
+  ].map((workflow) => [`malformed workflow ${JSON.stringify(workflow)}`, () => { const value = input(); value.candidates[0].workflow = workflow; return value; }]),
+  ["allocation missing model", () => { const value = input("allocation"); delete value.candidates[0].model; return value; }],
   ["duplicate candidate ID", () => { const value = input(); value.candidates[1].id = "native"; return value; }],
   ["reserved no_match", () => { const value = input(); value.candidates[0].id = "no_match"; return value; }],
   ["reserved constructor", () => { const value = input(); value.candidates[0].id = "constructor"; return value; }],

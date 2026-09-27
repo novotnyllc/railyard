@@ -7,23 +7,24 @@ nav_order: 4
 
 # Thermos
 
-Thermos is an optional review skill for a change that benefits from two practitioner lenses. It reviews a diff and synthesizes one actionable findings packet for the existing review owner.
+Thermos is an optional review skill for a change that benefits from two practitioner lenses. It gathers the diff without guessing, runs both reviewers, and synthesizes one actionable findings packet for the existing review owner.
 
 ## What it adds
 
-Thermos runs this paired review. Its correctness lens covers breakage, security, developer experience, and feature-leak risk. Its code-quality lens covers structure, duplication, complexity, and maintainability.
+Thermos runs a paired review, each rubric carried over from upstream verbatim: a security/correctness rubric with an added failure-memory lens (a wrong, durable conclusion drawn from a handled failure), and a strict maintainability rubric for structure, duplication, complexity, and file-size growth.
 
 ## How it works
 
-Both lenses receive the same diff, source context, and requirement. They run in parallel as native subagents when the harness supports it, each with a deliberately chosen model and effort; synthesis deduplicates findings for the existing workflow owner. When used in Compound Engineering (CE) delivery, the implementation lane fixes accepted findings through its existing review loop.
+Thermos gathers the diff and any needed context itself rather than asking a reviewer to guess it, and passes each reviewer the identical scoped diff in a self-contained brief — a fresh reviewer has none of the calling conversation's history. The two reviewers run as background subagents in parallel, each with a model and reasoning effort chosen through `railyard:model-routing`. When a change ships a runtime artifact, reviewers validate the actual delivery/packaging path rather than accepting a formal receipt at face value. An opt-in frozen review packet (deterministic diff/file digests plus reusable validation results) is available when the caller asks for one. Synthesis deduplicates findings across reviewers and weights overlapping findings more heavily. When used in Compound Engineering (CE) delivery, the implementation lane fixes accepted findings through its existing review loop.
 
 Illustrative review outline:
 
 ```text
 > Run the two Thermos lenses on this diff and return one deduplicated findings packet.
-packet=<diff and source context>
-lenses=correctness,code-quality
-output=deduplicated findings with evidence
+packet=<diff and source context, gathered not guessed>
+lenses=correctness+failure-memory,maintainability
+model=<chosen via model-routing per reviewer>
+output=deduplicated, weighted findings with evidence
 owner=existing-workflow
 ```
 

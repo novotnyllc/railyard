@@ -1,8 +1,7 @@
 # Delegated remote execution
 
 Use this reference only for an explicitly requested agent assignment on
-another host. A bounded one-host admin command uses the named CLI or
-`roundhouse:remote-mac` over SSH directly.
+another host.
 
 ## Readiness and placement
 
@@ -11,14 +10,12 @@ skills: `roundhouse:fleet-projects` for repository identity, checkout state,
 and saved-project readiness; `roundhouse:fleet-agents` for runtime, plugin, and
 capability readiness; `roundhouse:fleet-inventory` for host inventory; and
 `roundhouse:fleet-auth` only when the assignment needs authenticated tooling.
-Fleet-wide parity is the only objective that requires every host.
 
 Use the user-owned fleet configuration, never hardcoded machine names,
 credentials, or inventory. Filter hosts by required access, platform,
 toolchain, capabilities, and data locality; honor user placement, then prefer
 an idle capable host. Verify the project's exact baseline before a worker
-starts, so a missing platform or toolchain is found before dispatch rather
-than after. WSL evidence alone does not prove a native Windows result.
+starts. WSL evidence alone does not prove a native Windows result.
 
 Repair missing prerequisites only within existing authorization. If Roundhouse
 is unavailable, gather equivalent read-only evidence or report which readiness
@@ -61,8 +58,7 @@ not review readiness, merge, or completion.
 
 Follow [agent completion and waiting](../../../references/agent-coordination.md).
 After a timeout, check the original worker's liveness and progress before
-starting another. CE owns any PR review and CI watch loop; remote placement
-does not add a second watcher.
+starting another. Remote placement does not add a second PR or CI watcher.
 
 Claude Code peer sessions can use `ListAgents` and `SendMessage` where exposed,
 addressed by session name rather than resume UUID. Do not rely on cross-host

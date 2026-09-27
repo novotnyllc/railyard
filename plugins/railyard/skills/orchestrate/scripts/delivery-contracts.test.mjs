@@ -165,8 +165,12 @@ test("startup text and shipped instructions stay within word budgets", () => {
   }
   for (const file of shippedInstructionFiles) {
     const count = words(readFileSync(file, "utf8"));
-    const cap = file.endsWith("SKILL.md") ? 1400 : 1800;
-    assert.ok(count <= cap, `${path.relative(pluginRoot, file)} is ${count} words (cap ${cap})`);
+    // Thermos rubrics track Cursor's upstream text verbatim, so they get room
+    // for that substance instead of the general skill cap.
+    const relative = path.relative(pluginRoot, file).split(path.sep).join("/");
+    const upstreamRubric = /^skills\/thermo(?:s|-nuclear-review|-nuclear-code-quality-review)\/SKILL\.md$/.test(relative);
+    const cap = upstreamRubric ? 2000 : file.endsWith("SKILL.md") ? 1400 : 1800;
+    assert.ok(count <= cap, `${relative} is ${count} words (cap ${cap})`);
   }
 });
 

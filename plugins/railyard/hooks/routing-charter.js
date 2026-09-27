@@ -17,7 +17,7 @@ const lines = [
 ];
 // Presence enables advice, not an inference call or a credential disclosure.
 if (process.env.TYPESAFE_API_KEY?.trim()) {
-  lines.push("- Jev is configured: use railyard:jev for model, effort, and workflow advice; explicit choices and privacy limits win.");
+  lines.push("- Jev is configured: consult railyard:jev when a model, effort, or workflow choice is genuinely open; skip explicit choices, clear defaults, and small dispatches.");
 }
 process.stdout.write(lines.join("\n") + "\n");
 

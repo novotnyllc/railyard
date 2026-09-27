@@ -15,13 +15,18 @@ agent keeps responsibility for the decision and its evidence.
 
 ## Default behavior
 
-When `TYPESAFE_API_KEY` is in the environment, Railyard uses Jev by default at
-these semantic decision points throughout delivery, including before
-substantive model-and-effort selections. Revisit when evidence or options
-change. Explicit user choices and deterministic work
-need no inference. Task privacy restrictions still apply. Missing keys,
-uncertain results, invalid responses, and service failures fall back to normal
-Railyard reasoning. Use the helper's `--offline` option to disable remote advice.
+With `TYPESAFE_API_KEY` set, Railyard consults Jev only when a model, effort,
+or workflow choice is genuinely open between eligible options and the choice
+matters for cost or outcome — for example a substantive subagent, an
+escalation, or a fork between a direct fix and a heavier workflow. It skips
+explicit choices, clear defaults, single-option cases, and small dispatches,
+and reuses an answer already reached in the session rather than asking again
+for a similar assignment. An auth or rate-limit failure stops further
+consultation for the rest of the session. Explicit user choices always win.
+Task privacy restrictions still apply. Missing keys, uncertain results,
+invalid responses, and other service failures fall back to normal Railyard
+reasoning. Use the helper's `--offline` option to disable remote advice. With
+no `TYPESAFE_API_KEY` set, Jev is inactive.
 
 Codex and Claude Code use the same Node 24 helper. No SDK, additional plugin,
 or background service is required. Startup only advertises the configured

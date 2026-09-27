@@ -7,29 +7,34 @@ nav_order: 9
 
 # Cleanup Codex
 
-Reclaim detached session residue only after the process, launcher, and thread all prove the same identity. This turns a risky cleanup into a precise recovery and leaves the machine ready for a trustworthy restart.
+Diagnose and recover macOS Codex app-servers under descriptor pressure. Inspect first, then recycle a detached server or the desktop app in two confirmed passes, or snapshot a server and reap its exact leftovers once it exits. It runs on macOS only.
 
 ## What it adds
 
-Cleanup Codex owns recovery. Inspection reports matching session servers, process age, descriptors, and launcher state. Reap uses the exact session identity, a host-local lock, paired snapshots, and proves final absence; recycle owns replacement and restart attestation.
+Inspect is read-only: for each app-server it reports ancestry (desktop-hosted or detached), descriptors, descendants, control socket, and the launchd `maxfiles` limit GUI apps inherit. A desktop-hosted server under descriptor pressure gets a recommendation to recycle the app rather than the server alone.
 
 ## How it works
 
-The cleanup path checks ownership, thread identity, process arguments, and launcher relationship before acting. Automatic cleanup is off by default; the plugin does not register a SessionEnd cleanup hook. The retained opt-in hook uses the same identity checks.
+Recycle always takes two passes: the first changes nothing and prints a confirmation token; rerunning the identical command with that token acts. Any change to the bound identities between passes invalidates the token.
 
-Illustrative inspection fields:
+For a **detached server**, managed mode (the default) rechecks the daemon's PID record, runs `codex app-server daemon restart`, then verifies a new server owns the control socket and the old tree is gone. Unmanaged mode stops the exact recorded tree and starts a given launcher instead. An optional descriptor-limit attestor can require the replacement to prove a minimum soft limit; without it, the limit is reported as unverified.
+
+For the **desktop app** (`--desktop`), both passes run only when Codex has been idle for 5 minutes, no app-server child has started in that window, and the app isn't frontmost — otherwise the command refuses and lists why. When idle, it asks the app to quit gracefully, waits for it, reaps exact leftovers of the old server's tree, relaunches the app, and verifies the result. It never force-kills the app; if it won't quit, the command stops rather than guessing.
+
+For a detached server that will exit on its own, a snapshot taken while it runs lets a later reap remove exactly that recorded tree, even after it's gone.
 
 ```text
-> Inspect the detached Codex residue for this thread; reclaim it only when identity evidence is complete.
-thread=<selected thread>
-ownership=<observed identity> server=<match result> launcher=<match result>
-snapshot=<paired evidence> lock=<observed state>
-recommendation=<inspection result>
+> Inspect Codex app-servers, then recycle the one under descriptor pressure.
+ancestry=detached fds=<count> maxfiles=256 recommendation=recycle
+pass_1=confirmation-token
+pass_2=daemon-restart verified=new-socket-owner old-tree=gone
 ```
+
+GUI apps inherit launchd's `maxfiles` soft limit (256 by default), and a login shell gets 8192 from the user's dotfiles. Current Codex app-servers raise their own limit, so a server with a descriptor above launchd's soft limit is not capped there. Only a server still below it gets the desktop-recycle recommendation and the launchd advice: a root LaunchDaemon running `launchctl limit maxfiles 8192 unlimited` at boot.
 
 ## Scope
 
-Cleanup covers session residue tied to the selected Codex thread. Incomplete evidence produces a diagnostic result for operator review.
+Signals go only to exact PIDs whose UID, start time, executable, and process group still match the recorded identity — never to a group or by name. Other desktop apps' servers are left untouched, and a refusal is reported rather than worked around.
 
 ## Source
 
@@ -37,4 +42,4 @@ Ships in the `railyard` plugin.
 
 ## Proof point
 
-A completed cleanup must retain its matched identity evidence and verify that the exact selected residue is absent. Report incomplete evidence or refusal as observed; cleanup is not a routine delivery closing step.
+A recycle or reap must verify the exact recorded tree is gone and that a legitimate replacement — a new daemon-owned socket or a relaunched app — is in place before it reports success.

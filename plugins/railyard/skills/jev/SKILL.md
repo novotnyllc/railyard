@@ -1,97 +1,106 @@
 ---
 name: jev
-description: "Use TypeSafe Jev by default when TYPESAFE_API_KEY is available for model and reasoning-effort selection, workflow choice, evidence selection, work prioritization, and review triage. Preserve explicit choices, privacy restrictions, and CE review ownership."
+description: "Consult TypeSafe Jev when TYPESAFE_API_KEY is set and a model-and-effort, workflow, evidence, priority, or review-investigation choice is genuinely open between eligible options. Skip it for explicit choices, clear defaults, and small dispatches."
 ---
 
 # Jev advice
 
-Use Jev by default for Railyard's bounded semantic decisions when
-`TYPESAFE_API_KEY` is present. It supplies a typed suggestion; the calling
-agent still owns the decision and its evidence. This works in Codex and
-Claude Code with Node 24 and no package installation.
+Jev picks one option from a list you supply and returns probabilities. You
+still own the decision. It needs Node 24 and no installation.
 
-## Choose the question
+## When to consult
 
-| Mode | Use it for | Caller still owns |
+Consult Jev only when all of these hold:
+
+- `TYPESAFE_API_KEY` is set, and privacy or offline instructions allow
+  sending a short task summary to TypeSafe.
+- At least two options are eligible, and the owning skill's default does not
+  already settle the choice.
+- The choice matters for cost or outcome. Examples: a substantive subagent,
+  an escalation (Opus 5.5 to Fable 5.1, or Sol `medium` to `high` or Astra),
+  a workflow fork (a direct fix, `ce-debug`, or `ce-plan`), or the order of
+  several ready investigations.
+
+Skip it when:
+
+- The user named the model, effort, or workflow.
+- A default clearly applies: Haiku for read-only search, an inheriting fork,
+  or mechanical work that runs through tools.
+- Only one option is eligible, or a wrong pick would cost less than the call.
+- You already asked this question in the session. Reuse the answer for
+  similar assignments. Ask again only when the evidence, the candidates, or
+  the task state changes.
+- An earlier call in this session returned `missing_api_key`,
+  `invalid_api_key`, `authentication_failed`, or `rate_limited`. Don't call
+  Jev again for the rest of the session.
+
+Never ask Jev to approve actions, certify tests, dismiss findings, authorize a
+merge, or write code.
+
+## Modes
+
+| Mode | Chooses | Caller still owns |
 | --- | --- | --- |
-| `workflow` | Choosing among available native or CE workflows | Requested scope, stage availability, and permission to publish |
-| `allocation` | Selecting a model and reasoning-effort pair from eligible candidates | Tool compatibility, explicit preferences, budgets, privacy, and dispatch |
-| `evidence-selection` | Choosing the next relevant document, code excerpt, test, or observation to inspect | Retrieval, permitted context, freshness, and factual verification |
-| `work-priority` | Choosing the next ready subtask or check | Dependencies, ownership, execution, and completion evidence |
-| `review-triage` | Choosing the next investigation for a review finding | CE's review settlement, reproduction, fixes, and CI |
+| `allocation` | A model and reasoning-effort pair | Tool support, explicit preferences, budgets, privacy, and dispatch |
+| `workflow` | Native tools or one loaded skill | Requested scope, stage availability, and permission to publish |
+| `evidence-selection` | The next document, excerpt, test, or observation to inspect | Retrieval, permitted context, and verification |
+| `work-priority` | The next ready subtask or check | Dependencies, ownership, and completion evidence |
+| `review-triage` | The next investigation of a review finding | CE's review settlement, reproduction, fixes, and CI |
 
-Use it throughout planning, implementation, debugging, and review wherever a
-bounded semantic judgment helps. Revisit a choice when new evidence, candidate
-availability, or task state changes; do not repeat the same unchanged request.
-Use allocation mode before a substantive model-and-effort selection. Explicit user
-choices and deterministic lookups need no inference. Do not ask Jev to
-approve actions, certify tests, dismiss findings, authorize a merge, or
-generate implementation code. It is an adviser, not an execution model.
+## Build the request
 
-## Prepare and call
-
-1. Honor task privacy and offline instructions before calling. A configured
-   key enables the adviser, but does not override a restriction on sending
-   content to TypeSafe. Use `--offline` when remote inference is disallowed.
-2. Prepare a small, relevant `state` string describing the question and its
-   evidence. The state and candidate descriptions go to TypeSafe. Exclude
-   credentials and unrelated private material. The helper does not read the
-   repository, transcripts, configuration, or credential stores for you.
-3. Supply locally checked eligible `candidates` with stable IDs. For
-   allocation, include complete model and reasoning-effort pairs, availability,
-   and relevant accepted-task evidence. Draw them from the
-   [model-routing](../model-routing/SKILL.md) guidance rather than inventing
-   a cheap-model ladder.
-4. Resolve `SKILL_DIR` to this loaded skill's absolute directory, then run:
+1. Write `state` as a few sentences: the question and the evidence that
+   bears on it. Leave out credentials and unrelated private material. The
+   helper reads no files, transcripts, or configuration.
+2. List 2 to 4 `candidates` that you have checked are available. Give each a
+   stable `id` and an honest `description`.
+   - For allocation, draw pairs from
+     [model-routing](../model-routing/SKILL.md) for the current harness.
+     Railyard keeps no capability table, so that skill and the live tool
+     schema are the roster. Include the default pair: `opus` at `medium` in
+     Claude Code, or `gpt-6-sol` at `medium` in Codex. Use
+     `"reasoning_effort": null` for a model with no effort setting, such as
+     Haiku. Claude Code's Agent tool sets only the model, so list the effort
+     that will actually apply: the session's, or the subagent definition's.
+   - For a workflow, use `native` or a skill name exactly as your session
+     lists it, such as `compound-engineering:ce-debug`. Offer only skills that are
+     loaded now. The helper checks the name's format, not a roster, so new
+     or renamed CE skills need no Railyard change.
+3. Resolve `SKILL_DIR` to this skill's directory, then run:
 
    ```sh
    node "$SKILL_DIR/scripts/jev-adviser.mjs" < /path/to/jev-request.json
    ```
 
-   No enabling flag is needed. The helper reads `TYPESAFE_API_KEY` from its
-   environment; do not put the key in a command, request file, or output.
-   Do not install another plugin or fetch credentials merely because the key
-   is absent. Use the user's established environment setup when requested.
-5. Read the structured result. A `recommended` result contains only a
-   `candidateId`; resolve it through the original local candidate list.
-   Recheck that the evidence, available tools, and constraints still apply,
-   then use the recommended candidate when those checks pass. Override it
-   when concrete evidence or the user's instructions require another choice.
-   `deferred`, `unavailable`, or `error` means use ordinary Railyard reasoning
-   and the existing policy. An optional adviser failure does not block the task.
+   The helper reads the key from its environment. Never put the key in a
+   command, a file, or output. If the key is absent, don't fetch or install
+   credentials. Continue without Jev.
 
-Read [the request and response reference](references/usage.md) for runnable
-examples, bounds, failure states, and probability semantics.
+## Apply the result
+
+- `recommended`: map `recommendation.candidateId` back to your list. Recheck
+  that the constraints still apply, then use it. Override it only when
+  concrete evidence or the user requires another choice.
+- `deferred`: use the owning skill's default. Don't reword the request to
+  force a pick.
+- `unavailable` or `error`: continue without Jev. The adviser never blocks
+  a task. Exit code 2 means the request was invalid; fix it once or skip Jev.
+
+A result is `recommended` only when three values each reach 0.8: Choice
+confidence, the chosen option's probability, and Noul's estimate that the
+context is sufficient. These are cautious starting filters, not measured
+accuracy. Don't loosen them until you have labeled Railyard outcomes. When
+auditing, record the returned provider model and token usage.
 
 ## Keep ownership explicit
 
-For workflow selection, pass the suggestion back to `railyard:deliver` and
-preserve the requested endpoint. For allocation, apply the chosen pair
-through `railyard:model-routing` and the active dispatch tool. A Jev candidate
-ID is not a reservation, capability attestation, or dispatch receipt.
+Pass workflow advice back to `railyard:deliver`, and keep the requested
+endpoint. Apply allocations through `railyard:model-routing` and the dispatch
+tool. A candidate ID doesn't reserve capacity or prove that a tool supports
+the model. For review triage, offer only next investigations, and give the
+advice to the existing CE owner. Evidence selection and work priority each
+pick one next item; they don't retrieve files, schedule work, or run tests.
 
-For review triage, offer only next investigations, such as reproducing a
-failure, examining a relevant code path, or obtaining missing evidence.
-Feed the advice to the existing CE owner without starting another watcher.
-Neither a high-confidence answer nor an `exit 0` establishes correctness or
-review settlement.
-
-Use evidence selection while assembling context for planning, diagnosis,
-implementation, or a second opinion. Candidate descriptions must represent
-the evidence honestly; Jev cannot judge omitted material or prove a claim
-from a filename. Use work priority only after the caller has filtered out
-blocked or unauthorized work. Neither mode retrieves files, starts agents,
-runs tests, or changes dependency state.
-
-The helper asks one Choice and one independent Noul question in a single
-request. Choice selects a candidate or `no_match`; Noul estimates whether
-the supplied evidence supports a choice. All three default thresholds are
-0.8: Choice confidence, selected-option probability, and Noul probability.
-These are conservative initial filters, not measured Railyard accuracy.
-Evaluate them on representative labeled tasks before changing them or making
-efficiency claims. Record the returned provider model and usage when useful;
-compare complete accepted outcomes, retries, repairs, and elapsed time.
-
-Missing key, offline mode, uncertainty, invalid responses, rate limits, and
-service errors return no recommendation. No inference runs inside startup or
-tool hooks. Startup only advertises this default when the key is present.
+No inference runs in startup or tool hooks. See
+[the request and response reference](references/usage.md) for runnable
+examples, limits, failure codes, and probability semantics.
