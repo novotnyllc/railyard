@@ -132,6 +132,23 @@ function allowed(result, calls = ["api graphql"]) {
   assert.deepEqual(result.calls, calls);
 }
 
+// A real, settled CE 3.28.0 snapshot/state pair (captured from a merged PR,
+// watcher details neutralized). Identity and timing fields are re-bound to
+// the fixture PR; every other field keeps 3.28.0's actual shape.
+gated("CE 3.28.0 settled snapshot and state are accepted", () => {
+  const captured = JSON.parse(readFileSync(path.join(path.dirname(script), "fixtures", "ce-3.28.0-settled.json"), "utf8"));
+  const result = run(bash(fullMerge), {
+    mode: "interactive",
+    mutate(data) {
+      const bind = ["url", "head_sha", "invocation_id", "tick", "invocation_started_at", "invocation_wall_elapsed_seconds", "base"];
+      data.snapshot = { ...captured.snapshot, ...Object.fromEntries(bind.map((key) => [key, data.snapshot[key]])) };
+      const bindState = ["pr", "head_sha", "invocation_id", "tick", "started_at", "last_activity_at", "base"];
+      data.state = { ...captured.state, ...Object.fromEntries(bindState.map((key) => [key, data.state[key]])) };
+    },
+  });
+  allowed(result);
+});
+
 gated("CE pipeline result allows a pinned current PR without any reviewer or timing query", () => {
   const result = run(bash(fullMerge));
   allowed(result);
