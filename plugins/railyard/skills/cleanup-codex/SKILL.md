@@ -1,135 +1,101 @@
 ---
 name: cleanup-codex
-description: Clean completed-session process residue, inspect macOS Codex app-server resources, reap exact snapshot-bound residue, or explicitly recycle one fully attested detached server.
+description: Diagnose and recover macOS Codex app-servers under descriptor pressure — read-only inspect, two-pass recycle of a detached server (native daemon restart) or of the ChatGPT/Codex desktop app, and snapshot-bound reaping of leftover processes.
 ---
 
 # Cleanup Codex
 
-Use this skill to diagnose retained Codex app-server resources and, when separately authorized, reap identities from a prior exact-tree snapshot or recycle one fully attested detached Unix server. It never decides whether a task is complete or archived.
-
-## Inspect
-
-From this skill directory:
+Use this skill when Codex slows down, hits "too many open files", or leaves
+processes behind. It runs on macOS. Define `CC` once, with `SKILL_DIR` set to
+this skill's directory:
 
 ```bash
-node scripts/cleanup-codex.mjs inspect
+CC() { node "$SKILL_DIR/scripts/cleanup-codex.mjs" "$@"; }
 ```
 
-From the Railyard repository root:
+## Inspect first
 
 ```bash
-node plugins/railyard/skills/cleanup-codex/scripts/cleanup-codex.mjs inspect --json
+CC inspect            # add --json for the structured result
 ```
 
-`inspect` is the default action, so it may be omitted. The command reports app-server PID, parent and process-group identity, UID, executable, canonical command identity, start time and age, GUI or detached ancestry, numeric descriptors, descendants, remote proxies, control-socket ownership, and missing evidence.
-
-The stable JSON result always includes `action`, `selected`, `skipped`, `warnings`, and `verification`. A detached entry in `selected` is an inspection candidate only; `authorizesMutation` remains false. GUI and ambiguous entries are skipped with reasons.
-
-### Optional root SessionEnd hook
-
-Automatic cleanup is off: the default plugin manifest does not register a
-SessionEnd cleanup hook. Use manual inspection for an observed resource
-problem. If the user explicitly selects automatic cleanup, validate the
-current harness payload and trust only that reviewed command.
-
-The retained `cleanup --hook` implementation accepts only a bounded JSON payload naming `SessionEnd` and a UUID `session_id`, then takes paired plain and environment-expanded macOS process snapshots. It considers only same-user PIDs carrying that exact `CODEX_THREAD_ID`; process groups are used for exclusion and reporting, never group signaling. Mixed-thread, cross-user, hook/app-server, proxy/daemon, incomplete, or oversized groups are refused.
-
-Under the shared mutation lock, the hook revalidates each exact PID, UID, start time, absolute executable, and process group, signals exact PIDs deepest-first with `TERM`, waits about 200 ms, then revalidates and sends `KILL` only to exact survivors. It verifies the old birth identities are absent or reused. The hook is designed for a three-second timeout, remains silent during normal invocation, never restarts or signals the shared app-server, and never writes raw commands or environment values to its private receipt.
-
-The hook atomically replaces one mode-`0600` latest receipt for the exact app-server identity under `${XDG_STATE_HOME}/railyard/cleanup-codex` when `XDG_STATE_HOME` is set, otherwise under `~/Library/Application Support/railyard/cleanup-codex`. A later complete manual inspection prunes only private receipts whose exact identities are proven absent or reused. Set `RAILYARD_CLEANUP_CODEX_HOOK_DISABLED=1` to disable hook cleanup. Claude Code exposes this skill for explicit use but does not install the Codex hook.
-
-## Snapshot
-
-Record exactly one fully classified detached server, its recorded descendants, and only proxies linked by exact control-socket evidence:
-
-```bash
-node scripts/cleanup-codex.mjs inspect --snapshot /private/path/codex-tree.json --json
-```
-
-The destination must not already exist. The script publishes one same-user regular mode-`0600` file atomically and serializes process metadata only. Zero or multiple detached candidates, incomplete target identity, tree churn, unsafe paths, and incomplete evidence refuse without creating a snapshot.
-
-## Reap
-
-Reap residue only from a previously generated snapshot:
-
-```bash
-node scripts/cleanup-codex.mjs reap --snapshot /private/path/codex-tree.json --json
-```
-
-`reap` is macOS-only and takes one host-local exclusive mutation lock. It proceeds only when the recorded owner PID is authoritatively absent; a live, reused, or unreadable owner refuses. Every recorded target is checked for PID, UID, start time, absolute executable, and process-group identity before `TERM`, then checked again before survivor-only `KILL`. After `KILL`, a bounded final check requires the old identity to be absent; an exact survivor or unknown state returns exit `3`, while a reused PID is reported and never signaled again. New children and changed or unrelated identities are never selected.
+Inspect is read-only. For each app-server it reports ancestry (`gui` when the
+ChatGPT/Codex app hosts it, otherwise `detached`), descriptors, descendants, and
+control socket, plus the launchd `maxfiles` limit GUI apps inherit. A GUI server
+under descriptor pressure gets a recommendation to recycle the desktop app.
+Warnings describe pressure only; thresholds are tunable (`--fd-count-warn`,
+`--highest-fd-warn`, `--age-hours-warn`, `--descendant-warn`).
 
 ## Recycle
 
-Recycle is an explicit two-pass operation. Start with the exact detached PID reported by `inspect`, an absolute descriptor-attestor path, and no confirmation:
+Recycle takes two passes. Share the inspect output with the user and get their
+go-ahead first. The first pass changes nothing and prints a confirmation token;
+rerun the identical command with `--confirm '<token>'` to act. Any change to the
+bound identities in between invalidates the token.
+
+**Desktop app (GUI server).** For a server hosted by the ChatGPT or Codex app:
 
 ```bash
-node scripts/cleanup-codex.mjs recycle --pid 500 --nofile-attestor /private/absolute/codex-nofile-attestor --json
+CC recycle --pid <gui-pid> --desktop
+CC recycle --pid <gui-pid> --desktop --confirm '<token>'
 ```
 
-The first pass always refuses with exit `2` and returns a `confirmationToken`. Review the receipt, then rerun the identical command with the quoted token:
+Both passes run only when the app is idle: no Codex rollout or thread update
+for 5 minutes, no app-server child started in that window, and the app not frontmost. Otherwise
+the command refuses with `desktop-busy` and lists why; retry once the work in the
+app has finished. The check repeats under the lock just before quitting.
+
+When idle, it asks the app to quit, waits up to 30 seconds, reaps leftovers of
+the old server's tree that still match their recorded identities, and reopens
+the app by bundle id. The app is never force-killed: if it does not quit (say, a
+dialog is open), the command stops with `desktop-host-quit-timeout`.
+
+The usual root cause is launchd's default `maxfiles` soft limit of 256, which
+the app inherits, so a recycle only resets the count. The lasting fix is a root
+LaunchDaemon running `launchctl limit maxfiles 8192 unlimited` at boot, or
+Roundhouse machine configuration; recommend it rather than changing it here.
+
+**Detached server.** Managed mode (the default) rechecks that the daemon's PID
+record still names the receipt's server, runs `codex app-server daemon restart`,
+then verifies a new server owns the control socket and the old tree is gone.
+For a server the daemon does not run, `--unmanaged --launcher <path>` stops the
+exact recorded tree and starts the launcher.
 
 ```bash
-node scripts/cleanup-codex.mjs recycle --pid 500 --nofile-attestor /private/absolute/codex-nofile-attestor --confirm 'RECYCLE sha256-digest' --json
+CC recycle --pid <detached-pid>
+CC recycle --pid <detached-pid> --unmanaged --launcher ~/.local/bin/codex
 ```
 
-The receipt binds the exact server, applicable parent, descendants, socket-linked proxy PIDs, socket, native daemon evidence, minimum limit, attestor, launcher, and expected replacement executable. Any drift before mutation invalidates it.
+`--nofile-attestor <path>` is optional. Without it, the descriptor limit is
+reported as `unverified`. With it, the replacement must attest at least
+`--min-soft-limit` (default 8192).
 
-Managed mode is the default. It requires stable native daemon samples before confirmation, under the lock, and immediately before mutation, plus replacement attestation after restart. Each sample requires backend `pid`, the exact native PID record, selected-socket ownership, and the managed executable identity. The current native `codex app-server daemon restart` command does not accept the receipt-bound expected PID and start time, so Railyard fails closed with `managed-restart-exact-pid-unsupported` before confirmation or mutation. A future native compare-and-swap adapter may own the lifecycle; Railyard never signals a managed server directly and may reap only still-matching residue from the confirmed old snapshot.
+## Snapshot and reap leftovers
 
-Use unmanaged mode only when native evidence explicitly proves no managed backend and no PID record:
+For a detached server that will exit on its own, record its tree while it runs
+and reap once it is gone:
 
 ```bash
-node scripts/cleanup-codex.mjs recycle --pid 500 --unmanaged --launcher /private/absolute/codex-wrapper --nofile-attestor /private/absolute/codex-nofile-attestor --json
+CC inspect --snapshot "$TMPDIR/codex-tree.json"
+CC reap --snapshot "$TMPDIR/codex-tree.json"
 ```
 
-After reviewing that receipt, rerun the identical command with `--confirm`. Unmanaged mode revalidates the full tree under the mutation lock, sends `TERM` and survivor-only `KILL` to exact recorded PIDs, then launches only the receipt-bound launcher. If `--launcher` is omitted, resolution checks `RAILYARD_CODEX_BIN`, absolute `PATH` entries, then `~/.local/bin/codex`; symlinks are resolved and the canonical target is bound.
+## What the tools guarantee
 
-The configured minimum soft descriptor limit defaults to `8192` and may be changed with `--min-soft-limit`. `--nofile-attestor` may instead be supplied as `RAILYARD_NOFILE_ATTESTOR`. Railyard does not bundle or provision an attestor, launcher, or descriptor-limit configuration; Roundhouse owns that machine configuration, and the operator may only select an already approved path. Without a trusted provider, recycle intentionally refuses before mutation.
+- Signals go only to exact PIDs whose UID, start time, executable, and process
+  group still match the record; never to groups or by name.
+- Processes without a readable exact identity, such as retitled `npm exec` MCP
+  servers, are reported and left alone.
+- Other desktop apps' servers are untouched; detached recycle and reap refuse
+  GUI servers.
+- A refusal is an answer: report it rather than working around it.
 
-The attestor is an explicit trust boundary. It must be an absolute, executable, single-link regular file owned by root or the current user, with no set-ID or group/world-write bits. The command must emit only the following bounded JSON schemas:
-
-```json
-{"schema":"codex-nofile-attestation-v1","pid":500,"uid":501,"processStartTime":"2026-08-02T16:00:00.000Z","softNofile":8192}
-```
-
-for `attestor --pid 500 --json`, and:
-
-```json
-{"schema":"codex-launcher-nofile-attestation-v1","path":"/canonical/codex-wrapper","dev":1,"ino":2,"replacementExecutable":"/canonical/codex","softNofile":8192}
-```
-
-for `attestor --launcher /canonical/codex-wrapper --json`. Do not substitute an inferred limit or a helper that cannot attest the exact PID or launcher contract.
-
-Success requires a different replacement PID, exact ready-socket ownership, replacement descriptor-limit attestation, descriptor count and highest descriptor, a direct-child baseline, absence or safe reuse of every old identity (including an applicable parent), and unchanged GUI app-server identities. Any incomplete post-mutation proof exits `3` with the recovery reason.
-
-## Warning thresholds
-
-Override a warning threshold directly when needed:
-
-```bash
-node scripts/cleanup-codex.mjs inspect --fd-count-warn 200 --highest-fd-warn 220 --age-hours-warn 72 --descendant-warn 75
-```
-
-Thresholds identify pressure only. Age, descriptor use, and child count never prove staleness or authorize cleanup.
-
-## Safety and evidence
-
-- Treat incomplete process, ancestry, descriptor, or socket evidence as a refusal.
-- Require an absolute executable path from read-only `lsof` text-file evidence; `ps comm` alone is not an executable identity.
-- Associate a non-descendant `codex app-server proxy` only when its `lsof` control-socket path exactly matches the server-owned socket.
-- Do not signal by name, age, or pressure; do not use `killall` or broad process patterns.
-- Do not edit snapshots. Reap accepts only a same-user, non-symlink, single-link regular mode-`0600` file with the exact supported schema.
-- Do not break a contended mutation lock automatically. Resolve the active owner before retrying.
-- Never unlink `app-server-control.sock`. Native app-server startup owns that path.
-- Do not archive tasks, infer completion, change launchers, or change descriptor limits.
-- Do not use unmanaged mode as fallback for missing or conflicting managed evidence.
-- Do not run a live recycle without explicit operator approval. Tests use isolated fixture processes and sockets only.
-- JSON contains process metadata and canonical identities only. Raw command arguments, prompts, transcripts, environment values, and unrelated process arguments are discarded.
-- The shared skill works in Codex and Claude Code. This inspection collector requires macOS; other platforms return an explicit refusal rather than weaker evidence.
+An opt-in SessionEnd hook (`cleanup --hook`) can clean one finished session's
+processes automatically. The plugin does not register it; add it only when the
+user asks for automatic cleanup.
 
 ## Exit codes
 
-- `0`: healthy inspection or hook cleanup, successful reap, or fully verified recycle
-- `1`: warning or pressure; no action authorized
-- `2`: refused, ambiguous, unsupported, or invalid request
-- `3`: attempted cleanup or restart verification failure
+`0` healthy or recycled · `1` warning · `2` refused, or a first pass awaiting
+confirmation · `3` an attempted action could not be verified; the result names
+the recovery reason.

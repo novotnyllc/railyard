@@ -29,6 +29,7 @@ test("defaults to read-only inspect with stable exit codes", () => {
     pid: null,
     confirmation: null,
     unmanaged: false,
+    desktop: false,
     launcher: null,
     nofileAttestor: null,
     minSoftLimit: 8192,

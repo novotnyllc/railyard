@@ -33,6 +33,12 @@ import {
   pruneHookReceipts,
 } from "./lib/hook-receipts.mjs";
 import {
+  createDefaultDesktopDependencies,
+  desktopRecommendations,
+  readLaunchdMaxfiles,
+  recycleDesktop,
+} from "./lib/desktop.mjs";
+import {
   classifyInventory,
   collectExactProcessIdentity,
   collectMacOSInventory,
@@ -66,6 +72,7 @@ import {
 } from "./lib/snapshot.mjs";
 
 export * from "./lib/constants.mjs";
+export * from "./lib/desktop.mjs";
 export * from "./lib/hook.mjs";
 export * from "./lib/hook-receipts.mjs";
 export * from "./lib/inventory.mjs";
@@ -86,6 +93,7 @@ export function parseCliArgs(argv) {
   let pid = null;
   let confirmation = null;
   let unmanaged = false;
+  let desktop = false;
   let launcher = null;
   let nofileAttestor = null;
   let minSoftLimit = DEFAULT_MIN_SOFT_NOFILE;
@@ -111,6 +119,11 @@ export function parseCliArgs(argv) {
     if (arg === "--unmanaged") {
       if (unmanaged) error = "duplicate-unmanaged-argument";
       unmanaged = true;
+      continue;
+    }
+    if (arg === "--desktop") {
+      if (desktop) error = "duplicate-desktop-argument";
+      desktop = true;
       continue;
     }
 
@@ -184,13 +197,17 @@ export function parseCliArgs(argv) {
     pid !== null
     || confirmation !== null
     || unmanaged
+    || desktop
     || launcher
     || nofileAttestor
     || minSoftLimitSeen
   )) {
     error = "recycle-argument-without-recycle";
   }
-  if (action === "recycle" && !unmanaged && launcher !== null) error = "launcher-requires-unmanaged";
+  if (action === "recycle" && !unmanaged && launcher !== null && !desktop) error = "launcher-requires-unmanaged";
+  if (action === "recycle" && desktop && (unmanaged || launcher !== null || nofileAttestor !== null)) {
+    error = "desktop-incompatible-arguments";
+  }
   if (hook && snapshot !== null) error = "hook-snapshot-not-allowed";
   if (hook && action !== "cleanup") error = "hook-requires-cleanup";
   if (!hook && action === "cleanup") error = "cleanup-requires-hook";
@@ -203,6 +220,7 @@ export function parseCliArgs(argv) {
     pid,
     confirmation,
     unmanaged,
+    desktop,
     launcher,
     nofileAttestor,
     minSoftLimit,
@@ -240,16 +258,37 @@ export function renderHuman(result) {
       : "selected snapshot targets";
   lines.push(`${selectionLabel}: ${result.selected.length ? result.selected.map((item) => item.pid).join(", ") : "none"}`);
   if (result.action === "recycle" && result.verification.receipt) {
+    const receipt = result.verification.receipt;
+    lines.push(`mode: ${receipt.mode}`);
+    if (receipt.mode === "desktop") {
+      lines.push(`desktop app: ${receipt.host.bundleId} host pid ${receipt.host.pid} (${receipt.host.bundlePath})`);
+      const idle = result.verification.idle;
+      if (idle) {
+        lines.push(idle.idle
+          ? `idle: yes (no Codex activity for ${idle.idleSeconds}s; last at ${idle.lastActivityAt ?? "unknown"})`
+          : `idle: no (${idle.reasons.join(", ")}); retry when Codex work in the app has finished`);
+      }
+    } else {
+      lines.push(`descriptor limit: ${result.verification.nofileLimit ?? "attested"}`);
+    }
+    lines.push(`confirmation token: ${receipt.confirmationToken}`);
+  }
+  if (result.action === "recycle" && result.verification.after) {
+    const after = result.verification.after;
     lines.push(
-      `mode: ${result.verification.receipt.mode}`,
-      `confirmation token: ${result.verification.receipt.confirmationToken}`,
+      `replacement app-server pid ${after.pid}: descriptors=${after.descriptors?.count ?? "unknown"} highest=${after.descriptors?.highest ?? "unknown"}`,
     );
   }
+  const limits = result.verification.launchdMaxfiles;
+  if (limits) lines.push(`launchd maxfiles: soft=${limits.soft} hard=${limits.hard}`);
   for (const item of result.skipped) {
     lines.push(`skipped pid ${item.pid}: ${item.reasons.join(", ")}`);
   }
   for (const warning of result.warnings) {
     lines.push(`warning pid ${warning.pid}: ${warning.message}; does not authorize action`);
+  }
+  for (const recommendation of result.recommendations ?? []) {
+    lines.push(`recommendation: ${recommendation.message}`);
   }
   if (result.verification.missingEvidence.length) {
     lines.push(`refused: missing ${result.verification.missingEvidence.join(", ")}`);
@@ -259,11 +298,13 @@ export function renderHuman(result) {
 
 export function usage() {
   return [
-    "Usage: cleanup-codex [inspect [--snapshot path] | cleanup --hook | reap --snapshot path | recycle --pid PID] [--json]",
+    "Usage: cleanup-codex [inspect [--snapshot path] | cleanup --hook | reap --snapshot path | recycle --pid PID [--desktop]] [--json]",
     "",
     "Inspection is the default action; --snapshot records an exact tree for an explicit later reap.",
-    "Recycle requires --nofile-attestor PATH on the receipt-producing pass; rerun the same command with --confirm TOKEN.",
-    "Unmanaged receipt and recycle also require --unmanaged and --launcher PATH (or RAILYARD_CODEX_BIN).",
+    "Recycle is two-pass: the first pass prints a confirmation token; rerun the same command with --confirm TOKEN.",
+    "Detached servers restart through `codex app-server daemon restart` by default, or with --unmanaged",
+    "and --launcher PATH (or RAILYARD_CODEX_BIN). --nofile-attestor PATH is optional; without it the limit is unverified.",
+    "--desktop quits and relaunches the ChatGPT/Codex app hosting a GUI app-server, only when it has been idle for 5 minutes.",
     "Threshold options: --fd-count-warn, --highest-fd-warn, --age-hours-warn, --descendant-warn",
     "Exit codes: 0 healthy, 1 warning, 2 refused/invalid, 3 attempted cleanup verification failure.",
   ].join("\n");
@@ -293,6 +334,8 @@ export function runCli(argv = process.argv.slice(2), {
   lockPath,
   lock = createMutationLock({ fsApi, uid, ...(lockPath ? { lockPath } : {}) }),
   recycleDependencies = null,
+  desktopDependencies = null,
+  readLaunchdLimits = suppliedInventory === null ? () => readLaunchdMaxfiles(runner) : () => null,
   write = (text) => console.log(text),
 } = {}) {
   const parsed = parseCliArgs(argv);
@@ -365,6 +408,30 @@ export function runCli(argv = process.argv.slice(2), {
   }
 
   const inventory = suppliedInventory ?? collectMacOSInventory({ runner, platform });
+  if (parsed.action === "recycle" && parsed.desktop) {
+    const dependencies = desktopDependencies ?? createDefaultDesktopDependencies({
+      inventory,
+      runner,
+      uid,
+      readIdentity,
+      signalProcess,
+      sleep,
+      graceMs,
+      postSignalMs,
+      monotonicNow,
+      lock,
+    });
+    const outcome = recycleDesktop({
+      platform,
+      uid,
+      pid: parsed.pid,
+      confirmation: parsed.confirmation,
+      minSoftLimit: parsed.minSoftLimit,
+      now,
+    }, dependencies);
+    write(parsed.json ? JSON.stringify(outcome.result, null, 2) : renderHuman(outcome.result));
+    return outcome.exitCode;
+  }
   if (parsed.action === "recycle") {
     const launcher = parsed.unmanaged
       ? strictLauncherPath({ explicit: parsed.launcher, env, fsApi })
@@ -407,6 +474,12 @@ export function runCli(argv = process.argv.slice(2), {
   });
   const { result } = classified;
   let exitCode = classified.exitCode;
+  let launchdMaxfiles = null;
+  try {
+    launchdMaxfiles = readLaunchdLimits();
+  } catch {}
+  result.verification.launchdMaxfiles = launchdMaxfiles;
+  result.recommendations = desktopRecommendations(result, launchdMaxfiles);
   if (suppliedInventory === null && result.verification.complete) {
     result.verification.hookReceipts = pruneHookReceipts({ fsApi, env, uid, readIdentity });
   }

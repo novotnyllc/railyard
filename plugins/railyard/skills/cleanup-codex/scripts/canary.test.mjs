@@ -149,7 +149,35 @@ test("isolated managed recycle canary replaces a real Unix-socket fixture", {
         items: [{ path: socket, ownerPid: originalIdentity.pid }],
       },
     });
+    // Only the native CLI is faked; the production restart adapter drives it.
+    const nativeRestart = () => {
+      restartCalls += 1;
+      stopNativeFixture(activeIdentity);
+      if (fs.existsSync(socket)) {
+        fs.unlinkSync(socket);
+        nativeSocketUnlinks += 1;
+      }
+      activeIdentity = launchServer();
+      return {
+        status: 0,
+        stdout: JSON.stringify({
+          status: "restarted",
+          backend: "pid",
+          pid: activeIdentity.pid,
+          managedCodexPath: codex,
+          managedCodexVersion: null,
+          socketPath: socket,
+          cliVersion: "0.157.1",
+          appServerVersion: "0.157.1",
+        }),
+        stderr: "",
+      };
+    };
     const runner = (file, args, options = {}) => {
+      if (file === codex && args.join(" ") === "app-server daemon restart") {
+        assert.ok(options.timeout >= 75_000, "restart timeout must exceed the daemon lock wait");
+        return nativeRestart();
+      }
       if (file === codex && args.join(" ") === "app-server daemon version") {
         return {
           status: 0,
@@ -203,23 +231,6 @@ test("isolated managed recycle canary replaces a real Unix-socket fixture", {
       lock: { acquire: () => () => {} },
     });
     dependencies.collectInventory = () => fixtureInventory;
-    dependencies.restartManagedExact = ({ expectedIdentity }) => {
-      assert.equal(expectedIdentity.pid, activeIdentity.pid);
-      assert.equal(expectedIdentity.startTime, activeIdentity.startTime);
-      restartCalls += 1;
-      stopNativeFixture(activeIdentity);
-      if (fs.existsSync(socket)) {
-        fs.unlinkSync(socket);
-        nativeSocketUnlinks += 1;
-      }
-      activeIdentity = launchServer();
-      return {
-        status: "restarted",
-        backend: "pid",
-        pid: activeIdentity.pid,
-        socketPath: socket,
-      };
-    };
     const options = {
       platform: "darwin",
       uid: process.getuid(),
