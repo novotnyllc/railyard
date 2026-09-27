@@ -9,8 +9,10 @@ Choose the model and reasoning effort together for each assignment. This skill
 only guides native delegation. It does not create tasks, dispatch workers, or
 replace the delivery or review workflow.
 
-When `TYPESAFE_API_KEY` is set, consult [`railyard:jev`](../jev/SKILL.md) in
-allocation mode with the eligible pairs, then apply the guidance below. The
+When `TYPESAFE_API_KEY` is set and the choice among the pairs below is
+genuinely open, consult [`railyard:jev`](../jev/SKILL.md) in allocation mode
+with 2 to 4 eligible pairs from this list, including the default pair. Then
+apply the guidance below. Skip Jev when a default clearly applies. The
 user's explicit model or effort choices always win.
 
 ## Claude Code

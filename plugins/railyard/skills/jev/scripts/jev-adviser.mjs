@@ -20,14 +20,10 @@ export const DEFAULT_THRESHOLDS = Object.freeze({
   minProbability: 0.8,
   minSufficientContext: 0.8,
 });
-export const WORKFLOWS = Object.freeze([
-  "native",
-  ...[
-    "ce-brainstorm", "ce-debug", "ce-plan", "ce-work", "ce-code-review",
-    "ce-test-browser", "ce-commit-push-pr", "ce-babysit-pr", "ce-resolve-pr-feedback",
-    "ce-compound", "lfg",
-  ].map((name) => `compound-engineering:${name}`),
-]);
+// A workflow is `native` or a namespaced skill reference such as
+// `compound-engineering:ce-plan`. Plugins add and rename skills, so the caller
+// supplies only skills its harness has loaded; this checks shape, not a roster.
+export const WORKFLOW = /^(?:native|[a-z0-9][a-z0-9-]{0,63}:[a-z0-9][a-z0-9-]{0,63})$/;
 
 const MODES = ["workflow", "allocation", "review-triage", "evidence-selection", "work-priority"];
 const EFFORTS = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
@@ -74,10 +70,12 @@ function inputCandidate(value, mode) {
   if (typeof value.id !== "string" || !ID.test(value.id) || RESERVED_IDS.has(value.id)) fail();
   const candidate = { id: value.id, description: textField(value.description, LIMITS.descriptionBytes) };
   if (mode === "workflow") {
-    if (!WORKFLOWS.includes(value.workflow)) fail();
+    if (typeof value.workflow !== "string" || !WORKFLOW.test(value.workflow)) fail();
     candidate.workflow = value.workflow;
   } else if (mode === "allocation") {
-    if (typeof value.model !== "string" || !MODEL_ID.test(value.model) || !EFFORTS.includes(value.reasoning_effort)) fail();
+    // null marks a model without an effort setting, such as Claude Haiku.
+    if (typeof value.model !== "string" || !MODEL_ID.test(value.model)) fail();
+    if (value.reasoning_effort !== null && !EFFORTS.includes(value.reasoning_effort)) fail();
     candidate.model = value.model;
     candidate.reasoning_effort = value.reasoning_effort;
   }
@@ -127,7 +125,7 @@ function apiRequest(input) {
     : input.candidates.filter(({ id }) => id === input.requiredCandidateId);
   const criteria = Object.fromEntries(candidates.map((candidate) => {
     const prefix = input.mode === "workflow" ? `Workflow: ${candidate.workflow}. `
-      : input.mode === "allocation" ? `Model: ${candidate.model}. Reasoning effort: ${candidate.reasoning_effort}. `
+      : input.mode === "allocation" ? `Model: ${candidate.model}. Reasoning effort: ${candidate.reasoning_effort ?? "not configurable"}. `
       : input.mode === "evidence-selection" ? "Evidence or context item: "
       : input.mode === "work-priority" ? "Ready subtask or check: " : "Next investigation: ";
     return [candidate.id, `${prefix}${candidate.description}`];
@@ -296,7 +294,8 @@ export async function advise(value, options = {}) {
 const HELP = `Usage: node jev-adviser.mjs [--offline]
 Read one JSON object from stdin: {mode,state,candidates,requiredCandidateId?,thresholds?}.
 Modes: workflow, allocation, review-triage, evidence-selection, work-priority.
-See ../SKILL.md for candidate shapes.
+Workflow candidates name native or a loaded skill as plugin:skill.
+See ../references/usage.md for candidate shapes.
 TYPESAFE_API_KEY enables a single request to https://api.typesafe.ai/v1/systemone.
 --offline prevents network access even when a key is configured. No other flags.
 Only caller-supplied task context and candidates are sent; no files are read.
