@@ -97,8 +97,17 @@ export function launchdMaxfilesWarning(limits, minimum = DEFAULT_MIN_SOFT_NOFILE
   };
 }
 
-// Human-facing next steps for inspect: GUI servers under descriptor pressure
-// are recycled by relaunching their desktop app.
+// GUI apps inherit launchd's maxfiles soft limit, but the Codex app-server can
+// raise its own. A descriptor at or above launchd's soft limit proves the
+// server is not capped there, so launchd advice only applies below it.
+export function appearsCappedByLaunchd(server, limits) {
+  return Number.isInteger(limits?.soft)
+    && Number.isInteger(server?.highestDescriptor)
+    && server.highestDescriptor < limits.soft;
+}
+
+// Human-facing next steps for inspect: a GUI server under descriptor pressure
+// that still looks capped by launchd is recycled by relaunching its app.
 export function desktopRecommendations(inspection, limits, minimum = DEFAULT_MIN_SOFT_NOFILE) {
   const recommendations = [];
   const pressured = new Set(inspection.warnings
@@ -106,6 +115,7 @@ export function desktopRecommendations(inspection, limits, minimum = DEFAULT_MIN
     .map((warning) => warning.pid));
   for (const server of inspection.verification.servers ?? []) {
     if (server.classification !== "gui" || !pressured.has(server.pid)) continue;
+    if (!appearsCappedByLaunchd(server, limits)) continue;
     recommendations.push({
       code: "desktop-recycle-recommended",
       pid: server.pid,
@@ -481,12 +491,14 @@ export function recycleDesktop(options, deps) {
       launchdMaxfiles = deps.readLaunchdMaxfiles?.() ?? null;
     } catch {}
     result.verification.launchdMaxfiles = launchdMaxfiles;
-    const limitWarning = launchdMaxfilesWarning(launchdMaxfiles, minSoftLimit);
-    if (limitWarning) result.warnings.push({ pid: options.pid, ...limitWarning });
 
     const context = { pid: options.pid, uid, now };
     const evidence = desktopEvidence(deps.inventory, context, deps);
     result.verification.servers = evidence.servers;
+    if (appearsCappedByLaunchd(evidence.server, launchdMaxfiles)) {
+      const limitWarning = launchdMaxfilesWarning(launchdMaxfiles, minSoftLimit);
+      if (limitWarning) result.warnings.push({ pid: options.pid, ...limitWarning });
+    }
     const firstSnapshot = desktopTreeSnapshot({
       inventory: deps.inventory,
       owner: evidence.owner,

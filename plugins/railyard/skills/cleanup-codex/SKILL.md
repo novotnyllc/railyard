@@ -50,10 +50,12 @@ the old server's tree that still match their recorded identities, and reopens
 the app by bundle id. The app is never force-killed: if it does not quit (say, a
 dialog is open), the command stops with `desktop-host-quit-timeout`.
 
-The usual root cause is launchd's default `maxfiles` soft limit of 256, which
-the app inherits, so a recycle only resets the count. The lasting fix is a root
-LaunchDaemon running `launchctl limit maxfiles 8192 unlimited` at boot, or
-Roundhouse machine configuration; recommend it rather than changing it here.
+GUI apps inherit launchd's `maxfiles` soft limit (256 by default), but current
+Codex app-servers raise their own limit, so a descriptor above launchd's soft
+limit proves the server is not capped there. Only a server still below that
+limit gets the desktop-recycle and launchd advice (a root LaunchDaemon running
+`launchctl limit maxfiles 8192 unlimited` at boot); recommend it rather than
+changing it here.
 
 **Detached server.** Managed mode (the default) rechecks that the daemon's PID
 record still names the receipt's server, runs `codex app-server daemon restart`,

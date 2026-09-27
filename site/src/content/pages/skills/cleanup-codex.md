@@ -30,7 +30,7 @@ pass_1=confirmation-token
 pass_2=daemon-restart verified=new-socket-owner old-tree=gone
 ```
 
-The launchd default `maxfiles` soft limit is 256, and GUI apps inherit it; a login shell instead gets 8192 from the user's dotfiles. A recycle only resets the count against that ceiling — the lasting fix is a root LaunchDaemon running `launchctl limit maxfiles 8192 unlimited` at boot.
+GUI apps inherit launchd's `maxfiles` soft limit (256 by default), and a login shell gets 8192 from the user's dotfiles. Current Codex app-servers raise their own limit, so a server with a descriptor above launchd's soft limit is not capped there. Only a server still below it gets the desktop-recycle recommendation and the launchd advice: a root LaunchDaemon running `launchctl limit maxfiles 8192 unlimited` at boot.
 
 ## Scope
 
