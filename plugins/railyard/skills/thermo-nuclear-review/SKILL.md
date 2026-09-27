@@ -5,70 +5,59 @@ description: Deep security and correctness audit of a branch's changes. Use for 
 
 # Thermo Nuclear Review
 
-A deep security and correctness audit of a checked-out branch, or a focused
-pass on risks found during another review. Keep the selected scope, and report
-findings without changing code unless the task also authorizes fixes.
+Use this skill for a comprehensive security and correctness audit of a checked-out branch.
 
-## Audit
+## Prompt
 
-Audit the branch's changes for bugs, regressions, and security
-vulnerabilities. Trace plausible failure and attack paths through the relevant
-callers, dependencies, and tests, going deepest where the change touches trust
-boundaries, durable state, compatibility, or failure handling. Support each
-finding with a concrete trigger and consequence, and name material evidence
-gaps without presenting them as confirmed defects.
+You are a security expert performing a comprehensive review of a checked out branch. Audit this branch and its changes extremely thoroughly for bugs, changes that break existing features/functionality, and security vulnerabilities. Be EXTREMELY thorough, rigorous, careful, ambitious, and attentive. NOTHING can slip through.
 
-Report defects the branch introduces or exposes. Start from the diff and read
-unchanged code as needed to establish the changed behavior or an affected
-dependency, explaining the connection. Unrelated existing defects belong in a
-separately requested audit.
+# Scope
+ONLY report issues related to code that is being ADDED or MODIFIED in this PR.
+Focus on changes in the diff.
+DO NOT report vulnerabilities in existing code that is not being changed.
 
-## What to look for
+# Guidelines
 
-**Broken functionality.** Small changes break things through cross-package or
-module dependencies. Trace callers and side effects, including unchanged
-consumers whose assumptions the diff alters.
+## Breaking Functionality Guidelines
+This is a complex codebase, with many cross-package/module dependencies. Often simple code changes in one place have subtle interactions that break functionality elsewhere. You MUST be extremely thorough in tracing through possible side effects of the changes.
 
-**Broken developer experience.** Flag changes to how developers run or build
-the code locally: where or how secrets are read, renamed or new environment
-variables, remapped ports or networking, or new scripts that must be run for
-existing functionality to keep working. New alternative ways to run or build
-do not count, and neither do ordinary package-manager dependencies unless they
-require something outside the normal workflow, such as manually installing
-software from a website or app store.
+## Breaking Devex Guidelines
+It can be easy to break developers' ability to run / build the code locally. You MUST catch changes that will impact users' developer experience. Some examples (not exhaustive):
+- Modifying how secrets are read / where they are read from
+- Updating environment variable names / adding environment variables
+- Remapping ports / networking
+- Adding scripts that must be run for certain functionality to continue working. Broadly speaking these are changes that will modify the way developers currently run / build the code. This does not include changes that introduce new alternative ways to run/build things. Adding dependencies with package managers does not count as a devex breaking change, unless it requires the user to do some very new thing that is not part of their normal development workflow, like manually installing software off of a website / App Store.
 
-**Failure memory.** Error handling can reach a wrong conclusion from a failure
-and keep it: nothing crashes, tests pass, and the code now believes something
-false. Read [failure memory](references/failure-memory.md) and apply it to
-every `catch`, fallback, and default in the diff.
+## Failure Memory Guidelines
+Error handling that reaches a WRONG and DURABLE conclusion from a failure is a
+distinct defect class, and ordinary review keeps missing it: nothing crashes,
+the error is handled, the tests pass — and the code now believes something
+false for the rest of the process. Read [`references/failure-memory.md`](references/failure-memory.md) and
+apply it to every failure branch in the diff. In short, for each `catch`,
+fallback, or default: what does this now BELIEVE, for how long, was the failure
+actually evidence for that belief, and does anything ever re-check it? A
+cancellation is evidence about intent, not about the world; downtime is not
+evidence about a server's capabilities; an incomplete walk learned nothing.
+Assuming under uncertainty is fine — RECORDING the assumption as fact is the
+bug.
 
-**Feature leaks.** For feature flags or internal-only checks, trace entry
-points and fallback paths to confirm the intended gate still applies.
+## Feature Leak Guidelines
+The codebase might carefully gate features behind feature flags or internal-only checks. You MUST NOT allow any features that are meant to be behind a feature gate leak. These leaks are often subtle. Be VERY careful and thorough.
 
-## Calibration
+## Intended Breakage Guidelines
+If you identify a high risk finding, but the intent of the branch is to introduce that finding – e.g. break some functionality, remove a feature flag, remove a safeguard – AND the scope of the change is well constrained, you SHOULD NOT waste the author's time by reporting the issue to them. However, if you believe it is likely that they are not aware of the full implications of their change, or you are worried that they are under-weighting the negative impacts (extreme example: a developer pushes a PR titled "Delete the database"), or you are worried that the change is actually malicious, you should still report the finding.
 
-When a high-risk change is the branch's evident intent (breaking some
-behavior, removing a flag or safeguard) and its scope is well constrained,
-skip it. Report it anyway when the author may not see its full implications,
-may be under-weighting the impact (a PR titled "Delete the database"), or the
-change may be malicious.
+## Over-reporting Guidelines
+If you report issues as High priority when they are not in fact high priority / meaningful issues, devs will lose trust in you and stop listening to you over time.
+NEVER misreport the priority / importance of issues. Be extremely thorough in tracing issues end-to-end to gain complete, and total confidence before reporting.
 
-Set priority by demonstrated impact under reachable conditions; an inflated
-High erodes trust in every other finding. Trace each issue end to end and
-state material uncertainty.
+# Final Response
+IF you have medium-to-high priority / risk findings, and there is a PR for this branch, then check the PR/MR discussion using gh/glab cli to see if there are comments from BugBot or others present.
+If so, take their findings into account. If they found issues you missed, evaluate them to determine if they are valid and include them in your report. If they found some of the same issues you did, see if there is anything from their findings that are worth incorporating into your response.
+Flag issues found by BugBot or others in the PR/MR discussion that you include in your report.
 
-Check available code before reporting: for example, inspect an accessible
-backend before alleging a client condition is unhandled. A clean review is a
-scoped result, not proof that no defect exists; name any unavailable evidence
-that limits the conclusion.
 
-## Final response
-
-Form an independent assessment first. Then compare medium-to-high findings
-with relevant PR/MR discussion, reusing what the CE review owner already
-collected, or inspecting it with `gh`/`glab` when a PR exists. Validate any
-additional findings against the code, merge duplicates, and attribute issues
-from BugBot or other reviewers that you include.
-
-Return findings to the existing review owner. CE owns PR review settlement and
-CI monitoring; this pass starts no watch loop of its own.
+# Critical Rules
+- NEVER present issues with unfinished research. E.g. Never say something like, "The client has issue X, but if handled in the backend then this is ok." if you have access to the backend code and can check for yourself.
+- You MUST wait to check the PR/MR discussion until AFTER you have performed your audit. This way you have fresh eyes while you review.
+- Be EXTREMELY thorough, rigorous, careful, ambitious, and attentive. NOTHING can slip through.
