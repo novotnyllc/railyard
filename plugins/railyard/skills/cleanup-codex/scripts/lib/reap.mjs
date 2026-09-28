@@ -3,18 +3,15 @@
 import {
   DEFAULT_GRACE_MS,
   DEFAULT_POST_SIGNAL_MS,
-  EXIT_CODES,
 } from "./constants.mjs";
 import {
   collectExactProcessIdentity,
 } from "./inventory.mjs";
 import {
-  CleanupRefusal,
   callerUid,
   identityDifferences,
   refuse,
   sleepSync,
-  unique,
   validObservedIdentity,
 } from "./process-evidence.mjs";
 import {
@@ -22,6 +19,7 @@ import {
   sameBirthIdentityPresent,
   validateSnapshotObject,
 } from "./snapshot.mjs";
+import { runMutation } from "./transaction.mjs";
 
 export function signalExactPid(pid, signal) {
   if (!Number.isInteger(pid) || pid <= 0) refuse("signal-target-invalid");
@@ -78,215 +76,202 @@ export function reapSnapshot(snapshot, {
   ownerReplacement = null,
 } = {}) {
   const result = emptyReapResult(platform);
-  let exitCode = EXIT_CODES.refused;
-  let release = null;
+  return runMutation(result, { lock }, {
+    unexpectedCode: "reap-failed",
+    errorsFail: true,
+    prepare() {
+      if (platform !== "darwin") refuse("unsupported-platform");
+      validateSnapshotObject(snapshot, uid);
+      if (
+        !Number.isFinite(graceMs)
+        || graceMs < 0
+        || graceMs > 10_000
+        || !Number.isFinite(postSignalMs)
+        || postSignalMs < 0
+        || postSignalMs > 10_000
+      ) {
+        refuse("invalid-grace-period");
+      }
+      result.verification.snapshot = {
+        schema: snapshot.schema,
+        ownerPid: snapshot.owner.pid,
+        targetPids: snapshot.targets.map((target) => target.pid),
+      };
+    },
+    mutate: () => reapLocked(snapshot, result, {
+      readIdentity,
+      signalProcess,
+      sleep,
+      graceMs,
+      postSignalMs,
+      ownerReplacement,
+    }),
+  });
+}
+
+// Everything reap does under the lock. Returns the failure codes of an
+// attempted reap, recorded as they happen so an exception later in the pass
+// keeps them; refuses (throws) while nothing has been signalled.
+function reapLocked(snapshot, result, {
+  readIdentity,
+  signalProcess,
+  sleep,
+  graceMs,
+  postSignalMs,
+  ownerReplacement,
+}) {
+  const failures = [];
   let identityRefused = false;
   let attemptedFailure = false;
+  const fail = (code) => {
+    attemptedFailure = true;
+    failures.push(code);
+    result.verification.missingEvidence.push(code);
+  };
 
-  try {
-    if (platform !== "darwin") refuse("unsupported-platform");
-    validateSnapshotObject(snapshot, uid);
+  const ownerObservation = readIdentity(snapshot.owner.pid);
+  const replacedByKnownBirth = Boolean(ownerReplacement)
+    && ownerObservation?.state === "present"
+    && validObservedIdentity(ownerObservation.identity)
+    && ownerObservation.identity.pid === ownerReplacement.pid
+    && ownerObservation.identity.startTime === ownerReplacement.startTime
+    && ownerReplacement.startTime !== snapshot.owner.startTime;
+  if (replacedByKnownBirth) {
+    result.verification.ownerProof = "replaced";
+  } else {
+    if (ownerObservation?.state === "present" && validObservedIdentity(ownerObservation.identity)) {
+      const changed = identityDifferences(snapshot.owner, ownerObservation.identity);
+      refuse(changed.length ? "owner-identity-changed" : "owner-still-live");
+    }
+    if (ownerObservation?.state !== "absent") refuse("owner-evidence-unavailable");
+    result.verification.ownerProof = "absent";
+  }
+
+  const active = [];
+  for (const target of snapshot.targets) {
+    const observation = readIdentity(target.pid);
     if (
-      !Number.isFinite(graceMs)
-      || graceMs < 0
-      || graceMs > 10_000
-      || !Number.isFinite(postSignalMs)
-      || postSignalMs < 0
-      || postSignalMs > 10_000
+      ownerReplacement
+      && target.pid === ownerReplacement.pid
+      && observation?.state === "present"
+      && validObservedIdentity(observation.identity)
+      && observation.identity.startTime === ownerReplacement.startTime
+      && ownerReplacement.startTime !== target.startTime
     ) {
-      refuse("invalid-grace-period");
+      result.skipped.push({ pid: target.pid, reasons: ["replaced-by-recycle"] });
+      continue;
     }
-    result.verification.snapshot = {
-      schema: snapshot.schema,
-      ownerPid: snapshot.owner.pid,
-      targetPids: snapshot.targets.map((target) => target.pid),
-    };
+    const skipped = skippedIdentity(target.pid, observation, target);
+    if (!skipped) active.push(target);
+    else if (skipped.reasons[0] === "already-absent") result.skipped.push(skipped);
+    else {
+      result.skipped.push(skipped);
+      identityRefused = true;
+    }
+  }
+  if (identityRefused) refuse("target-identity-changed");
+  result.selected = active.map((target) => ({ pid: target.pid, role: target.role }));
+
+  const termTargets = [];
+  for (const target of active) {
+    const observation = readIdentity(target.pid);
+    const skipped = skippedIdentity(target.pid, observation, target);
+    if (skipped) {
+      result.skipped.push(skipped);
+      if (skipped.reasons[0] !== "already-absent") identityRefused = true;
+      if (identityRefused) break;
+      continue;
+    }
     try {
-      release = lock.acquire();
+      result.verification.mutationAttempted = true;
+      signalProcess(target.pid, "SIGTERM");
+      result.verification.termPids.push(target.pid);
+      termTargets.push(target);
     } catch (error) {
-      refuse(error?.code === "mutation-lock-held" || error?.code === "ELOCKED"
-        ? "mutation-lock-held"
-        : "mutation-lock-unavailable");
-    }
-
-    const ownerObservation = readIdentity(snapshot.owner.pid);
-    const replacedByKnownBirth = Boolean(ownerReplacement)
-      && ownerObservation?.state === "present"
-      && validObservedIdentity(ownerObservation.identity)
-      && ownerObservation.identity.pid === ownerReplacement.pid
-      && ownerObservation.identity.startTime === ownerReplacement.startTime
-      && ownerReplacement.startTime !== snapshot.owner.startTime;
-    if (replacedByKnownBirth) {
-      result.verification.ownerProof = "replaced";
-    } else {
-      if (ownerObservation?.state === "present" && validObservedIdentity(ownerObservation.identity)) {
-        const changed = identityDifferences(snapshot.owner, ownerObservation.identity);
-        refuse(changed.length ? "owner-identity-changed" : "owner-still-live");
+      if (error?.code === "ESRCH") result.skipped.push({ pid: target.pid, reasons: ["already-absent"] });
+      else {
+        fail("signal-or-wait-failed");
       }
-      if (ownerObservation?.state !== "absent") refuse("owner-evidence-unavailable");
-      result.verification.ownerProof = "absent";
+      if (attemptedFailure) break;
     }
+  }
 
-    const active = [];
-    for (const target of snapshot.targets) {
+  if (!attemptedFailure && result.verification.termPids.length) {
+    try {
+      sleep(graceMs);
+    } catch {
+      fail("signal-or-wait-failed");
+    }
+  }
+
+  const killedTargets = [];
+  if (!attemptedFailure) {
+    for (const target of termTargets) {
       const observation = readIdentity(target.pid);
-      if (
-        ownerReplacement
-        && target.pid === ownerReplacement.pid
-        && observation?.state === "present"
-        && validObservedIdentity(observation.identity)
-        && observation.identity.startTime === ownerReplacement.startTime
-        && ownerReplacement.startTime !== target.startTime
-      ) {
-        result.skipped.push({ pid: target.pid, reasons: ["replaced-by-recycle"] });
+      const skipped = skippedIdentity(target.pid, observation, target);
+      if (skipped?.reasons[0] === "already-absent") {
+        result.skipped.push(skipped);
         continue;
       }
-      const skipped = skippedIdentity(target.pid, observation, target);
-      if (!skipped) active.push(target);
-      else if (skipped.reasons[0] === "already-absent") result.skipped.push(skipped);
-      else {
-        result.skipped.push(skipped);
-        identityRefused = true;
-      }
-    }
-    if (identityRefused) refuse("target-identity-changed");
-    result.selected = active.map((target) => ({ pid: target.pid, role: target.role }));
-
-    const termTargets = [];
-    for (const target of active) {
-      const observation = readIdentity(target.pid);
-      const skipped = skippedIdentity(target.pid, observation, target);
       if (skipped) {
-        result.skipped.push(skipped);
-        if (skipped.reasons[0] !== "already-absent") identityRefused = true;
-        if (identityRefused) break;
+        const reused = !sameBirthIdentityPresent(target, observation);
+        result.skipped.push(reused
+          ? { pid: target.pid, reasons: ["pid-reused-after-term"] }
+          : skipped);
+        if (reused) {
+          result.verification.postKillVerifiedPids.push(target.pid);
+          continue;
+        }
+        identityRefused = true;
         continue;
       }
       try {
         result.verification.mutationAttempted = true;
-        signalProcess(target.pid, "SIGTERM");
-        result.verification.termPids.push(target.pid);
-        termTargets.push(target);
+        signalProcess(target.pid, "SIGKILL");
+        result.verification.killPids.push(target.pid);
+        killedTargets.push(target);
       } catch (error) {
         if (error?.code === "ESRCH") result.skipped.push({ pid: target.pid, reasons: ["already-absent"] });
         else {
-          attemptedFailure = true;
-          result.verification.missingEvidence.push("signal-or-wait-failed");
+          fail("signal-or-wait-failed");
         }
-        if (attemptedFailure) break;
-      }
-    }
-
-    if (!attemptedFailure && result.verification.termPids.length) {
-      try {
-        sleep(graceMs);
-      } catch {
-        attemptedFailure = true;
-        result.verification.missingEvidence.push("signal-or-wait-failed");
-      }
-    }
-
-    const killedTargets = [];
-    if (!attemptedFailure) {
-      for (const target of termTargets) {
-        const observation = readIdentity(target.pid);
-        const skipped = skippedIdentity(target.pid, observation, target);
-        if (skipped?.reasons[0] === "already-absent") {
-          result.skipped.push(skipped);
-          continue;
-        }
-        if (skipped) {
-          const reused = !sameBirthIdentityPresent(target, observation);
-          result.skipped.push(reused
-            ? { pid: target.pid, reasons: ["pid-reused-after-term"] }
-            : skipped);
-          if (reused) {
-            result.verification.postKillVerifiedPids.push(target.pid);
-            continue;
-          }
-          identityRefused = true;
-          continue;
-        }
-        try {
-          result.verification.mutationAttempted = true;
-          signalProcess(target.pid, "SIGKILL");
-          result.verification.killPids.push(target.pid);
-          killedTargets.push(target);
-        } catch (error) {
-          if (error?.code === "ESRCH") result.skipped.push({ pid: target.pid, reasons: ["already-absent"] });
-          else {
-            attemptedFailure = true;
-            result.verification.missingEvidence.push("signal-or-wait-failed");
-          }
-        }
-      }
-    }
-
-    if (!attemptedFailure && killedTargets.length) {
-      try {
-        sleep(postSignalMs);
-      } catch {
-        attemptedFailure = true;
-        result.verification.missingEvidence.push("signal-or-wait-failed");
-      }
-    }
-    if (!attemptedFailure) {
-      for (const target of killedTargets) {
-        const observation = readIdentity(target.pid);
-        if (observation?.state === "absent") {
-          result.verification.postKillVerifiedPids.push(target.pid);
-          continue;
-        }
-        if (observation?.state === "present" && validObservedIdentity(observation.identity)) {
-          if (!sameBirthIdentityPresent(target, observation)) {
-            result.verification.postKillVerifiedPids.push(target.pid);
-            result.skipped.push({ pid: target.pid, reasons: ["pid-reused-after-kill"] });
-          } else {
-            attemptedFailure = true;
-            result.verification.missingEvidence.push("post-kill-survivor");
-          }
-          continue;
-        }
-        attemptedFailure = true;
-        result.verification.missingEvidence.push("post-kill-verification-unknown");
-      }
-    }
-
-    if (attemptedFailure) {
-      result.status = "failed";
-      exitCode = EXIT_CODES.failed;
-    } else if (identityRefused) {
-      result.verification.missingEvidence.push("target-identity-changed");
-      if (result.verification.mutationAttempted) {
-        result.status = "failed";
-        result.verification.missingEvidence.push("incomplete-after-mutation");
-        exitCode = EXIT_CODES.failed;
-      } else {
-        result.status = "refused";
-        exitCode = EXIT_CODES.refused;
-      }
-    } else {
-      result.status = "healthy";
-      result.verification.complete = true;
-      exitCode = EXIT_CODES.healthy;
-    }
-  } catch (error) {
-    const code = error instanceof CleanupRefusal ? error.code : "reap-failed";
-    result.status = code === "reap-failed" ? "failed" : "refused";
-    result.verification.missingEvidence.push(code);
-    exitCode = code === "reap-failed" ? EXIT_CODES.failed : EXIT_CODES.refused;
-  } finally {
-    if (release) {
-      try {
-        release();
-      } catch {
-        result.status = "failed";
-        result.verification.complete = false;
-        result.verification.missingEvidence.push("mutation-lock-release-failed");
-        exitCode = EXIT_CODES.failed;
       }
     }
   }
-  result.verification.missingEvidence = unique(result.verification.missingEvidence);
-  return { result, exitCode };
+
+  if (!attemptedFailure && killedTargets.length) {
+    try {
+      sleep(postSignalMs);
+    } catch {
+      fail("signal-or-wait-failed");
+    }
+  }
+  if (!attemptedFailure) {
+    for (const target of killedTargets) {
+      const observation = readIdentity(target.pid);
+      if (observation?.state === "absent") {
+        result.verification.postKillVerifiedPids.push(target.pid);
+        continue;
+      }
+      if (observation?.state === "present" && validObservedIdentity(observation.identity)) {
+        if (!sameBirthIdentityPresent(target, observation)) {
+          result.verification.postKillVerifiedPids.push(target.pid);
+          result.skipped.push({ pid: target.pid, reasons: ["pid-reused-after-kill"] });
+        } else {
+          fail("post-kill-survivor");
+        }
+        continue;
+      }
+      fail("post-kill-verification-unknown");
+    }
+  }
+
+  if (attemptedFailure) return failures;
+  if (identityRefused) {
+    // Before any signal an identity change is a refusal; after one it is an
+    // incomplete reap.
+    if (!result.verification.mutationAttempted) refuse("target-identity-changed");
+    return ["target-identity-changed", "incomplete-after-mutation"];
+  }
+  return [];
 }

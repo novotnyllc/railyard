@@ -84,6 +84,7 @@ export * from "./lib/recycle.mjs";
 export * from "./lib/recycle-deps.mjs";
 export * from "./lib/recycle-evidence.mjs";
 export * from "./lib/snapshot.mjs";
+export * from "./lib/transaction.mjs";
 
 export function parseCliArgs(argv) {
   let action = "inspect";
