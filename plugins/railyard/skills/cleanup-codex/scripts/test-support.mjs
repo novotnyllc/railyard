@@ -738,7 +738,7 @@ export function desktopHarness({
     armRelaunchWatchdog(args) {
       calls.watchdog.push(args);
       calls.order.push("watchdog");
-      return { ok: true, pid: 4242 };
+      return { ok: true, pid: 4242, disarm: () => calls.order.push("disarm") };
     },
     launchApp(bundlePath) {
       calls.launch.push(bundlePath);

@@ -471,8 +471,8 @@ export function sameBirthIdentityPresent(expected, observation) {
 
 // One verdict on whether the exact birth `expected` names still runs: "gone"
 // (absent, or the PID now holds another birth), "present", or "unknown" (the
-// read failed or returned no valid identity). Every desktop and recycle check
-// that asks this question uses it, so they cannot disagree.
+// read failed or returned no valid identity). The desktop recycle's waits,
+// its watchdog and assertExpectedIdentityGone share it, so they agree.
 export function observeBirth(expected, readIdentity) {
   let observation;
   try {

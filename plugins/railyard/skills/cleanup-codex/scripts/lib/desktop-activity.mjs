@@ -7,7 +7,15 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { LSAPPINFO, LSOF, SQLITE3 } from "./constants.mjs";
+import {
+  DESKTOP_LATEST_THREADS,
+  DESKTOP_OPEN_TURN_WINDOW_MS,
+  DESKTOP_ROLLOUT_TAIL_BYTES,
+  DESKTOP_THREAD_QUERY_LIMIT,
+  LSAPPINFO,
+  LSOF,
+  SQLITE3,
+} from "./constants.mjs";
 import { childrenByParent, descendantsOf } from "./inventory.mjs";
 import { defaultRunner, safeRun } from "./process-evidence.mjs";
 
@@ -16,8 +24,10 @@ import { defaultRunner, safeRun } from "./process-evidence.mjs";
 // originator (the local DB already holds `codex_work_desktop`) cannot make a
 // busy app look idle. Threads from builds that recorded no originator are
 // classified by their source instead.
-export const NON_DESKTOP_ORIGINATORS = new Set(["codex_exec", "codex_cli_rs", "codex_cli", "codex_vscode"]);
-const NON_DESKTOP_SOURCES = new Set(["exec", "cli", "vscode", "mcp"]);
+// With no originator, `vscode` still counts: the desktop app used that source
+// for its own top-level threads.
+const NON_DESKTOP_ORIGINATORS = new Set(["codex_exec", "codex_cli_rs", "codex_cli", "codex_vscode"]);
+const NON_DESKTOP_SOURCES = new Set(["exec", "cli", "mcp"]);
 export function countsAsDesktopThread(row) {
   const originator = typeof row?.originator === "string" ? row.originator.trim() : "";
   if (originator) return !NON_DESKTOP_ORIGINATORS.has(originator);
@@ -26,20 +36,16 @@ export function countsAsDesktopThread(row) {
   return !(NON_DESKTOP_SOURCES.has(source) || source.startsWith("{"));
 }
 
-const THREAD_QUERY_LIMIT = 500;
-const LATEST_THREADS = 20;
-const ROLLOUT_TAIL_BYTES = 256 * 1024;
-// Every counted thread active this recently is checked for an open turn or
-// tool call: a single tool call can sit silent far longer than the idle window.
-export const OPEN_TURN_WINDOW_MS = 24 * 60 * 60 * 1000;
 const TURN_STARTS = new Set(["task_started", "turn_started"]);
 const TURN_ENDS = new Set(["task_complete", "turn_complete", "turn_completed", "turn_aborted", "task_aborted"]);
 const TOOL_CALLS = new Set(["function_call", "custom_tool_call", "local_shell_call"]);
 const TOOL_OUTPUTS = new Set(["function_call_output", "custom_tool_call_output", "local_shell_call_output"]);
 
-// The Codex home and state database the selected server has open. Its
-// state/logs/queue databases live directly in that home; the state database
-// must be among them, because a guessed one could be stale.
+// The Codex home the selected server uses: the one directory holding the
+// Codex databases (state/logs/queue) it has open. The live desktop server
+// often holds only logs and queue open, so the state database is read from
+// that same directory (stateDatabaseIn). No open Codex database, or more than
+// one home, is not tied to the server.
 export function codexHomeFromOpenFiles(lsofOutput) {
   const homes = new Set();
   const states = new Set();
@@ -51,11 +57,9 @@ export function codexHomeFromOpenFiles(lsofOutput) {
     homes.add(match[1]);
     if (match[2] === "state") states.add(name.replace(/-(?:wal|shm)$/, ""));
   }
-  if (homes.size !== 1 || states.size !== 1) return null;
+  if (homes.size !== 1 || states.size > 1) return null;
   const [home] = homes;
-  const [database] = states;
-  // The path goes into a SQLite URI; anything URI-special is not used.
-  return /[?#%]/.test(database) ? null : { home, database };
+  return { home, openState: states.size ? [...states][0] : null };
 }
 
 // A rollout's last turn: "open" when a turn started without a completion or a
@@ -103,12 +107,8 @@ export function readTurn(text, { partial = false } = {}) {
   return { state: partial && events ? "unknown" : "closed", openedAtMs: null };
 }
 
-export function rolloutTurnState(text, options) {
-  return readTurn(text, options).state;
-}
-
 function readRolloutTail(fsApi, rollout) {
-  const length = Math.min(rollout.size, ROLLOUT_TAIL_BYTES);
+  const length = Math.min(rollout.size, DESKTOP_ROLLOUT_TAIL_BYTES);
   const start = rollout.size - length;
   const fd = fsApi.openSync(rollout.path, "r");
   try {
@@ -120,20 +120,38 @@ function readRolloutTail(fsApi, rollout) {
   }
 }
 
+// The newest `state_N.sqlite` in the Codex home: the one the server has open
+// if any, else the highest N on disk. None is unknown.
+export function stateDatabaseIn(located, fsApi = fs) {
+  if (located.openState) return located.openState;
+  let names;
+  try {
+    names = fsApi.readdirSync(located.home);
+  } catch {
+    return null;
+  }
+  const newest = names
+    .map((name) => ({ name, version: Number(/^state_(\d+)\.sqlite$/.exec(name)?.[1]) }))
+    .filter((entry) => Number.isInteger(entry.version))
+    .sort((left, right) => right.version - left.version)[0];
+  const database = newest ? path.join(located.home, newest.name) : null;
+  // The path goes into a SQLite URI; anything URI-special is not used.
+  return database && !/[?#%]/.test(database) ? database : null;
+}
+
 // Read-only signals that the desktop app's own Codex work is running: its
 // newest thread update or rollout write, any turn or tool call still open in a
 // thread active in the last day, and which app is frontmost. The Codex home
-// and state database come from the selected server's open files. Anything
-// that cannot be read or tied to the server leaves `complete` false with an
-// `unknown` code, which counts as busy.
+// is the directory of the Codex databases the selected server holds open.
+// Anything that cannot be read or tied to the server leaves `complete` false
+// with an `unknown` code, which counts as busy.
 export function readDesktopActivity({ runner = defaultRunner, serverPid, fsApi = fs, nowMs = Date.now() } = {}) {
   const activity = {
     complete: false,
     unknown: null,
     codexHome: null,
     latestActivityMs: null,
-    turnInProgress: false,
-    openTurnStartedMs: null,
+    openTurns: [],
     frontmostBundleId: null,
   };
   const unknown = (code) => {
@@ -145,12 +163,14 @@ export function readDesktopActivity({ runner = defaultRunner, serverPid, fsApi =
   const located = openFiles.status === 0 ? codexHomeFromOpenFiles(openFiles.stdout) : null;
   if (!located) return unknown("codex-home-unknown");
   activity.codexHome = located.home;
+  const database = stateDatabaseIn(located, fsApi);
+  if (!database) return unknown("codex-state-unknown");
   const query = safeRun(runner, SQLITE3, [
     "-readonly",
     "-json",
-    `file:${located.database}?mode=ro`,
-    "SELECT rollout_path, updated_at_ms, originator, source FROM threads WHERE archived = 0"
-      + ` ORDER BY updated_at_ms DESC LIMIT ${THREAD_QUERY_LIMIT}`,
+    `file:${database}?mode=ro`,
+    "SELECT id, title, rollout_path, updated_at_ms, originator, source FROM threads WHERE archived = 0"
+      + ` ORDER BY updated_at_ms DESC LIMIT ${DESKTOP_THREAD_QUERY_LIMIT}`,
   ], { timeout: 5_000 });
   if (query.status !== 0 || typeof query.stdout !== "string") return unknown("desktop-threads-unreadable");
   let rows;
@@ -160,9 +180,9 @@ export function readDesktopActivity({ runner = defaultRunner, serverPid, fsApi =
     return unknown("desktop-threads-unreadable");
   }
   if (!Array.isArray(rows)) return unknown("desktop-threads-unreadable");
-  const windowStart = nowMs - OPEN_TURN_WINDOW_MS;
+  const windowStart = nowMs - DESKTOP_OPEN_TURN_WINDOW_MS;
   // A full page still inside the window may hide older active threads.
-  if (rows.length >= THREAD_QUERY_LIMIT && rows.at(-1)?.updated_at_ms >= windowStart) {
+  if (rows.length >= DESKTOP_THREAD_QUERY_LIMIT && rows.at(-1)?.updated_at_ms >= windowStart) {
     return unknown("desktop-threads-too-many");
   }
   const counted = rows.filter(countsAsDesktopThread);
@@ -174,23 +194,22 @@ export function readDesktopActivity({ runner = defaultRunner, serverPid, fsApi =
     if (!Number.isFinite(updated) || updated <= 0 || updated > nowMs + 86_400_000) {
       return unknown("desktop-thread-timestamp-invalid");
     }
-    if (index >= LATEST_THREADS && updated < windowStart) break;
+    const recent = updated >= windowStart;
+    if (index >= DESKTOP_LATEST_THREADS && !recent) break;
     latest = Math.max(latest, updated);
-    if (typeof row.rollout_path !== "string" || !path.isAbsolute(row.rollout_path)) {
-      return unknown("desktop-rollout-unreadable");
-    }
-    let info;
+    let info = null;
     try {
-      info = fsApi.statSync(row.rollout_path);
-    } catch {
-      return unknown("desktop-rollout-unreadable");
-    }
+      if (typeof row.rollout_path === "string" && path.isAbsolute(row.rollout_path)) info = fsApi.statSync(row.rollout_path);
+    } catch {}
     if (!Number.isFinite(info?.mtimeMs) || !Number.isInteger(info?.size) || info.size < 0) {
-      return unknown("desktop-rollout-unreadable");
+      // A thread active in the window must be readable; an older one whose
+      // rollout is gone cannot be running, so it is ignored.
+      if (recent) return unknown("desktop-rollout-unreadable");
+      continue;
     }
     latest = Math.max(latest, info.mtimeMs);
-    if (Math.max(updated, info.mtimeMs) >= windowStart) {
-      rollouts.push({ path: row.rollout_path, size: info.size });
+    if (recent || info.mtimeMs >= windowStart) {
+      rollouts.push({ path: row.rollout_path, size: info.size, id: row.id ?? null, title: row.title ?? null });
     }
   }
   activity.latestActivityMs = latest;
@@ -203,11 +222,14 @@ export function readDesktopActivity({ runner = defaultRunner, serverPid, fsApi =
       turn = { state: "unknown" };
     }
     if (turn.state === "unknown") return unknown("desktop-rollout-unreadable");
-    if (turn.state !== "open") continue;
-    activity.turnInProgress = true;
-    // Without a recorded start, the whole window is in play.
-    const opened = Number.isFinite(turn.openedAtMs) ? turn.openedAtMs : windowStart;
-    activity.openTurnStartedMs = Math.min(activity.openTurnStartedMs ?? opened, opened);
+    if (turn.state === "open") {
+      activity.openTurns.push({
+        threadId: typeof rollout.id === "string" ? rollout.id : null,
+        title: typeof rollout.title === "string" ? rollout.title.slice(0, 80) : null,
+        since: Number.isFinite(turn.openedAtMs) ? new Date(turn.openedAtMs).toISOString() : null,
+        rollout: rollout.path,
+      });
+    }
   }
   const front = safeRun(runner, LSAPPINFO, ["front"], { timeout: 5_000 });
   const asn = typeof front.stdout === "string" ? front.stdout.trim() : "";
@@ -232,19 +254,16 @@ export function desktopBusyReasons({ activity, inventory, serverPid, bundleId, n
   }
   const reasons = [];
   if (nowMs - activity.latestActivityMs < idleMs) reasons.push("codex-activity-recent");
-  if (activity.turnInProgress) reasons.push("desktop-turn-in-progress");
+  // An open turn counts even when abandoned (say, after a crash): the refusal
+  // names its thread so the user can finish, cancel or archive it.
+  if (activity.openTurns?.length) reasons.push("desktop-turn-in-progress");
   if (activity.frontmostBundleId && activity.frontmostBundleId === bundleId) {
     reasons.push("desktop-app-frontmost");
   }
-  const descendants = descendantsOf(serverPid, childrenByParent(inventory.processes)).descendants;
   const started = (item) => Date.parse(item.startTime ?? "");
-  if (descendants.some((item) => !Number.isFinite(started(item)) || nowMs - started(item) < idleMs)) {
+  if (descendantsOf(serverPid, childrenByParent(inventory.processes)).descendants
+    .some((item) => !Number.isFinite(started(item)) || nowMs - started(item) < idleMs)) {
     reasons.push("recent-app-server-child");
-  }
-  // A child started after an open turn began is that turn's work, however old.
-  if (Number.isFinite(activity.openTurnStartedMs)
-    && descendants.some((item) => started(item) >= activity.openTurnStartedMs)) {
-    reasons.push("open-turn-child");
   }
   return reasons;
 }

@@ -30,6 +30,7 @@ node --test \
   plugins/railyard/skills/cleanup-codex/scripts/inventory.test.mjs \
   plugins/railyard/skills/cleanup-codex/scripts/snapshot-reap.test.mjs \
   plugins/railyard/skills/cleanup-codex/scripts/recycle.test.mjs \
+  plugins/railyard/skills/cleanup-codex/scripts/desktop.test.mjs \
   plugins/railyard/skills/cleanup-codex/scripts/hook.test.mjs \
   plugins/railyard/skills/cleanup-codex/scripts/canary.test.mjs \
   plugins/railyard/hooks/lean-hooks.test.mjs \

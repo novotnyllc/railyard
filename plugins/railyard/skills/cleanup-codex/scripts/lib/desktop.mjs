@@ -22,10 +22,12 @@ import {
   DESKTOP_RECEIPT_SCHEMA,
   EXIT_CODES,
   LAUNCHCTL,
-  OPEN,
+  MAIN_APP_EXECUTABLE,
   OSASCRIPT,
   PLUTIL,
   SNAPSHOT_SCHEMA,
+  WATCHDOG_LATE_QUIT_MS,
+  WATCHDOG_TIMEOUT_MS,
 } from "./constants.mjs";
 import {
   childrenByParent,
@@ -58,7 +60,7 @@ import {
   recycleConfirmationToken,
 } from "./recycle-evidence.mjs";
 import { desktopBusyReasons, readDesktopActivity } from "./desktop-activity.mjs";
-import { armRelaunchWatchdog, validRelaunchPath } from "./desktop-watchdog.mjs";
+import { armRelaunchWatchdog, launchBundle, validRelaunchPath } from "./desktop-watchdog.mjs";
 import {
   createMutationLock,
   observeBirth,
@@ -68,7 +70,6 @@ import {
   validateSnapshotObject,
 } from "./snapshot.mjs";
 
-const MAIN_APP_EXECUTABLE = /^(\/.+\/(?:Codex|ChatGPT)\.app)\/Contents\/MacOS\/(?:Codex|ChatGPT)$/i;
 
 const BUNDLE_ID = /^[A-Za-z0-9][A-Za-z0-9.-]{0,254}$/;
 
@@ -501,8 +502,9 @@ export function recycleDesktop(options, deps) {
     // Quitting interrupts any running turn, so only an idle app is recycled.
     const idleSeconds = options.idleSeconds ?? DEFAULT_DESKTOP_IDLE_SECONDS;
     if (!Number.isInteger(idleSeconds) || idleSeconds < 0) refuse("invalid-idle-seconds");
-    // The process tree is read after the activity probe, so a child started
-    // while the probe ran is still seen.
+    // Activity is read first. Given a reader, the process tree is read after
+    // it, so a child started while the activity probe ran is still seen;
+    // given an inventory already read, only the activity is fresh.
     const checkIdle = (inventorySource) => {
       let activity = null;
       try {
@@ -525,6 +527,9 @@ export function recycleDesktop(options, deps) {
         idleSeconds,
         reasons,
         unknown: activity?.complete ? null : activity?.unknown ?? "desktop-activity-unavailable",
+        // An open turn (even one a crash abandoned) keeps the app busy until
+        // it is finished, cancelled or archived in the app.
+        openTurns: activity?.openTurns ?? [],
         lastActivityAt: Number.isFinite(activity?.latestActivityMs) && activity.latestActivityMs > 0
           ? new Date(activity.latestActivityMs).toISOString()
           : null,
@@ -557,15 +562,12 @@ export function recycleDesktop(options, deps) {
       now,
       skipped: result.skipped,
     });
-    if (buildDesktopReceipt(locked, lockedSnapshot, launchdMaxfiles).confirmationToken !== receipt.confirmationToken) {
-      refuse("desktop-identity-changed");
-    }
+    const lockedReceipt = buildDesktopReceipt(locked, lockedSnapshot, launchdMaxfiles);
+    if (lockedReceipt.confirmationToken !== receipt.confirmationToken) refuse("desktop-identity-changed");
     // Descendants churn; report what the locked snapshot will actually act on.
-    const lockedSelectedPids = [lockedSnapshot.owner.pid, ...lockedSnapshot.targets.map((target) => target.pid)]
-      .sort((left, right) => left - right);
-    result.verification.receipt = { ...receipt, targets: lockedSnapshot.targets, selectedPids: lockedSelectedPids };
+    result.verification.receipt = lockedReceipt;
     result.verification.before.targetPids = lockedSnapshot.targets.map((target) => target.pid);
-    result.selected = lockedSelectedPids.map((pid) => ({
+    result.selected = lockedReceipt.selectedPids.map((pid) => ({
       pid,
       role: pid === lockedSnapshot.owner.pid ? "server" : "descendant",
     }));
@@ -586,13 +588,15 @@ export function recycleDesktop(options, deps) {
     checkIdle(lockedInventoryAfterIdle);
     // A detached watchdog reopens the app if this process dies after the
     // quit, the quit lands after this process gives up, or anything throws.
+    const watchTarget = {
+      hostPid: receipt.host.pid,
+      hostStartTime: receipt.host.startTime,
+      bundlePath: receipt.host.bundlePath,
+      bundleId: receipt.host.bundleId,
+    };
     let watchdog = null;
     try {
-      watchdog = deps.armRelaunchWatchdog({
-        hostPid: receipt.host.pid,
-        hostStartTime: receipt.host.startTime,
-        bundlePath: receipt.host.bundlePath,
-      });
+      watchdog = deps.armRelaunchWatchdog(watchTarget);
     } catch {}
     if (!watchdog?.ok) refuse("desktop-watchdog-unavailable");
     result.verification.watchdog = { armed: true, pid: watchdog.pid ?? null };
@@ -605,7 +609,7 @@ export function recycleDesktop(options, deps) {
     try {
       quit = deps.quitApp(receipt.host.bundleId);
     } catch {}
-    const failures = quitAndRestore({ receipt, lockedSnapshot, evidence, quit, uid, now, deps, result });
+    const failures = quitAndRestore({ receipt, lockedSnapshot, evidence, quit, uid, now, deps, result, watchdog, watchTarget });
     if (failures.length) {
       result.verification.missingEvidence.push(...failures);
       result.status = "failed";
@@ -617,15 +621,11 @@ export function recycleDesktop(options, deps) {
       exitCode = EXIT_CODES.healthy;
     }
   } catch (error) {
+    // Only reached before the quit: quitAndRestore never throws.
     const code = error instanceof CleanupRefusal ? error.code : "desktop-recycle-evidence-failed";
     result.verification.missingEvidence.push(code);
-    if (result.verification.mutationAttempted) {
-      result.status = "failed";
-      exitCode = EXIT_CODES.failed;
-    } else {
-      result.status = "refused";
-      exitCode = EXIT_CODES.refused;
-    }
+    result.status = "refused";
+    exitCode = EXIT_CODES.refused;
   } finally {
     if (release) {
       try {
@@ -645,7 +645,7 @@ export function recycleDesktop(options, deps) {
 // Everything after the quit request. It never throws: once the app is not
 // shown running, the relaunch always happens (from `finally` if need be), and
 // every failure is returned to be reported beside it.
-function quitAndRestore({ receipt, lockedSnapshot, evidence, quit, uid, now, deps, result }) {
+function quitAndRestore({ receipt, lockedSnapshot, evidence, quit, uid, now, deps, result, watchdog, watchTarget }) {
   const failures = [];
   const fail = (error, fallback) => {
     failures.push(error instanceof CleanupRefusal ? error.code : fallback);
@@ -658,7 +658,9 @@ function quitAndRestore({ receipt, lockedSnapshot, evidence, quit, uid, now, dep
     try {
       launched = deps.launchApp(receipt.host.bundlePath, receipt.host.bundleId);
     } catch {}
-    result.verification.actions.push({ kind: "relaunch-desktop-app", bundlePath: receipt.host.bundlePath, ok: launched?.ok === true });
+    result.verification.actions.push({
+      kind: "relaunch-desktop-app", bundlePath: receipt.host.bundlePath, ok: launched?.ok === true, by: launched?.by ?? null,
+    });
     result.verification.relaunch = { attempted: true, requested: launched?.ok === true, verified: false };
     if (!launched?.ok) failures.push("desktop-relaunch-failed");
     return launched?.ok === true;
@@ -668,14 +670,22 @@ function quitAndRestore({ receipt, lockedSnapshot, evidence, quit, uid, now, dep
     const quitTimeoutMs = deps.quitTimeoutMs ?? DEFAULT_DESKTOP_QUIT_TIMEOUT_MS;
     const hostGone = waitUntil(deps, quitTimeoutMs, () => observeBirth(receipt.host, deps.readIdentity) === "gone");
     if (!hostGone) {
-      // Still running (say, a dialog is open): nothing is forced, and the
-      // armed watchdog reopens the app if the quit lands later.
+      // Still running (say, a dialog is open): nothing is forced. The long
+      // watchdog is replaced by a short one, so a quit that lands soon is
+      // still reopened but an app the user quits later on purpose is not.
       if (observeBirth(receipt.host, deps.readIdentity) === "present") {
         failures.push(quit?.ok ? "desktop-host-quit-timeout" : "desktop-quit-request-failed");
+        try { watchdog?.disarm?.(); } catch {}
+        let late = null;
+        try {
+          late = deps.armRelaunchWatchdog({ ...watchTarget, timeoutMs: WATCHDOG_LATE_QUIT_MS });
+        } catch {}
+        result.verification.watchdog = { armed: late?.ok === true, pid: late?.pid ?? null, lateQuitMs: WATCHDOG_LATE_QUIT_MS };
         result.warnings.push({
           code: "desktop-quit-may-still-land",
           pid: receipt.host.pid,
-          message: "the app did not quit in time; if it quits within 10 minutes, the watchdog reopens it",
+          message: `the app did not quit; if it quits within ${WATCHDOG_LATE_QUIT_MS / 1000} seconds it is reopened, `
+            + `otherwise reopen it yourself (the recycle's first watchdog, up to ${WATCHDOG_TIMEOUT_MS / 60_000} minutes, was stopped)`,
           authorizesAction: false,
         });
         return failures;
@@ -814,12 +824,7 @@ export function createDefaultDesktopDependencies({
     // Reopen the exact bundle that was quit. Only if that path fails (say it
     // was translocated) fall back to the bundle id, which no other running
     // copy shares (checked before the quit).
-    launchApp(bundlePath, bundleId) {
-      if (!validRelaunchPath(bundlePath)) return { ok: false };
-      if (safeRun(runner, OPEN, [bundlePath], { timeout: 20_000 }).status === 0) return { ok: true };
-      if (!BUNDLE_ID.test(bundleId ?? "")) return { ok: false };
-      return { ok: safeRun(runner, OPEN, ["-b", bundleId], { timeout: 20_000 }).status === 0 };
-    },
+    launchApp: (bundlePath, bundleId) => launchBundle(runner, { bundlePath, bundleId }),
     armRelaunchWatchdog: (args) => armRelaunchWatchdog(args, { spawnProcess }),
     reapResidue(snapshot, { ownerReplacement = null } = {}) {
       return reapSnapshot(snapshot, {

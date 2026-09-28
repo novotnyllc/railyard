@@ -43,31 +43,36 @@ CC recycle --pid <gui-pid> --desktop --confirm '<token>'
 Confirming quits the app, which closes the user's desktop session (every open
 window and thread) until it reopens; say so when asking for the go-ahead.
 
-Both passes run only when the app is idle. The selected server's own open
-state database names its Codex home. Every thread there counts as the app's
-except those from `codex exec`, the CLI, the VS Code extension or subagents,
-and the app is busy if any counted thread updated in the last 5 minutes, any
-counted thread active in the last day still has a turn or tool call open, an
-app-server child started in that window or after an open turn began, or the
-app is frontmost. Anything that cannot be read or tied to that server counts
-as busy, including a server that has no state database open at that moment
-and an app with no threads yet. Otherwise the command refuses with
-`desktop-busy` and lists why; retry once the work has finished. The check
-repeats under the lock, with one last activity read just before quitting. It
-also refuses when run from inside the app (`desktop-recycle-inside-app`); run
-it from a terminal outside the app.
+Both passes run only when the app is idle. The Codex databases the selected
+server holds open name its Codex home, and the newest `state_N.sqlite` there
+lists its threads. Every thread counts as the app's except those from
+`codex exec`, the CLI, the VS Code extension, MCP or subagents. The app is busy
+if a counted thread updated in the last 5 minutes, a counted thread active in
+the last day still has a turn or tool call open, an app-server child started
+in the last 5 minutes, or the app is frontmost. Anything that cannot be read
+or tied to that server counts as busy, including an app with no threads yet.
+Otherwise the command refuses with `desktop-busy` and lists why; retry once
+the work has finished. An open turn left behind by a crash also counts: the
+refusal names its thread, and the user clears it by finishing, cancelling or
+archiving that thread in the app. The check repeats under the lock, with one
+last activity read just before quitting. It also refuses when run from inside
+the app (`desktop-recycle-inside-app`); run it from a terminal outside the app.
 
-Before quitting it arms a detached watchdog. If the recycle process dies, the
-quit lands late, or anything fails, the watchdog reopens that exact bundle in
-the background (`open -g`) once the old app exits, unless it is already
-running; it gives up after 10 minutes. Then it asks the app to quit and waits
-up to 30 seconds. The app is never force-killed: if it does not quit (say, a
-dialog is open), the command stops with `desktop-host-quit-timeout`. Once the
-app is gone it reopens that exact bundle at once, waits up to 90 seconds for
-a new server and up to 30 for the old server to exit, then reaps leftovers of
-the old tree that still match their recorded identities. Any later failure is
-reported beside the relaunch with exit `3`. Allow the confirmed pass at least
-3 minutes, or run it in the background.
+Before quitting it arms a detached watchdog: if the recycle process dies or
+anything fails, the watchdog reopens that exact bundle in the background once
+the old app exits, unless it is already running, and gives up after 10
+minutes. Then it asks the app to quit and waits up to 30 seconds. The app is
+never force-killed. If it does not quit (say, a dialog is open), the command
+stops with `desktop-host-quit-timeout` (or `desktop-quit-request-failed` when
+the request itself failed) and the watchdog is cut to 60 seconds, so a quit
+the user later makes on purpose is not undone. Once the app is gone (or cannot
+be shown running, `desktop-host-quit-unverified`) it reopens that exact bundle
+at once, waits up to 90 seconds for a new server and up to 30 for the old
+server to exit, then reaps leftovers of the old tree that still match their
+recorded identities. Every relaunch uses `open -g` on the bundle path (falling
+back to its bundle id), so it never takes focus. Any later failure is reported
+beside the relaunch with exit `3`. Allow the confirmed pass at least 3
+minutes, or run it in the background.
 
 GUI apps inherit launchd's `maxfiles` soft limit (256 by default), but current
 Codex app-servers raise their own limit, so a descriptor above launchd's soft

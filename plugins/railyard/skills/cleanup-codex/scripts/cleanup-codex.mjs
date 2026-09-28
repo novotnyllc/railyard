@@ -268,7 +268,11 @@ export function renderHuman(result) {
       if (idle) {
         lines.push(idle.idle
           ? `idle: yes (no Codex activity for ${idle.idleSeconds}s; last at ${idle.lastActivityAt ?? "unknown"})`
-          : `idle: no (${idle.reasons.join(", ")}); retry when Codex work in the app has finished`);
+          : `idle: no (${idle.reasons.join(", ")}${idle.unknown ? `: ${idle.unknown}` : ""}); retry when Codex work in the app has finished`);
+        for (const turn of idle.openTurns ?? []) {
+          lines.push(`  open turn in thread ${JSON.stringify(turn.title ?? "untitled")} (${turn.threadId ?? "unknown id"}) since ${turn.since ?? "unknown"}:`
+            + " finish, cancel or archive that thread in the app, then retry");
+        }
       }
     } else {
       lines.push(`descriptor limit: ${result.verification.nofileLimit ?? "attested"}`);
@@ -423,6 +427,7 @@ export function runCli(argv = process.argv.slice(2), {
       postSignalMs,
       monotonicNow,
       lock,
+      spawnProcess,
     });
     const outcome = recycleDesktop({
       platform,
