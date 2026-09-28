@@ -32,6 +32,8 @@ test("isolated managed recycle canary replaces a real Unix-socket fixture", {
   const attestationState = path.join(directory, "attestations.json");
   const launcher = path.join(directory, "launch-fixture.mjs");
   const tracked = [];
+  // Every spawned listener, recorded before any wait, so a failed wait cannot leak it.
+  const launchedPids = [];
   const signalCalls = [];
   let activeIdentity = null;
   let restartCalls = 0;
@@ -83,6 +85,7 @@ test("isolated managed recycle canary replaces a real Unix-socket fixture", {
     assert.equal(launched.status, 0, launched.stderr);
     const pid = Number(launched.stdout.trim());
     assert.ok(Number.isInteger(pid) && pid > 0);
+    launchedPids.push(pid);
     let observedIdentity = null;
     let identity;
     try {
@@ -265,6 +268,14 @@ test("isolated managed recycle canary replaces a real Unix-socket fixture", {
       const current = exactLiveIdentity(identity.pid);
       if (sameExactIdentity(identity, current)) {
         try { process.kill(identity.pid, "SIGKILL"); } catch {}
+      }
+    }
+    // A listener whose wait failed, or whose identity drifted, still names this
+    // run's unique socket in its argv; kill only those.
+    for (const pid of launchedPids) {
+      const run = runActual("/bin/ps", ["-o", "command=", "-p", String(pid)]);
+      if (run.status === 0 && run.stdout.includes(socket)) {
+        try { process.kill(pid, "SIGKILL"); } catch {}
       }
     }
     try { if (fs.existsSync(socket)) fs.unlinkSync(socket); } catch {}

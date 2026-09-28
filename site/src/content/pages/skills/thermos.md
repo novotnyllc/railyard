@@ -7,7 +7,7 @@ nav_order: 4
 
 # Thermos
 
-Thermos is an optional review skill for a change that benefits from two practitioner lenses. It gathers the diff without guessing, runs both reviewers, and synthesizes one actionable findings packet for the existing review owner.
+Thermos is Railyard's recommended end-of-PR review, run in parallel with `codex review` on GPT-6 Astra at high effort. It gathers the diff without guessing, runs both reviewers, and synthesizes one actionable findings packet for the existing review owner.
 
 ## What it adds
 

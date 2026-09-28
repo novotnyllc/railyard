@@ -24,7 +24,7 @@ For a request to fix an issue and get it merged, begin with native execution and
 
 Routine work runs natively. Select CE workflows automatically when they help, and resolve CE only when a selected stage needs it. Startup loads routing guidance without bootstrapping workflow dependencies.
 
-Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or pushing user-requested commits to an existing PR. CE owns one review settlement and CI loop. [Thermos](/skills/thermos/) and [audits or retrospectives](/delivery/audit/) are optional tools for work that benefits from them.
+Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or pushing user-requested commits to an existing PR. CE owns one review settlement and CI loop. Before settlement, run [Thermos](/skills/thermos/) and `codex review` on GPT-6 Astra (high effort) in parallel as the end-of-PR review; [audits or retrospectives](/delivery/audit/) remain optional.
 
 Use native child agents for useful parallel work. Create visible Codex tasks only when the user explicitly requests them. Fleet or account orchestration also requires explicit scope.
 
