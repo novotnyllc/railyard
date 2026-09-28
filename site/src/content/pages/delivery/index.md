@@ -17,6 +17,6 @@ Native subagents handle bounded parallel work. Fleet/account orchestration is ex
 - [Model routing](/delivery/model-routing/) — native model and effort choices for Claude Code and Codex.
 - [Gates](/delivery/gates/) — proportional verification and one owner for review settlement.
 - [Audit](/delivery/audit/) — optional analysis of outcomes and resource use.
-- [Review bakeoff](/delivery/review-bakeoff/) — why the end-of-PR review is Thermos plus `codex review`.
+- [Review bakeoff](/delivery/review-bakeoff/) — why Railyard's end-of-PR review pairs Thermos with `codex review`.
 
 The [ship a change scenario](/what-it-does/ship-a-change/) shows an authorized PR delivery. Machine readiness and convergence are documented separately under [Roundhouse](/roundhouse/).

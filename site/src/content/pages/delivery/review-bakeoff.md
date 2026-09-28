@@ -7,11 +7,19 @@ nav_order: 5
 
 # Review bakeoff
 
-The end-of-PR review is [Thermos](/skills/thermos/) plus `codex review`. A small bakeoff on past Railyard and Roundhouse bugs chose that pairing: Thermos caught the most bugs at moderate cost, and `codex review` is fast and caught a bug that no other tool found.
+[Railyard's end-of-PR review](/skills/deliver/) pairs [Thermos](/skills/thermos/) with `codex review`. A small bakeoff on past Railyard and Roundhouse bugs chose that pairing: Thermos caught the most known bugs, and one `codex review` run caught the only bug no other tool found.
 
 ## Method
 
-The cases were five past Railyard and Roundhouse commits whose bugs were later fixed. A control commit was later found to contain real merge-gate bypasses. Each tool reviewed each pre-fix commit once, and every Claude arm ran on Opus 5.5.
+There were five cases, each a past Railyard or Roundhouse commit reviewed as it was before a later fix. Each tool reviewed each case once, and every Claude arm ran on Opus 5.5.
+
+The ground truth has 8 units, one per known bug:
+
+- R1, RH1, and R2 each had one known bug.
+- R2 also had a confirmed bonus bug.
+- R3 had four known bugs.
+
+A catch with the right mechanism earns the full unit, and a partial catch earns half. The fifth case, C1, was a control meant to have no known bug and does not count toward the 8. It later turned out to contain real merge-gate bypasses, which were scored separately as false-positive checks.
 
 ## Results
 
@@ -27,26 +35,29 @@ Ground-truth units caught, out of 8:
 | Codex Security `$security-diff-scan` | 1 |
 | Semgrep | 0 |
 
-Cost per case:
+The bug only the Astra-high `codex review` run caught was R3's relaunch accepted on incomplete evidence.
+
+Approximate cost per case:
 
 | Tool | Tokens | Wall time |
 | --- | --- | --- |
-| Thermos | about 0.5–0.9M | 3–11 min |
-| Compound Engineering `ce-code-review` | about 1.2–2M | 12–22 min |
+| Railyard Thermos | 0.5–0.9M | 3–11 min |
+| Cursor upstream Thermos | 0.4–0.6M | — |
+| Compound Engineering `ce-code-review` | 1.2–2M | 12–22 min |
 | `codex review` | — | 1–7 min |
+| Codex Security `$security-diff-scan` | 68k–159k | 2.5–8 min |
+| Semgrep | — | seconds |
 
 ## Why Thermos won
 
 - Reviewers proved their findings with probes.
 - It uses a few broad lenses, each with whole-file context.
-- It has no synthesis step that drops findings. Compound Engineering demoted two real bugs that its own Codex pass had found.
+- Its synthesis keeps and weights overlapping findings rather than discarding unconfirmed ones. By contrast, Compound Engineering's own Codex cross-model pass flagged the R1 bug and one R3 bug, but its validation and synthesis step demoted both to "residual".
 - The failure-memory lens targets fail-open checks, the dominant bug shape.
-
-`codex review` is cheap by comparison, and its Astra run found the one bug nothing else caught.
 
 ## Caveats
 
-The sample is small, each tool ran once per case, and one grader scored the results. The cases also come from the repository the failure-memory lens was drawn from, which may favor Thermos.
+The sample is small, each tool ran once per case, and one grader scored the results. The cases also come from the repository the failure-memory lens was drawn from.
 
 ## Not adopted: a change-coverage lens
 
@@ -54,4 +65,4 @@ A follow-up test added a "change coverage" lens to Thermos, inspired by a commun
 
 ## Next
 
-[Thermos](/skills/thermos/) or [harden review](/what-it-does/harden-review/).
+[Deliver](/skills/deliver/), [Thermos](/skills/thermos/), or [harden review](/what-it-does/harden-review/).

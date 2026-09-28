@@ -28,7 +28,7 @@ output=deduplicated, weighted findings with evidence
 owner=existing-workflow
 ```
 
-The [review bakeoff](/delivery/review-bakeoff/) explains why the end-of-PR review pairs Thermos with `codex review`.
+The [review bakeoff](/delivery/review-bakeoff/) explains why Railyard's end-of-PR review pairs Thermos with `codex review`.
 
 ## Scope
 
