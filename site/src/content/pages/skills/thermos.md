@@ -28,6 +28,8 @@ output=deduplicated, weighted findings with evidence
 owner=existing-workflow
 ```
 
+The [review bakeoff](/delivery/review-bakeoff/) explains why the end-of-PR review pairs Thermos with `codex review`.
+
 ## Scope
 
 Thermos reviews and synthesizes. When CE owns delivery, it retains review settlement and CI/PR monitoring, and the delivery owner continues to the authorized endpoint. Selecting Thermos does not add a second watcher or a mandatory pre-commit gate.

@@ -17,6 +17,8 @@ An orchestrator change touches many mechanical call sites and one gnarly concurr
 
 Compound Engineering (CE) owns review settlement and CI monitoring. Before settlement, run the Thermos pair and `codex review` (GPT-6 Astra, high effort) in parallel; their findings go to the CE owner.
 
+The [review bakeoff](/delivery/review-bakeoff/) compares Thermos, `codex review`, and other reviewers on past Railyard and Roundhouse bugs.
+
 ## Illustrative workflow
 
 The operator asks whether a wide migration and its concurrency seam are ready to merge. The selected review receives a frozen diff and relevant source context. Thermos can contribute a deduplicated findings packet to the CE owner; accepted findings return to implementation, and affected checks run after fixes. CE settles that evidence against the corrected head before the authorized merge proceeds.
