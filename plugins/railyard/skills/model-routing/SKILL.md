@@ -64,7 +64,10 @@ history, give the child a brief that is complete on its own.
   a command or apply an edit you already know.
 - Inheriting the parent's settings is fine when it is a deliberate choice.
 - For a cross-family second opinion, use the other family: a Codex child from
-  Claude Code, or a Claude subagent from Codex, when that is available.
+  Claude Code, or a Claude subagent from Codex, when that is available. From
+  Claude Code, run the Codex CLI directly:
+  `codex exec -m <model> -c model_reasoning_effort=<effort> -s read-only -o <file> '<brief>'`
+  (a writable sandbox only when the child owns edits).
 - Judge cost by the accepted result: count retries, repairs, and child agents,
   not the per-token price.
 - If a requested model, effort, or history mode isn't supported, say so. Don't
