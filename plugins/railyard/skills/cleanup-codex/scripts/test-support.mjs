@@ -557,7 +557,7 @@ export const DESKTOP_HOST_EXECUTABLE = "/Applications/ChatGPT.app/Contents/MacOS
 
 export const DESKTOP_SELF_PID = 9001;
 
-export const DESKTOP_SERVER_EXECUTABLE ="/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex";
+export const DESKTOP_SERVER_EXECUTABLE = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex";
 
 function desktopProcesses({ hostPid, serverPid, startTime }) {
   return [
@@ -679,7 +679,7 @@ export function desktopHarness({
     state.set(pid, { state: "present", identity: liveIdentity(byPid.get(pid)) });
   }
   state.set(202, { state: "unknown" });
-  const calls = { quit: [], launch: [], reaped: [], activity: [], lock: 0, order: [] };
+  const calls = { quit: [], launch: [], reaped: [], activity: [], watchdog: [], lock: 0, order: [] };
   let relaunched = false;
   let clock = 0;
   const deps = {
@@ -734,6 +734,11 @@ export function desktopHarness({
         state.set(200, { state: "present", identity: { ...orphan, parentPid: 1 } });
       }
       return { ok: quitReportsOk };
+    },
+    armRelaunchWatchdog(args) {
+      calls.watchdog.push(args);
+      calls.order.push("watchdog");
+      return { ok: true, pid: 4242 };
     },
     launchApp(bundlePath) {
       calls.launch.push(bundlePath);

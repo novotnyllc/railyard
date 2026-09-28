@@ -8,7 +8,12 @@ import test from "node:test";
 
 import {
   EXIT_CODES,
+  armRelaunchWatchdog,
+  bundleRunning,
   codexHomeFromOpenFiles,
+  countsAsDesktopThread,
+  readTurn,
+  runRelaunchWatchdog,
   createDefaultDesktopDependencies,
   desktopBusyReasons,
   desktopServerEvidenceGap,
@@ -1185,7 +1190,7 @@ test("confirmed desktop recycle quits, relaunches the exact bundle, then reaps e
   const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
 
   assert.equal(exitCode, EXIT_CODES.healthy, JSON.stringify(result.verification.missingEvidence));
-  assert.deepEqual(harness.calls.order, ["quit", "launch", "reap"]);
+  assert.deepEqual(harness.calls.order, ["watchdog", "quit", "launch", "reap"]);
   assert.deepEqual(harness.calls.launch, ["/Applications/ChatGPT.app"]);
   assert.deepEqual(result.verification.relaunch, { attempted: true, requested: true, verified: true });
   assert.ok(harness.calls.activity.every((context) => context.serverPid === 13125));
@@ -1531,7 +1536,7 @@ test("once the app is gone the relaunch always runs, and later failures are repo
     };
     const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
     assert.equal(exitCode, EXIT_CODES.failed);
-    assert.deepEqual(harness.calls.order, ["quit", "launch", "reap"]);
+    assert.deepEqual(harness.calls.order, ["watchdog", "quit", "launch", "reap"]);
     assert.ok(result.verification.missingEvidence.includes("target-survived"));
     assert.equal(result.verification.after.pid, 14100);
     assert.equal(result.verification.relaunch.verified, true);
@@ -1647,20 +1652,19 @@ test("a turn still open in the app keeps it busy through a long silent gap", () 
 
 // Fake runner and filesystem for the activity reader.
 const HOME = "/Users/u/.codex";
-const line = (type, payload) => JSON.stringify({ timestamp: "t", type, payload }) + "\n";
+const line = (type, payload, timestamp = "2026-08-02T15:00:00.000Z") => JSON.stringify({ timestamp, type, payload }) + "\n";
 const CLOSED_TURN = line("session_meta", {}) + line("event_msg", { type: "task_started" })
   + line("response_item", { type: "function_call", call_id: "c1" })
   + line("response_item", { type: "function_call_output", call_id: "c1" })
   + line("event_msg", { type: "task_complete" });
-const OPEN_TURN = line("session_meta", {}) + line("event_msg", { type: "task_started" })
+const openTurn = (startedAt) => line("session_meta", {}) + line("event_msg", { type: "task_started" }, new Date(startedAt).toISOString())
   + line("response_item", { type: "custom_tool_call", call_id: "c2" });
+const OPEN_TURN = openTurn(NOW - 40 * 60_000);
+const desktopRow = (name, updated, extra = {}) => ({ rollout_path: `${HOME}/sessions/${name}.jsonl`, updated_at_ms: updated, originator: "Codex Desktop", source: "vscode", ...extra });
 
 function activityFixture({
-  lsof = `p13125\nn${HOME}/logs_2.sqlite\nn${HOME}/queue_1.sqlite-wal\n`,
-  rows = [
-    { rollout_path: `${HOME}/sessions/a.jsonl`, updated_at_ms: NOW - 3_600_000 },
-    { rollout_path: `${HOME}/sessions/b.jsonl`, updated_at_ms: NOW - 7_200_000 },
-  ],
+  lsof = `p13125\nn${HOME}/logs_2.sqlite\nn${HOME}/state_5.sqlite\nn${HOME}/state_5.sqlite-wal\nn${HOME}/queue_1.sqlite-wal\n`,
+  rows = [desktopRow("a", NOW - 3_600_000), desktopRow("b", NOW - 7_200_000)],
   files = {
     [`${HOME}/sessions/a.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 3_000_000 },
     [`${HOME}/sessions/b.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 7_000_000 },
@@ -1678,6 +1682,7 @@ function activityFixture({
     return { status: 0, stdout: bundle, stderr: "" };
   };
   const handles = new Map();
+  const reads = [];
   const fsApi = {
     statSync(file) {
       const entry = files[file];
@@ -1685,6 +1690,7 @@ function activityFixture({
       return { mtimeMs: entry.mtimeMs, size: Buffer.byteLength(entry.text) };
     },
     openSync(file) {
+      reads.push(file);
       const fd = handles.size + 10;
       handles.set(fd, Buffer.from(files[file].text));
       return fd;
@@ -1696,10 +1702,10 @@ function activityFixture({
       handles.delete(fd);
     },
   };
-  return { calls, read: () => readDesktopActivity({ runner, fsApi, serverPid: 13125, nowMs: NOW }) };
+  return { calls, reads, read: () => readDesktopActivity({ runner, fsApi, serverPid: 13125, nowMs: NOW }) };
 }
 
-test("desktop activity is read from the selected server's own Codex home and desktop threads", () => {
+test("desktop activity is read from the selected server's own state database", () => {
   const fixture = activityFixture();
   const activity = fixture.read();
   assert.equal(activity.complete, true, activity.unknown);
@@ -1710,21 +1716,57 @@ test("desktop activity is read from the selected server's own Codex home and des
   assert.deepEqual(fixture.calls[0], ["/usr/sbin/lsof", "-nP", "-a", "-p", "13125", "-Fn"]);
   const query = fixture.calls.find((call) => call[0] === "/usr/bin/sqlite3");
   assert.equal(query[3], `file:${HOME}/state_5.sqlite?mode=ro`);
-  assert.match(query[4], /originator IN \('Codex Desktop', 'codex-chrome-extension-sidepanel'\)/);
-  assert.match(query[4], /archived = 0/);
+  assert.match(query[4], /SELECT rollout_path, updated_at_ms, originator, source FROM threads WHERE archived = 0/);
+});
+
+test("only known non-desktop threads are left out of desktop activity", () => {
+  assert.equal(countsAsDesktopThread({ originator: "Codex Desktop" }), true);
+  assert.equal(countsAsDesktopThread({ originator: "codex_work_desktop" }), true);
+  assert.equal(countsAsDesktopThread({ originator: "something-new" }), true);
+  for (const originator of ["codex_exec", "codex_cli_rs", "codex_vscode"]) {
+    assert.equal(countsAsDesktopThread({ originator, source: "vscode" }), false, originator);
+  }
+  for (const source of ["exec", "cli", "vscode", "mcp", '{"subagent":"review"}']) {
+    assert.equal(countsAsDesktopThread({ originator: null, source }), false, source);
+  }
+  assert.equal(countsAsDesktopThread({ originator: null, source: "unknown" }), true);
+
+  // A recent exec thread does not make the app busy; a renamed desktop
+  // originator does.
+  const quiet = activityFixture({
+    rows: [desktopRow("x", NOW - 10_000, { originator: "codex_exec", source: "exec" }), desktopRow("a", NOW - 3_600_000)],
+    files: {
+      [`${HOME}/sessions/x.jsonl`]: { text: OPEN_TURN, mtimeMs: NOW - 10_000 },
+      [`${HOME}/sessions/a.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 3_600_000 },
+    },
+  }).read();
+  assert.equal(quiet.latestActivityMs, NOW - 3_600_000);
+  assert.equal(quiet.turnInProgress, false);
+  const renamed = activityFixture({
+    rows: [desktopRow("n", NOW - 10_000, { originator: "codex_work_desktop" }), desktopRow("a", NOW - 3_600_000)],
+    files: {
+      [`${HOME}/sessions/n.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 10_000 },
+      [`${HOME}/sessions/a.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 3_600_000 },
+    },
+  }).read();
+  assert.equal(renamed.latestActivityMs, NOW - 10_000);
 });
 
 test("desktop activity treats every unreadable or untied signal as unknown", () => {
   for (const [overrides, code] of [
     [{ lsof: null }, "codex-home-unknown"],
     [{ lsof: "p1\nn/tmp/other.txt\n" }, "codex-home-unknown"],
-    [{ lsof: `n${HOME}/logs_2.sqlite\nn/Users/v/.codex/queue_1.sqlite\n` }, "codex-home-unknown"],
+    // No state database open: never fall back to a guessed state_5.sqlite.
+    [{ lsof: `n${HOME}/logs_2.sqlite\nn${HOME}/queue_1.sqlite\n` }, "codex-home-unknown"],
+    [{ lsof: `n${HOME}/state_5.sqlite\nn/Users/v/.codex/queue_1.sqlite\n` }, "codex-home-unknown"],
     [{ sqliteStatus: 1 }, "desktop-threads-unreadable"],
     [{ rows: "not json" }, "desktop-threads-unreadable"],
     [{ rows: [] }, "desktop-threads-none"],
-    [{ rows: [{ rollout_path: `${HOME}/sessions/a.jsonl`, updated_at_ms: null }] }, "desktop-thread-timestamp-invalid"],
-    [{ rows: [{ rollout_path: `${HOME}/sessions/a.jsonl`, updated_at_ms: NOW + 10 * 86_400_000 }] }, "desktop-thread-timestamp-invalid"],
-    [{ rows: [{ rollout_path: `${HOME}/sessions/missing.jsonl`, updated_at_ms: NOW - 1 }] }, "desktop-rollout-unreadable"],
+    [{ rows: [desktopRow("x", NOW - 1, { originator: "codex_exec" })] }, "desktop-threads-none"],
+    [{ rows: Array.from({ length: 500 }, (_, index) => desktopRow(`r${index}`, NOW - index)) }, "desktop-threads-too-many"],
+    [{ rows: [desktopRow("a", null)] }, "desktop-thread-timestamp-invalid"],
+    [{ rows: [desktopRow("a", NOW + 10 * 86_400_000)] }, "desktop-thread-timestamp-invalid"],
+    [{ rows: [desktopRow("missing", NOW - 1)] }, "desktop-rollout-unreadable"],
     [{ files: { [`${HOME}/sessions/a.jsonl`]: { text: "{broken\n", mtimeMs: NOW - 1 }, [`${HOME}/sessions/b.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 2 } } }, "desktop-rollout-unreadable"],
     [{ front: "garbage" }, "frontmost-app-unknown"],
     [{ bundle: "no bundle here" }, "frontmost-app-unknown"],
@@ -1739,37 +1781,61 @@ test("desktop activity treats every unreadable or untied signal as unknown", () 
   assert.equal(readDesktopActivity({ runner: () => assert.fail("no probe without a server"), serverPid: null }).unknown, "desktop-server-unidentified");
 });
 
-test("an open turn in the newest or a recent rollout marks the app busy", () => {
-  const newest = activityFixture({
+test("an open turn in any desktop thread active in the last day marks the app busy", () => {
+  // Thermos #1: thread A has sat inside a tool call for 40 minutes while
+  // thread B finished 10 minutes ago.
+  const fixture = activityFixture({
+    rows: [desktopRow("b", NOW - 10 * 60_000), desktopRow("a", NOW - 40 * 60_000)],
     files: {
-      [`${HOME}/sessions/a.jsonl`]: { text: OPEN_TURN, mtimeMs: NOW - 12 * 60_000 },
-      [`${HOME}/sessions/b.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 7_000_000 },
+      [`${HOME}/sessions/b.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 10 * 60_000 },
+      [`${HOME}/sessions/a.jsonl`]: { text: OPEN_TURN, mtimeMs: NOW - 40 * 60_000 },
     },
-  }).read();
-  assert.equal(newest.complete, true, newest.unknown);
-  assert.equal(newest.turnInProgress, true);
+  });
+  const activity = fixture.read();
+  assert.equal(activity.complete, true, activity.unknown);
+  assert.equal(activity.turnInProgress, true);
+  assert.equal(activity.openTurnStartedMs, NOW - 40 * 60_000);
+  assert.deepEqual(desktopBusyReasons({ activity, inventory: { processes: [] }, serverPid: 1, bundleId: "x", nowMs: NOW, idleMs: 300_000 }), [
+    "desktop-turn-in-progress",
+  ]);
 
-  const concurrent = activityFixture({
-    files: {
-      [`${HOME}/sessions/a.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 60_000 },
-      [`${HOME}/sessions/b.jsonl`]: { text: OPEN_TURN, mtimeMs: NOW - 15 * 60_000 },
-    },
-  }).read();
-  assert.equal(concurrent.turnInProgress, true);
+  // Older than a day and past the newest threads: not read at all.
+  const rows = [desktopRow("b", NOW - 60_000)];
+  const files = { [`${HOME}/sessions/b.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 60_000 } };
+  for (let index = 0; index < 25; index += 1) {
+    rows.push(desktopRow(`old${index}`, NOW - 2 * 86_400_000 - index));
+    files[`${HOME}/sessions/old${index}.jsonl`] = { text: OPEN_TURN, mtimeMs: NOW - 2 * 86_400_000 };
+  }
+  const old = activityFixture({ rows, files });
+  assert.equal(old.read().turnInProgress, false);
+  assert.ok(!old.reads.includes(`${HOME}/sessions/old24.jsonl`));
+});
 
-  // An old, abandoned open turn in a rollout other than the newest is ignored.
-  const stale = activityFixture({
-    files: {
-      [`${HOME}/sessions/a.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 60_000 },
-      [`${HOME}/sessions/b.jsonl`]: { text: OPEN_TURN, mtimeMs: NOW - 5 * 3_600_000 },
-    },
-  }).read();
-  assert.equal(stale.turnInProgress, false);
+test("a server child started after an open turn began is busy, however old", () => {
+  const activity = { complete: true, latestActivityMs: NOW - 3_600_000, turnInProgress: true, openTurnStartedMs: NOW - 7_200_000, frontmostBundleId: "x" };
+  const inventory = { processes: [
+    processRecord({ pid: 13125, parentPid: 1, processGroupId: 13125, startTime: new Date(NOW - 9_000_000).toISOString(), executable: "/x", rawCommand: "/x app-server" }),
+    processRecord({ pid: 300, parentPid: 13125, processGroupId: 300, startTime: new Date(NOW - 7_000_000).toISOString(), executable: "/bin/zsh", rawCommand: "/bin/zsh -lc make" }),
+  ] };
+  assert.deepEqual(desktopBusyReasons({ activity, inventory, serverPid: 13125, bundleId: "y", nowMs: NOW, idleMs: 300_000 }), [
+    "desktop-turn-in-progress",
+    "open-turn-child",
+  ]);
+});
+
+test("a failed process list during the idle check counts as busy", () => {
+  const activity = { complete: true, latestActivityMs: NOW - 600_000, turnInProgress: false, frontmostBundleId: "com.apple.Terminal" };
+  for (const inventory of [{ collectionErrors: [{ code: "process-list-unavailable" }], processes: [] }, null]) {
+    assert.deepEqual(desktopBusyReasons({ activity, inventory, serverPid: 13125, bundleId: "x", nowMs: NOW, idleMs: 300_000 }), [
+      "desktop-process-list-unknown",
+    ]);
+  }
 });
 
 test("rollout turn state reads turns and tool calls from the tail", () => {
   assert.equal(rolloutTurnState(CLOSED_TURN), "closed");
   assert.equal(rolloutTurnState(OPEN_TURN), "open");
+  assert.equal(readTurn(OPEN_TURN).openedAtMs, NOW - 40 * 60_000);
   assert.equal(rolloutTurnState(line("event_msg", { type: "task_started" }) + line("event_msg", { type: "turn_aborted" })), "closed");
   assert.equal(rolloutTurnState(CLOSED_TURN + line("response_item", { type: "function_call", call_id: "late" })), "open");
   assert.equal(rolloutTurnState(line("session_meta", {}) + line("response_item", { type: "compaction" })), "closed");
@@ -1781,13 +1847,144 @@ test("rollout turn state reads turns and tool calls from the tail", () => {
   assert.equal(rolloutTurnState(null), "unknown");
 });
 
-test("the Codex home comes only from the server's own open databases", () => {
+test("the Codex home comes only from the server's own open state database", () => {
   assert.deepEqual(codexHomeFromOpenFiles(`n${HOME}/state_5.sqlite-wal\nn${HOME}/logs_2.sqlite\n`), {
     home: HOME,
     database: `${HOME}/state_5.sqlite`,
   });
   assert.deepEqual(codexHomeFromOpenFiles(`n${HOME}/state_6.sqlite\n`), { home: HOME, database: `${HOME}/state_6.sqlite` });
+  assert.equal(codexHomeFromOpenFiles(`n${HOME}/logs_2.sqlite\n`), null);
   assert.equal(codexHomeFromOpenFiles(`n${HOME}/state_5.sqlite\nn${HOME}/state_6.sqlite\n`), null);
-  assert.equal(codexHomeFromOpenFiles("n/tmp/odd?dir/logs_2.sqlite\n"), null);
+  assert.equal(codexHomeFromOpenFiles("n/tmp/odd?dir/state_5.sqlite\n"), null);
   assert.equal(codexHomeFromOpenFiles(""), null);
+});
+
+// The detached relaunch watchdog, driven with fakes.
+function watchdogFakes({ hostGoneAfter = 2, running = false, identityThrows = false } = {}) {
+  let clock = 0;
+  let polls = 0;
+  const launched = [];
+  return {
+    launched,
+    deps: {
+      readIdentity(pid) {
+        if (identityThrows) throw new Error("ps failed");
+        polls += 1;
+        return polls > hostGoneAfter
+          ? { state: "absent" }
+          : { state: "present", identity: exactIdentity({ pid, startTime: "2026-08-02T10:00:00.000Z" }) };
+      },
+      isRunning: () => running,
+      launch: (bundlePath) => {
+        launched.push(bundlePath);
+        return true;
+      },
+      sleep: (ms) => { clock += ms; },
+      now: () => clock,
+    },
+  };
+}
+const WATCH = { hostPid: 13007, hostStartTime: "2026-08-02T10:00:00.000Z", bundlePath: "/Applications/ChatGPT.app" };
+
+test("the relaunch watchdog reopens the app in the background only when nothing else did", () => {
+  const closed = watchdogFakes();
+  assert.equal(runRelaunchWatchdog(WATCH, closed.deps), "relaunched");
+  assert.deepEqual(closed.launched, ["/Applications/ChatGPT.app"]);
+
+  const reopened = watchdogFakes({ running: true });
+  assert.equal(runRelaunchWatchdog(WATCH, reopened.deps), "already-running");
+  assert.deepEqual(reopened.launched, []);
+
+  const stays = watchdogFakes({ hostGoneAfter: Number.POSITIVE_INFINITY });
+  assert.equal(runRelaunchWatchdog(WATCH, stays.deps), "host-still-running");
+  assert.deepEqual(stays.launched, []);
+
+  const unreadable = watchdogFakes({ identityThrows: true });
+  assert.equal(runRelaunchWatchdog(WATCH, unreadable.deps), "host-still-running");
+  assert.deepEqual(unreadable.launched, []);
+
+  assert.equal(runRelaunchWatchdog({ ...WATCH, bundlePath: "/Applications/../x/ChatGPT.app" }, closed.deps), "invalid-arguments");
+});
+
+test("the relaunch watchdog is spawned detached, and its launcher never takes focus", () => {
+  const spawned = [];
+  const child = { pid: 777, unref() { this.unrefed = true; }, on() {} };
+  const armed = armRelaunchWatchdog(WATCH, {
+    spawnProcess: (file, args, options) => {
+      spawned.push({ file, args, options });
+      return child;
+    },
+    execPath: "/usr/local/bin/node",
+  });
+  assert.deepEqual(armed, { ok: true, pid: 777 });
+  assert.equal(child.unrefed, true);
+  assert.equal(spawned[0].file, "/usr/local/bin/node");
+  assert.match(spawned[0].args[0], /desktop-watchdog\.mjs$/);
+  assert.deepEqual(JSON.parse(spawned[0].args[1]), WATCH);
+  assert.deepEqual(spawned[0].options, { detached: true, stdio: "ignore" });
+  assert.deepEqual(armRelaunchWatchdog({ ...WATCH, bundlePath: "relative/ChatGPT.app" }, { spawnProcess: () => assert.fail() }), { ok: false });
+  const source = fs.readFileSync(new URL("./lib/desktop-watchdog.mjs", import.meta.url), "utf8");
+  assert.match(source, /OPEN, \["-g", bundlePath\]/);
+  assert.equal(bundleRunning("/Applications/ChatGPT.app", () => ({ status: 0, stdout: "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT\n" })), true);
+  assert.equal(bundleRunning("/Applications/ChatGPT.app", () => ({ status: 0, stdout: "/Applications/Codex.app/Contents/MacOS/Codex\n" })), false);
+  assert.equal(bundleRunning("/Applications/ChatGPT.app", () => ({ status: 1, stdout: "" })), null);
+});
+
+test("the watchdog is armed before the quit, and a recycle refuses without one", () => {
+  const { harness, result } = confirmedDesktop();
+  assert.deepEqual(harness.calls.order.slice(0, 2), ["watchdog", "quit"]);
+  assert.deepEqual(harness.calls.watchdog, [WATCH]);
+  assert.deepEqual(result.verification.watchdog, { armed: true, pid: 4242 });
+
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const unarmed = desktopHarness();
+  unarmed.deps.armRelaunchWatchdog = () => ({ ok: false });
+  const refusedRun = recycleDesktop(desktopOptions({ confirmation: token }), unarmed.deps);
+  assert.equal(refusedRun.exitCode, EXIT_CODES.refused);
+  assert.ok(refusedRun.result.verification.missingEvidence.includes("desktop-watchdog-unavailable"));
+  assert.equal(refusedRun.result.verification.mutationAttempted, false);
+  assert.deepEqual(unarmed.calls.quit, []);
+});
+
+test("an exception after the quit still relaunches the app and is reported", () => {
+  for (const [failing, launches] of [["monotonicNow", 1], ["sleep", 1]]) {
+    const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+    const harness = desktopHarness({ incompleteRelaunchPolls: Number.POSITIVE_INFINITY });
+    let quitSent = false;
+    const quit = harness.deps.quitApp;
+    harness.deps.quitApp = (bundleId) => {
+      quitSent = true;
+      return quit(bundleId);
+    };
+    const original = harness.deps[failing];
+    harness.deps[failing] = (...args) => {
+      if (quitSent) throw new Error(`${failing} failed`);
+      return original(...args);
+    };
+    const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+    assert.equal(exitCode, EXIT_CODES.failed, failing);
+    assert.equal(harness.calls.launch.length, launches, failing);
+    assert.ok(result.verification.missingEvidence.includes("desktop-recycle-evidence-failed"), failing);
+  }
+});
+
+test("a quit that times out warns that the watchdog may still reopen the app", () => {
+  const { harness, result, exitCode } = confirmedDesktop({ hostQuits: false });
+  assert.equal(exitCode, EXIT_CODES.failed);
+  assert.deepEqual(harness.calls.launch, []);
+  assert.ok(result.warnings.some((warning) => warning.code === "desktop-quit-may-still-land"));
+});
+
+test("the relaunch path is checked before anything is quit", () => {
+  const harness = desktopHarness();
+  const host = harness.state.get(13007).identity;
+  // A bundle path the relaunch would refuse, bound into the receipt.
+  const moved = { ...host, executable: "/Applications/./ChatGPT.app/Contents/MacOS/ChatGPT" };
+  harness.fixture.processes.find((record) => record.pid === 13007).executable = moved.executable;
+  harness.state.set(13007, { state: "present", identity: moved });
+  harness.deps.readBundleIdentifier = (bundlePath) => (bundlePath.includes("ChatGPT") ? "com.openai.codex" : "com.openai.codex-app");
+  const first = recycleDesktop(desktopOptions(), harness.deps).result.verification.receipt.confirmationToken;
+  const { result } = recycleDesktop(desktopOptions({ confirmation: first }), harness.deps);
+  assert.ok(result.verification.missingEvidence.includes("desktop-relaunch-path-invalid"), JSON.stringify(result.verification.missingEvidence));
+  assert.deepEqual(harness.calls.quit, []);
 });

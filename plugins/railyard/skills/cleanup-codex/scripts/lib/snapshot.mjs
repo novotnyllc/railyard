@@ -469,6 +469,33 @@ export function sameBirthIdentityPresent(expected, observation) {
     && identityDifferences(expected, observation.identity, BIRTH_IDENTITY_FIELDS).length === 0;
 }
 
+// One verdict on whether the exact birth `expected` names still runs: "gone"
+// (absent, or the PID now holds another birth), "present", or "unknown" (the
+// read failed or returned no valid identity). Every desktop and recycle check
+// that asks this question uses it, so they cannot disagree.
+export function observeBirth(expected, readIdentity) {
+  let observation;
+  try {
+    observation = readIdentity(expected.pid);
+  } catch {
+    return "unknown";
+  }
+  if (observation?.state === "absent") return "gone";
+  if (observation?.state !== "present" || !validObservedIdentity(observation.identity)) return "unknown";
+  return sameBirthIdentityPresent(expected, observation) ? "present" : "gone";
+}
+
+// Whether `expected` is present with every revalidated identity field intact.
+export function stillExactlyPresent(expected, readIdentity) {
+  let observation;
+  try {
+    observation = readIdentity(expected.pid);
+  } catch {
+    return false;
+  }
+  return sameSignalIdentityPresent(expected, observation);
+}
+
 export function exactSnapshotIdentityPresent(expected, observation) {
   return observation?.state === "present"
     && validObservedIdentity(observation.identity)

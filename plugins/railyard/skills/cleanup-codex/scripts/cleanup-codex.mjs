@@ -73,6 +73,8 @@ import {
 
 export * from "./lib/constants.mjs";
 export * from "./lib/desktop.mjs";
+export * from "./lib/desktop-activity.mjs";
+export * from "./lib/desktop-watchdog.mjs";
 export * from "./lib/hook.mjs";
 export * from "./lib/hook-receipts.mjs";
 export * from "./lib/inventory.mjs";
