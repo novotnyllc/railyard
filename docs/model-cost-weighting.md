@@ -38,7 +38,7 @@ List prices and controls are in the
 5. **Measured outcomes win.** Once cost per accepted task has been measured
    for a model and effort, use that number instead of this arithmetic.
 
-## Current table (checked 2026-09-26)
+## Current table (checked 2026-09-28)
 
 ### Claude (reference: Fable 5.1 = 100)
 
@@ -47,12 +47,17 @@ List prices and controls are in the
 | Fable 5.1 | 10.00 | 50.00 | 69.00 | **100** |
 | Opus 5 | 5.00 | 25.00 | 34.50 | **50** |
 | Opus 5.5 | 4.00 | 20.00 | 27.60 | **40** |
+| Sonnet 5.5 | 2.00 | 10.00 | 13.80 | **20** |
 | Sonnet 5 | 2.00 | 10.00 | 13.80 | **20** |
 | Haiku 4.5 | 1.00 | 5.00 | 6.90 | **10** |
 
 Anthropic reports that Opus 5.5 at `medium` matches or exceeds Opus 5 at
 `high`. At a lower price, that makes Opus 5.5 the better default of the two
 for most work. Measured outcomes still decide it.
+
+Sonnet 5.5 costs the same as Sonnet 5. Anthropic reports that on several
+benchmarks Sonnet 5.5 at `low` or `medium` beats Sonnet 5's best score at
+about a tenth of the cost per task.
 
 ### Codex (reference: prior GPT-6 Sol promotional price = 100)
 

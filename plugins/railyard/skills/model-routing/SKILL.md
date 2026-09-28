@@ -22,7 +22,10 @@ user's explicit model or effort choices always win.
   multi-file or ambiguous work.
 - **Fable 5.1** (`fable`) is for frontier-hard problems, long autonomous runs,
   or work where Opus 5.5 fell short.
-- **Sonnet 5** (`sonnet`) is for bounded, well-specified edits.
+- **Sonnet 5.5** (`sonnet`, `claude-sonnet-5-5`) is for well-scoped everyday
+  work, bug fixes, bounded edits with a clear acceptance check, and docs,
+  usually at `low` or `medium` effort. Where `sonnet` still resolves to
+  Sonnet 5, see the reference below.
 - **Haiku 4.5** (`haiku`) is for read-only search. It has no effort setting.
 
 The Agent tool's `model` parameter accepts only these aliases. Effort comes

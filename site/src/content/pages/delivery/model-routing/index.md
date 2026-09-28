@@ -15,10 +15,12 @@ Choose the model and reasoning effort together for each delegated assignment, us
 | --- | --- | --- |
 | Opus 5.5 | `opus` (`claude-opus-5-5`) | The default for substantive subagent work |
 | Fable 5.1 | `fable` (`claude-fable-5-1`) | Escalation for frontier-hard or long autonomous work |
-| Sonnet 5 | `sonnet` | Bounded edits with a clear acceptance check |
+| Sonnet 5.5 | `sonnet` (`claude-sonnet-5-5`) | Well-scoped everyday work, bug fixes, bounded edits with a clear acceptance check, and docs, usually at `low` or `medium` |
 | Haiku 4.5 | `haiku` | Read-only search and lookup |
 
 Opus 5.5 requires Claude Code 2.1.280 or later and accepts `low` through `max` effort, with `medium` as the default. Start a session with `--model` and `--effort`. The `Agent` tool takes a model alias; effort comes from the session or from a subagent definition that sets both `model` and `effort`. Fork subagents always inherit the parent's settings.
+
+Once your Claude Code version's model catalog includes Sonnet 5.5, the `sonnet` alias uses it. Until then, `sonnet` resolves to Sonnet 5; pass `claude-sonnet-5-5[1m]` explicitly where a model ID is accepted, or keep Sonnet 5.
 
 ## Codex
 

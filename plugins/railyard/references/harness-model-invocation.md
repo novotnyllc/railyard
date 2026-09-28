@@ -13,7 +13,8 @@ with this page, they are correct.
 | Claude Code | Fable 5.1 | `claude-fable-5-1` | `fable` | `low`–`max` | $10 / $50 |
 | Claude Code | Opus 5.5 | `claude-opus-5-5` | `opus` (also the default model) | `low`–`max`, default `medium` | $4 / $20 |
 | Claude Code | Opus 5 | `claude-opus-5` | — (pin by ID) | `low`–`max` | $5 / $25 |
-| Claude Code | Sonnet 5 | `claude-sonnet-5` | `sonnet` | `low`–`max` | $2 / $10 |
+| Claude Code | Sonnet 5.5 | `claude-sonnet-5-5` | `sonnet` once the catalog lists it | `low`–`max`, API default `high` | $2 / $10 |
+| Claude Code | Sonnet 5 | `claude-sonnet-5` | `sonnet` on older catalogs | `low`–`max` | $2 / $10 |
 | Claude Code | Haiku 4.5 | `claude-haiku-4-5` | `haiku` | none | $1 / $5 |
 | Codex | GPT-6 Sol | `gpt-6-sol` | — | check live schema | $2 / $10 |
 | Codex | GPT-6 Luna | `gpt-6-luna` | — | check live schema | $0.10 / $0.50 |
@@ -25,6 +26,20 @@ Anthropic reports that Opus 5.5 at `medium` matches or exceeds Opus 5 at
 `high`, so don't carry Opus 5 effort habits over to Opus 5.5. Opus 5.5
 requires Claude Code 2.1.280 or later; older versions resolve `opus` to an
 earlier Opus, so update Claude Code rather than pinning an old ID.
+
+Sonnet 5.5 has a 1M context window and 128K max output. Once your Claude
+Code version's model catalog includes Sonnet 5.5, the `sonnet` alias uses
+it. Until then, `sonnet` resolves to Sonnet 5, and an unlisted
+`claude-sonnet-5-5` warns and caps auto-compact at 200K; pass
+`claude-sonnet-5-5[1m]` explicitly where a model ID is accepted, or keep
+Sonnet 5. Its thinking is adaptive and on by default; the lowest setting,
+`between_tools`, works at `high` effort or below. Non-default
+`temperature`, `top_p`, or `top_k` returns a 400. Coming from Sonnet 5,
+forced `tool_choice` (`any` or `tool`) errors, thinking blocks are tied to
+the model and conversation, text between tool calls arrives in thinking
+blocks, `computer_20251124` is rejected on the API and Google Cloud, and the
+advisor tool rejects Opus 4.8, Opus 4.7, and Sonnet 5 as advisors. On
+Bedrock the ID is `anthropic.claude-sonnet-5-5`.
 
 For Codex, OpenAI's published API efforts are `none` through `max` for Sol and
 Luna, and `low` through `max` for Astra. Some native surfaces have also listed
@@ -38,6 +53,7 @@ Prices are list API rates. They are a planning input, not the cost of an
 accepted result. The Railyard repository's
 `docs/model-cost-weighting.md` has the relative weights.
 Sources: [Claude Code model configuration](https://code.claude.com/docs/en/model-config),
+[Sonnet 5.5 overview](https://platform.claude.com/docs/en/models/sonnet-5-5/overview),
 [subagents](https://code.claude.com/docs/en/sub-agents), and
 [Introducing GPT-6 Sol and Luna](https://openai.com/index/introducing-gpt-6-sol-and-luna/).
 
