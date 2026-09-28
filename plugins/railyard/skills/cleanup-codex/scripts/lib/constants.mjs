@@ -65,7 +65,7 @@ export const WATCHDOG_LATE_QUIT_MS = 60_000;
 
 // The ChatGPT/Codex desktop app's name, in one place. Every pattern below
 // that recognizes the app, its bundle or its helpers is built from it.
-export const APP_NAME_PATTERN = "(?:Codex|ChatGPT)";
+const APP_NAME_PATTERN = "(?:Codex|ChatGPT)";
 // The main app: its executable (capturing the bundle), and the bundle itself.
 export const MAIN_APP_EXECUTABLE = new RegExp(
   `^(\\/.+\\/${APP_NAME_PATTERN}\\.app)\\/Contents\\/MacOS\\/${APP_NAME_PATTERN}$`,

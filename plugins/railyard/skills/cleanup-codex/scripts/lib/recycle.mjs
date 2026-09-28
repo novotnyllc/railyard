@@ -47,23 +47,24 @@ export function recycleServer(options, deps) {
   const platform = options?.platform ?? process.platform;
   const uid = options?.uid ?? callerUid();
   const result = emptyRecycleResult(platform);
+  const run = { options, platform, uid };
   return runMutation(result, { lock: deps?.lock, confirmation: options?.confirmation }, {
     unexpected: { code: "recycle-evidence-failed", status: "refused" },
-    prepare: () => prepareRecycle(options, deps, { platform, uid, result }),
+    prepare: () => prepareRecycle(deps, run, result),
     confirmToken: (plan) => plan.receipt.confirmationToken,
     mutate: (plan, txn) => {
-      recheckUnderLock(plan, options, deps, result);
+      recheckUnderLock(plan, deps, run, result);
       const replacement = plan.mode === "managed"
-        ? restartManaged(plan, deps, result, txn)
-        : replaceUnmanaged(plan, deps, result, txn);
-      verifyReplacement(plan, replacement, options, deps, result);
+        ? restartManaged(plan, deps, run, result, txn)
+        : replaceUnmanaged(plan, deps, run, result, txn);
+      verifyReplacement(plan, deps, run, result, replacement);
     },
   });
 }
 
 // The first pass, and the unlocked half of the second: select the server,
 // bind its exact tree and daemon evidence, and build the receipt.
-function prepareRecycle(options, deps, { platform, uid, result }) {
+function prepareRecycle(deps, { options, platform, uid }, result) {
   if (platform !== "darwin") refuse("unsupported-platform");
   if (!Number.isInteger(options?.pid) || options.pid <= 0) refuse("recycle-pid-required");
   if (!Number.isInteger(options?.minSoftLimit) || options.minSoftLimit <= 0) {
@@ -127,19 +128,9 @@ function prepareRecycle(options, deps, { platform, uid, result }) {
 
   const mode = options.unmanaged === true ? "unmanaged" : "managed";
   result.verification.mode = mode;
-  const takeDaemonSample = (owner = snapshot.owner, sampleExecutable = executable) => normalizeDaemonSample(
-    deps.sampleDaemonEvidence({ socket, executable: sampleExecutable, ownerPid: owner.pid }),
-    {
-      mode,
-      owner,
-      socket,
-      executable: sampleExecutable,
-      uid,
-      canonicalPath: deps.canonicalPath,
-    },
-  );
-  const firstSample = takeDaemonSample();
-  const secondSample = takeDaemonSample();
+  const binding = { uid, mode, snapshot, socket, executable };
+  const firstSample = sampleDaemon(binding, deps);
+  const secondSample = sampleDaemon(binding, deps);
   if (stableJson(firstSample) !== stableJson(secondSample)) refuse("daemon-attestation-unstable");
 
   // The descriptor-limit attestor is optional. Without one the limit is
@@ -204,12 +195,7 @@ function prepareRecycle(options, deps, { platform, uid, result }) {
   }
 
   return {
-    uid,
-    mode,
-    snapshot,
-    socket,
-    executable,
-    takeDaemonSample,
+    ...binding,
     secondSample,
     nofile,
     launcher,
@@ -220,15 +206,30 @@ function prepareRecycle(options, deps, { platform, uid, result }) {
   };
 }
 
+// One daemon sample, normalized against the bound server (or, after the
+// restart, against its replacement).
+function sampleDaemon(binding, deps, owner = binding.snapshot.owner, executable = binding.executable) {
+  return normalizeDaemonSample(
+    deps.sampleDaemonEvidence({ socket: binding.socket, executable, ownerPid: owner.pid }),
+    {
+      mode: binding.mode,
+      owner,
+      socket: binding.socket,
+      executable,
+      uid: binding.uid,
+      canonicalPath: deps.canonicalPath,
+    },
+  );
+}
+
 // Under the lock: every binding the receipt made must still hold, and the
 // live process tree must still be exactly the confirmed one.
-function recheckUnderLock(plan, options, deps, result) {
+function recheckUnderLock(plan, deps, { options }, result) {
   const {
     uid,
     snapshot,
     socket,
     executable,
-    takeDaemonSample,
     secondSample,
     nofile,
     launcher,
@@ -243,7 +244,7 @@ function recheckUnderLock(plan, options, deps, result) {
     revalidateExecutableEvidence(replacementExecutable, deps, uid, "replacement-executable-changed");
   }
 
-  const finalSample = takeDaemonSample();
+  const finalSample = sampleDaemon(plan, deps);
   if (stableJson(secondSample) !== stableJson(finalSample)) refuse("daemon-attestation-unstable");
   revalidateSnapshot(snapshot, deps.readIdentity);
   if (parent && !exactSnapshotIdentityPresent(parent, deps.readIdentity(parent.pid))) {
@@ -295,12 +296,12 @@ function recheckUnderLock(plan, options, deps, result) {
   }
   assertGuiPreserved(guiBaselines, deps.readIdentity);
 
-  const mutationSample = takeDaemonSample();
+  const mutationSample = sampleDaemon(plan, deps);
   if (stableJson(secondSample) !== stableJson(mutationSample)) refuse("daemon-attestation-unstable");
 }
 
 // Managed: the daemon's own restart, then an exact reap of what it left.
-function restartManaged(plan, deps, result, txn) {
+function restartManaged(plan, deps, run, result, txn) {
   const { uid, snapshot, socket, executable, receipt } = plan;
   let { replacementExecutable } = plan;
   if (typeof deps.reapResidue !== "function") refuse("residue-reaper-unavailable");
@@ -384,7 +385,7 @@ function restartManaged(plan, deps, result, txn) {
 }
 
 // Unmanaged: stop the exact recorded tree, then start the launcher.
-function replaceUnmanaged(plan, deps, result, txn) {
+function replaceUnmanaged(plan, deps, run, result, txn) {
   const { uid, snapshot, socket, launcher, replacementExecutable, receipt } = plan;
   if (typeof deps.stopUnmanaged !== "function" || typeof deps.launchUnmanaged !== "function") {
     refuse("unmanaged-lifecycle-unavailable");
@@ -414,8 +415,8 @@ function replaceUnmanaged(plan, deps, result, txn) {
 
 // The replacement must be ready, own the socket, and meet the limit; the old
 // tree and parent must be gone and every GUI server untouched.
-function verifyReplacement(plan, replacement, options, deps, result) {
-  const { uid, mode, snapshot, socket, nofile, takeDaemonSample, guiBaselines, parent } = plan;
+function verifyReplacement(plan, deps, { options }, result, replacement) {
+  const { uid, mode, snapshot, socket, nofile, guiBaselines, parent } = plan;
   const { pid: replacementPid, executable: replacementExecutable } = replacement;
   if (typeof deps.waitForReady !== "function") refuse("readiness-verifier-unavailable");
   const ready = deps.waitForReady({
@@ -439,7 +440,7 @@ function verifyReplacement(plan, replacement, options, deps, result) {
     refuse("replacement-identity-changed");
   }
   revalidateExecutableEvidence(replacementExecutable, deps, uid, "replacement-executable-changed");
-  takeDaemonSample(freshReplacement.identity, replacementExecutable);
+  sampleDaemon(plan, deps, freshReplacement.identity, replacementExecutable);
   const readySocket = canonicalPathOrRefuse(ready.socket?.path, deps.canonicalPath, "replacement-socket-invalid");
   const readyOwners = normalizedSocketOwners(ready.socket?.owners);
   if (

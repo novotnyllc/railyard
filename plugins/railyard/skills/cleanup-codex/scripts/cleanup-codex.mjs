@@ -109,7 +109,7 @@ export const RECYCLE_MODES = Object.freeze({
   }),
 });
 
-export function recycleModeFor(flags) {
+function recycleModeFor(flags) {
   if (flags.has("--desktop")) return "desktop";
   return flags.has("--unmanaged") ? "unmanaged" : "managed";
 }

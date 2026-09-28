@@ -433,10 +433,10 @@ export function recycleDesktop(options, deps) {
   const minSoftLimit = options?.minSoftLimit ?? DEFAULT_MIN_SOFT_NOFILE;
   const now = options?.now ?? Date.now();
   const result = emptyDesktopResult(platform);
-  const run = { platform, uid, minSoftLimit, now };
+  const run = { options, platform, uid, minSoftLimit, now };
   return runMutation(result, { lock: deps?.lock, confirmation: options?.confirmation }, {
     unexpected: { code: "desktop-recycle-evidence-failed", status: "refused" },
-    prepare: () => prepareDesktop(options, deps, run, result),
+    prepare: () => prepareDesktop(deps, run, result),
     confirmToken: (plan) => plan.receipt.confirmationToken,
     mutate: (plan, txn) => quitDesktopLocked(plan, deps, run, result, txn),
   });
@@ -444,7 +444,8 @@ export function recycleDesktop(options, deps) {
 
 // The first pass, and the unlocked half of the second: bind the host app and
 // the exact app-server, snapshot its tree, and require the app to be idle.
-function prepareDesktop(options, deps, { platform, uid, minSoftLimit, now }, result) {
+function prepareDesktop(deps, run, result) {
+  const { options, platform, uid, minSoftLimit, now } = run;
   if (platform !== "darwin") refuse("unsupported-platform");
   if (!Number.isInteger(options?.pid) || options.pid <= 0) refuse("recycle-pid-required");
   if (!Number.isInteger(minSoftLimit) || minSoftLimit <= 0) refuse("invalid-minimum-soft-limit");
@@ -497,50 +498,55 @@ function prepareDesktop(options, deps, { platform, uid, minSoftLimit, now }, res
   // Quitting interrupts any running turn, so only an idle app is recycled.
   const idleSeconds = options.idleSeconds ?? DEFAULT_DESKTOP_IDLE_SECONDS;
   if (!Number.isInteger(idleSeconds) || idleSeconds < 0) refuse("invalid-idle-seconds");
-  // Activity is read first. Given a reader, the process tree is read after
-  // it, so a child started while the activity probe ran is still seen;
-  // given an inventory already read, only the activity is fresh.
-  const checkIdle = (inventorySource) => {
-    let activity = null;
-    try {
-      activity = deps.readDesktopActivity({ serverPid: receipt.server.pid, nowMs: options.now ?? Date.now() });
-    } catch {}
-    let inventory = null;
-    try {
-      inventory = typeof inventorySource === "function" ? inventorySource() : inventorySource;
-    } catch {}
-    const reasons = desktopBusyReasons({
-      activity,
-      inventory,
-      serverPid: receipt.server.pid,
-      bundleId: receipt.host.bundleId,
-      nowMs: options.now ?? Date.now(),
-      idleMs: idleSeconds * 1000,
-    });
-    result.verification.idle = {
-      idle: reasons.length === 0,
-      idleSeconds,
-      reasons,
-      unknown: activity?.complete ? null : activity?.unknown ?? "desktop-activity-unavailable",
-      // An open turn (even one a crash abandoned) keeps the app busy until
-      // it is finished, cancelled or archived in the app.
-      openTurns: activity?.openTurns ?? [],
-      lastActivityAt: Number.isFinite(activity?.latestActivityMs) && activity.latestActivityMs > 0
-        ? new Date(activity.latestActivityMs).toISOString()
-        : null,
-    };
-    if (reasons.length) refuse("desktop-busy");
-    return inventory;
+  const plan = { context, evidence, receipt, launchdMaxfiles, idleSeconds };
+  checkDesktopIdle(plan, deps, run, result, deps.inventory);
+  return plan;
+}
+
+// The idle gate, read at three points (prepare, under the lock, and just
+// before the quit). Activity is read first. Given a reader, the process tree
+// is read after it, so a child started while the activity probe ran is still
+// seen; given an inventory already read, only the activity is fresh. Refuses
+// when busy; otherwise returns the inventory it read.
+function checkDesktopIdle({ receipt, idleSeconds }, deps, { options }, result, inventorySource) {
+  let activity = null;
+  try {
+    activity = deps.readDesktopActivity({ serverPid: receipt.server.pid, nowMs: options.now ?? Date.now() });
+  } catch {}
+  let inventory = null;
+  try {
+    inventory = typeof inventorySource === "function" ? inventorySource() : inventorySource;
+  } catch {}
+  const reasons = desktopBusyReasons({
+    activity,
+    inventory,
+    serverPid: receipt.server.pid,
+    bundleId: receipt.host.bundleId,
+    nowMs: options.now ?? Date.now(),
+    idleMs: idleSeconds * 1000,
+  });
+  result.verification.idle = {
+    idle: reasons.length === 0,
+    idleSeconds,
+    reasons,
+    unknown: activity?.complete ? null : activity?.unknown ?? "desktop-activity-unavailable",
+    // An open turn (even one a crash abandoned) keeps the app busy until
+    // it is finished, cancelled or archived in the app.
+    openTurns: activity?.openTurns ?? [],
+    lastActivityAt: Number.isFinite(activity?.latestActivityMs) && activity.latestActivityMs > 0
+      ? new Date(activity.latestActivityMs).toISOString()
+      : null,
   };
-  checkIdle(deps.inventory);
-  return { context, evidence, receipt, launchdMaxfiles, checkIdle };
+  if (reasons.length) refuse("desktop-busy");
+  return inventory;
 }
 
 // Under the lock: re-derive everything from a fresh inventory, recheck
 // idleness, arm the watchdog, then quit. Everything after the quit is
 // recorded on `txn`; it refuses (throws) only before the quit.
-function quitDesktopLocked(plan, deps, { uid, now }, result, txn) {
-  const { context, evidence, receipt, launchdMaxfiles, checkIdle } = plan;
+function quitDesktopLocked(plan, deps, run, result, txn) {
+  const { uid, now } = run;
+  const { context, evidence, receipt, launchdMaxfiles } = plan;
   result.skipped = [];
   const lockedInventory = deps.collectInventory();
   const locked = desktopEvidence(lockedInventory, context, deps);
@@ -562,7 +568,7 @@ function quitDesktopLocked(plan, deps, { uid, now }, result, txn) {
     role: pid === lockedSnapshot.owner.pid ? "server" : "descendant",
   }));
   assertGuiPreserved(evidence.otherGui, deps.readIdentity);
-  const lockedInventoryAfterIdle = checkIdle(() => deps.collectInventory());
+  const lockedInventoryAfterIdle = checkDesktopIdle(plan, deps, run, result, () => deps.collectInventory());
   // The app can restart on its own during the idle check; quit only the bound births.
   if (!stillExactlyPresent(receipt.host, deps.readIdentity)
     || !stillExactlyPresent(receipt.server, deps.readIdentity)) {
@@ -575,7 +581,7 @@ function quitDesktopLocked(plan, deps, { uid, now }, result, txn) {
   }
   // One last activity read, immediately before the quit: a turn started
   // while the process inventory above ran is still caught.
-  checkIdle(lockedInventoryAfterIdle);
+  checkDesktopIdle(plan, deps, run, result, lockedInventoryAfterIdle);
   // A detached watchdog reopens the app if this process dies after the
   // quit, the quit lands after this process gives up, or anything throws.
   const watchTarget = {
