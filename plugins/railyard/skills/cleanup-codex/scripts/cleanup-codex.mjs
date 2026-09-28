@@ -304,7 +304,8 @@ export function usage() {
     "Recycle is two-pass: the first pass prints a confirmation token; rerun the same command with --confirm TOKEN.",
     "Detached servers restart through `codex app-server daemon restart` by default, or with --unmanaged",
     "and --launcher PATH (or RAILYARD_CODEX_BIN). --nofile-attestor PATH is optional; without it the limit is unverified.",
-    "--desktop quits and relaunches the ChatGPT/Codex app hosting a GUI app-server, only when it has been idle for 5 minutes.",
+    "--desktop quits and relaunches the ChatGPT/Codex app hosting a GUI app-server, closing its session, only when the app's",
+    "own threads have been idle for 5 minutes. Run it from outside the app.",
     "Threshold options: --fd-count-warn, --highest-fd-warn, --age-hours-warn, --descendant-warn",
     "Exit codes: 0 healthy, 1 warning, 2 refused/invalid, 3 attempted cleanup verification failure.",
   ].join("\n");

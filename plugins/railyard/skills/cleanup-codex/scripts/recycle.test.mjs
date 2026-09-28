@@ -8,9 +8,12 @@ import test from "node:test";
 
 import {
   EXIT_CODES,
+  codexHomeFromOpenFiles,
   createDefaultDesktopDependencies,
   desktopBusyReasons,
+  desktopServerEvidenceGap,
   readDesktopActivity,
+  rolloutTurnState,
   createDefaultRecycleDependencies,
   desktopRecommendations,
   parseCliArgs,
@@ -1010,7 +1013,22 @@ test("managed recycle without an attestor reports the limit as unverified and st
 });
 
 test("unmanaged recycle without an attestor requires the same executable as the old server", () => {
-  const options = confirmedRecycleOptions({ unmanaged: true, launcher: LAUNCHER, attestorPath: null });
+  // A launcher that is not the server's own executable cannot be compared, so
+  // it refuses before anything is stopped, on either pass.
+  for (const confirmation of [null, "RECYCLE " + "0".repeat(64)]) {
+    const wrapper = recycleHarness({ mode: "unmanaged" });
+    const refused = recycleServer(
+      recycleOptions({ unmanaged: true, launcher: LAUNCHER, attestorPath: null, confirmation }),
+      wrapper.deps,
+    );
+    assert.equal(refused.exitCode, EXIT_CODES.refused);
+    assert.equal(refused.result.verification.mutationAttempted, false);
+    assert.ok(refused.result.verification.missingEvidence.includes("unmanaged-launcher-not-server-executable"));
+    assert.equal(wrapper.calls.stop, 0);
+    assert.equal(wrapper.calls.launch, 0);
+  }
+
+  const options = confirmedRecycleOptions({ unmanaged: true, launcher: "/usr/local/bin/codex", attestorPath: null });
   const harness = recycleHarness({ mode: "unmanaged" });
   const { result, exitCode } = recycleServer(options, harness.deps);
 
@@ -1055,7 +1073,7 @@ test("a desktop quit that reports failure but still lands is waited out and rela
   const harness = desktopHarness({ quitReportsOk: false });
   const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
   assert.equal(exitCode, EXIT_CODES.healthy, JSON.stringify(result.verification.missingEvidence));
-  assert.deepEqual(harness.calls.launch, ["com.openai.codex"]);
+  assert.deepEqual(harness.calls.launch, ["/Applications/ChatGPT.app"]);
 });
 
 test("managed restart that activates a newer release binds the replacement to it", () => {
@@ -1161,13 +1179,16 @@ test("desktop first pass binds the host app and returns a token without mutation
   assert.equal(again.result.verification.receipt.confirmationToken, receipt.confirmationToken);
 });
 
-test("confirmed desktop recycle quits, reaps exact residue, and relaunches", () => {
+test("confirmed desktop recycle quits, relaunches the exact bundle, then reaps exact residue", () => {
   const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
   const harness = desktopHarness();
   const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
 
   assert.equal(exitCode, EXIT_CODES.healthy, JSON.stringify(result.verification.missingEvidence));
-  assert.deepEqual(harness.calls.order, ["quit", "reap", "launch"]);
+  assert.deepEqual(harness.calls.order, ["quit", "launch", "reap"]);
+  assert.deepEqual(harness.calls.launch, ["/Applications/ChatGPT.app"]);
+  assert.deepEqual(result.verification.relaunch, { attempted: true, requested: true, verified: true });
+  assert.ok(harness.calls.activity.every((context) => context.serverPid === 13125));
   assert.deepEqual(harness.calls.quit, ["com.openai.codex"]);
   assert.deepEqual(harness.calls.reaped, [[200, 201]]);
   assert.equal(harness.calls.lock, 1);
@@ -1290,19 +1311,6 @@ test("a failed quit request is still reported as an attempted mutation", () => {
   assert.equal(result.verification.mutationAttempted, true);
   assert.ok(result.verification.missingEvidence.includes("desktop-quit-request-failed"));
   assert.deepEqual(harness.calls.launch, []);
-});
-
-test("an unparsed frontmost app leaves desktop activity unknown", () => {
-  const runner = (file, args) => {
-    if (file === "/usr/bin/sqlite3") return { status: 0, stdout: "[]", stderr: "" };
-    if (args[0] === "front") return { status: 0, stdout: "ASN:0x0-0x4e94e9:\n", stderr: "" };
-    return { status: 0, stdout: "no bundle here", stderr: "" };
-  };
-  const activity = readDesktopActivity({ runner, codexHome: "/nonexistent" });
-  assert.equal(activity.complete, false);
-  assert.deepEqual(desktopBusyReasons({ activity, inventory: { processes: [] }, serverPid: 1, bundleId: "x", nowMs: NOW, idleMs: 1 }), [
-    "desktop-activity-unknown",
-  ]);
 });
 
 test("desktop recycle never quits an app that restarted during the idle check", () => {
@@ -1450,11 +1458,336 @@ test("default desktop adapters issue exact quit, relaunch, and bundle lookups", 
 
   assert.equal(deps.readBundleIdentifier("/Applications/ChatGPT.app"), "com.openai.codex");
   assert.deepEqual(deps.quitApp("com.openai.codex"), { ok: true });
-  assert.deepEqual(deps.launchApp("com.openai.codex"), { ok: true });
+  assert.deepEqual(deps.launchApp("/Applications/ChatGPT.app"), { ok: true });
   assert.deepEqual(deps.quitApp('evil" to do shell script "x'), { ok: false });
+  for (const bad of ["com.openai.codex", "-b", "/Applications/../tmp/ChatGPT.app", "/Applications/Other.app"]) {
+    assert.deepEqual(deps.launchApp(bad), { ok: false });
+  }
+  assert.equal(deps.selfPid, process.pid);
   assert.deepEqual(calls, [
     ["/usr/bin/plutil", "-extract", "CFBundleIdentifier", "raw", "-o", "-", "/Applications/ChatGPT.app/Contents/Info.plist"],
     ["/usr/bin/osascript", "-e", 'tell application id "com.openai.codex" to quit'],
-    ["/usr/bin/open", "-b", "com.openai.codex"],
+    ["/usr/bin/open", "/Applications/ChatGPT.app"],
   ]);
+});
+
+// A VS Code-hosted stdio app-server: detached ancestry without a control
+// socket, so inspect calls it ambiguous. It is not the desktop recycle's.
+function withEditorServer(fixture) {
+  fixture.processes.push(
+    processRecord({
+      pid: 7000,
+      parentPid: 1,
+      processGroupId: 7000,
+      executable: "/Applications/Visual Studio Code.app/Contents/MacOS/Electron",
+      rawCommand: "/Applications/Visual Studio Code.app/Contents/MacOS/Electron",
+    }),
+    processRecord({
+      pid: 7100,
+      parentPid: 7000,
+      processGroupId: 7000,
+      executable: "/Users/u/.vscode/extensions/openai.chatgpt/bin/codex",
+      rawCommand: "/Users/u/.vscode/extensions/openai.chatgpt/bin/codex app-server",
+    }),
+  );
+  fixture.descriptors[7100] = { complete: true, count: 20, highest: 30 };
+  return fixture;
+}
+
+test("an unrelated ambiguous app-server does not block the pre-flight or the relaunch", () => {
+  const first = desktopHarness();
+  withEditorServer(first.fixture);
+  first.state.set(7100, { state: "present", identity: liveIdentity(first.fixture.processes.find((item) => item.pid === 7100)) });
+  const token = recycleDesktop(desktopOptions(), first.deps).result.verification.receipt?.confirmationToken;
+  assert.ok(token, "pre-flight accepts the selected server's own complete evidence");
+
+  const harness = desktopHarness({ relaunchedInventory: withEditorServer });
+  const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.healthy, JSON.stringify(result.verification.missingEvidence));
+  assert.equal(result.verification.after.pid, 14100);
+});
+
+test("pre-flight and relaunch share one evidence-completeness rule", () => {
+  assert.equal(desktopServerEvidenceGap({ missingEvidence: ["process-list-incomplete"] }), "inventory-incomplete");
+  assert.equal(desktopServerEvidenceGap({ missingEvidence: [] }, { missingEvidence: ["file-descriptors"] }), "selected-server-ambiguous");
+  assert.equal(desktopServerEvidenceGap({ missingEvidence: [] }, { missingEvidence: [] }), null);
+  assert.equal(desktopServerEvidenceGap({ missingEvidence: [] }), null);
+});
+
+function confirmedDesktop(harnessOptions = {}) {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness(harnessOptions);
+  return { harness, ...recycleDesktop(desktopOptions({ confirmation: token }), harness.deps) };
+}
+
+test("once the app is gone the relaunch always runs, and later failures are reported beside it", () => {
+  // The residue reap fails.
+  {
+    const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+    const harness = desktopHarness();
+    harness.deps.reapResidue = () => {
+      harness.calls.order.push("reap");
+      return { exitCode: EXIT_CODES.failed, result: { verification: { missingEvidence: ["target-survived"] } } };
+    };
+    const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+    assert.equal(exitCode, EXIT_CODES.failed);
+    assert.deepEqual(harness.calls.order, ["quit", "launch", "reap"]);
+    assert.ok(result.verification.missingEvidence.includes("target-survived"));
+    assert.equal(result.verification.after.pid, 14100);
+    assert.equal(result.verification.relaunch.verified, true);
+  }
+  // The old server outlives its host.
+  {
+    const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+    const harness = desktopHarness();
+    const quit = harness.deps.quitApp;
+    harness.deps.quitApp = (bundleId) => {
+      const outcome = quit(bundleId);
+      harness.state.set(13125, { state: "present", identity: liveIdentity(harness.fixture.processes.find((item) => item.pid === 13125)) });
+      return outcome;
+    };
+    const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+    assert.equal(exitCode, EXIT_CODES.failed);
+    assert.deepEqual(harness.calls.launch, ["/Applications/ChatGPT.app"]);
+    assert.ok(result.verification.missingEvidence.includes("desktop-server-survived-host"));
+  }
+  // The relaunch request fails: residue is still reaped and the failure named.
+  {
+    const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+    const harness = desktopHarness();
+    harness.deps.launchApp = (bundlePath) => {
+      harness.calls.launch.push(bundlePath);
+      throw new Error("open failed");
+    };
+    const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+    assert.equal(exitCode, EXIT_CODES.failed);
+    assert.deepEqual(harness.calls.launch, ["/Applications/ChatGPT.app"]);
+    assert.deepEqual(harness.calls.reaped, [[200, 201]]);
+    assert.ok(result.verification.missingEvidence.includes("desktop-relaunch-failed"));
+    assert.deepEqual(result.verification.relaunch, { attempted: true, requested: false, verified: false });
+    assert.equal(result.verification.after, null);
+  }
+  // The host cannot be read after the quit: it is not shown running, so relaunch.
+  {
+    const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+    const harness = desktopHarness();
+    const read = harness.deps.readIdentity;
+    let quitSent = false;
+    const quit = harness.deps.quitApp;
+    harness.deps.quitApp = (bundleId) => {
+      quitSent = true;
+      return quit(bundleId);
+    };
+    harness.deps.readIdentity = (pid) => {
+      if (quitSent && pid === 13007) throw new Error("ps failed");
+      return read(pid);
+    };
+    const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+    assert.equal(exitCode, EXIT_CODES.failed);
+    assert.deepEqual(harness.calls.launch, ["/Applications/ChatGPT.app"]);
+    assert.ok(result.verification.missingEvidence.includes("desktop-host-quit-unverified"));
+  }
+});
+
+test("a relaunched server that reuses the old server PID is passed to the residue reap", () => {
+  const { harness, exitCode, result } = confirmedDesktop({ relaunchServerPid: 13125 });
+  assert.equal(exitCode, EXIT_CODES.healthy, JSON.stringify(result.verification.missingEvidence));
+  assert.deepEqual(harness.calls.reapContext, {
+    ownerReplacement: { pid: 13125, startTime: "2026-08-02T16:05:00.000Z" },
+  });
+});
+
+test("desktop recycle refuses when its own process runs inside the app", () => {
+  for (const [selfPid, extra, code] of [
+    [201, null, "desktop-recycle-inside-app"],
+    [9300, { pid: 9300, parentPid: 13007 }, "desktop-recycle-inside-app"],
+    [424242, null, "desktop-self-ancestry-unknown"],
+  ]) {
+    const harness = desktopHarness();
+    if (extra) {
+      harness.fixture.processes.push(processRecord({
+        ...extra,
+        processGroupId: 9300,
+        executable: "/bin/zsh",
+        rawCommand: "/bin/zsh -l",
+      }));
+    }
+    harness.deps.selfPid = selfPid;
+    const { result, exitCode } = recycleDesktop(desktopOptions(), harness.deps);
+    assert.equal(exitCode, EXIT_CODES.refused);
+    assert.ok(result.verification.missingEvidence.includes(code), JSON.stringify(result.verification.missingEvidence));
+    assert.equal(result.verification.mutationAttempted, false);
+    assert.deepEqual(harness.calls.quit, []);
+  }
+});
+
+test("desktop recycle refuses when another running app copy shares the bundle id", () => {
+  const harness = desktopHarness({ bundleIds: { "/Applications/Codex.app": "com.openai.codex" } });
+  const { result, exitCode } = recycleDesktop(desktopOptions(), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.refused);
+  assert.ok(result.verification.missingEvidence.includes("desktop-bundle-id-ambiguous"));
+});
+
+test("the desktop activity reader is a required dependency", () => {
+  const harness = desktopHarness();
+  delete harness.deps.readDesktopActivity;
+  const { result } = recycleDesktop(desktopOptions(), harness.deps);
+  assert.deepEqual(result.verification.missingEvidence, ["desktop-evidence-unavailable"]);
+});
+
+test("a turn still open in the app keeps it busy through a long silent gap", () => {
+  const silent = { complete: true, latestActivityMs: NOW - 12 * 60_000, turnInProgress: true, frontmostBundleId: "com.apple.Terminal" };
+  const { result } = recycleDesktop(desktopOptions(), desktopHarness({ activity: [silent] }).deps);
+  assert.deepEqual(result.verification.idle.reasons, ["desktop-turn-in-progress"]);
+  assert.deepEqual(desktopBusyReasons({
+    activity: { complete: true, latestActivityMs: null },
+    inventory: { processes: [] }, serverPid: 1, bundleId: "x", nowMs: NOW, idleMs: 1,
+  }), ["desktop-activity-unknown"]);
+});
+
+// Fake runner and filesystem for the activity reader.
+const HOME = "/Users/u/.codex";
+const line = (type, payload) => JSON.stringify({ timestamp: "t", type, payload }) + "\n";
+const CLOSED_TURN = line("session_meta", {}) + line("event_msg", { type: "task_started" })
+  + line("response_item", { type: "function_call", call_id: "c1" })
+  + line("response_item", { type: "function_call_output", call_id: "c1" })
+  + line("event_msg", { type: "task_complete" });
+const OPEN_TURN = line("session_meta", {}) + line("event_msg", { type: "task_started" })
+  + line("response_item", { type: "custom_tool_call", call_id: "c2" });
+
+function activityFixture({
+  lsof = `p13125\nn${HOME}/logs_2.sqlite\nn${HOME}/queue_1.sqlite-wal\n`,
+  rows = [
+    { rollout_path: `${HOME}/sessions/a.jsonl`, updated_at_ms: NOW - 3_600_000 },
+    { rollout_path: `${HOME}/sessions/b.jsonl`, updated_at_ms: NOW - 7_200_000 },
+  ],
+  files = {
+    [`${HOME}/sessions/a.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 3_000_000 },
+    [`${HOME}/sessions/b.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 7_000_000 },
+  },
+  front = "ASN:0x0-0x4e94e9:\n",
+  bundle = '"CFBundleIdentifier"="com.apple.Terminal"\n',
+  sqliteStatus = 0,
+} = {}) {
+  const calls = [];
+  const runner = (file, args) => {
+    calls.push([file, ...args]);
+    if (file === "/usr/sbin/lsof") return { status: lsof === null ? 1 : 0, stdout: lsof ?? "", stderr: "" };
+    if (file === "/usr/bin/sqlite3") return { status: sqliteStatus, stdout: typeof rows === "string" ? rows : JSON.stringify(rows), stderr: "" };
+    if (args[0] === "front") return { status: 0, stdout: front, stderr: "" };
+    return { status: 0, stdout: bundle, stderr: "" };
+  };
+  const handles = new Map();
+  const fsApi = {
+    statSync(file) {
+      const entry = files[file];
+      if (!entry) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+      return { mtimeMs: entry.mtimeMs, size: Buffer.byteLength(entry.text) };
+    },
+    openSync(file) {
+      const fd = handles.size + 10;
+      handles.set(fd, Buffer.from(files[file].text));
+      return fd;
+    },
+    readSync(fd, buffer, offset, length, position) {
+      return handles.get(fd).copy(buffer, offset, position, position + length);
+    },
+    closeSync(fd) {
+      handles.delete(fd);
+    },
+  };
+  return { calls, read: () => readDesktopActivity({ runner, fsApi, serverPid: 13125, nowMs: NOW }) };
+}
+
+test("desktop activity is read from the selected server's own Codex home and desktop threads", () => {
+  const fixture = activityFixture();
+  const activity = fixture.read();
+  assert.equal(activity.complete, true, activity.unknown);
+  assert.equal(activity.codexHome, HOME);
+  assert.equal(activity.latestActivityMs, NOW - 3_000_000);
+  assert.equal(activity.turnInProgress, false);
+  assert.equal(activity.frontmostBundleId, "com.apple.Terminal");
+  assert.deepEqual(fixture.calls[0], ["/usr/sbin/lsof", "-nP", "-a", "-p", "13125", "-Fn"]);
+  const query = fixture.calls.find((call) => call[0] === "/usr/bin/sqlite3");
+  assert.equal(query[3], `file:${HOME}/state_5.sqlite?mode=ro`);
+  assert.match(query[4], /originator IN \('Codex Desktop', 'codex-chrome-extension-sidepanel'\)/);
+  assert.match(query[4], /archived = 0/);
+});
+
+test("desktop activity treats every unreadable or untied signal as unknown", () => {
+  for (const [overrides, code] of [
+    [{ lsof: null }, "codex-home-unknown"],
+    [{ lsof: "p1\nn/tmp/other.txt\n" }, "codex-home-unknown"],
+    [{ lsof: `n${HOME}/logs_2.sqlite\nn/Users/v/.codex/queue_1.sqlite\n` }, "codex-home-unknown"],
+    [{ sqliteStatus: 1 }, "desktop-threads-unreadable"],
+    [{ rows: "not json" }, "desktop-threads-unreadable"],
+    [{ rows: [] }, "desktop-threads-none"],
+    [{ rows: [{ rollout_path: `${HOME}/sessions/a.jsonl`, updated_at_ms: null }] }, "desktop-thread-timestamp-invalid"],
+    [{ rows: [{ rollout_path: `${HOME}/sessions/a.jsonl`, updated_at_ms: NOW + 10 * 86_400_000 }] }, "desktop-thread-timestamp-invalid"],
+    [{ rows: [{ rollout_path: `${HOME}/sessions/missing.jsonl`, updated_at_ms: NOW - 1 }] }, "desktop-rollout-unreadable"],
+    [{ files: { [`${HOME}/sessions/a.jsonl`]: { text: "{broken\n", mtimeMs: NOW - 1 }, [`${HOME}/sessions/b.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 2 } } }, "desktop-rollout-unreadable"],
+    [{ front: "garbage" }, "frontmost-app-unknown"],
+    [{ bundle: "no bundle here" }, "frontmost-app-unknown"],
+  ]) {
+    const activity = activityFixture(overrides).read();
+    assert.equal(activity.complete, false, code);
+    assert.equal(activity.unknown, code);
+    assert.deepEqual(desktopBusyReasons({ activity, inventory: { processes: [] }, serverPid: 1, bundleId: "x", nowMs: NOW, idleMs: 1 }), [
+      "desktop-activity-unknown",
+    ]);
+  }
+  assert.equal(readDesktopActivity({ runner: () => assert.fail("no probe without a server"), serverPid: null }).unknown, "desktop-server-unidentified");
+});
+
+test("an open turn in the newest or a recent rollout marks the app busy", () => {
+  const newest = activityFixture({
+    files: {
+      [`${HOME}/sessions/a.jsonl`]: { text: OPEN_TURN, mtimeMs: NOW - 12 * 60_000 },
+      [`${HOME}/sessions/b.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 7_000_000 },
+    },
+  }).read();
+  assert.equal(newest.complete, true, newest.unknown);
+  assert.equal(newest.turnInProgress, true);
+
+  const concurrent = activityFixture({
+    files: {
+      [`${HOME}/sessions/a.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 60_000 },
+      [`${HOME}/sessions/b.jsonl`]: { text: OPEN_TURN, mtimeMs: NOW - 15 * 60_000 },
+    },
+  }).read();
+  assert.equal(concurrent.turnInProgress, true);
+
+  // An old, abandoned open turn in a rollout other than the newest is ignored.
+  const stale = activityFixture({
+    files: {
+      [`${HOME}/sessions/a.jsonl`]: { text: CLOSED_TURN, mtimeMs: NOW - 60_000 },
+      [`${HOME}/sessions/b.jsonl`]: { text: OPEN_TURN, mtimeMs: NOW - 5 * 3_600_000 },
+    },
+  }).read();
+  assert.equal(stale.turnInProgress, false);
+});
+
+test("rollout turn state reads turns and tool calls from the tail", () => {
+  assert.equal(rolloutTurnState(CLOSED_TURN), "closed");
+  assert.equal(rolloutTurnState(OPEN_TURN), "open");
+  assert.equal(rolloutTurnState(line("event_msg", { type: "task_started" }) + line("event_msg", { type: "turn_aborted" })), "closed");
+  assert.equal(rolloutTurnState(CLOSED_TURN + line("response_item", { type: "function_call", call_id: "late" })), "open");
+  assert.equal(rolloutTurnState(line("session_meta", {}) + line("response_item", { type: "compaction" })), "closed");
+  // A cut tail with no turn boundary cannot tell.
+  assert.equal(rolloutTurnState("cut-line\n" + line("response_item", { type: "message" }), { partial: true }), "unknown");
+  // A line still being written means the rollout is being written.
+  assert.equal(rolloutTurnState(CLOSED_TURN + '{"type":"event_msg","pay'), "open");
+  assert.equal(rolloutTurnState(CLOSED_TURN + "{broken\n" + line("event_msg", { type: "task_complete" })), "unknown");
+  assert.equal(rolloutTurnState(null), "unknown");
+});
+
+test("the Codex home comes only from the server's own open databases", () => {
+  assert.deepEqual(codexHomeFromOpenFiles(`n${HOME}/state_5.sqlite-wal\nn${HOME}/logs_2.sqlite\n`), {
+    home: HOME,
+    database: `${HOME}/state_5.sqlite`,
+  });
+  assert.deepEqual(codexHomeFromOpenFiles(`n${HOME}/state_6.sqlite\n`), { home: HOME, database: `${HOME}/state_6.sqlite` });
+  assert.equal(codexHomeFromOpenFiles(`n${HOME}/state_5.sqlite\nn${HOME}/state_6.sqlite\n`), null);
+  assert.equal(codexHomeFromOpenFiles("n/tmp/odd?dir/logs_2.sqlite\n"), null);
+  assert.equal(codexHomeFromOpenFiles(""), null);
 });

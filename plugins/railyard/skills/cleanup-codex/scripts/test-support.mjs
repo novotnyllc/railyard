@@ -555,7 +555,9 @@ export function runHookFixture(fixture, directory) {
 
 export const DESKTOP_HOST_EXECUTABLE = "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT";
 
-export const DESKTOP_SERVER_EXECUTABLE = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex";
+export const DESKTOP_SELF_PID = 9001;
+
+export const DESKTOP_SERVER_EXECUTABLE ="/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex";
 
 function desktopProcesses({ hostPid, serverPid, startTime }) {
   return [
@@ -621,6 +623,21 @@ export function desktopInventoryFixture() {
         executable: "/Applications/Codex.app/Contents/Resources/codex",
         rawCommand: "/Applications/Codex.app/Contents/Resources/codex app-server",
       }),
+      // The recycle's own controller: node under a Terminal shell, outside the app.
+      processRecord({
+        pid: 9000,
+        parentPid: 1,
+        processGroupId: 9000,
+        executable: "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal",
+        rawCommand: "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal",
+      }),
+      processRecord({
+        pid: DESKTOP_SELF_PID,
+        parentPid: 9000,
+        processGroupId: DESKTOP_SELF_PID,
+        executable: "/usr/local/bin/node",
+        rawCommand: "/usr/local/bin/node cleanup-codex.mjs recycle --pid 13125 --desktop",
+      }),
     ],
     descriptors: {
       13125: { complete: true, count: 206, highest: 228 },
@@ -646,6 +663,8 @@ export function desktopHarness({
   relaunchServerPid = 14100,
   replacementExits = false,
   quitReportsOk = true,
+  relaunchedInventory = (inventory) => inventory,
+  bundleIds = {},
 } = {}) {
   const idleActivity = {
     complete: true,
@@ -660,14 +679,15 @@ export function desktopHarness({
     state.set(pid, { state: "present", identity: liveIdentity(byPid.get(pid)) });
   }
   state.set(202, { state: "unknown" });
-  const calls = { quit: [], launch: [], reaped: [], lock: 0, order: [] };
+  const calls = { quit: [], launch: [], reaped: [], activity: [], lock: 0, order: [] };
   let relaunched = false;
   let clock = 0;
   const deps = {
     inventory: fixture,
+    selfPid: DESKTOP_SELF_PID,
     collectInventory() {
       if (!relaunched) return fixture;
-      const next = desktopRelaunchedFixture({ serverPid: relaunchServerPid });
+      const next = relaunchedInventory(desktopRelaunchedFixture({ serverPid: relaunchServerPid }));
       if (incompleteRelaunchPolls > 0) {
         incompleteRelaunchPolls -= 1;
         next.descriptors[relaunchServerPid] = { complete: false, count: null, highest: null };
@@ -692,13 +712,15 @@ export function desktopHarness({
         : { state: "absent" };
     },
     readBundleIdentifier(bundlePath) {
-      assert.equal(bundlePath, "/Applications/ChatGPT.app");
-      return "com.openai.codex";
+      const ids = { "/Applications/ChatGPT.app": "com.openai.codex", "/Applications/Codex.app": "com.openai.codex-app", ...bundleIds };
+      assert.ok(Object.hasOwn(ids, bundlePath), bundlePath);
+      return ids[bundlePath];
     },
     readLaunchdMaxfiles() {
       return limits;
     },
-    readDesktopActivity() {
+    readDesktopActivity(context) {
+      calls.activity.push(context);
       return activityQueue.length ? activityQueue.shift() : idleActivity;
     },
     quitApp(bundleId) {
@@ -713,13 +735,14 @@ export function desktopHarness({
       }
       return { ok: quitReportsOk };
     },
-    launchApp(bundleId) {
-      calls.launch.push(bundleId);
+    launchApp(bundlePath) {
+      calls.launch.push(bundlePath);
       calls.order.push("launch");
       relaunched = true;
       return { ok: true };
     },
-    reapResidue(snapshot) {
+    reapResidue(snapshot, context) {
+      calls.reapContext = context;
       calls.reaped.push(snapshot.targets.map((target) => target.pid).sort((left, right) => left - right));
       calls.order.push("reap");
       for (const target of snapshot.targets) state.set(target.pid, { state: "absent" });

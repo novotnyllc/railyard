@@ -165,7 +165,11 @@ export function recycleServer(options, deps) {
       });
     }
     // Without an attestor, an unmanaged replacement must run the same
-    // executable as the old server.
+    // executable as the old server. Prove that before anything is stopped:
+    // only the launcher itself can be compared, so it must be that executable.
+    if (mode === "unmanaged" && !attestor && launcher.path !== executable.path) {
+      refuse("unmanaged-launcher-not-server-executable");
+    }
     if (mode === "unmanaged" && attestor) {
       if (typeof deps.attestLauncher !== "function") refuse("launcher-attestor-unavailable");
       launcherNofileAttestation = deps.attestLauncher(launcher, {
