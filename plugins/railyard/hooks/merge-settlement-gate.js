@@ -343,6 +343,13 @@ function mergeCommands(script, baseCwd) {
       }
       continue;
     }
+    if (basename(head) === "gh" && prefix.appendsArgs && pieceCount) {
+      // xargs appends a PR, repository or flags read from stdin after the
+      // gate has read the visible arguments.
+      unattributed.add("xargs adds merge arguments this guard cannot see; run the merge as its own command");
+      pushesAttributed += pushPiece;
+      continue;
+    }
     if (basename(head) === "gh") {
       const merge = mergeFromPrefix(prefix);
       if (merge) found.push(merge);
@@ -358,7 +365,7 @@ function mergeCommands(script, baseCwd) {
           kind: "push", tokens: invocation.args, env: prefix.env, cwd: invocation.cwd,
           cwdUnknown: prefix.cwdUnknown || invocation.cwdUnknown, repo: invocation.repo,
           // `xargs git push origin` appends refspecs this hook never sees.
-          appended: prefix.tokens.length < segment.length && segment.some((token) => basename(token) === "xargs"),
+          appended: prefix.appendsArgs,
         });
         pushesAttributed += pushPiece;
         continue; // its arguments are refspecs, never data

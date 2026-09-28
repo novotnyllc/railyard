@@ -596,6 +596,9 @@ gated("unconditional cwd and shell workdir are preserved; pipeline/subshell cwd 
       bash(`cd ${target} && gh pr merge 7 ${PIN}`),
       bash(`env -C ${target} gh pr merge 7 ${PIN}`),
       bash(`env --chdir=${target} gh pr merge 7 ${PIN}`),
+      // sudo -D/--chdir runs gh in that directory (Codex P1).
+      bash(`sudo -D ${target} gh pr merge 7 ${PIN}`),
+      bash(`sudo -u me --chdir=${target} gh pr merge 7 ${PIN}`),
       { ...bash(`gh pr merge 7 ${PIN}`), cwd: target },
       { tool_name: "shell", tool_input: { command: ["bash", "-lc", `gh pr merge 7 ${PIN}`], working_directory: target } },
     ]) {
@@ -957,6 +960,15 @@ gated("merges run through command wrappers are gated", () => {
   ]) refused(run(bash(text), { noPath: true }));
   allowed(run(bash("timeout 60 gh pr view 7"), { noPath: true }), []);
   allowed(run(bash("find . -name '*.md' -exec grep -l merge {} +"), { noPath: true }), []);
+});
+
+gated("xargs merges refuse even with settled evidence; sudo's unknown -D refuses (Codex P1)", () => {
+  // xargs appends a PR, repository or flags from stdin after the gate reads the visible ones.
+  for (const text of [`echo 8 | xargs gh pr merge ${PIN}`, `echo 8 | xargs -n1 gh pr merge 7 ${PIN}`]) {
+    refused(run(bash(text)), /xargs adds merge arguments/);
+  }
+  refused(run(bash(`sudo -D "$REPO" gh pr merge 7 ${PIN}`)), /unresolved or conditional `cd`/);
+  allowed(run(bash(`echo 7 | xargs gh pr view`), { noPath: true }), []);
 });
 
 gated("a merge past the parser's segment or depth cap refuses instead of being skipped", () => {

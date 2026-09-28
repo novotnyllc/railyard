@@ -412,6 +412,19 @@ function skipWrapper(rest, spec) {
   return rest.slice(index + spec.operands);
 }
 
+// `sudo -D DIR` / `--chdir=DIR` runs the command in DIR: the directory, or
+// null when sudo does not change it.
+function sudoChdir(rest) {
+  for (let index = 0; index < rest.length && rest[index].startsWith("-") && rest[index] !== "--"; index += 1) {
+    const token = rest[index];
+    if (token === "-D" || token === "--chdir") return rest[index + 1] ?? "";
+    if (token.startsWith("--chdir=")) return token.slice("--chdir=".length);
+    if (/^-D./.test(token)) return token.slice(2);
+    if (COMMAND_WRAPPERS.get("sudo").values.includes(token)) index += 1;
+  }
+  return null;
+}
+
 // Peel only the known env/shell/command wrappers. Keep their context with an
 // extracted script instead of re-parsing it later against the hook's ambient
 // settings.
@@ -422,6 +435,7 @@ function commandPrefix(segmentTokens, baseCwd, inherited = {}) {
     ignoreEnv: inherited.ignoreEnv || false, cwd: baseCwd,
     cwdUnknown: inherited.cwdUnknown || false,
     shell: false, // a shell interpreter was peeled
+    appendsArgs: inherited.appendsArgs || false, // xargs adds arguments read from stdin
   };
   for (;;) {
     const head = tokens[0];
@@ -439,7 +453,16 @@ function commandPrefix(segmentTokens, baseCwd, inherited = {}) {
       continue;
     }
     const wrapper = COMMAND_WRAPPERS.get(basename(head));
-    if (wrapper) { tokens = skipWrapper(tokens.slice(1), wrapper); continue; }
+    if (wrapper) {
+      if (basename(head) === "xargs") context.appendsArgs = true;
+      const chdir = basename(head) === "sudo" ? sudoChdir(tokens.slice(1)) : null;
+      if (chdir !== null) {
+        if (!chdir || /[$`~*?[\]]/.test(chdir)) context.cwdUnknown = true;
+        else context.cwd = path.resolve(context.cwd || process.cwd(), chdir);
+      }
+      tokens = skipWrapper(tokens.slice(1), wrapper);
+      continue;
+    }
     if (basename(head) !== "env" && !SHELLS.has(basename(head))) return { ...context, tokens };
     const dropped = dropWrapperFlags(tokens);
     if (basename(head) !== "env") context.shell = true;
