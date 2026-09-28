@@ -87,6 +87,29 @@ test("confirmed desktop recycle quits, relaunches the exact bundle, then reaps e
   assert.ok(result.warnings.some((warning) => warning.code === "desktop-launchd-maxfiles-low"));
 });
 
+test("the real residue reap signals only exact leftovers, never the app or an unidentified child", () => {
+  const { harness, exitCode, result } = confirmedDesktop();
+  assert.equal(exitCode, EXIT_CODES.healthy, JSON.stringify(result.verification.missingEvidence));
+  // 200 reparented to launchd when the app quit; it is still the recorded birth.
+  assert.deepEqual(harness.calls.signals, [[200, "SIGTERM"], [201, "SIGTERM"]]);
+  assert.equal(harness.state.get(202).state, "unknown");
+
+  // An old server that outlives its host is still live: the real reaper
+  // refuses to reap its tree, and nothing is signalled.
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const survivor = desktopHarness();
+  const quit = survivor.deps.quitApp;
+  survivor.deps.quitApp = (bundleId) => {
+    const outcome = quit(bundleId);
+    survivor.state.set(13125, { state: "present", identity: liveIdentity(survivor.fixture.processes.find((item) => item.pid === 13125)) });
+    return outcome;
+  };
+  const refused = recycleDesktop(desktopOptions({ confirmation: token }), survivor.deps);
+  assert.equal(refused.exitCode, EXIT_CODES.failed);
+  assert.deepEqual(survivor.calls.signals, []);
+  assert.ok(refused.result.verification.missingEvidence.includes("owner-still-live"));
+});
+
 test("desktop recycle waits for complete evidence before accepting the relaunched server", () => {
   const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
   const transient = desktopHarness({ incompleteRelaunchPolls: 2 });

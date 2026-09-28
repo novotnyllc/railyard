@@ -14,6 +14,7 @@ import {
   EXIT_CODES,
   SNAPSHOT_SCHEMA,
   inspectHook,
+  reapSnapshot,
   recycleServer,
 } from "./cleanup-codex.mjs";
 
@@ -679,9 +680,16 @@ export function desktopHarness({
     state.set(pid, { state: "present", identity: liveIdentity(byPid.get(pid)) });
   }
   state.set(202, { state: "unknown" });
-  const calls = { quit: [], launch: [], reaped: [], activity: [], watchdog: [], lock: 0, order: [] };
+  const calls = { quit: [], launch: [], reaped: [], signals: [], activity: [], watchdog: [], lock: 0, order: [] };
   let relaunched = false;
   let clock = 0;
+  // The residue reap runs the real reapSnapshot; only signal delivery is
+  // faked. A signalled process exits; one already gone reports ESRCH.
+  const signalProcess = (pid, signal) => {
+    calls.signals.push([pid, signal]);
+    if (state.get(pid)?.state !== "present") throw Object.assign(new Error("no such process"), { code: "ESRCH" });
+    state.set(pid, { state: "absent" });
+  };
   const deps = {
     inventory: fixture,
     selfPid: DESKTOP_SELF_PID,
@@ -750,8 +758,17 @@ export function desktopHarness({
       calls.reapContext = context;
       calls.reaped.push(snapshot.targets.map((target) => target.pid).sort((left, right) => left - right));
       calls.order.push("reap");
-      for (const target of snapshot.targets) state.set(target.pid, { state: "absent" });
-      return { exitCode: EXIT_CODES.healthy };
+      // Wired as createDefaultDesktopDependencies wires it: the recycle's own
+      // reader and sleep, and no second lock (the recycle holds it).
+      return reapSnapshot(snapshot, {
+        platform: "darwin",
+        uid: 501,
+        readIdentity: (pid) => deps.readIdentity(pid),
+        signalProcess,
+        sleep: (milliseconds) => deps.sleep(milliseconds),
+        lock: { acquire: () => () => {} },
+        ownerReplacement: context?.ownerReplacement ?? null,
+      });
     },
     sleep(milliseconds) {
       clock += milliseconds;
