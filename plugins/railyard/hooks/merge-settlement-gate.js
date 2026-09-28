@@ -114,11 +114,27 @@ function ghCommandWord(tokens) {
 // a built-in (not `extension exec`) or a plain alias. An extension receives
 // every argument and may run it, so a merge phrase there is not credited.
 function ghHandlesArguments(prefix) {
-  const { words } = parseArgs(prefix.tokens.slice(1));
+  const tokens = prefix.tokens.slice(1);
+  const alias = ghAliasAt(tokens, ghCommandWord(tokens).at, ghAliases(prefix));
+  if (alias) return !alias.expansion.startsWith("!");
+  const { words } = parseArgs(tokens);
   if (words[0] === "extension" && words[1] === "exec") return false;
-  if (GH_COMMANDS.has(words[0])) return true;
-  const alias = ghAliases(prefix)?.get(words[0]);
-  return alias !== undefined && !alias.startsWith("!");
+  return GH_COMMANDS.has(words[0]);
+}
+
+// The configured alias this command runs: the longest alias name, one or
+// more words (`gh alias set 'pr land' 'pr merge'`), matching the tokens from
+// the command word on. null when none matches.
+function ghAliasAt(tokens, at, aliases) {
+  if (!aliases || at < 0) return null;
+  let best = null;
+  for (const [name, expansion] of aliases) {
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length && parts.every((part, k) => tokens[at + k] === part) && (!best || parts.length > best.length)) {
+      best = { expansion, length: parts.length };
+    }
+  }
+  return best;
 }
 
 function mergeFromPrefix(prefix) {
@@ -128,8 +144,9 @@ function mergeFromPrefix(prefix) {
   if (aliases === null && name !== undefined && !GH_COMMANDS.has(name)) {
     return { kind: "unsupported", why: "gh reads its aliases from a config directory this guard cannot resolve; run gh pr merge directly" };
   }
-  const alias = aliases?.get(name);
-  if (alias !== undefined) {
+  const match = ghAliasAt(tokens, at, aliases);
+  const alias = match?.expansion;
+  if (match) {
     // A shell alias (`!…`) or one with `$1` placeholders cannot be expanded
     // here; it refuses when its text contains a merge.
     if (alias.startsWith("!") || /\$\d|\$@|\$\*/.test(alias)) {
@@ -137,7 +154,7 @@ function mergeFromPrefix(prefix) {
         ? { kind: "unsupported", why: "a gh alias runs a merge this guard cannot expand; run gh pr merge directly" }
         : null;
     }
-    tokens = [...tokens.slice(0, at), ...alias.split(/\s+/).filter(Boolean), ...tokens.slice(at + 1)];
+    tokens = [...tokens.slice(0, at), ...alias.split(/\s+/).filter(Boolean), ...tokens.slice(at + match.length)];
   }
   const { env, unset, ignoreEnv } = prefix;
   const { words, flags } = parseArgs(tokens);

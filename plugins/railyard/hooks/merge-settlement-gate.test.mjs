@@ -1192,6 +1192,15 @@ gated("a gh alias that expands to a merge is gated", () => {
   const config = "version: 1\naliases:\n    pm: pr merge\n    co: pr checkout\n    sm: '!gh pr merge \"$1\" --admin'\ngit_protocol: https\n";
   refused(run(bash("gh pm 7 --admin"), withAliases(config)), /RAILYARD_CE_SNAPSHOT/);
   refused(run(bash("gh sm 7"), withAliases(config)), /alias runs a merge/);
+  // A multi-word alias under a built-in is matched by its whole name, the
+  // longest one winning (Codex P1).
+  const multi = config.replace("git_protocol: https\n",
+    "    pr land: pr merge\n    'pr land safe': pr view\n    \"issue mine\": issue list --author @me\n");
+  for (const text of ["gh pr land 7 --admin", "gh pr land --admin 7"]) {
+    refused(run(bash(text), withAliases(multi)), /RAILYARD_CE_SNAPSHOT/);
+  }
+  allowed(run(bash("gh pr land safe 7"), withAliases(multi)), []);
+  allowed(run(bash("gh issue mine"), withAliases(multi)), []);
   // The alias is found past gh's options (Codex P1).
   for (const text of ["gh -R owner/repo pm 7 --admin", "gh --repo=owner/repo pm 7 --admin"]) {
     refused(run(bash(text), withAliases(config)), /RAILYARD_CE_SNAPSHOT/);
