@@ -45,13 +45,21 @@ export function launchBundle(runner, { bundlePath, bundleId }) {
   return { ok: byId, by: byId ? "bundle-id" : null };
 }
 
-// Whether a main-app process of this bundle is running: true, false, or null
-// when the process list cannot be read.
-export function bundleRunning(bundlePath, runner = defaultRunner) {
-  const run = safeRun(runner, PS, ["-axo", "command="], { timeout: 5_000 });
+// Whether this user's main-app process of this bundle is running: true,
+// false, or null when the process list cannot be read. Only the bundle's own
+// Codex/ChatGPT executable counts, never another binary beside it in
+// Contents/MacOS, and never another user's copy: either would leave this
+// user's app closed.
+export function bundleRunning(bundlePath, runner = defaultRunner, uid = process.getuid?.()) {
+  if (!Number.isInteger(uid)) return null;
+  const run = safeRun(runner, PS, ["-axo", "uid=,command="], { timeout: 5_000 });
   if (run.status !== 0 || typeof run.stdout !== "string") return null;
   const prefix = `${bundlePath}/Contents/MacOS/`;
-  return run.stdout.split("\n").some((line) => line.trim().startsWith(prefix));
+  return run.stdout.split("\n").some((line) => {
+    const match = /^\s*(\d+)\s+(.*)$/.exec(line);
+    if (!match || Number(match[1]) !== uid || !match[2].startsWith(prefix)) return false;
+    return /^(?:Codex|ChatGPT)(?:\s|$)/i.test(match[2].slice(prefix.length));
+  });
 }
 
 export function runRelaunchWatchdog(

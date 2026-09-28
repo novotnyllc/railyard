@@ -862,9 +862,16 @@ test("the relaunch watchdog is spawned detached and can be disarmed", () => {
   armed.disarm();
   assert.equal(child.killed, "SIGTERM");
   assert.deepEqual(armRelaunchWatchdog({ ...WATCH, bundlePath: "relative/ChatGPT.app" }, { spawnProcess: () => assert.fail() }), { ok: false });
-  assert.equal(bundleRunning("/Applications/ChatGPT.app", () => ({ status: 0, stdout: "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT\n" })), true);
-  assert.equal(bundleRunning("/Applications/ChatGPT.app", () => ({ status: 0, stdout: "/Applications/Codex.app/Contents/MacOS/Codex\n" })), false);
-  assert.equal(bundleRunning("/Applications/ChatGPT.app", () => ({ status: 1, stdout: "" })), null);
+  const ps = (stdout) => () => ({ status: 0, stdout });
+  assert.equal(bundleRunning("/Applications/ChatGPT.app", ps("  501 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT\n"), 501), true);
+  assert.equal(bundleRunning("/Applications/ChatGPT.app", ps("501 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT --flag\n"), 501), true);
+  assert.equal(bundleRunning("/Applications/ChatGPT.app", ps("501 /Applications/Codex.app/Contents/MacOS/Codex\n"), 501), false);
+  // A helper beside the main executable is not the app.
+  assert.equal(bundleRunning("/Applications/ChatGPT.app", ps("501 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT-helper\n"), 501), false);
+  // Another user's copy does not stand in for this user's app.
+  assert.equal(bundleRunning("/Applications/ChatGPT.app", ps("502 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT\n"), 501), false);
+  assert.equal(bundleRunning("/Applications/ChatGPT.app", () => ({ status: 1, stdout: "" }), 501), null);
+  assert.equal(bundleRunning("/Applications/ChatGPT.app", ps("501 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT\n"), null), null);
 });
 
 test("the CLI hands its process spawner to the desktop watchdog", () => {
