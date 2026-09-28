@@ -1179,10 +1179,12 @@ gated("a gh alias that expands to a merge is gated", () => {
   });
   const config = "version: 1\naliases:\n    pm: pr merge\n    co: pr checkout\n    sm: '!gh pr merge \"$1\" --admin'\ngit_protocol: https\n";
   refused(run(bash("gh pm 7 --admin"), withAliases(config)), /RAILYARD_CE_SNAPSHOT/);
-  // A shell alias runs through sh: refused however it builds its command (Codex P1).
-  refused(run(bash("gh sm 7"), withAliases(config)), /shell alias/);
-  const dynamic = `${config}    boom: '!f(){ x=merge; gh pr $x 7 --admin; }; f'\n`.replace("git_protocol: https\n", "") ;
-  refused(run(bash("gh boom"), withAliases(dynamic)), /shell alias/);
+  refused(run(bash("gh sm 7"), withAliases(config)), /alias runs a merge/);
+  // A shell alias whose text holds no merge runs like any command. One that
+  // builds a merge word at run time is deliberate obfuscation, outside the
+  // documented scope (ce-merge-guard.md).
+  const listing = config.replace("git_protocol: https\n", "    mine: '!gh pr list --author @me'\n");
+  allowed(run(bash("gh mine"), withAliases(listing)), []);
   allowed(run(bash("gh co 7"), withAliases(config)), []);
   // An unreadable config never blocks a non-merge command.
   allowed(run(bash("gh pm 7"), withAliases("aliases: [not: yaml")), []);
@@ -1323,10 +1325,14 @@ gated("push-guard: --git-dir, --work-tree and GIT_DIR select the repository whos
       `git --git-dir=${dir}/.git push origin HEAD:main`,
       `git --git-dir ${dir}/.git --work-tree ${dir} push origin main`,
       `GIT_DIR=${dir}/.git git push origin main`,
-      // A named repository this hook cannot resolve may have opted in.
-      `git --git-dir="$D" push origin feature`,
-      `git --git-dir=${outside}/missing push origin feature`,
     ]) pushRefused(run(at(command), { noPath: true }));
+    // A repository this hook cannot resolve is not opted in, so the push runs
+    // unless the environment turns the guard on.
+    for (const command of [`git --git-dir="$D" push origin HEAD:main`, `git --git-dir=${outside}/missing push origin HEAD:main`,
+      `git -C "$D" push origin main`, `git -C ${outside}/missing push origin main`, `cd "$D" && git push origin main`]) {
+      allowed(run(at(command), { noPath: true }), []);
+      pushRefused(run(at(`export RAILYARD_GUARD_DEFAULT_BRANCH_PUSH=1; ${command}`), { noPath: true }));
+    }
     allowed(run(at(`git --git-dir=${dir}/.git push origin HEAD:feature`), { noPath: true }), []);
     git("config", "--unset", "railyard.guardDefaultBranchPush");
     allowed(run(at(`git --git-dir=${dir}/.git push origin HEAD:main`), { noPath: true }), []);

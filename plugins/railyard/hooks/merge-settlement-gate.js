@@ -110,12 +110,9 @@ function mergeFromPrefix(prefix) {
   }
   const alias = aliases?.get(name);
   if (alias !== undefined) {
-    // A shell alias (`!…`) runs through sh, so what it does cannot be read
-    // from its text; one with `$1` placeholders cannot be expanded here.
-    if (alias.startsWith("!")) {
-      return { kind: "unsupported", why: "a gh shell alias runs commands this guard cannot inspect; run them directly" };
-    }
-    if (/\$\d|\$@|\$\*/.test(alias)) {
+    // A shell alias (`!…`) or one with `$1` placeholders cannot be expanded
+    // here; it refuses when its text contains a merge.
+    if (alias.startsWith("!") || /\$\d|\$@|\$\*/.test(alias)) {
       return mergePhraseCount(alias)
         ? { kind: "unsupported", why: "a gh alias runs a merge this guard cannot expand; run gh pr merge directly" }
         : null;
@@ -934,15 +931,16 @@ function pushRepository(command) {
   }
 }
 
+// On only when the environment says so or a repository this hook can resolve
+// opts in. Anything unresolvable is not opted in: the guard never refuses a
+// push nobody asked it to guard.
 function pushGuardEnabled(command, repo) {
   if (commandSetting({ env: command.env, unset: [], ignoreEnv: false }, "RAILYARD_GUARD_DEFAULT_BRANCH_PUSH") === "1") return true;
-  // A repository the command names but this hook cannot read may have opted
-  // in; with no named repository, a failed lookup is simply not opted in.
-  if (!repo.known && repo.explicit) return true;
+  if (!repo.known) return false;
   try {
     return git([...repo.args, "config", "--type=bool", "--get", "railyard.guardDefaultBranchPush"], command.cwd) === "true";
-  } catch (error) {
-    return error?.status !== 1 && repo.known; // 1: unset; anything else fails closed
+  } catch {
+    return false;
   }
 }
 

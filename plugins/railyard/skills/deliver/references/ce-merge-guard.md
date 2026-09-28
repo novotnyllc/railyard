@@ -19,6 +19,14 @@ GraphQL `mergePullRequest` always refuses. Run a merge as its own command.
 Codex's own outer `bash -lc` (or `-c`, `-euc`, `-eu -o pipefail -c`) argv is
 the command text.
 
+The guard is a workflow guardrail against accidental and ordinary merge
+shapes: an unsettled merge, the wrong PR or repository, and loops or
+interpreted scripts that contain a merge. It does not try to defeat
+deliberately obfuscated shell, such as `gh` redefined as a function or alias
+inside the command, command names built at run time, or custom wrappers made
+to hide a merge. Some trust in the agent is still required. For adversarial
+cases the boundary is branch protection, not this hook.
+
 The guard does not cover arbitrary API clients or a stack manager's internal
 transport. `git push` to a default branch is not a merge; it is refused only
 where a repository opts in with `git config railyard.guardDefaultBranchPush
@@ -31,8 +39,9 @@ refspec whose `remote.<name>.push` or `push.default` could reach the default
 branch, or whose remote has no recorded default branch (a URL, or no
 `refs/remotes/<remote>/HEAD`; `git remote set-head <remote> --auto` records
 it). The opt-in is read from the repository the push names with `-C`,
-`--git-dir`, `--work-tree` or `GIT_DIR`, and a named repository the guard
-cannot resolve refuses.
+`--git-dir`, `--work-tree` or `GIT_DIR`. The guard never refuses a push that
+has not opted in: a repository it cannot resolve counts as not opted in
+unless `RAILYARD_GUARD_DEFAULT_BRANCH_PUSH=1` is set.
 
 ## Handoff from the existing CE owner
 
