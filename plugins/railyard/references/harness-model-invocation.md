@@ -38,17 +38,7 @@ blocks, `computer_20251124` is rejected on the API and Google Cloud, and the
 advisor tool rejects Opus 4.8, Opus 4.7, and Sonnet 5 as advisors. On
 Bedrock the ID is `anthropic.claude-sonnet-5-5`.
 
-Release-day evidence for placing Sonnet 5.5, not Railyard measurements:
-Anthropic reports it 30% faster than Sonnet 5 and up to 30% cheaper per task
-on well-scoped everyday tasks. Artificial Analysis ranks it second to Opus 5.5
-on its Intelligence Index (56). It scores 70.6% on Terminal-Bench against Opus
-5.5's 66.4%, a gap commenters partly attribute to Opus hitting safeguard
-fallbacks more often. Practitioners report that Sonnet 5.5 at `high` or
-`xhigh` often costs about the same as Opus 5.5 at `low` or `medium` for
-similar results. Its cache reads cost $0.20/MTok, the same as Opus 5.5, so
-savings shrink in long cache-heavy loops. It is the first Sonnet with the cyber
-safeguards that both 5.5 models apply, so security-adjacent code can see
-refusals or fallbacks.
+Why Sonnet 5.5 is placed this way: see `docs/agents/routing.md`.
 
 For Codex, OpenAI's published API efforts are `none` through `max` for Sol and
 Luna, and `low` through `max` for Astra. Some native surfaces have also listed

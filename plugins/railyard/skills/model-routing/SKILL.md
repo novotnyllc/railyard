@@ -50,9 +50,7 @@ refusals or fallbacks. Report them; don't silently switch models.
 - **Daybreak** (`gpt-daybreak-blue-latest`) is for defensive security work
   when the surface exposes it.
 - **Codex review** (`codex review`, including the end-of-PR review) always
-  runs GPT-6 Astra at `high`. In a third-party code-review benchmark, Astra
-  reached 96% precision while Luna missed 23 bugs Astra caught, at about $0.11
-  versus $0.004 per review:
+  runs GPT-6 Astra at `high`:
   `codex review --base <base> -c model=gpt-6-astra -c review_model=gpt-6-astra -c model_reasoning_effort=high`.
 
 `spawn_agent` accepts `model` and `reasoning_effort` only with `fork_turns`
