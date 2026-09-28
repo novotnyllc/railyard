@@ -531,6 +531,8 @@ test("a turn still open in the app keeps it busy and names its thread", () => {
   const lines = [];
   runCli(["recycle", "--pid", "13125", "--desktop"], {
     platform: "darwin",
+    // The fixture's processes belong to uid 501, not to whoever runs the suite.
+    uid: 501,
     inventory: desktopInventoryFixture(),
     desktopDependencies: desktopHarness({ activity: [silent] }).deps,
     now: NOW,
