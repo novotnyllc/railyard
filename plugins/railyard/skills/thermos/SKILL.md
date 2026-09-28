@@ -7,12 +7,13 @@ description: "Combine targeted correctness/security and maintainability reviews.
 
 Run the two thermo review passes as async background subagents in parallel, then synthesize their results.
 
-Use it when the user asks for it or when a change's risk needs both
-correctness/security and maintainability depth; for a single concern, use the
-relevant sibling skill directly. Choose each reviewer's model and reasoning
-effort with `railyard:model-routing`. When Compound Engineering owns a
-cross-model review mechanism, use it rather than launching a separate provider
-runner.
+Use it as the end-of-PR review in `railyard:deliver`, where it runs beside
+`codex review` and its findings go to the CE owner; also use it when the user
+asks for it or when a change's risk needs both correctness/security and
+maintainability depth. For a single concern, use the relevant sibling skill
+directly. Choose each reviewer's model and reasoning effort with
+`railyard:model-routing`. Thermos itself launches no other provider's review;
+the Codex review beside it is the caller's to run.
 
 ## Workflow
 

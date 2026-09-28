@@ -78,12 +78,10 @@ Once the PR's change is complete, run these two in parallel against its base
 and hand the combined findings to the CE owner before settlement:
 
 - `railyard:thermos`
-- `codex review --base <base> -c model=gpt-6-astra -c model_reasoning_effort=high`
-  (Codex review always uses GPT-6 Astra at `high`)
+- `codex review --base <base>`, with the model and effort that
+  `railyard:model-routing` sets for Codex review (today
+  `-c model=gpt-6-astra -c model_reasoning_effort=high`)
 
-On past commits with known later-fixed bugs, Thermos found the most, and Codex
-review found one nothing else did, with no false positives;
-`compound-engineering:ce-code-review` found fewer at about twice the cost.
 These reviews produce findings only; CE still settles review and CI and hands
 off the merge snapshot.
 

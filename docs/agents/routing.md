@@ -6,12 +6,14 @@ substantial planning, and `lfg` for a coordinated full workflow.
 `railyard:deliver` coordinates these stages when the user asks to deliver or
 ship.
 
-- End-of-PR review: run `railyard:thermos` and
-  `codex review --base <base> -c model=gpt-6-astra -c model_reasoning_effort=high`
-  in parallel, and feed their findings to the CE owner. Codex review always
-  uses GPT-6 Astra at `high`. In a bakeoff on past commits, Thermos caught the
-  most known bugs, Codex review caught one nothing else did, and
-  `ce-code-review` caught fewer at about twice the cost.
+- End-of-PR review: run `railyard:thermos` and `codex review --base <base>`
+  in parallel, and feed their findings to the CE owner. The Codex review model
+  and effort come from `railyard:model-routing` (today
+  `-c model=gpt-6-astra -c model_reasoning_effort=high`). Why: in a bakeoff on
+  five past commits with known later-fixed bugs, Thermos caught 6.5 of 8
+  ground-truth units, `ce-code-review` caught 4 at about twice the tokens and
+  time, and Codex review on GPT-6 Astra at high caught 2, including the one
+  nothing else found, with no false positives.
 
 - Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or
   pushing user-requested commits to an existing PR, and `gh-stack` for related

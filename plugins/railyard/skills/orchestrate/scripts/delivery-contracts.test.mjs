@@ -124,9 +124,14 @@ test("the end-of-PR review is Thermos plus Codex review on GPT-6 Astra at high",
   const review = flat(read("skills/deliver/SKILL.md").match(/## End-of-PR review\n([\s\S]*?)\n## /)?.[1] ?? "");
   assert.match(review, /in parallel/);
   assert.match(review, /`railyard:thermos`/);
-  assert.match(review, /`codex review --base <base> -c model=gpt-6-astra -c model_reasoning_effort=high`/);
+  assert.match(review, /`codex review --base <base>`, with the model and effort that `railyard:model-routing` sets/);
   assert.match(review, /CE still settles review and CI/);
   assert.doesNotMatch(deliver, /mandatory Thermos/);
+  // The model choice itself lives in model-routing.
+  const routing = flat(read("skills/model-routing/SKILL.md"));
+  assert.match(routing, /\*\*Codex review\*\*[^.]*always runs GPT-6 Astra at `high`/);
+  assert.match(routing, /`codex review --base <base> -c model=gpt-6-astra -c model_reasoning_effort=high`/);
+  assert.match(flat(read("skills/thermos/SKILL.md")), /end-of-PR review in `railyard:deliver`/);
 });
 
 test("merge goes through the CE snapshot handoff", () => {
