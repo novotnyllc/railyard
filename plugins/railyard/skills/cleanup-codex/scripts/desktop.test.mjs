@@ -931,10 +931,25 @@ test("a quit that does not land swaps the long watchdog for a short one", () => 
     const { harness, result, exitCode } = confirmedDesktop({ hostQuits: false, quitReportsOk });
     assert.equal(exitCode, EXIT_CODES.failed);
     assert.deepEqual(harness.calls.launch, []);
-    assert.deepEqual(harness.calls.order, ["watchdog", "quit", "disarm", "watchdog"]);
+    // The short watchdog runs before the long one is stopped.
+    assert.deepEqual(harness.calls.order, ["watchdog", "quit", "watchdog", "disarm"]);
     assert.deepEqual(harness.calls.watchdog, [WATCH, { ...WATCH, timeoutMs: 60_000 }]);
     assert.equal(result.verification.watchdog.lateQuitMs, 60_000);
     assert.ok(result.warnings.some((warning) => warning.code === "desktop-quit-may-still-land" && /60 seconds/.test(warning.message)));
+  }
+});
+
+test("a short watchdog that cannot start leaves the long one armed", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  for (const failure of [() => ({ ok: false }), () => { throw new Error("spawn failed"); }]) {
+    const harness = desktopHarness({ hostQuits: false });
+    const arm = harness.deps.armRelaunchWatchdog;
+    harness.deps.armRelaunchWatchdog = (args) => (harness.calls.watchdog.length ? failure() : arm(args));
+    const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+    assert.equal(exitCode, EXIT_CODES.failed);
+    assert.ok(!harness.calls.order.includes("disarm"), JSON.stringify(harness.calls.order));
+    assert.deepEqual(result.verification.watchdog, { armed: true, pid: 4242, lateQuitArmFailed: true });
+    assert.ok(result.warnings.some((warning) => warning.code === "desktop-quit-may-still-land" && /stays armed/.test(warning.message)));
   }
 });
 

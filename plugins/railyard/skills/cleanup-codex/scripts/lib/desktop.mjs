@@ -675,17 +675,27 @@ function quitAndRestore({ receipt, lockedSnapshot, evidence, quit, uid, now, dep
       // still reopened but an app the user quits later on purpose is not.
       if (observeBirth(receipt.host, deps.readIdentity) === "present") {
         failures.push(quit?.ok ? "desktop-host-quit-timeout" : "desktop-quit-request-failed");
-        try { watchdog?.disarm?.(); } catch {}
+        // Arm the short watchdog first: the long one is stopped only once its
+        // replacement runs, so a quit that still lands is always reopened.
         let late = null;
         try {
           late = deps.armRelaunchWatchdog({ ...watchTarget, timeoutMs: WATCHDOG_LATE_QUIT_MS });
         } catch {}
-        result.verification.watchdog = { armed: late?.ok === true, pid: late?.pid ?? null, lateQuitMs: WATCHDOG_LATE_QUIT_MS };
+        const replaced = late?.ok === true;
+        if (replaced) {
+          try { watchdog?.disarm?.(); } catch {}
+        }
+        result.verification.watchdog = replaced
+          ? { armed: true, pid: late.pid ?? null, lateQuitMs: WATCHDOG_LATE_QUIT_MS }
+          : { armed: watchdog?.ok === true, pid: watchdog?.pid ?? null, lateQuitArmFailed: true };
         result.warnings.push({
           code: "desktop-quit-may-still-land",
           pid: receipt.host.pid,
-          message: `the app did not quit; if it quits within ${WATCHDOG_LATE_QUIT_MS / 1000} seconds it is reopened, `
-            + `otherwise reopen it yourself (the recycle's first watchdog, up to ${WATCHDOG_TIMEOUT_MS / 60_000} minutes, was stopped)`,
+          message: replaced
+            ? `the app did not quit; if it quits within ${WATCHDOG_LATE_QUIT_MS / 1000} seconds it is reopened, `
+              + `otherwise reopen it yourself (the recycle's first watchdog, up to ${WATCHDOG_TIMEOUT_MS / 60_000} minutes, was stopped)`
+            : `the app did not quit; the shorter watchdog could not be started, so the recycle's first watchdog stays armed `
+              + `and reopens the app if it quits within ${WATCHDOG_TIMEOUT_MS / 60_000} minutes`,
           authorizesAction: false,
         });
         return failures;
