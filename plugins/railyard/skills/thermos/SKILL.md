@@ -1,6 +1,6 @@
 ---
 name: thermos
-description: "Combine targeted correctness/security and maintainability reviews when explicitly requested or justified by substantial risk. Optional deep review; not a routine delivery gate."
+description: "Combine targeted correctness/security and maintainability reviews. Railyard's recommended end-of-PR review, run beside Codex review; also use when the user asks or a change's risk justifies it. Supplies findings; not a merge gate."
 ---
 
 # Thermos

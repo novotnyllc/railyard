@@ -120,6 +120,15 @@ test("CE alone owns review settlement and CI, and PRs use ce-commit-push-pr", ()
   }
 });
 
+test("the end-of-PR review is Thermos plus Codex review on GPT-6 Astra at high", () => {
+  const review = flat(read("skills/deliver/SKILL.md").match(/## End-of-PR review\n([\s\S]*?)\n## /)?.[1] ?? "");
+  assert.match(review, /in parallel/);
+  assert.match(review, /`railyard:thermos`/);
+  assert.match(review, /`codex review --base <base> -c model=gpt-6-astra -c model_reasoning_effort=high`/);
+  assert.match(review, /CE still settles review and CI/);
+  assert.doesNotMatch(deliver, /mandatory Thermos/);
+});
+
 test("merge goes through the CE snapshot handoff", () => {
   assert.match(deliver, /\[merge guard\]\(references\/ce-merge-guard\.md\)/);
   assert.match(mergeGuard, /RAILYARD_CE_SNAPSHOT/);

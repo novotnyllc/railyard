@@ -41,7 +41,7 @@ deployment authority.
 | Difficult diagnosis | `compound-engineering:ce-debug` |
 | Implementation that benefits from a structured work stage | `compound-engineering:ce-work` |
 | Coordinated planning, implementation, review, and shipping | `compound-engineering:lfg` |
-| Review a meaningful or risky change | `compound-engineering:ce-code-review` |
+| Review a PR before settlement | [End-of-PR review](#end-of-pr-review) |
 | Create a PR or push user-requested commits to an existing PR | `compound-engineering:ce-commit-push-pr` |
 | Watch or drive an existing PR, including review and CI repairs | `compound-engineering:ce-babysit-pr` |
 | Resolve one bounded batch of review feedback | `compound-engineering:ce-resolve-pr-feedback` |
@@ -64,13 +64,28 @@ only within existing authorization.
 
 CE alone owns review settlement and CI/PR monitoring. When LFG already runs
 `ce-babysit-pr`, consume its result and continuations; for an existing PR
-outside LFG, `ce-babysit-pr` owns that loop. Railyard adds no watcher,
-settlement checklist, mandatory Thermos pass, or fixed reviewer. Feed any
-extra reviewer's findings to the same CE owner.
+outside LFG, `ce-babysit-pr` owns that loop. Railyard adds no watcher or
+settlement checklist. Feed the end-of-PR review's findings, and any extra
+reviewer's, to the same CE owner.
 
 A CE checkpoint that still needs a watch continuation is not completion.
 Continue that owner until review and CI settle or a concrete blocker requires
 user action.
+
+## End-of-PR review
+
+Once the PR's change is complete, run these two in parallel against its base
+and hand the combined findings to the CE owner before settlement:
+
+- `railyard:thermos`
+- `codex review --base <base> -c model=gpt-6-astra -c model_reasoning_effort=high`
+  (Codex review always uses GPT-6 Astra at `high`)
+
+On past commits with known later-fixed bugs, Thermos found the most, and Codex
+review found one nothing else did, with no false positives;
+`compound-engineering:ce-code-review` found fewer at about twice the cost.
+These reviews produce findings only; CE still settles review and CI and hands
+off the merge snapshot.
 
 ## Delivery tail
 
