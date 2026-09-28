@@ -17,20 +17,28 @@ user's explicit model or effort choices always win.
 
 ## Claude Code
 
-- **Opus 5.5** (`opus`, `claude-opus-5-5`) is the default for substantive
-  subagents. Choose effort on purpose: `medium` for ordinary work, `high` for
-  multi-file or ambiguous work.
+- **Opus 5.5** (`opus`, `claude-opus-5-5`) is the default for substantive or
+  judgment-heavy subagents: design, ambiguous debugging, coordination, and
+  reviewers. Choose effort on purpose: `medium` for ordinary work, `high` for
+  multi-file or ambiguous work. The Thermos and review-bakeoff
+  evidence is on Opus 5.5.
 - **Fable 5.1** (`fable`) is for frontier-hard problems, long autonomous runs,
   or work where Opus 5.5 fell short.
-- **Sonnet 5.5** (`sonnet`, `claude-sonnet-5-5`) is for well-scoped everyday
-  work, bug fixes, bounded edits with a clear acceptance check, and docs,
-  usually at `low` or `medium` effort. Where `sonnet` still resolves to
-  Sonnet 5, see the reference below.
+- **Sonnet 5.5** (`sonnet`, Claude Code 2.1.284 or later; earlier versions
+  resolve `sonnet` to Sonnet 5) at `low` or `medium` is for well-scoped work
+  with a clear acceptance check: bug fixes with a repro, bounded edits, test
+  fixes, PR-feedback fixers, docs, and fast parallel fan-out. Don't raise it
+  to `high` or above as a stand-in for Opus; use Opus 5.5 at `medium`. For
+  long, cache-heavy, judgment-heavy loops, prefer Opus: cache reads cost the
+  same.
 - **Haiku 4.5** (`haiku`) is for read-only search. It has no effort setting.
 
 The Agent tool's `model` parameter accepts only these aliases. Effort comes
 from the session or from a subagent definition's `effort` field. `fork`
 subagents inherit both model and effort.
+
+Both 5.5 models apply cyber safeguards, so security-adjacent tasks may hit
+refusals or fallbacks. Report them; don't silently switch models.
 
 ## Codex
 

@@ -57,7 +57,9 @@ for most work. Measured outcomes still decide it.
 
 Sonnet 5.5 costs the same as Sonnet 5. Anthropic reports that on several
 benchmarks Sonnet 5.5 at `low` or `medium` beats Sonnet 5's best score at
-about a tenth of the cost per task.
+about a tenth of the cost per task. Against Opus 5.5, per-task savings
+depend on the output share: Sonnet 5.5 cache reads cost $0.20/MTok, the same
+as Opus 5.5.
 
 ### Codex (reference: prior GPT-6 Sol promotional price = 100)
 

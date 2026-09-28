@@ -11,7 +11,7 @@ nav_order: 3
 
 ## Defaults
 
-- **Claude Code:** Opus 5.5 (`opus`, `claude-opus-5-5`, Claude Code 2.1.280 or later, `low`–`max` effort, default `medium`) handles substantive subagent work. Escalate to Fable 5.1 (`claude-fable-5-1`) for frontier-hard or long autonomous work. Use Sonnet 5.5 (`sonnet`, `claude-sonnet-5-5`, usually `low` or `medium`) for well-scoped edits, bug fixes, and docs, and Haiku 4.5 for read-only search.
+- **Claude Code:** Opus 5.5 (`opus`, `claude-opus-5-5`, Claude Code 2.1.280 or later, `low`–`max` effort, default `medium`) handles substantive or judgment-heavy subagent work, including reviewers. Escalate to Fable 5.1 (`claude-fable-5-1`) for frontier-hard or long autonomous work. Use Sonnet 5.5 (`sonnet`, Claude Code 2.1.284 or later; earlier versions resolve `sonnet` to Sonnet 5) at `low` or `medium` for well-scoped work with a clear acceptance check, such as bug fixes, test fixes, bounded edits, docs, and fast fan-out. Don't raise it to `high` as a stand-in for Opus. Use Haiku 4.5 for read-only search.
 - **Codex:** GPT-6 Sol at `medium` is the baseline. Use Luna for bounded work and Astra when the work is hard. Daybreak fits defensive security work when the harness exposes it.
 
 An explicit user choice or fixed role wins. Leaving the model unset means the child inherits the parent's model. Use deterministic tools directly for mechanical work.
