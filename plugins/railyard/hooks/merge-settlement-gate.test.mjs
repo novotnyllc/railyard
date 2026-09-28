@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, truncateSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -95,17 +95,26 @@ function prepare(fixtures = {}) {
     GH_FIXTURE_VIEW: fixtures.view ?? JSON.stringify({ number: data.number, url: data.snapshot.url }),
     GH_FIXTURE_GRAPHQL: fixtures.graphql ?? JSON.stringify({ data: { repository: { pullRequest: data.live } } }),
     GH_FIXTURE_FAIL: fixtures.fail ? "1" : "", GH_FIXTURE_SLEEP: fixtures.sleep ?? "",
+    // Override records land here, never in the developer's own state dir.
+    RAILYARD_RUN_LOG_DIR: fixtures.runLogDir ?? path.join(dir, "run-log"),
   };
   const finish = (result) => {
     const calls = readFileSync(logs.calls, "utf8").trim().split("\n").filter(Boolean);
     const lines = (name) => readFileSync(logs[name], "utf8").split("\n").slice(0, calls.length);
     const output = { code: result.status, err: result.stderr, calls,
       hosts: lines("hosts"), tokens: lines("tokens"), xdg: lines("xdg"), cwds: lines("cwds"),
-      args: readFileSync(logs.args, "utf8") };
+      args: readFileSync(logs.args, "utf8"), records: runLogRecords(env.RAILYARD_RUN_LOG_DIR) };
     rmSync(dir, { recursive: true, force: true });
     return output;
   };
   return { env, snapshotPath, finish };
+}
+
+function runLogRecords(dir) {
+  try {
+    return readdirSync(dir).flatMap((name) => readFileSync(path.join(dir, name), "utf8")
+      .trim().split("\n").filter(Boolean).map((line) => JSON.parse(line)));
+  } catch { return []; }
 }
 
 function run(input, fixtures = {}) {
@@ -662,17 +671,59 @@ gated("the documented local verification includes the same suites as CI", () => 
 const adminMerge = `gh pr merge ${URL} --squash --admin --delete-branch`;
 const OVERRIDE = "RAILYARD_MERGE_OVERRIDE=user-approved";
 
-gated("an inline user-approved override allows an unpinned admin merge without CE evidence", () => {
-  const result = run(bash(`${OVERRIDE} ${adminMerge}`), { noPath: true, noSnapshot: true, noState: true });
+function overridden(result) {
   assert.equal(result.code, 0, result.err);
-  assert.match(result.err, /allowed by RAILYARD_MERGE_OVERRIDE/);
+  assert.match(result.err, /allowed by the user-directed override/);
   assert.deepEqual(result.calls, []);
+  assert.equal(result.records.length, 1);
+  assert.equal(result.records[0].event, "merge-override");
+  return result.records[0];
+}
+
+// Refused by the CE gate, with the override named as not applying and no record.
+function notOverridden(result, reason) {
+  refused(result);
+  assert.match(result.err, /user-directed override did not apply/);
+  if (reason) assert.match(result.err, reason);
+  assert.deepEqual(result.records, []);
+}
+
+gated("an inline user-approved override allows an unpinned admin merge and records it", () => {
+  const result = run({ ...bash(`${OVERRIDE} ${adminMerge}`), session_id: "session-7" }, { noPath: true, noSnapshot: true, noState: true });
+  const record = overridden(result);
+  assert.equal(record.session_id, "session-7");
+  assert.equal(record.kind, "pr");
+  assert.equal(record.target, URL);
+  assert.equal(record.admin, true);
 });
 
-gated("the override applies to a merge after a cd", () => {
-  const result = run(bash(`cd /tmp && ${OVERRIDE} gh pr merge 7 --squash --admin`), { noPath: true });
-  assert.equal(result.code, 0, result.err);
-  assert.deepEqual(result.calls, []);
+gated("the override applies to a merge after a cd into a known directory", () => {
+  overridden(run(bash(`cd /tmp && ${OVERRIDE} gh pr merge 7 --squash --admin`), { noPath: true }));
+});
+
+gated("the override applies to a literal REST merge", () => {
+  const record = overridden(run(bash(`${OVERRIDE} gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge`), { noPath: true }));
+  assert.equal(record.kind, "api");
+});
+
+gated("quoted keywords in a merge body do not refuse the override", () => {
+  overridden(run(bash(`${OVERRIDE} gh pr merge 7 --squash --body 'for the record; while we wait'`), { noPath: true }));
+});
+
+gated("Codex's own bash -lc argv wrapper is the command text, not an interpreted string", () => {
+  overridden(run({ tool_name: "shell", tool_input: { command: ["bash", "-lc", `${OVERRIDE} gh pr merge 7 --squash`] } }, { noPath: true }));
+  notOverridden(run({ tool_name: "shell", tool_input: { command: ["bash", "-lc", `${OVERRIDE} bash -c 'gh pr merge 7 --squash'`] } }, { noPath: true }), /interprets/);
+});
+
+gated("an override that cannot be recorded does not apply", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ce-merge-log-"));
+  const blocker = path.join(dir, "file");
+  writeFileSync(blocker, "");
+  try {
+    notOverridden(run(bash(`${OVERRIDE} gh pr merge 7 --squash`), { noPath: true, runLogDir: path.join(blocker, "run-log") }), /could not be written/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 gated("an ambient override in the hook's environment does not bypass the gate", () => {
@@ -684,26 +735,33 @@ gated("an ambient override in the hook's environment does not bypass the gate", 
   refused(setup.finish(result), /RAILYARD_CE_SNAPSHOT/);
 });
 
-gated("any other override value is ignored", () => {
-  refused(run(bash(`RAILYARD_MERGE_OVERRIDE=yes ${adminMerge}`), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+gated("any other override value, or an override not on the merge, is ignored", () => {
+  notOverridden(run(bash(`RAILYARD_MERGE_OVERRIDE=yes ${adminMerge}`), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+  notOverridden(run(bash(`export ${OVERRIDE}; ${adminMerge}`), { noPath: true }), /inline assignment/);
 });
 
 gated("the override covers only its own command, not a second merge in the same text", () => {
-  refused(run(bash(`${OVERRIDE} ${adminMerge}; gh pr merge 8 --squash`), { noPath: true }), /one PR per command/);
+  notOverridden(run(bash(`${OVERRIDE} ${adminMerge}; gh pr merge 8 --squash`), { noPath: true }), /one PR per command/);
 });
 
-gated("an override on a shell wrapper does not cover two merges inside it", () => {
-  refused(run(bash(`${OVERRIDE} bash -lc 'gh pr merge 7 --squash; gh pr merge 8 --squash'`), { noPath: true }), /one PR per command/);
-});
-
-gated("an override on a wrapper around a single merge applies to that merge", () => {
-  const result = run(bash(`${OVERRIDE} bash -lc 'gh pr merge 7 --squash --admin'`), { noPath: true });
-  assert.equal(result.code, 0, result.err);
-  assert.deepEqual(result.calls, []);
+gated("the override never covers a merge inside an interpreted string", () => {
+  for (const text of [
+    `${OVERRIDE} bash -lc 'gh pr merge 7 --squash --admin'`,
+    `${OVERRIDE} sh -c 'gh pr merge 7 --squash'`,
+    `${OVERRIDE} zsh -c "gh pr merge 7 --squash"`,
+    `${OVERRIDE} bash -lc 'gh pr merge 7 --squash; gh pr merge 8 --squash'`,
+    `${OVERRIDE} eval gh pr merge 7 --squash`,
+    `eval '${OVERRIDE} gh pr merge 7 --squash'`,
+    `${OVERRIDE} env -S 'gh pr merge 7 --squash'`,
+    `${OVERRIDE} gh pr merge 7 --squash; trap 'gh pr merge 8' EXIT`,
+    `${OVERRIDE} gh pr merge 7 --squash; bash <<EOF\ngh pr merge 8\nEOF`,
+    `cat <<EOF >/dev/null\nnote\nEOF\n${OVERRIDE} gh pr merge 7 --squash`,
+    `${OVERRIDE} gh pr merge 7 --squash <<< 'x'`,
+  ]) notOverridden(run(bash(text), { noPath: true }));
 });
 
 gated("the override does not admit a raw GraphQL merge", () => {
-  refused(run(bash(`${OVERRIDE} gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}'`), { noPath: true }), /mergePullRequest is unsupported/);
+  notOverridden(run(bash(`${OVERRIDE} gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}'`), { noPath: true }), /mergePullRequest is unsupported/);
 });
 
 gated("the override does not cover a merge site that a loop can re-run", () => {
@@ -711,19 +769,79 @@ gated("the override does not cover a merge site that a loop can re-run", () => {
     `${OVERRIDE} bash -lc 'for pr in 7 8; do gh pr merge "$pr" --squash --admin; done'`,
     `${OVERRIDE} bash -lc 'while read pr; do gh pr merge 7 --squash; done'`,
     `m() { ${OVERRIDE} gh pr merge 7 --squash; }; m; m`,
-  ]) refused(run(bash(text), { noPath: true }));
+    `for pr in 7; do ${OVERRIDE} gh pr merge 7 --squash; done`,
+    `repeat 2 do ${OVERRIDE} gh pr merge 7 --squash; done`,
+    `repeat 2 ${OVERRIDE} gh pr merge 7 --squash`,
+    `x=\`for i in 1 2; do :; done\`; ${OVERRIDE} gh pr merge 7 --squash`,
+    `x=$(while false; do :; done); ${OVERRIDE} gh pr merge 7 --squash`,
+    `f\\\nor i in 1 2; do ${OVERRIDE} gh pr merge 7 --squash; done`,
+    `wh\\\nile true; do ${OVERRIDE} gh pr merge 7 --squash; done`,
+    `${OVERRIDE} gh pr merge 7 --squash | xargs echo`,
+  ]) notOverridden(run(bash(text), { noPath: true }));
 });
 
-gated("the override requires a literal PR selector", () => {
+gated("the override requires a literal target", () => {
   for (const text of [
     `${OVERRIDE} gh pr merge --squash --admin`,
     `${OVERRIDE} gh pr merge "$PR" --squash --admin`,
     `${OVERRIDE} gh pr merge 7 --repo "$REPO" --squash`,
-  ]) refused(run(bash(text), { noPath: true }));
+    `${OVERRIDE} gh pr merge \${PR} --squash`,
+    `${OVERRIDE} gh pr merge 7 --squash --body "$(cat notes)"`,
+    `${OVERRIDE} gh pr merge {7,8} --squash`,
+    `${OVERRIDE} gh pr merge 7 # --repo other/repo`,
+    // Reproduced bypasses: an expanded GH_REPO, a REST prefix, and a backtick
+    // glued to the selector that the tokenizer splits off as its own segment.
+    `${OVERRIDE} GH_REPO="$R" gh pr merge 7 --squash`,
+    `${OVERRIDE} GH_REPO=other/repo gh pr merge 7 --squash`,
+    `${OVERRIDE} GH_HOST=github.example.com gh pr merge 7 --squash`,
+    `${OVERRIDE} gh api --hostname github.example.com -X PUT repos/o/r/pulls/7/merge`,
+    `${OVERRIDE} gh api -X PUT \${P}repos/o/r/pulls/7/merge`,
+    `${OVERRIDE} gh api -X PUT repos/{owner}/{repo}/pulls/7/merge`,
+    `${OVERRIDE} gh pr merge 7\`printf 8\` --squash`,
+  ]) notOverridden(run(bash(text), { noPath: true }));
 });
 
-gated("refusals name the user-approved override for explicitly directed merges", () => {
+gated("the override requires a known working directory", () => {
+  for (const text of [
+    `cd "$D" && ${OVERRIDE} gh pr merge 7 --squash`,
+    `cd ~/elsewhere && ${OVERRIDE} gh pr merge 7 --squash`,
+    `cd - && ${OVERRIDE} gh pr merge 7 --squash`,
+    `cd && ${OVERRIDE} gh pr merge 7 --squash`,
+    `pushd /tmp && ${OVERRIDE} gh pr merge 7 --squash`,
+    `cd /nonexistent-railyard-dir && ${OVERRIDE} gh pr merge 7 --squash`,
+    `false && cd /tmp; ${OVERRIDE} gh pr merge 7 --squash`,
+    `if true; then cd /tmp; fi; ${OVERRIDE} gh pr merge 7 --squash`,
+  ]) notOverridden(run(bash(text), { noPath: true }));
+});
+
+gated("the override refuses --auto, which could merge a later head", () => {
+  notOverridden(run(bash(`${OVERRIDE} gh pr merge 7 --squash --auto`), { noPath: true }), /--auto/);
+});
+
+gated("refusals do not advertise the override token", () => {
   const result = run(bash(adminMerge), { noPath: true });
   refused(result);
-  assert.match(result.err, /explicitly directs this merge.*RAILYARD_MERGE_OVERRIDE=user-approved/);
+  assert.doesNotMatch(result.err, /RAILYARD_MERGE_OVERRIDE|user-approved|override/);
+});
+
+gated("eval and zsh repeat merges are gated, not skipped", () => {
+  for (const text of [`eval gh pr merge 7 ${PIN}`, `repeat 2 gh pr merge 7 ${PIN}`, `noglob gh pr merge 7 ${PIN}`]) {
+    refused(run(bash(text), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+  }
+});
+
+gated("a REST merge endpoint must be the whole literal path", () => {
+  for (const endpoint of [
+    "https://api.github.com/repos/novotnyllc/railyard/pulls/7/merge",
+    "repos/novotnyllc/railyard/pulls/7/merge?x=1",
+    "x/repos/novotnyllc/railyard/pulls/7/merge",
+  ]) {
+    refused(run(bash(`gh api -X PUT ${endpoint} -f sha=${HEAD}`)), /endpoint or method is unresolved/);
+  }
+  allowed(run(bash(`gh api -X PUT /repos/novotnyllc/railyard/pulls/7/merge -f sha=${HEAD}`)));
+});
+
+gated("an unresolved cd refuses the CE gate, but a subshell's cd does not leak", () => {
+  refused(run(bash(`cd ~/elsewhere && ${fullMerge}`)), /unresolved or conditional `cd`/);
+  allowed(run(bash(`(cd - && echo done); ${fullMerge}`)));
 });

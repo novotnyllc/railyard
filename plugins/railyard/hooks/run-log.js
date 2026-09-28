@@ -76,17 +76,24 @@ function clip(value, max = 120) {
   return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
 }
 
+// Throwing variant for a caller that must know the line landed (the merge
+// gate's user-directed override). Returns the day file written.
+function append(entry) {
+  const detected = harness();
+  const line = {
+    ts: new Date().toISOString(),
+    ...(detected ? { harness: detected } : {}),
+    ...entry,
+  };
+  const file = logPath();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.appendFileSync(file, JSON.stringify(line) + "\n"); // O_APPEND
+  return file;
+}
+
 function record(entry) {
   try {
-    const detected = harness();
-    const line = {
-      ts: new Date().toISOString(),
-      ...(detected ? { harness: detected } : {}),
-      ...entry,
-    };
-    const file = logPath();
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.appendFileSync(file, JSON.stringify(line) + "\n"); // O_APPEND
+    append(entry);
   } catch {
     // Never surface: an unwritable log is not a reason to fail a dispatch.
   }
@@ -101,7 +108,7 @@ function entriesForSession(entries, requestedSessionId) {
     !Array.isArray(entry) && entry.session_id === requestedSessionId);
 }
 
-module.exports = { record, clip, logPath, logDir, entriesForSession };
+module.exports = { record, append, clip, logPath, logDir, entriesForSession };
 
 if (require.main === module) {
   const [mode, arg] = process.argv.slice(2);

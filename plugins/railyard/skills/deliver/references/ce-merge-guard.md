@@ -46,14 +46,31 @@ is permitted:
 RAILYARD_MERGE_OVERRIDE=user-approved gh pr merge 123 --repo OWNER/REPO --squash --admin
 ```
 
-The override must be an inline assignment in the command text; an ambient
-environment variable is ignored and any other value is ignored. It applies
-only when the command holds exactly one `gh pr merge` or REST merge that
-names its PR literally (a number, branch or URL, with any `--repo` also
-literal) and contains no loop, function, `xargs` or `parallel` that could
-re-run it. Two merges in one command, a variable selector, or a raw GraphQL
-merge are still refused. Do not use it on your own initiative or
-because a reviewer is slow — use it only on the user's explicit instruction.
+The override must be an inline assignment on the merge command itself; an
+ambient variable, an `export`, or any other value is ignored. It applies only
+when the text runs exactly one merge, once, against a literal target:
+
+- one `gh pr merge` or `gh api -X PUT repos/OWNER/REPO/pulls/N/merge`, typed
+  directly — not inside `sh -c`, `bash -c`, `zsh -c`, `eval`, `env -S`, a
+  heredoc or a `trap` string. Codex's own outer `bash -lc` argv counts as the
+  command text;
+- a literal PR number, branch or URL, and any `--repo` literal; no `$VAR`,
+  `${VAR}`, `$(...)` or backticks outside single quotes anywhere in the text,
+  no brace or glob selector, no comment, and no `GH_REPO`, `GH_HOST` or
+  `--hostname`;
+- no loop, function, `repeat`, `xargs`, `parallel`, `watch` or `trap`, and
+  exactly one merge phrase in the whole text;
+- a known working directory (an explicit, existing `cd` target only) and no
+  `--auto`, which could merge a later head nobody approved.
+
+Anything else falls back to the CE gate, whose refusal says why the override
+did not apply; refusals never suggest the override. Each used override
+appends one `{"event":"merge-override",…}` line (session, PR, repository,
+`--admin`) to the Railyard run log,
+`$XDG_STATE_HOME/railyard/run-log/YYYY-MM-DD.jsonl` (default
+`~/.local/state`, or `RAILYARD_RUN_LOG_DIR`). If that line cannot be written,
+the override does not apply. Do not use it on your own initiative or because
+a reviewer is slow — use it only on the user's explicit instruction.
 
 The selected handoff asserts that the CE owner completed its judgment. A raw
 snapshot alone is not proof of that judgment. The guard checks the snapshot's
