@@ -8,8 +8,7 @@ ship.
 
 - End-of-PR review: run `railyard:thermos` and `codex review --base <base>`
   in parallel, and feed their findings to the CE owner. The Codex review model
-  and effort come from `railyard:model-routing` (today
-  `-c model=gpt-6-astra -c model_reasoning_effort=high`). Why: in a bakeoff on
+  and effort come from `railyard:model-routing`. Why: in a bakeoff on
   five past commits with known later-fixed bugs, Thermos caught 6.5 of 8
   ground-truth units, `ce-code-review` caught 4 at about twice the tokens and
   time, and Codex review on GPT-6 Astra at high caught 2, including the one

@@ -127,7 +127,9 @@ test("the end-of-PR review is Thermos plus Codex review on GPT-6 Astra at high",
   assert.match(review, /`codex review --base <base>`, with the model and effort that `railyard:model-routing` sets/);
   assert.match(review, /CE still settles review and CI/);
   assert.doesNotMatch(deliver, /mandatory Thermos/);
-  // The model choice itself lives in model-routing.
+  // The model choice itself lives only in model-routing.
+  assert.doesNotMatch(review, /gpt-6-astra|model_reasoning_effort/);
+  assert.doesNotMatch(readFileSync(path.join(pluginRoot, "../../docs/agents/routing.md"), "utf8"), /gpt-6-astra|model_reasoning_effort/);
   const routing = flat(read("skills/model-routing/SKILL.md"));
   assert.match(routing, /\*\*Codex review\*\*[^.]*always runs GPT-6 Astra at `high`/);
   assert.match(routing, /`codex review --base <base> -c model=gpt-6-astra -c model_reasoning_effort=high`/);

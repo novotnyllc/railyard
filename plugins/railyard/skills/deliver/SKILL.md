@@ -79,8 +79,7 @@ and hand the combined findings to the CE owner before settlement:
 
 - `railyard:thermos`
 - `codex review --base <base>`, with the model and effort that
-  `railyard:model-routing` sets for Codex review (today
-  `-c model=gpt-6-astra -c model_reasoning_effort=high`)
+  `railyard:model-routing` sets for Codex review
 
 These reviews produce findings only; CE still settles review and CI and hands
 off the merge snapshot.
