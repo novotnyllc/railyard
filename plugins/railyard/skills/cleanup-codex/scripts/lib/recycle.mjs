@@ -49,16 +49,15 @@ export function recycleServer(options, deps) {
   const uid = options?.uid ?? callerUid();
   const result = emptyRecycleResult(platform);
   return runMutation(result, { lock: deps?.lock, confirmation: options?.confirmation }, {
-    unexpectedCode: "recycle-evidence-failed",
+    unexpected: { code: "recycle-evidence-failed", status: "refused" },
     prepare: () => prepareRecycle(options, deps, { platform, uid, result }),
     confirmToken: (plan) => plan.receipt.confirmationToken,
-    mutate: (plan) => {
+    mutate: (plan, txn) => {
       recheckUnderLock(plan, options, deps, result);
       const replacement = plan.mode === "managed"
-        ? restartManaged(plan, deps, result)
-        : replaceUnmanaged(plan, deps, result);
+        ? restartManaged(plan, deps, result, txn)
+        : replaceUnmanaged(plan, deps, result, txn);
       verifyReplacement(plan, replacement, options, deps, result);
-      return [];
     },
   });
 }
@@ -322,7 +321,7 @@ function recheckUnderLock(plan, options, deps, result) {
 }
 
 // Managed: the daemon's own restart, then an exact reap of what it left.
-function restartManaged(plan, deps, result) {
+function restartManaged(plan, deps, result, txn) {
   const { uid, snapshot, socket, executable, receipt } = plan;
   let { replacementExecutable } = plan;
   if (typeof deps.reapResidue !== "function") refuse("residue-reaper-unavailable");
@@ -338,7 +337,7 @@ function restartManaged(plan, deps, result) {
       socketPath: socket,
     });
   } catch (error) {
-    result.verification.mutationAttempted = true;
+    txn.attempted();
     refuse(error instanceof CleanupRefusal
       ? safeFailureCode(error.code, "managed-restart-failed")
       : "managed-restart-failed");
@@ -346,7 +345,7 @@ function restartManaged(plan, deps, result) {
   if (restarted?.status === "refused") {
     refuse(safeFailureCode(restarted.failureCode, "managed-restart-precondition-failed"));
   }
-  result.verification.mutationAttempted = true;
+  txn.attempted();
   if (
     !restarted
     || restarted.status !== "restarted"
@@ -406,7 +405,7 @@ function restartManaged(plan, deps, result) {
 }
 
 // Unmanaged: stop the exact recorded tree, then start the launcher.
-function replaceUnmanaged(plan, deps, result) {
+function replaceUnmanaged(plan, deps, result, txn) {
   const { uid, snapshot, socket, launcher, replacementExecutable, receipt } = plan;
   if (typeof deps.stopUnmanaged !== "function" || typeof deps.launchUnmanaged !== "function") {
     refuse("unmanaged-lifecycle-unavailable");
@@ -414,7 +413,7 @@ function replaceUnmanaged(plan, deps, result) {
   revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
   revalidateExecutableEvidence(replacementExecutable, deps, uid, "replacement-executable-changed");
   const stopped = deps.stopUnmanaged(snapshot);
-  result.verification.mutationAttempted = stopped?.mutationAttempted === true;
+  if (stopped?.mutationAttempted === true) txn.attempted();
   if (stopped?.exitCode !== EXIT_CODES.healthy) {
     refuse(safeFailureCode(stopped?.failureCode, "unmanaged-stop-incomplete"));
   }
@@ -424,7 +423,7 @@ function replaceUnmanaged(plan, deps, result) {
   });
   revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
   revalidateExecutableEvidence(replacementExecutable, deps, uid, "replacement-executable-changed");
-  result.verification.mutationAttempted = true;
+  txn.attempted();
   const launched = deps.launchUnmanaged({ launcher: launcher.path, socketPath: socket });
   if (!Number.isInteger(launched?.pid) || launched.pid <= 0 || launched.pid === snapshot.owner.pid) {
     refuse("unmanaged-launch-invalid");

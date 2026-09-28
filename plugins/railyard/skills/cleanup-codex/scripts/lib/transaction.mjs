@@ -7,19 +7,22 @@
  *   lock     → the per-user mutation lock is held for the rest of the run
  *   mutate   → rechecks under the lock, then the mutation itself
  *
- * A refusal is a failure once `verification.mutationAttempted` is set, the
- * lock is always released, and the exit code follows from the final status.
+ * `mutate` reports through one handle, `txn`: `txn.attempted()` before it
+ * changes anything, `txn.fail(code)` for a failure it records and carries on
+ * past, and a thrown error to stop. The runner owns
+ * `verification.mutationAttempted` and settles the status: a stop before any
+ * attempt is a refusal, a stop or a recorded failure after one is a failure.
+ * The lock is always released, and the exit code follows from the status.
  */
 
 import { EXIT_CODES } from "./constants.mjs";
 import { CleanupRefusal, refuse, unique } from "./process-evidence.mjs";
 
-// Statuses are named after the exit codes they map to.
-export function exitCodeForStatus(status) {
-  return Object.hasOwn(EXIT_CODES, status) ? EXIT_CODES[status] : EXIT_CODES.failed;
-}
+// A lock for a nested run whose caller already holds the mutation lock (the
+// residue reap inside a recycle): it takes nothing and releases nothing.
+export const LOCK_HELD_BY_CALLER = Object.freeze({ acquire: () => null });
 
-export function acquireMutationLock(lock) {
+function acquireMutationLock(lock) {
   if (!lock || typeof lock.acquire !== "function") refuse("mutation-lock-unavailable");
   try {
     return lock.acquire();
@@ -36,20 +39,38 @@ export function acquireMutationLock(lock) {
  * - `prepare()` returns the plan `mutate` acts on.
  * - `confirmToken(plan)`, when given, names the token the operator must echo
  *   back as `confirmation`; modes without a token (reap) omit it.
- * - `mutate(plan)` returns failure codes (none means healthy) or throws a
- *   CleanupRefusal to refuse. A code it already recorded is not repeated.
- * - `unexpectedCode` names any error that is not a CleanupRefusal.
- * - `errorsFail` makes an unexpected error or a failed lock release a failure
- *   even before any mutation (reap's contract: its exit code 3 means "look").
+ * - `mutate(plan, txn)` reports as described above; its return is ignored.
+ * - `unexpected: { code, status }` settles an error that is not a
+ *   CleanupRefusal, and a failed lock release, before any attempt: reap
+ *   treats both as "failed", the recycles as "refused". After an attempt
+ *   they are always "failed".
  */
 export function runMutation(result, { lock, confirmation = null } = {}, {
   prepare,
   confirmToken = null,
   mutate,
-  unexpectedCode,
-  errorsFail = false,
+  unexpected,
 }) {
   const verification = result.verification;
+  let failed = false;
+  const txn = {
+    attempted() {
+      verification.mutationAttempted = true;
+    },
+    // A recorded failure is kept even if the run stops later.
+    fail(code) {
+      verification.mutationAttempted = true;
+      failed = true;
+      verification.missingEvidence.push(code);
+    },
+    get hasAttempted() {
+      return verification.mutationAttempted;
+    },
+    get hasFailed() {
+      return failed;
+    },
+  };
+  const settle = (fallback) => (verification.mutationAttempted ? "failed" : fallback);
   let release = null;
   try {
     const plan = prepare();
@@ -58,11 +79,8 @@ export function runMutation(result, { lock, confirmation = null } = {}, {
       if (confirmation !== confirmToken(plan)) refuse("confirmation-mismatch");
     }
     release = acquireMutationLock(lock);
-    const failures = mutate(plan) ?? [];
-    if (failures.length) {
-      for (const code of failures) {
-        if (!verification.missingEvidence.includes(code)) verification.missingEvidence.push(code);
-      }
+    mutate(plan, txn);
+    if (failed) {
       result.status = "failed";
     } else {
       verification.complete = true;
@@ -70,8 +88,8 @@ export function runMutation(result, { lock, confirmation = null } = {}, {
     }
   } catch (error) {
     const refusal = error instanceof CleanupRefusal;
-    verification.missingEvidence.push(refusal ? error.code : unexpectedCode);
-    result.status = verification.mutationAttempted || (errorsFail && !refusal) ? "failed" : "refused";
+    verification.missingEvidence.push(refusal ? error.code : unexpected.code);
+    result.status = settle(refusal ? "refused" : unexpected.status);
   } finally {
     if (release) {
       try {
@@ -79,10 +97,10 @@ export function runMutation(result, { lock, confirmation = null } = {}, {
       } catch {
         verification.missingEvidence.push("mutation-lock-release-failed");
         verification.complete = false;
-        result.status = verification.mutationAttempted || errorsFail ? "failed" : "refused";
+        result.status = settle(unexpected.status);
       }
     }
   }
   verification.missingEvidence = unique(verification.missingEvidence);
-  return { result, exitCode: exitCodeForStatus(result.status) };
+  return { result, exitCode: EXIT_CODES[result.status] };
 }

@@ -435,10 +435,10 @@ export function recycleDesktop(options, deps) {
   const result = emptyDesktopResult(platform);
   const run = { platform, uid, minSoftLimit, now };
   return runMutation(result, { lock: deps?.lock, confirmation: options?.confirmation }, {
-    unexpectedCode: "desktop-recycle-evidence-failed",
+    unexpected: { code: "desktop-recycle-evidence-failed", status: "refused" },
     prepare: () => prepareDesktop(options, deps, run, result),
     confirmToken: (plan) => plan.receipt.confirmationToken,
-    mutate: (plan) => quitDesktopLocked(plan, deps, run, result),
+    mutate: (plan, txn) => quitDesktopLocked(plan, deps, run, result, txn),
   });
 }
 
@@ -537,9 +537,9 @@ function prepareDesktop(options, deps, { platform, uid, minSoftLimit, now }, res
 }
 
 // Under the lock: re-derive everything from a fresh inventory, recheck
-// idleness, arm the watchdog, then quit. Returns the failures reported after
-// the quit; refuses (throws) only before it.
-function quitDesktopLocked(plan, deps, { uid, now }, result) {
+// idleness, arm the watchdog, then quit. Everything after the quit is
+// recorded on `txn`; it refuses (throws) only before the quit.
+function quitDesktopLocked(plan, deps, { uid, now }, result, txn) {
   const { context, evidence, receipt, launchdMaxfiles, checkIdle } = plan;
   result.skipped = [];
   const lockedInventory = deps.collectInventory();
@@ -593,15 +593,15 @@ function quitDesktopLocked(plan, deps, { uid, now }, result) {
 
   // Ask the app to quit. The host is never signalled. The quit event can
   // land even when osascript reports failure, so record the attempt first.
-  result.verification.mutationAttempted = true;
+  txn.attempted();
   result.verification.actions.push({ kind: "quit-desktop-app", bundleId: receipt.host.bundleId, hostPid: receipt.host.pid });
   let quit = null;
   try {
     quit = deps.quitApp(receipt.host.bundleId);
   } catch {}
   const failures = quitAndRestore({ receipt, lockedSnapshot, evidence, quit, uid, now, deps, result, watchdog, watchTarget });
+  for (const code of failures) txn.fail(code);
   if (!failures.length) result.verification.guiPreserved = true;
-  return failures;
 }
 
 // Everything after the quit request. It never throws: once the app is not

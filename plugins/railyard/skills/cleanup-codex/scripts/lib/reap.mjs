@@ -20,7 +20,7 @@ import {
   sameBirthIdentityPresent,
   validateSnapshotObject,
 } from "./snapshot.mjs";
-import { runMutation } from "./transaction.mjs";
+import { LOCK_HELD_BY_CALLER, runMutation } from "./transaction.mjs";
 
 export function signalExactPid(pid, signal) {
   if (!Number.isInteger(pid) || pid <= 0) refuse("signal-target-invalid");
@@ -64,8 +64,8 @@ export function skippedIdentity(pid, observation, expected) {
 }
 
 // The residue reaper a recycle hands its dependencies: reapSnapshot bound to
-// the recycle's own reader, signaller and sleep, with no lock of its own
-// because the recycle already holds it.
+// the recycle's own reader, signaller and sleep, under the mutation lock the
+// recycle already holds.
 export function residueReaper({ uid, readIdentity, signalProcess, sleep, graceMs, postSignalMs }) {
   return (snapshot, { ownerReplacement = null } = {}) => reapSnapshot(snapshot, {
     platform: "darwin",
@@ -75,7 +75,7 @@ export function residueReaper({ uid, readIdentity, signalProcess, sleep, graceMs
     sleep,
     graceMs,
     postSignalMs,
-    lock: { acquire: () => () => {} },
+    lock: LOCK_HELD_BY_CALLER,
     ownerReplacement,
   });
 }
@@ -95,8 +95,8 @@ export function reapSnapshot(snapshot, {
 } = {}) {
   const result = emptyReapResult(platform);
   return runMutation(result, { lock }, {
-    unexpectedCode: "reap-failed",
-    errorsFail: true,
+    // An unexpected error fails a reap even before a signal: exit 3 means "look".
+    unexpected: { code: "reap-failed", status: "failed" },
     prepare() {
       if (platform !== "darwin") refuse("unsupported-platform");
       validateSnapshotObject(snapshot, uid);
@@ -116,7 +116,7 @@ export function reapSnapshot(snapshot, {
         targetPids: snapshot.targets.map((target) => target.pid),
       };
     },
-    mutate: () => reapLocked(snapshot, result, {
+    mutate: (plan, txn) => reapLocked(snapshot, result, txn, {
       readIdentity,
       signalProcess,
       sleep,
@@ -127,10 +127,10 @@ export function reapSnapshot(snapshot, {
   });
 }
 
-// Everything reap does under the lock. Returns the failure codes of an
-// attempted reap, recorded as they happen so an exception later in the pass
-// keeps them; refuses (throws) while nothing has been signalled.
-function reapLocked(snapshot, result, {
+// Everything reap does under the lock. A failure after a signal is recorded
+// on `txn` as it happens and ends the signalling; anything before a signal
+// refuses.
+function reapLocked(snapshot, result, txn, {
   readIdentity,
   signalProcess,
   sleep,
@@ -138,14 +138,7 @@ function reapLocked(snapshot, result, {
   postSignalMs,
   ownerReplacement,
 }) {
-  const failures = [];
   let identityRefused = false;
-  let attemptedFailure = false;
-  const fail = (code) => {
-    attemptedFailure = true;
-    failures.push(code);
-    result.verification.missingEvidence.push(code);
-  };
 
   const ownerObservation = readIdentity(snapshot.owner.pid);
   const replacedByKnownBirth = Boolean(ownerReplacement)
@@ -201,29 +194,29 @@ function reapLocked(snapshot, result, {
       continue;
     }
     try {
-      result.verification.mutationAttempted = true;
+      txn.attempted();
       signalProcess(target.pid, "SIGTERM");
       result.verification.termPids.push(target.pid);
       termTargets.push(target);
     } catch (error) {
       if (error?.code === "ESRCH") result.skipped.push({ pid: target.pid, reasons: ["already-absent"] });
       else {
-        fail("signal-or-wait-failed");
+        txn.fail("signal-or-wait-failed");
       }
-      if (attemptedFailure) break;
+      if (txn.hasFailed) break;
     }
   }
 
-  if (!attemptedFailure && result.verification.termPids.length) {
+  if (!txn.hasFailed && result.verification.termPids.length) {
     try {
       sleep(graceMs);
     } catch {
-      fail("signal-or-wait-failed");
+      txn.fail("signal-or-wait-failed");
     }
   }
 
   const killedTargets = [];
-  if (!attemptedFailure) {
+  if (!txn.hasFailed) {
     for (const target of termTargets) {
       const observation = readIdentity(target.pid);
       const skipped = skippedIdentity(target.pid, observation, target);
@@ -244,27 +237,27 @@ function reapLocked(snapshot, result, {
         continue;
       }
       try {
-        result.verification.mutationAttempted = true;
+        txn.attempted();
         signalProcess(target.pid, "SIGKILL");
         result.verification.killPids.push(target.pid);
         killedTargets.push(target);
       } catch (error) {
         if (error?.code === "ESRCH") result.skipped.push({ pid: target.pid, reasons: ["already-absent"] });
         else {
-          fail("signal-or-wait-failed");
+          txn.fail("signal-or-wait-failed");
         }
       }
     }
   }
 
-  if (!attemptedFailure && killedTargets.length) {
+  if (!txn.hasFailed && killedTargets.length) {
     try {
       sleep(postSignalMs);
     } catch {
-      fail("signal-or-wait-failed");
+      txn.fail("signal-or-wait-failed");
     }
   }
-  if (!attemptedFailure) {
+  if (!txn.hasFailed) {
     for (const target of killedTargets) {
       const observation = readIdentity(target.pid);
       const verdict = birthVerdict(target, observation);
@@ -275,16 +268,14 @@ function reapLocked(snapshot, result, {
         }
         continue;
       }
-      fail(verdict === "present" ? "post-kill-survivor" : "post-kill-verification-unknown");
+      txn.fail(verdict === "present" ? "post-kill-survivor" : "post-kill-verification-unknown");
     }
   }
 
-  if (attemptedFailure) return failures;
-  if (identityRefused) {
-    // Before any signal an identity change is a refusal; after one it is an
-    // incomplete reap.
-    if (!result.verification.mutationAttempted) refuse("target-identity-changed");
-    return ["target-identity-changed", "incomplete-after-mutation"];
-  }
-  return [];
+  if (txn.hasFailed || !identityRefused) return;
+  // Before any signal an identity change is a refusal; after one it is an
+  // incomplete reap.
+  if (!txn.hasAttempted) refuse("target-identity-changed");
+  txn.fail("target-identity-changed");
+  txn.fail("incomplete-after-mutation");
 }

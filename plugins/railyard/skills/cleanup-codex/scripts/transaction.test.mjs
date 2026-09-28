@@ -5,8 +5,7 @@ import test from "node:test";
 import {
   CleanupRefusal,
   EXIT_CODES,
-  acquireMutationLock,
-  exitCodeForStatus,
+  LOCK_HELD_BY_CALLER,
   recycleDesktop,
   recycleServer,
   reapSnapshot,
@@ -46,28 +45,21 @@ function countingLock({ acquireError = null, releaseError = null } = {}) {
 function run({ lock = countingLock(), confirmation = null, ...steps } = {}) {
   const result = emptyResult();
   const outcome = runMutation(result, { lock, confirmation }, {
-    unexpectedCode: "unexpected",
+    unexpected: { code: "unexpected", status: "refused" },
     prepare: () => ({ token: "RECYCLE token" }),
-    mutate: () => [],
+    mutate: () => {},
     ...steps,
   });
   assert.equal(outcome.result, result);
   return { ...outcome, lock };
 }
 
-test("exit codes follow the status names", () => {
-  assert.equal(exitCodeForStatus("healthy"), EXIT_CODES.healthy);
-  assert.equal(exitCodeForStatus("warning"), EXIT_CODES.warning);
-  assert.equal(exitCodeForStatus("refused"), EXIT_CODES.refused);
-  assert.equal(exitCodeForStatus("failed"), EXIT_CODES.failed);
-  assert.equal(exitCodeForStatus("unknown-status"), EXIT_CODES.failed);
-});
-
 test("a completed mutation is healthy and releases the lock once", () => {
-  const { result, exitCode, lock } = run();
+  const { result, exitCode, lock } = run({ mutate: (plan, txn) => txn.attempted() });
   assert.equal(exitCode, EXIT_CODES.healthy);
   assert.equal(result.status, "healthy");
   assert.equal(result.verification.complete, true);
+  assert.equal(result.verification.mutationAttempted, true);
   assert.deepEqual(result.verification.missingEvidence, []);
   assert.deepEqual(lock.calls, { acquire: 1, release: 1 });
 });
@@ -78,7 +70,6 @@ test("a refusal while preparing never takes the lock or mutates", () => {
     prepare: () => refuse("inventory-incomplete"),
     mutate: () => {
       mutated = true;
-      return [];
     },
   });
   assert.equal(exitCode, EXIT_CODES.refused);
@@ -96,7 +87,6 @@ test("a token mode refuses a missing or mismatched confirmation before the lock"
       confirmToken: (plan) => plan.token,
       mutate: () => {
         mutated = true;
-        return [];
       },
     });
     assert.equal(exitCode, EXIT_CODES.refused, code);
@@ -119,7 +109,6 @@ test("the plan from prepare reaches mutate", () => {
     prepare: () => ({ receipt: 7 }),
     mutate: (plan) => {
       seen = plan;
-      return [];
     },
   });
   assert.deepEqual(seen, { receipt: 7 });
@@ -138,68 +127,82 @@ test("a held lock and an unusable lock are both refusals", () => {
       lock,
       mutate: () => {
         mutated = true;
-        return [];
       },
     });
     assert.equal(exitCode, EXIT_CODES.refused, code);
     assert.deepEqual(result.verification.missingEvidence, [code]);
     assert.equal(mutated, false);
   }
-  assert.throws(() => acquireMutationLock(null), (error) => error.code === "mutation-lock-unavailable");
 });
 
-test("reported failures fail the run and are recorded once", () => {
-  const result = emptyResult();
-  const lock = countingLock();
-  const { exitCode } = runMutation(result, { lock }, {
-    unexpectedCode: "unexpected",
-    prepare: () => null,
-    mutate: () => {
-      result.verification.mutationAttempted = true;
-      result.verification.missingEvidence.push("post-kill-survivor");
-      return ["post-kill-survivor", "desktop-relaunch-failed", "desktop-relaunch-failed"];
+test("a caller-held lock takes and releases nothing", () => {
+  const { exitCode } = run({ lock: LOCK_HELD_BY_CALLER });
+  assert.equal(exitCode, EXIT_CODES.healthy);
+});
+
+test("recorded failures fail the run, mark it attempted, and survive a later stop", () => {
+  const recorded = run({
+    mutate: (plan, txn) => {
+      txn.fail("post-kill-survivor");
+      txn.fail("desktop-relaunch-failed");
+      txn.fail("desktop-relaunch-failed");
+      assert.equal(txn.hasFailed, true);
+      assert.equal(txn.hasAttempted, true);
     },
   });
-  assert.equal(exitCode, EXIT_CODES.failed);
-  assert.equal(result.status, "failed");
-  assert.equal(result.verification.complete, false);
-  assert.deepEqual(result.verification.missingEvidence, ["post-kill-survivor", "desktop-relaunch-failed"]);
-  assert.equal(lock.calls.release, 1);
+  assert.equal(recorded.exitCode, EXIT_CODES.failed);
+  assert.equal(recorded.result.status, "failed");
+  assert.equal(recorded.result.verification.complete, false);
+  assert.equal(recorded.result.verification.mutationAttempted, true);
+  assert.deepEqual(recorded.result.verification.missingEvidence, ["post-kill-survivor", "desktop-relaunch-failed"]);
+  assert.equal(recorded.lock.calls.release, 1);
+
+  const stopped = run({
+    mutate: (plan, txn) => {
+      txn.fail("signal-or-wait-failed");
+      throw new TypeError("reader failed");
+    },
+  });
+  assert.equal(stopped.exitCode, EXIT_CODES.failed);
+  assert.deepEqual(stopped.result.verification.missingEvidence, ["signal-or-wait-failed", "unexpected"]);
 });
 
-test("a refusal under the lock is a refusal before any mutation and a failure after", () => {
+test("a stop under the lock is a refusal before any attempt and a failure after", () => {
   const before = run({ mutate: () => refuse("recycle-identity-changed") });
   assert.equal(before.exitCode, EXIT_CODES.refused);
   assert.deepEqual(before.result.verification.missingEvidence, ["recycle-identity-changed"]);
+  assert.equal(before.result.verification.mutationAttempted, false);
   assert.equal(before.lock.calls.release, 1);
 
-  const result = emptyResult();
-  const lock = countingLock();
-  const after = runMutation(result, { lock }, {
-    unexpectedCode: "unexpected",
-    prepare: () => null,
-    mutate: () => {
-      result.verification.mutationAttempted = true;
+  const after = run({
+    mutate: (plan, txn) => {
+      txn.attempted();
       refuse("replacement-readiness-timeout");
     },
   });
   assert.equal(after.exitCode, EXIT_CODES.failed);
-  assert.equal(result.status, "failed");
-  assert.deepEqual(result.verification.missingEvidence, ["replacement-readiness-timeout"]);
-  assert.equal(lock.calls.release, 1);
+  assert.equal(after.result.status, "failed");
+  assert.deepEqual(after.result.verification.missingEvidence, ["replacement-readiness-timeout"]);
+  assert.equal(after.lock.calls.release, 1);
 });
 
-test("an unexpected error is named by the mode, and fails only where the mode says so", () => {
+test("an unexpected error settles as the mode says before any attempt", () => {
   const refused = run({ mutate: () => { throw new TypeError("boom"); } });
   assert.equal(refused.exitCode, EXIT_CODES.refused);
   assert.deepEqual(refused.result.verification.missingEvidence, ["unexpected"]);
 
-  const failed = run({ errorsFail: true, prepare: () => { throw new TypeError("boom"); } });
+  const failed = run({
+    unexpected: { code: "unexpected", status: "failed" },
+    prepare: () => { throw new TypeError("boom"); },
+  });
   assert.equal(failed.exitCode, EXIT_CODES.failed);
   assert.deepEqual(failed.result.verification.missingEvidence, ["unexpected"]);
 
   // A refusal stays a refusal even where unexpected errors fail.
-  const stillRefused = run({ errorsFail: true, prepare: () => refuse("snapshot-schema-invalid") });
+  const stillRefused = run({
+    unexpected: { code: "unexpected", status: "failed" },
+    prepare: () => refuse("snapshot-schema-invalid"),
+  });
   assert.equal(stillRefused.exitCode, EXIT_CODES.refused);
 });
 
@@ -209,20 +212,18 @@ test("a failed release overrides the outcome and clears completeness", () => {
   assert.equal(quiet.result.verification.complete, false);
   assert.deepEqual(quiet.result.verification.missingEvidence, ["mutation-lock-release-failed"]);
 
-  const strict = run({ errorsFail: true, lock: countingLock({ releaseError: new Error("unlink") }) });
+  const strict = run({
+    unexpected: { code: "unexpected", status: "failed" },
+    lock: countingLock({ releaseError: new Error("unlink") }),
+  });
   assert.equal(strict.exitCode, EXIT_CODES.failed);
 
-  const result = emptyResult();
-  const attempted = runMutation(result, { lock: countingLock({ releaseError: new Error("unlink") }) }, {
-    unexpectedCode: "unexpected",
-    prepare: () => null,
-    mutate: () => {
-      result.verification.mutationAttempted = true;
-      return [];
-    },
+  const attempted = run({
+    lock: countingLock({ releaseError: new Error("unlink") }),
+    mutate: (plan, txn) => txn.attempted(),
   });
   assert.equal(attempted.exitCode, EXIT_CODES.failed);
-  assert.equal(result.verification.complete, false);
+  assert.equal(attempted.result.verification.complete, false);
 });
 
 test("reap, detached recycle and desktop recycle all settle through the runner", () => {
