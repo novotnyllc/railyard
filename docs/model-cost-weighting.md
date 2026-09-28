@@ -27,8 +27,11 @@ List prices and controls are in the
    | --- | --- | --- |
    | `io_ratio` (input:output) | 10:1 | Agents resend a large stable prefix every turn |
    | `cache_hit` | 0.90 | Prefixes are resent every turn |
-   | `cache_read_rate` | 0.10 × input | Anthropic and OpenAI cached-input rates are about a tenth of list |
-   | effective input multiplier | 0.19 | 0.9 × 0.1 + 0.1 |
+   | `cache_read_rate` | per model; 0.10 × input unless listed | Anthropic: 0.05 for Opus 5.5, 0.025 for Fable 5.1; OpenAI about a tenth of list |
+   | effective input multiplier | 0.19 at 0.10; 0.145 at 0.05; 0.1225 at 0.025 | 0.9 × `cache_read_rate` + 0.1 |
+
+   The cache-read rate is per model: use each model's published rate, not a
+   flat tenth.
 
 3. **Plan on post-promotion prices.** A promotion that ends mid-quarter
    shouldn't re-rank models.
@@ -42,14 +45,17 @@ List prices and controls are in the
 
 ### Claude (reference: Fable 5.1 = 100)
 
-| Model | Input $/MTok | Output $/MTok | Work unit | Index |
-| --- | --- | --- | --- | --- |
-| Fable 5.1 | 10.00 | 50.00 | 69.00 | **100** |
-| Opus 5 | 5.00 | 25.00 | 34.50 | **50** |
-| Opus 5.5 | 4.00 | 20.00 | 27.60 | **40** |
-| Sonnet 5.5 | 2.00 | 10.00 | 13.80 | **20** |
-| Sonnet 5 | 2.00 | 10.00 | 13.80 | **20** |
-| Haiku 4.5 | 1.00 | 5.00 | 6.90 | **10** |
+| Model | Input $/MTok | Cache read $/MTok | Output $/MTok | Work unit | Index |
+| --- | --- | --- | --- | --- | --- |
+| Fable 5.1 | 10.00 | 0.25 | 50.00 | 62.25 | **100** |
+| Opus 5 | 5.00 | 0.50 | 25.00 | 34.50 | **55** |
+| Opus 5.5 | 4.00 | 0.20 | 20.00 | 25.80 | **41** |
+| Sonnet 5.5 | 2.00 | 0.20 | 10.00 | 13.80 | **22** |
+| Sonnet 5 | 2.00 | 0.20 | 10.00 | 13.80 | **22** |
+| Haiku 4.5 | 1.00 | 0.10 | 5.00 | 6.90 | **11** |
+
+Source for cache-read rates: the
+[Sonnet 5.5 overview](https://platform.claude.com/docs/en/models/sonnet-5-5/overview).
 
 Anthropic reports that Opus 5.5 at `medium` matches or exceeds Opus 5 at
 `high`. At a lower price, that makes Opus 5.5 the better default of the two
