@@ -101,9 +101,29 @@ const GH_COMMANDS = new Set([
 const mergeAliasNames = () => [...(ghAliases() || [])].filter(([, expansion]) => mergePhraseCount(expansion)).map(([name]) => name);
 
 // One simple command's merge, if it is one. `--help` is not a merge.
+// gh's command word and its index, past options and their values
+// (`gh -R owner/repo pm 7` runs alias `pm`, not `owner/repo`).
+function ghCommandWord(tokens) {
+  const name = parseArgs(tokens).words[0];
+  if (name === undefined) return { name, at: -1 };
+  const at = tokens.findIndex((token, index) => token === name && !parseArgs(tokens.slice(0, index)).words.length);
+  return { name, at };
+}
+
+// Whether gh itself handles this command, so its arguments are data to it:
+// a built-in (not `extension exec`) or a plain alias. An extension receives
+// every argument and may run it, so a merge phrase there is not credited.
+function ghHandlesArguments(prefix) {
+  const { words } = parseArgs(prefix.tokens.slice(1));
+  if (words[0] === "extension" && words[1] === "exec") return false;
+  if (GH_COMMANDS.has(words[0])) return true;
+  const alias = ghAliases(prefix)?.get(words[0]);
+  return alias !== undefined && !alias.startsWith("!");
+}
+
 function mergeFromPrefix(prefix) {
   let tokens = prefix.tokens.slice(1);
-  const name = tokens.find((token) => !token.startsWith("-"));
+  const { name, at } = ghCommandWord(tokens);
   const aliases = ghAliases(prefix);
   if (aliases === null && name !== undefined && !GH_COMMANDS.has(name)) {
     return { kind: "unsupported", why: "gh reads its aliases from a config directory this guard cannot resolve; run gh pr merge directly" };
@@ -117,7 +137,6 @@ function mergeFromPrefix(prefix) {
         ? { kind: "unsupported", why: "a gh alias runs a merge this guard cannot expand; run gh pr merge directly" }
         : null;
     }
-    const at = tokens.findIndex((token) => !token.startsWith("-"));
     tokens = [...tokens.slice(0, at), ...alias.split(/\s+/).filter(Boolean), ...tokens.slice(at + 1)];
   }
   const { env, unset, ignoreEnv } = prefix;
@@ -474,7 +493,7 @@ function mergeCommands(script, baseCwd) {
       if (words[0] === "alias" && (words[1] === "set" || words[1] === "import")) aliasesChanged = true;
       const merge = mergeFromPrefix(prefix);
       if (merge) found.push(merge);
-      attributed += argvCount;
+      if (merge || ghHandlesArguments(prefix)) attributed += argvCount;
       pushesAttributed += argvPushes; // gh never runs its arguments as git
       continue;
     }

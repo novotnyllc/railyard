@@ -1180,6 +1180,15 @@ gated("a gh alias that expands to a merge is gated", () => {
   const config = "version: 1\naliases:\n    pm: pr merge\n    co: pr checkout\n    sm: '!gh pr merge \"$1\" --admin'\ngit_protocol: https\n";
   refused(run(bash("gh pm 7 --admin"), withAliases(config)), /RAILYARD_CE_SNAPSHOT/);
   refused(run(bash("gh sm 7"), withAliases(config)), /alias runs a merge/);
+  // The alias is found past gh's options (Codex P1).
+  for (const text of ["gh -R owner/repo pm 7 --admin", "gh --repo=owner/repo pm 7 --admin"]) {
+    refused(run(bash(text), withAliases(config)), /RAILYARD_CE_SNAPSHOT/);
+  }
+  // An extension receives every argument, so a merge phrase passed to it is not data (Codex P1).
+  for (const text of ["gh extension exec forward pr merge 7 --admin", "gh forward pr merge 7 --admin"]) {
+    refused(run(bash(text), withAliases(config)), /cannot attribute/);
+  }
+  allowed(run(bash(`gh pr comment 7 --body "merge after gh pr merge 6"`), withAliases(config)), []);
   // A shell alias whose text holds no merge runs like any command. One that
   // builds a merge word at run time is deliberate obfuscation, outside the
   // documented scope (ce-merge-guard.md).
