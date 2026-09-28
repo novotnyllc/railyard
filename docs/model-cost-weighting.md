@@ -67,17 +67,24 @@ about a tenth of the cost per task. Against Opus 5.5, per-task savings
 depend on the output share: Sonnet 5.5 cache reads cost $0.20/MTok, the same
 as Opus 5.5.
 
-### Codex (reference: prior GPT-6 Sol promotional price = 100)
+### Codex (reference: GPT-5.6 Sol list price = 100)
 
-| Model | Input $/MTok | Output $/MTok | Work unit | Index |
-| --- | --- | --- | --- | --- |
-| Prior Sol promotional reference | 4.00 | 20.00 | 27.60 | 100 |
-| GPT-6 Sol | 2.00 | 10.00 | 13.80 | **50** |
-| GPT-6 Luna | 0.10 | 0.50 | 0.69 | **3** |
+| Model | Input $/MTok | Cached input $/MTok | Output $/MTok | Work unit | Index |
+| --- | --- | --- | --- | --- | --- |
+| GPT-5.6 Sol (reference only) | 4.00 | 0.40 | 20.00 | 27.60 | 100 |
+| GPT-6 Astra | 10.00 | 1.00 | 50.00 | 69.00 | **250** |
+| GPT-6 Sol | 2.00 | 0.20 | 10.00 | 13.80 | **50** |
+| GPT-6 Luna | 0.10 | 0.01 | 0.50 | 0.69 | **3** |
 
-Source: [Introducing GPT-6 Sol and Luna](https://openai.com/index/introducing-gpt-6-sol-and-luna/).
+These are standard short-context rates; above each model's long-context
+threshold, OpenAI charges Astra $20 / $2 / $75, Sol $4 / $0.40 / $15, and Luna
+$0.20 / $0.02 / $0.75.
 
-Astra is not indexed here. Daybreak (`gpt-daybreak-blue-latest`) is not
+Sources: [OpenAI API pricing](https://developers.openai.com/api/docs/pricing)
+(checked 2026-09-28) and
+[Introducing GPT-6 Sol and Luna](https://openai.com/index/introducing-gpt-6-sol-and-luna/).
+
+Daybreak (`gpt-daybreak-blue-latest`) is not
 separately priced, and because its alias can be repointed, don't derive a
 Daybreak rate from Sol or Luna. Choosing Daybreak for security work needs an
 access rationale, not a borrowed price.

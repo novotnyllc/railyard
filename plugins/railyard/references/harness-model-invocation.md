@@ -3,8 +3,9 @@
 This is Railyard's reference for choosing models and effort in Claude Code and
 Codex. [`railyard:model-routing`](../skills/model-routing/SKILL.md) says which
 model fits which work. This page covers the controls that apply the choice.
-Snapshot as of 2026-09. When the live tool schema or harness docs disagree
-with this page, they are correct.
+Snapshot as of 2026-09; Codex prices checked 2026-09-28. OpenAI DevDay is
+2026-09-29, so the Codex lineup may change. When the live tool schema or
+harness docs disagree with this page, they are correct.
 
 ## Models
 
@@ -18,7 +19,7 @@ with this page, they are correct.
 | Claude Code | Haiku 4.5 | `claude-haiku-4-5` | `haiku` | none | $1 / $5 |
 | Codex | GPT-6 Sol | `gpt-6-sol` | — | check live schema | $2 / $10 |
 | Codex | GPT-6 Luna | `gpt-6-luna` | — | check live schema | $0.10 / $0.50 |
-| Codex | GPT-6 Astra | `gpt-6-astra` | — | check live schema | not tracked here |
+| Codex | GPT-6 Astra | `gpt-6-astra` | — | check live schema | $10 / $50 |
 | Codex | Daybreak | `gpt-daybreak-blue-latest` | — | check live schema | not separately priced |
 
 On Claude, the full effort range is `low`, `medium`, `high`, `xhigh`, `max`.
@@ -57,12 +58,16 @@ model. Daybreak appears only on some accounts and hosts. Effort names are
 model-specific: Codex's `ultra` is not a Claude effort, and Claude's levels
 don't map one-to-one onto Codex's.
 
+Astra's list price matches Fable 5.1's, and Sol's matches Sonnet 5.5's, so
+reserve Astra for hard work and review.
+
 Prices are list API rates. They are a planning input, not the cost of an
 accepted result. The Railyard repository's
 `docs/model-cost-weighting.md` has the relative weights.
 Sources: [Claude Code model configuration](https://code.claude.com/docs/en/model-config),
 [Sonnet 5.5 overview](https://platform.claude.com/docs/en/models/sonnet-5-5/overview),
-[subagents](https://code.claude.com/docs/en/sub-agents), and
+[subagents](https://code.claude.com/docs/en/sub-agents),
+[OpenAI API pricing](https://developers.openai.com/api/docs/pricing), and
 [Introducing GPT-6 Sol and Luna](https://openai.com/index/introducing-gpt-6-sol-and-luna/).
 
 ## Claude Code controls
