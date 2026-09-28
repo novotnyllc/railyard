@@ -700,10 +700,22 @@ function quitAndRestore({ receipt, lockedSnapshot, evidence, quit, uid, now, dep
         });
         return failures;
       }
+      // Unknown: the app may still be running. Touch nothing more: no reopen
+      // aimed at a possibly live app and no reaping of what may be its live
+      // tree. The armed watchdog reopens the app once it sees the host gone.
       failures.push("desktop-host-quit-unverified");
+      result.verification.watchdog = { armed: watchdog?.ok === true, pid: watchdog?.pid ?? null };
+      result.warnings.push({
+        code: "desktop-host-state-unknown",
+        pid: receipt.host.pid,
+        message: "whether the app quit could not be read; nothing else was stopped, and the recycle's watchdog "
+          + `reopens the app once it sees it gone (up to ${WATCHDOG_TIMEOUT_MS / 60_000} minutes)`,
+        authorizesAction: false,
+      });
+      return failures;
     }
 
-    // The app is closed (or cannot be shown running): reopen that exact
+    // The app is closed: reopen that exact
     // bundle at once, then check what the quit left behind.
     if (relaunch()) {
       relaunched = waitUntil(deps, deps.relaunchTimeoutMs ?? DEFAULT_DESKTOP_RELAUNCH_TIMEOUT_MS, () => {
@@ -769,8 +781,9 @@ function quitAndRestore({ receipt, lockedSnapshot, evidence, quit, uid, now, dep
   } catch (error) {
     fail(error, "desktop-recycle-evidence-failed");
   } finally {
-    // Whatever failed above, an app that is not shown running is reopened.
-    if (!launchAttempted && observeBirth(receipt.host, deps.readIdentity) !== "present") {
+    // Whatever failed above, an app shown gone is reopened. One whose state
+    // cannot be read is left to the armed watchdog, never reopened blind.
+    if (!launchAttempted && observeBirth(receipt.host, deps.readIdentity) === "gone") {
       try {
         relaunch();
       } catch {}

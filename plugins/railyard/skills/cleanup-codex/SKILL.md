@@ -65,9 +65,10 @@ minutes. Then it asks the app to quit and waits up to 30 seconds. The app is
 never force-killed. If it does not quit (say, a dialog is open), the command
 stops with `desktop-host-quit-timeout` (or `desktop-quit-request-failed` when
 the request itself failed) and the watchdog is cut to 60 seconds, so a quit
-the user later makes on purpose is not undone. Once the app is gone (or cannot
-be shown running, `desktop-host-quit-unverified`) it reopens that exact bundle
-at once, waits up to 90 seconds for a new server and up to 30 for the old
+the user later makes on purpose is not undone. If whether the app quit cannot
+be read, it stops with `desktop-host-quit-unverified` and touches nothing
+more; the armed watchdog reopens the app once it sees it gone. Once the app
+is gone it reopens that exact bundle at once, waits up to 90 seconds for a new server and up to 30 for the old
 server to exit, then reaps leftovers of the old tree that still match their
 recorded identities. Every relaunch uses `open -g` on the bundle path (falling
 back to its bundle id), so it never takes focus. Any later failure is reported

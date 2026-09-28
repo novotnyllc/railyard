@@ -454,7 +454,8 @@ test("once the app is gone the relaunch always runs, and later failures are repo
     assert.deepEqual(result.verification.relaunch, { attempted: true, requested: false, verified: false });
     assert.equal(result.verification.after, null);
   }
-  // The host cannot be read after the quit: it is not shown running, so relaunch.
+  // The host cannot be read after the quit: it may still be running, so
+  // nothing is reopened or reaped; the armed watchdog owns the relaunch (Codex P2).
   {
     const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
     const harness = desktopHarness();
@@ -471,8 +472,12 @@ test("once the app is gone the relaunch always runs, and later failures are repo
     };
     const { result, exitCode } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
     assert.equal(exitCode, EXIT_CODES.failed);
-    assert.deepEqual(harness.calls.launch, ["/Applications/ChatGPT.app"]);
+    assert.deepEqual(harness.calls.launch, []);
+    assert.ok(!harness.calls.order.includes("reap"), JSON.stringify(harness.calls.order));
+    assert.ok(!harness.calls.order.includes("disarm"), JSON.stringify(harness.calls.order));
+    assert.deepEqual(result.verification.watchdog, { armed: true, pid: 4242 });
     assert.ok(result.verification.missingEvidence.includes("desktop-host-quit-unverified"));
+    assert.ok(result.warnings.some((warning) => warning.code === "desktop-host-state-unknown"));
   }
 });
 
