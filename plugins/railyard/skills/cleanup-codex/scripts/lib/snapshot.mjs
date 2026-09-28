@@ -469,10 +469,18 @@ export function sameBirthIdentityPresent(expected, observation) {
     && identityDifferences(expected, observation.identity, BIRTH_IDENTITY_FIELDS).length === 0;
 }
 
-// One verdict on whether the exact birth `expected` names still runs: "gone"
-// (absent, or the PID now holds another birth), "present", or "unknown" (the
-// read failed or returned no valid identity). The desktop recycle's waits,
-// its watchdog and assertExpectedIdentityGone share it, so they agree.
+// One verdict on whether the exact birth `expected` names still runs, from an
+// observation of its PID: "gone" (absent, or the PID now holds another
+// birth), "present", or "unknown" (no valid identity). Every post-signal
+// check (reap, hook, unmanaged stop) and every wait on a quit shares it.
+export function birthVerdict(expected, observation) {
+  if (observation?.state === "absent") return "gone";
+  if (observation?.state !== "present" || !validObservedIdentity(observation.identity)) return "unknown";
+  return sameBirthIdentityPresent(expected, observation) ? "present" : "gone";
+}
+
+// birthVerdict for a fresh read; a read that throws is "unknown". The desktop
+// recycle's waits, its watchdog and assertExpectedIdentityGone share it.
 export function observeBirth(expected, readIdentity) {
   let observation;
   try {
@@ -480,9 +488,7 @@ export function observeBirth(expected, readIdentity) {
   } catch {
     return "unknown";
   }
-  if (observation?.state === "absent") return "gone";
-  if (observation?.state !== "present" || !validObservedIdentity(observation.identity)) return "unknown";
-  return sameBirthIdentityPresent(expected, observation) ? "present" : "gone";
+  return birthVerdict(expected, observation);
 }
 
 // Whether `expected` is present with every revalidated identity field intact.

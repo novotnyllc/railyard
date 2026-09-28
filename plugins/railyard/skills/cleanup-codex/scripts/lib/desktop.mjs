@@ -12,6 +12,7 @@ import path from "node:path";
 import { performance } from "node:perf_hooks";
 
 import {
+  BUNDLE_ID,
   DEFAULT_DESKTOP_IDLE_SECONDS,
   DEFAULT_DESKTOP_POLL_MS,
   DEFAULT_DESKTOP_QUIT_TIMEOUT_MS,
@@ -22,7 +23,6 @@ import {
   DESKTOP_RECEIPT_SCHEMA,
   EXIT_CODES,
   LAUNCHCTL,
-  MAIN_APP_EXECUTABLE,
   OSASCRIPT,
   PLUTIL,
   SNAPSHOT_SCHEMA,
@@ -35,6 +35,7 @@ import {
   collectExactProcessIdentity,
   collectMacOSInventory,
   descendantsOf,
+  mainAppBundlePath,
 } from "./inventory.mjs";
 import {
   CleanupRefusal,
@@ -50,7 +51,7 @@ import {
   validObservedIdentity,
 } from "./process-evidence.mjs";
 import {
-  reapSnapshot,
+  residueReaper,
   signalExactPid,
 } from "./reap.mjs";
 import {
@@ -69,9 +70,8 @@ import {
   snapshotIdentity,
   validateSnapshotObject,
 } from "./snapshot.mjs";
+import { runMutation } from "./transaction.mjs";
 
-
-const BUNDLE_ID = /^[A-Za-z0-9][A-Za-z0-9.-]{0,254}$/;
 
 export function readLaunchdMaxfiles(runner = defaultRunner) {
   const run = safeRun(runner, LAUNCHCTL, ["limit", "maxfiles"], { timeout: 5_000 });
@@ -142,20 +142,6 @@ export function readBundleIdentifier(runner, bundlePath) {
   ], { timeout: 5_000 });
   const value = run.status === 0 ? run.stdout.trim() : "";
   return BUNDLE_ID.test(value) ? value : null;
-}
-
-export function findDesktopHost(server, byPid) {
-  const seen = new Set([server.pid]);
-  let parentPid = server.parentPid;
-  while (Number.isInteger(parentPid) && parentPid > 1 && !seen.has(parentPid)) {
-    seen.add(parentPid);
-    const record = byPid.get(parentPid);
-    if (!record) return null;
-    const match = MAIN_APP_EXECUTABLE.exec(record.executable ?? "");
-    if (match) return { record, bundlePath: match[1] };
-    parentPid = record.parentPid;
-  }
-  return null;
 }
 
 export function emptyDesktopResult(platform) {
@@ -304,6 +290,7 @@ export function processAncestry(pid, byPid) {
 function desktopEvidence(inventory, { pid, uid, now }, deps) {
   const classified = classifyInventory(inventory, { now });
   const verification = classified.result.verification;
+  const hostOf = (candidate) => classified.hosts.get(candidate.pid) ?? null;
   const inventoryGap = desktopServerEvidenceGap(verification);
   if (inventoryGap) refuse(inventoryGap);
   const server = verification.servers.find((candidate) => candidate.pid === pid);
@@ -315,7 +302,7 @@ function desktopEvidence(inventory, { pid, uid, now }, deps) {
 
   const processes = inventory.processes ?? [];
   const byPid = new Map(processes.map((item) => [item.pid, item]));
-  const host = findDesktopHost(server, byPid);
+  const host = hostOf(server);
   if (!host) refuse("desktop-host-unidentified");
   if (host.record.uid !== uid) refuse("desktop-host-wrong-user");
   if (processes.filter((item) => item.executable === host.record.executable).length !== 1) {
@@ -343,7 +330,7 @@ function desktopEvidence(inventory, { pid, uid, now }, deps) {
   // The quit is addressed by bundle id, so another running copy of the app
   // (a second install with the same id) could be the one that quits.
   const otherBundles = unique(processes
-    .map((item) => MAIN_APP_EXECUTABLE.exec(item.executable ?? "")?.[1])
+    .map((item) => mainAppBundlePath(item.executable))
     .filter((bundlePath) => bundlePath && bundlePath !== host.bundlePath));
   for (const bundlePath of otherBundles) {
     let other = null;
@@ -365,7 +352,7 @@ function desktopEvidence(inventory, { pid, uid, now }, deps) {
   // GUI servers hosted by any other app process must survive the recycle.
   const otherGui = verification.servers
     .filter((candidate) => candidate.classification === "gui" && candidate.pid !== server.pid)
-    .filter((candidate) => findDesktopHost(candidate, byPid)?.record.pid !== host.record.pid)
+    .filter((candidate) => hostOf(candidate)?.record.pid !== host.record.pid)
     .map((candidate) => {
       const observation = deps.readIdentity(candidate.pid);
       if (observation?.state !== "present" || !validObservedIdentity(observation.identity)) {
@@ -427,7 +414,7 @@ function findRelaunched(inventory, oldHost, oldOwner, uid, now) {
     const serverRecord = byPid.get(server.pid);
     // A reused PID with a new birth is a valid replacement.
     if (!serverRecord || (server.pid === oldOwner.pid && serverRecord.startTime === oldOwner.startTime)) continue;
-    const host = findDesktopHost(server, byPid);
+    const host = classified.hosts.get(server.pid);
     if (!host || host.record.executable !== oldHost.executable) continue;
     if (host.record.pid === oldHost.pid && host.record.startTime === oldHost.startTime) continue;
     return { server, serverRecord, host: host.record };
@@ -446,200 +433,181 @@ export function recycleDesktop(options, deps) {
   const minSoftLimit = options?.minSoftLimit ?? DEFAULT_MIN_SOFT_NOFILE;
   const now = options?.now ?? Date.now();
   const result = emptyDesktopResult(platform);
-  let exitCode = EXIT_CODES.refused;
-  let release = null;
+  const run = { options, platform, uid, minSoftLimit, now };
+  return runMutation(result, { lock: deps?.lock, confirmation: options?.confirmation }, {
+    unexpected: { code: "desktop-recycle-evidence-failed", status: "refused" },
+    prepare: () => prepareDesktop(deps, run, result),
+    confirmToken: (plan) => plan.receipt.confirmationToken,
+    mutate: (plan, txn) => quitDesktopLocked(plan, deps, run, result, txn),
+  });
+}
 
+// The first pass, and the unlocked half of the second: bind the host app and
+// the exact app-server, snapshot its tree, and require the app to be idle.
+function prepareDesktop(deps, run, result) {
+  const { options, platform, uid, minSoftLimit, now } = run;
+  if (platform !== "darwin") refuse("unsupported-platform");
+  if (!Number.isInteger(options?.pid) || options.pid <= 0) refuse("recycle-pid-required");
+  if (!Number.isInteger(minSoftLimit) || minSoftLimit <= 0) refuse("invalid-minimum-soft-limit");
+  if (
+    !deps?.inventory
+    || [
+      "readIdentity", "collectInventory", "readBundleIdentifier", "readDesktopActivity",
+      "quitApp", "launchApp", "armRelaunchWatchdog", "reapResidue", "sleep", "monotonicNow",
+    ].some((name) => typeof deps[name] !== "function")
+    || !Number.isInteger(deps.selfPid)
+  ) refuse("desktop-evidence-unavailable");
+
+  let launchdMaxfiles = null;
   try {
-    if (platform !== "darwin") refuse("unsupported-platform");
-    if (!Number.isInteger(options?.pid) || options.pid <= 0) refuse("recycle-pid-required");
-    if (!Number.isInteger(minSoftLimit) || minSoftLimit <= 0) refuse("invalid-minimum-soft-limit");
-    if (
-      !deps?.inventory
-      || [
-        "readIdentity", "collectInventory", "readBundleIdentifier", "readDesktopActivity",
-        "quitApp", "launchApp", "armRelaunchWatchdog", "reapResidue", "sleep", "monotonicNow",
-      ].some((name) => typeof deps[name] !== "function")
-      || !Number.isInteger(deps.selfPid)
-    ) refuse("desktop-evidence-unavailable");
+    launchdMaxfiles = deps.readLaunchdMaxfiles?.() ?? null;
+  } catch {}
+  result.verification.launchdMaxfiles = launchdMaxfiles;
 
-    let launchdMaxfiles = null;
-    try {
-      launchdMaxfiles = deps.readLaunchdMaxfiles?.() ?? null;
-    } catch {}
-    result.verification.launchdMaxfiles = launchdMaxfiles;
-
-    const context = { pid: options.pid, uid, now };
-    const evidence = desktopEvidence(deps.inventory, context, deps);
-    result.verification.servers = evidence.servers;
-    if (appearsCappedByLaunchd(evidence.server, launchdMaxfiles)) {
-      const limitWarning = launchdMaxfilesWarning(launchdMaxfiles, minSoftLimit);
-      if (limitWarning) result.warnings.push({ pid: options.pid, ...limitWarning });
-    }
-    const firstSnapshot = desktopTreeSnapshot({
-      inventory: deps.inventory,
-      owner: evidence.owner,
-      readIdentity: deps.readIdentity,
-      uid,
-      now,
-      skipped: result.skipped,
-    });
-    const receipt = buildDesktopReceipt(evidence, firstSnapshot, launchdMaxfiles);
-    result.verification.receipt = receipt;
-    result.verification.before = {
-      host: evidence.host,
-      pid: evidence.server.pid,
-      descriptors: {
-        count: evidence.server.descriptorCount,
-        highest: evidence.server.highestDescriptor,
-      },
-      descendants: evidence.server.descendants,
-      targetPids: firstSnapshot.targets.map((target) => target.pid),
-    };
-    result.selected = receipt.selectedPids.map((pid) => ({
-      pid,
-      role: pid === evidence.server.pid ? "server" : "descendant",
-    }));
-    // Quitting interrupts any running turn, so only an idle app is recycled.
-    const idleSeconds = options.idleSeconds ?? DEFAULT_DESKTOP_IDLE_SECONDS;
-    if (!Number.isInteger(idleSeconds) || idleSeconds < 0) refuse("invalid-idle-seconds");
-    // Activity is read first. Given a reader, the process tree is read after
-    // it, so a child started while the activity probe ran is still seen;
-    // given an inventory already read, only the activity is fresh.
-    const checkIdle = (inventorySource) => {
-      let activity = null;
-      try {
-        activity = deps.readDesktopActivity({ serverPid: receipt.server.pid, nowMs: options.now ?? Date.now() });
-      } catch {}
-      let inventory = null;
-      try {
-        inventory = typeof inventorySource === "function" ? inventorySource() : inventorySource;
-      } catch {}
-      const reasons = desktopBusyReasons({
-        activity,
-        inventory,
-        serverPid: receipt.server.pid,
-        bundleId: receipt.host.bundleId,
-        nowMs: options.now ?? Date.now(),
-        idleMs: idleSeconds * 1000,
-      });
-      result.verification.idle = {
-        idle: reasons.length === 0,
-        idleSeconds,
-        reasons,
-        unknown: activity?.complete ? null : activity?.unknown ?? "desktop-activity-unavailable",
-        // An open turn (even one a crash abandoned) keeps the app busy until
-        // it is finished, cancelled or archived in the app.
-        openTurns: activity?.openTurns ?? [],
-        lastActivityAt: Number.isFinite(activity?.latestActivityMs) && activity.latestActivityMs > 0
-          ? new Date(activity.latestActivityMs).toISOString()
-          : null,
-      };
-      if (reasons.length) refuse("desktop-busy");
-      return inventory;
-    };
-    checkIdle(deps.inventory);
-    if (!options.confirmation) refuse("confirmation-required");
-    if (options.confirmation !== receipt.confirmationToken) refuse("confirmation-mismatch");
-
-    if (!deps.lock || typeof deps.lock.acquire !== "function") refuse("mutation-lock-unavailable");
-    try {
-      release = deps.lock.acquire();
-    } catch (error) {
-      refuse(error?.code === "ELOCKED" || error?.code === "mutation-lock-held"
-        ? "mutation-lock-held"
-        : "mutation-lock-unavailable");
-    }
-
-    // Re-derive everything from a fresh inventory under the lock.
-    result.skipped = [];
-    const lockedInventory = deps.collectInventory();
-    const locked = desktopEvidence(lockedInventory, context, deps);
-    const lockedSnapshot = desktopTreeSnapshot({
-      inventory: lockedInventory,
-      owner: locked.owner,
-      readIdentity: deps.readIdentity,
-      uid,
-      now,
-      skipped: result.skipped,
-    });
-    const lockedReceipt = buildDesktopReceipt(locked, lockedSnapshot, launchdMaxfiles);
-    if (lockedReceipt.confirmationToken !== receipt.confirmationToken) refuse("desktop-identity-changed");
-    // Descendants churn; report what the locked snapshot will actually act on.
-    result.verification.receipt = lockedReceipt;
-    result.verification.before.targetPids = lockedSnapshot.targets.map((target) => target.pid);
-    result.selected = lockedReceipt.selectedPids.map((pid) => ({
-      pid,
-      role: pid === lockedSnapshot.owner.pid ? "server" : "descendant",
-    }));
-    assertGuiPreserved(evidence.otherGui, deps.readIdentity);
-    const lockedInventoryAfterIdle = checkIdle(() => deps.collectInventory());
-    // The app can restart on its own during the idle check; quit only the bound births.
-    if (!stillExactlyPresent(receipt.host, deps.readIdentity)
-      || !stillExactlyPresent(receipt.server, deps.readIdentity)) {
-      refuse("desktop-identity-changed");
-    }
-    // The relaunch target must be usable before anything is quit.
-    if (!validRelaunchPath(receipt.host.bundlePath)
-      || !receipt.host.executable.startsWith(`${receipt.host.bundlePath}/Contents/MacOS/`)) {
-      refuse("desktop-relaunch-path-invalid");
-    }
-    // One last activity read, immediately before the quit: a turn started
-    // while the process inventory above ran is still caught.
-    checkIdle(lockedInventoryAfterIdle);
-    // A detached watchdog reopens the app if this process dies after the
-    // quit, the quit lands after this process gives up, or anything throws.
-    const watchTarget = {
-      hostPid: receipt.host.pid,
-      hostStartTime: receipt.host.startTime,
-      bundlePath: receipt.host.bundlePath,
-      bundleId: receipt.host.bundleId,
-    };
-    let watchdog = null;
-    try {
-      watchdog = deps.armRelaunchWatchdog(watchTarget);
-    } catch {}
-    if (!watchdog?.ok) refuse("desktop-watchdog-unavailable");
-    result.verification.watchdog = { armed: true, pid: watchdog.pid ?? null };
-
-    // Ask the app to quit. The host is never signalled. The quit event can
-    // land even when osascript reports failure, so record the attempt first.
-    result.verification.mutationAttempted = true;
-    result.verification.actions.push({ kind: "quit-desktop-app", bundleId: receipt.host.bundleId, hostPid: receipt.host.pid });
-    let quit = null;
-    try {
-      quit = deps.quitApp(receipt.host.bundleId);
-    } catch {}
-    const failures = quitAndRestore({ receipt, lockedSnapshot, evidence, quit, uid, now, deps, result, watchdog, watchTarget });
-    if (failures.length) {
-      result.verification.missingEvidence.push(...failures);
-      result.status = "failed";
-      exitCode = EXIT_CODES.failed;
-    } else {
-      result.verification.guiPreserved = true;
-      result.verification.complete = true;
-      result.status = "healthy";
-      exitCode = EXIT_CODES.healthy;
-    }
-  } catch (error) {
-    // Only reached before the quit: quitAndRestore never throws.
-    const code = error instanceof CleanupRefusal ? error.code : "desktop-recycle-evidence-failed";
-    result.verification.missingEvidence.push(code);
-    result.status = "refused";
-    exitCode = EXIT_CODES.refused;
-  } finally {
-    if (release) {
-      try {
-        release();
-      } catch {
-        result.verification.missingEvidence.push("mutation-lock-release-failed");
-        result.verification.complete = false;
-        result.status = result.verification.mutationAttempted ? "failed" : "refused";
-        exitCode = result.verification.mutationAttempted ? EXIT_CODES.failed : EXIT_CODES.refused;
-      }
-    }
+  const context = { pid: options.pid, uid, now };
+  const evidence = desktopEvidence(deps.inventory, context, deps);
+  result.verification.servers = evidence.servers;
+  if (appearsCappedByLaunchd(evidence.server, launchdMaxfiles)) {
+    const limitWarning = launchdMaxfilesWarning(launchdMaxfiles, minSoftLimit);
+    if (limitWarning) result.warnings.push({ pid: options.pid, ...limitWarning });
   }
-  result.verification.missingEvidence = unique(result.verification.missingEvidence);
-  return { result, exitCode };
+  const firstSnapshot = desktopTreeSnapshot({
+    inventory: deps.inventory,
+    owner: evidence.owner,
+    readIdentity: deps.readIdentity,
+    uid,
+    now,
+    skipped: result.skipped,
+  });
+  const receipt = buildDesktopReceipt(evidence, firstSnapshot, launchdMaxfiles);
+  result.verification.receipt = receipt;
+  result.verification.before = {
+    host: evidence.host,
+    pid: evidence.server.pid,
+    descriptors: {
+      count: evidence.server.descriptorCount,
+      highest: evidence.server.highestDescriptor,
+    },
+    descendants: evidence.server.descendants,
+    targetPids: firstSnapshot.targets.map((target) => target.pid),
+  };
+  result.selected = receipt.selectedPids.map((pid) => ({
+    pid,
+    role: pid === evidence.server.pid ? "server" : "descendant",
+  }));
+  // Quitting interrupts any running turn, so only an idle app is recycled.
+  const idleSeconds = options.idleSeconds ?? DEFAULT_DESKTOP_IDLE_SECONDS;
+  if (!Number.isInteger(idleSeconds) || idleSeconds < 0) refuse("invalid-idle-seconds");
+  const plan = { context, evidence, receipt, launchdMaxfiles, idleSeconds };
+  checkDesktopIdle(plan, deps, run, result, deps.inventory);
+  return plan;
+}
+
+// The idle gate, read at three points (prepare, under the lock, and just
+// before the quit). Activity is read first. Given a reader, the process tree
+// is read after it, so a child started while the activity probe ran is still
+// seen; given an inventory already read, only the activity is fresh. Refuses
+// when busy; otherwise returns the inventory it read.
+function checkDesktopIdle({ receipt, idleSeconds }, deps, { options }, result, inventorySource) {
+  let activity = null;
+  try {
+    activity = deps.readDesktopActivity({ serverPid: receipt.server.pid, nowMs: options.now ?? Date.now() });
+  } catch {}
+  let inventory = null;
+  try {
+    inventory = typeof inventorySource === "function" ? inventorySource() : inventorySource;
+  } catch {}
+  const reasons = desktopBusyReasons({
+    activity,
+    inventory,
+    serverPid: receipt.server.pid,
+    bundleId: receipt.host.bundleId,
+    nowMs: options.now ?? Date.now(),
+    idleMs: idleSeconds * 1000,
+  });
+  result.verification.idle = {
+    idle: reasons.length === 0,
+    idleSeconds,
+    reasons,
+    unknown: activity?.complete ? null : activity?.unknown ?? "desktop-activity-unavailable",
+    // An open turn (even one a crash abandoned) keeps the app busy until
+    // it is finished, cancelled or archived in the app.
+    openTurns: activity?.openTurns ?? [],
+    lastActivityAt: Number.isFinite(activity?.latestActivityMs) && activity.latestActivityMs > 0
+      ? new Date(activity.latestActivityMs).toISOString()
+      : null,
+  };
+  if (reasons.length) refuse("desktop-busy");
+  return inventory;
+}
+
+// Under the lock: re-derive everything from a fresh inventory, recheck
+// idleness, arm the watchdog, then quit. Everything after the quit is
+// recorded on `txn`; it refuses (throws) only before the quit.
+function quitDesktopLocked(plan, deps, run, result, txn) {
+  const { uid, now } = run;
+  const { context, evidence, receipt, launchdMaxfiles } = plan;
+  result.skipped = [];
+  const lockedInventory = deps.collectInventory();
+  const locked = desktopEvidence(lockedInventory, context, deps);
+  const lockedSnapshot = desktopTreeSnapshot({
+    inventory: lockedInventory,
+    owner: locked.owner,
+    readIdentity: deps.readIdentity,
+    uid,
+    now,
+    skipped: result.skipped,
+  });
+  const lockedReceipt = buildDesktopReceipt(locked, lockedSnapshot, launchdMaxfiles);
+  if (lockedReceipt.confirmationToken !== receipt.confirmationToken) refuse("desktop-identity-changed");
+  // Descendants churn; report what the locked snapshot will actually act on.
+  result.verification.receipt = lockedReceipt;
+  result.verification.before.targetPids = lockedSnapshot.targets.map((target) => target.pid);
+  result.selected = lockedReceipt.selectedPids.map((pid) => ({
+    pid,
+    role: pid === lockedSnapshot.owner.pid ? "server" : "descendant",
+  }));
+  assertGuiPreserved(evidence.otherGui, deps.readIdentity);
+  const lockedInventoryAfterIdle = checkDesktopIdle(plan, deps, run, result, () => deps.collectInventory());
+  // The app can restart on its own during the idle check; quit only the bound births.
+  if (!stillExactlyPresent(receipt.host, deps.readIdentity)
+    || !stillExactlyPresent(receipt.server, deps.readIdentity)) {
+    refuse("desktop-identity-changed");
+  }
+  // The relaunch target must be usable before anything is quit.
+  if (!validRelaunchPath(receipt.host.bundlePath)
+    || !receipt.host.executable.startsWith(`${receipt.host.bundlePath}/Contents/MacOS/`)) {
+    refuse("desktop-relaunch-path-invalid");
+  }
+  // One last activity read, immediately before the quit: a turn started
+  // while the process inventory above ran is still caught.
+  checkDesktopIdle(plan, deps, run, result, lockedInventoryAfterIdle);
+  // A detached watchdog reopens the app if this process dies after the
+  // quit, the quit lands after this process gives up, or anything throws.
+  const watchTarget = {
+    hostPid: receipt.host.pid,
+    hostStartTime: receipt.host.startTime,
+    bundlePath: receipt.host.bundlePath,
+    bundleId: receipt.host.bundleId,
+  };
+  let watchdog = null;
+  try {
+    watchdog = deps.armRelaunchWatchdog(watchTarget);
+  } catch {}
+  if (!watchdog?.ok) refuse("desktop-watchdog-unavailable");
+  result.verification.watchdog = { armed: true, pid: watchdog.pid ?? null };
+
+  // Ask the app to quit. The host is never signalled. The quit event can
+  // land even when osascript reports failure, so record the attempt first.
+  txn.attempted();
+  result.verification.actions.push({ kind: "quit-desktop-app", bundleId: receipt.host.bundleId, hostPid: receipt.host.pid });
+  let quit = null;
+  try {
+    quit = deps.quitApp(receipt.host.bundleId);
+  } catch {}
+  const failures = quitAndRestore({ receipt, lockedSnapshot, evidence, quit, uid, now, deps, result, watchdog, watchTarget });
+  for (const code of failures) txn.fail(code);
+  if (!failures.length) result.verification.guiPreserved = true;
 }
 
 // Everything after the quit request. It never throws: once the app is not
@@ -849,19 +817,7 @@ export function createDefaultDesktopDependencies({
     // copy shares (checked before the quit).
     launchApp: (bundlePath, bundleId) => launchBundle(runner, { bundlePath, bundleId }),
     armRelaunchWatchdog: (args) => armRelaunchWatchdog(args, { spawnProcess }),
-    reapResidue(snapshot, { ownerReplacement = null } = {}) {
-      return reapSnapshot(snapshot, {
-        platform: "darwin",
-        uid,
-        readIdentity,
-        signalProcess,
-        sleep,
-        graceMs,
-        postSignalMs,
-        lock: { acquire: () => () => {} },
-        ownerReplacement,
-      });
-    },
+    reapResidue: residueReaper({ uid, readIdentity, signalProcess, sleep, graceMs, postSignalMs }),
     sleep,
     monotonicNow,
     quitTimeoutMs,

@@ -47,8 +47,8 @@ import {
   skippedIdentity,
 } from "./reap.mjs";
 import {
+  birthVerdict,
   createMutationLock,
-  sameBirthIdentityPresent,
 } from "./snapshot.mjs";
 
 export function hookAncestor(startPid, runner) {
@@ -295,13 +295,9 @@ function signalRound(targets, signal, { signalProcess, signalled, verified }) {
  */
 function verifyKilled(targets, { readIdentity, runner, verified, missingEvidence }) {
   for (const target of targets) {
-    const current = readIdentity(target.pid, { runner });
-    const identified = current?.state === "present" && validObservedIdentity(current.identity);
-    if (current?.state === "absent" || (identified && !sameBirthIdentityPresent(target, current))) {
-      verified.push(target.pid);
-    } else {
-      missingEvidence.push(identified ? "post-kill-survivor" : "post-kill-verification-unknown");
-    }
+    const verdict = birthVerdict(target, readIdentity(target.pid, { runner }));
+    if (verdict === "gone") verified.push(target.pid);
+    else missingEvidence.push(verdict === "present" ? "post-kill-survivor" : "post-kill-verification-unknown");
   }
 }
 
@@ -397,14 +393,9 @@ export function inspectHook({
     const survivors = [];
     for (const target of termTargets) {
       const current = readIdentity(target.pid, { runner: boundedRunner });
-      if (current?.state === "absent") {
-        cleanup.verifiedPids.push(target.pid);
-        continue;
-      }
-      if (current?.state !== "present" || !validObservedIdentity(current.identity)) {
-        refuse("hook-post-term-identity-unavailable");
-      }
-      if (!sameBirthIdentityPresent(target, current)) {
+      const verdict = birthVerdict(target, current);
+      if (verdict === "unknown") refuse("hook-post-term-identity-unavailable");
+      if (verdict === "gone") {
         cleanup.verifiedPids.push(target.pid);
         continue;
       }

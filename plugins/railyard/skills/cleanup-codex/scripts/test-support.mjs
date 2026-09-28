@@ -15,6 +15,7 @@ import {
   SNAPSHOT_SCHEMA,
   inspectHook,
   recycleServer,
+  residueReaper,
 } from "./cleanup-codex.mjs";
 
 export const NOW = Date.parse("2026-08-02T16:00:00.000Z");
@@ -679,9 +680,22 @@ export function desktopHarness({
     state.set(pid, { state: "present", identity: liveIdentity(byPid.get(pid)) });
   }
   state.set(202, { state: "unknown" });
-  const calls = { quit: [], launch: [], reaped: [], activity: [], watchdog: [], lock: 0, order: [] };
+  const calls = { quit: [], launch: [], reaped: [], signals: [], activity: [], watchdog: [], lock: 0, order: [] };
   let relaunched = false;
   let clock = 0;
+  // The residue reap is the real reaper, wired as the default desktop
+  // dependencies wire it; only signal delivery is faked. A signalled process
+  // exits; one already gone reports ESRCH.
+  const reapResidue = residueReaper({
+    uid: 501,
+    readIdentity: (pid) => deps.readIdentity(pid),
+    signalProcess(pid, signal) {
+      calls.signals.push([pid, signal]);
+      if (state.get(pid)?.state !== "present") throw Object.assign(new Error("no such process"), { code: "ESRCH" });
+      state.set(pid, { state: "absent" });
+    },
+    sleep: (milliseconds) => deps.sleep(milliseconds),
+  });
   const deps = {
     inventory: fixture,
     selfPid: DESKTOP_SELF_PID,
@@ -750,8 +764,7 @@ export function desktopHarness({
       calls.reapContext = context;
       calls.reaped.push(snapshot.targets.map((target) => target.pid).sort((left, right) => left - right));
       calls.order.push("reap");
-      for (const target of snapshot.targets) state.set(target.pid, { state: "absent" });
-      return { exitCode: EXIT_CODES.healthy };
+      return reapResidue(snapshot, context);
     },
     sleep(milliseconds) {
       clock += milliseconds;

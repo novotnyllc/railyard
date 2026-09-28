@@ -63,9 +63,31 @@ export const WATCHDOG_GRACE_MS = 5_000;
 export const WATCHDOG_POLL_MS = 1_000;
 export const WATCHDOG_LATE_QUIT_MS = 60_000;
 
-// The ChatGPT/Codex main app: its executable, and the bundle that holds it.
-export const MAIN_APP_EXECUTABLE = /^(\/.+\/(?:Codex|ChatGPT)\.app)\/Contents\/MacOS\/(?:Codex|ChatGPT)$/i;
-export const MAIN_APP_BUNDLE = /^\/.+\/(?:Codex|ChatGPT)\.app$/i;
+// The ChatGPT/Codex desktop app's name, in one place. Every pattern below
+// that recognizes the app, its bundle or its helpers is built from it.
+const APP_NAME_PATTERN = "(?:Codex|ChatGPT)";
+// The main app: its executable (capturing the bundle), and the bundle itself.
+export const MAIN_APP_EXECUTABLE = new RegExp(
+  `^(\\/.+\\/${APP_NAME_PATTERN}\\.app)\\/Contents\\/MacOS\\/${APP_NAME_PATTERN}$`,
+  "i",
+);
+export const MAIN_APP_BUNDLE = new RegExp(`^\\/.+\\/${APP_NAME_PATTERN}\\.app$`, "i");
+// The main executable's own file name within Contents/MacOS.
+export const MAIN_APP_EXECUTABLE_NAME = new RegExp(`^${APP_NAME_PATTERN}(?:\\s|$)`, "i");
+// A GUI host seen in an executable path or command line: the main app, or
+// one of its Frameworks helpers.
+export const GUI_MAIN_APP_COMMAND = new RegExp(
+  `\\/${APP_NAME_PATTERN}\\.app\\/Contents\\/MacOS\\/${APP_NAME_PATTERN}(?:\\s|$)`,
+  "i",
+);
+export const GUI_HELPER_COMMAND = new RegExp(
+  `\\/${APP_NAME_PATTERN}\\.app\\/Contents\\/Frameworks\\/.*${APP_NAME_PATTERN} Helper`,
+  "i",
+);
+
+// A macOS bundle identifier. Validating against it is also what keeps one
+// safe inside the AppleScript string literal of the quit request.
+export const BUNDLE_ID = /^[A-Za-z0-9][A-Za-z0-9.-]{0,254}$/;
 
 export const LSAPPINFO = "/usr/bin/lsappinfo";
 

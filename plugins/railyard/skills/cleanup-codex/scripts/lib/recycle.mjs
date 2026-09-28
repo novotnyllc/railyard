@@ -1,4 +1,4 @@
-/** The recycle state machine. */
+/** The detached recycle: evidence and receipt, then the locked restart. */
 
 import {
   EXIT_CODES,
@@ -31,529 +31,453 @@ import {
   executableEvidenceOrRefuse,
   guiBaselinesOrRefuse,
   normalizeDaemonSample,
+  nofileLimitPolicy,
   normalizedSocketOwners,
   revalidateExecutableEvidence,
   revalidateSnapshot,
-  validateLauncherNofileAttestation,
-  validatePidNofileAttestation,
 } from "./recycle-evidence.mjs";
 import {
   buildExactTreeSnapshot,
   exactSnapshotIdentityPresent,
   snapshotIdentity,
 } from "./snapshot.mjs";
+import { runMutation } from "./transaction.mjs";
 
 export function recycleServer(options, deps) {
   const platform = options?.platform ?? process.platform;
   const uid = options?.uid ?? callerUid();
   const result = emptyRecycleResult(platform);
-  let exitCode = EXIT_CODES.refused;
-  let release = null;
+  const run = { options, platform, uid };
+  return runMutation(result, { lock: deps?.lock, confirmation: options?.confirmation }, {
+    unexpected: { code: "recycle-evidence-failed", status: "refused" },
+    prepare: () => prepareRecycle(deps, run, result),
+    confirmToken: (plan) => plan.receipt.confirmationToken,
+    mutate: (plan, txn) => {
+      recheckUnderLock(plan, deps, run, result);
+      const replacement = plan.mode === "managed"
+        ? restartManaged(plan, deps, run, result, txn)
+        : replaceUnmanaged(plan, deps, run, result, txn);
+      verifyReplacement(plan, deps, run, result, replacement);
+    },
+  });
+}
 
-  try {
-    if (platform !== "darwin") refuse("unsupported-platform");
-    if (!Number.isInteger(options?.pid) || options.pid <= 0) refuse("recycle-pid-required");
-    if (!Number.isInteger(options?.minSoftLimit) || options.minSoftLimit <= 0) {
-      refuse("invalid-minimum-soft-limit");
-    }
-    if (!deps?.inventory || typeof deps.readIdentity !== "function") refuse("recycle-evidence-unavailable");
-    if (
-      typeof deps.canonicalPath !== "function"
-      || typeof deps.fileIdentity !== "function"
-      || typeof deps.sampleDaemonEvidence !== "function"
-    ) refuse("recycle-evidence-unavailable");
+// The first pass, and the unlocked half of the second: select the server,
+// bind its exact tree and daemon evidence, and build the receipt.
+function prepareRecycle(deps, { options, platform, uid }, result) {
+  if (platform !== "darwin") refuse("unsupported-platform");
+  if (!Number.isInteger(options?.pid) || options.pid <= 0) refuse("recycle-pid-required");
+  if (!Number.isInteger(options?.minSoftLimit) || options.minSoftLimit <= 0) {
+    refuse("invalid-minimum-soft-limit");
+  }
+  if (!deps?.inventory || typeof deps.readIdentity !== "function") refuse("recycle-evidence-unavailable");
+  if (
+    typeof deps.canonicalPath !== "function"
+    || typeof deps.fileIdentity !== "function"
+    || typeof deps.sampleDaemonEvidence !== "function"
+  ) refuse("recycle-evidence-unavailable");
 
-    const classified = classifyInventory(deps.inventory, { now: options.now ?? Date.now() });
-    result.verification.servers = classified.result.verification.servers;
-    result.verification.controlSockets = classified.result.verification.controlSockets;
-    if (
-      !classified.result.verification.complete
-      || classified.result.verification.missingEvidence.length
-    ) refuse("inventory-incomplete");
-    const server = classified.result.verification.servers.find((candidate) => candidate.pid === options.pid);
-    if (!server) refuse("selected-pid-not-app-server");
-    if (server.classification === "gui") refuse("selected-server-is-gui");
-    if (server.classification !== "detached" || server.missingEvidence.length) {
-      refuse("selected-server-ambiguous");
-    }
-    if (server.uid !== uid) refuse("selected-server-wrong-user");
-    if (server.controlSocket.state !== "owned" || server.controlSocket.ownerPid !== server.pid) {
-      refuse("selected-socket-ambiguous");
-    }
-    const socket = canonicalPathOrRefuse(
-      server.controlSocket.path,
-      deps.canonicalPath,
-      "selected-socket-ambiguous",
-    );
-    auditProxySelection(deps.inventory, server, socket, deps.canonicalPath);
+  const classified = classifyInventory(deps.inventory, { now: options.now ?? Date.now() });
+  result.verification.servers = classified.result.verification.servers;
+  result.verification.controlSockets = classified.result.verification.controlSockets;
+  if (
+    !classified.result.verification.complete
+    || classified.result.verification.missingEvidence.length
+  ) refuse("inventory-incomplete");
+  const server = classified.result.verification.servers.find((candidate) => candidate.pid === options.pid);
+  if (!server) refuse("selected-pid-not-app-server");
+  if (server.classification === "gui") refuse("selected-server-is-gui");
+  if (server.classification !== "detached" || server.missingEvidence.length) {
+    refuse("selected-server-ambiguous");
+  }
+  if (server.uid !== uid) refuse("selected-server-wrong-user");
+  if (server.controlSocket.state !== "owned" || server.controlSocket.ownerPid !== server.pid) {
+    refuse("selected-socket-ambiguous");
+  }
+  const socket = canonicalPathOrRefuse(
+    server.controlSocket.path,
+    deps.canonicalPath,
+    "selected-socket-ambiguous",
+  );
+  auditProxySelection(deps.inventory, server, socket, deps.canonicalPath);
 
-    const narrowedInspection = {
-      selected: [{ pid: server.pid }],
-      verification: { servers: classified.result.verification.servers },
-    };
-    const snapshot = buildExactTreeSnapshot({
-      inventory: deps.inventory,
-      inspection: narrowedInspection,
-      readIdentity: deps.readIdentity,
-      now: options.now ?? Date.now(),
-      uid,
-    });
-    const guiBaselines = guiBaselinesOrRefuse(
-      classified.result.verification.servers,
-      deps.readIdentity,
-    );
-    const parent = applicableParentOrRefuse(server, deps.inventory, deps.readIdentity, uid);
-    const executable = executableEvidenceOrRefuse(snapshot.owner.executable, {
+  const narrowedInspection = {
+    selected: [{ pid: server.pid }],
+    verification: { servers: classified.result.verification.servers },
+  };
+  const snapshot = buildExactTreeSnapshot({
+    inventory: deps.inventory,
+    inspection: narrowedInspection,
+    readIdentity: deps.readIdentity,
+    now: options.now ?? Date.now(),
+    uid,
+  });
+  const guiBaselines = guiBaselinesOrRefuse(
+    classified.result.verification.servers,
+    deps.readIdentity,
+  );
+  const parent = applicableParentOrRefuse(server, deps.inventory, deps.readIdentity, uid);
+  const executable = executableEvidenceOrRefuse(snapshot.owner.executable, {
+    canonicalPath: deps.canonicalPath,
+    fileIdentity: deps.fileIdentity,
+    uid,
+    code: "selected-executable-invalid",
+    requireOwner: true,
+  });
+  if (executable.path !== snapshot.owner.executable) refuse("selected-executable-noncanonical");
+
+  const mode = options.unmanaged === true ? "unmanaged" : "managed";
+  result.verification.mode = mode;
+  const binding = { uid, mode, snapshot, socket, executable };
+  const firstSample = sampleDaemon(binding, deps);
+  const secondSample = sampleDaemon(binding, deps);
+  if (stableJson(firstSample) !== stableJson(secondSample)) refuse("daemon-attestation-unstable");
+
+  // The descriptor-limit attestor is optional. Without one the limit is
+  // reported as unverified; with one, the strict attestation contract holds.
+  const nofile = nofileLimitPolicy(options.attestorPath, deps, uid);
+  result.verification.nofileLimit = nofile.limit;
+  result.warnings.push(...nofile.warnings(server.pid));
+
+  let launcher = null;
+  let replacementExecutable = executable;
+  if (mode === "unmanaged") {
+    if (!options.launcher) refuse("unmanaged-launcher-required");
+    launcher = executableEvidenceOrRefuse(options.launcher, {
       canonicalPath: deps.canonicalPath,
       fileIdentity: deps.fileIdentity,
       uid,
-      code: "selected-executable-invalid",
+      code: "unmanaged-launcher-invalid",
       requireOwner: true,
     });
-    if (executable.path !== snapshot.owner.executable) refuse("selected-executable-noncanonical");
+    replacementExecutable = nofile.bindLauncher(launcher, executable, options.minSoftLimit);
+  }
 
-    const mode = options.unmanaged === true ? "unmanaged" : "managed";
-    result.verification.mode = mode;
-    const takeDaemonSample = (owner = snapshot.owner, sampleExecutable = executable) => normalizeDaemonSample(
-      deps.sampleDaemonEvidence({ socket, executable: sampleExecutable, ownerPid: owner.pid }),
-      {
-        mode,
-        owner,
-        socket,
-        executable: sampleExecutable,
-        uid,
-        canonicalPath: deps.canonicalPath,
-      },
-    );
-    const firstSample = takeDaemonSample();
-    const secondSample = takeDaemonSample();
-    if (stableJson(firstSample) !== stableJson(secondSample)) refuse("daemon-attestation-unstable");
+  const initialOwner = deps.readIdentity(snapshot.owner.pid);
+  if (!exactSnapshotIdentityPresent(snapshot.owner, initialOwner)) refuse("recycle-identity-changed");
+  const oldSoftNofile = nofile.attestOwner(initialOwner.identity);
 
-    // The descriptor-limit attestor is optional. Without one the limit is
-    // reported as unverified; with one, the strict attestation contract holds.
-    const attestor = options.attestorPath
-      ? executableEvidenceOrRefuse(options.attestorPath, {
-          canonicalPath: deps.canonicalPath,
-          fileIdentity: deps.fileIdentity,
-          uid,
-          code: "nofile-attestor-invalid",
-          requireOwner: true,
-        })
+  const daemonEvidenceDigest = sha256(stableJson(secondSample));
+  const authorization = {
+    minimumSoftNofile: options.minSoftLimit,
+    launcher,
+    replacementExecutable,
+    ...nofile.receiptBindings(),
+  };
+  const receipt = buildRecycleReceipt(
+    snapshot,
+    mode,
+    socket,
+    daemonEvidenceDigest,
+    authorization,
+    parent,
+  );
+  result.verification.receipt = receipt;
+  result.verification.before = {
+    pid: snapshot.owner.pid,
+    identity: receipt.server,
+    parent: receipt.parent,
+    socket: { path: socket, ownerPid: snapshot.owner.pid },
+    targetPids: snapshot.targets.map((target) => target.pid),
+    daemonEvidenceDigest,
+    softNofile: oldSoftNofile,
+  };
+  const selectedRoles = new Map([
+    [snapshot.owner.pid, "server"],
+    ...snapshot.targets.map((target) => [target.pid, target.role]),
+  ]);
+  result.selected = receipt.selectedPids.map((pid) => ({
+    pid,
+    role: selectedRoles.get(pid) ?? "target",
+  }));
+  if (mode === "managed" && typeof deps.restartManagedExact !== "function") {
+    refuse("managed-restart-unavailable");
+  }
+
+  return {
+    ...binding,
+    secondSample,
+    nofile,
+    launcher,
+    replacementExecutable,
+    guiBaselines,
+    parent,
+    receipt,
+  };
+}
+
+// One daemon sample, normalized against the bound server (or, after the
+// restart, against its replacement).
+function sampleDaemon(binding, deps, owner = binding.snapshot.owner, executable = binding.executable) {
+  return normalizeDaemonSample(
+    deps.sampleDaemonEvidence({ socket: binding.socket, executable, ownerPid: owner.pid }),
+    {
+      mode: binding.mode,
+      owner,
+      socket: binding.socket,
+      executable,
+      uid: binding.uid,
+      canonicalPath: deps.canonicalPath,
+    },
+  );
+}
+
+// Under the lock: every binding the receipt made must still hold, and the
+// live process tree must still be exactly the confirmed one.
+function recheckUnderLock(plan, deps, { options }, result) {
+  const {
+    uid,
+    snapshot,
+    socket,
+    executable,
+    secondSample,
+    nofile,
+    launcher,
+    replacementExecutable,
+    guiBaselines,
+    parent,
+  } = plan;
+  revalidateExecutableEvidence(executable, deps, uid, "selected-executable-changed");
+  nofile.revalidate();
+  if (launcher) revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
+  if (replacementExecutable !== executable) {
+    revalidateExecutableEvidence(replacementExecutable, deps, uid, "replacement-executable-changed");
+  }
+
+  const finalSample = sampleDaemon(plan, deps);
+  if (stableJson(secondSample) !== stableJson(finalSample)) refuse("daemon-attestation-unstable");
+  revalidateSnapshot(snapshot, deps.readIdentity);
+  if (parent && !exactSnapshotIdentityPresent(parent, deps.readIdentity(parent.pid))) {
+    refuse("parent-evidence-changed");
+  }
+  assertGuiPreserved(guiBaselines, deps.readIdentity);
+
+  const freshOwner = deps.readIdentity(snapshot.owner.pid);
+  if (!exactSnapshotIdentityPresent(snapshot.owner, freshOwner)) refuse("recycle-identity-changed");
+  const lockedSoftNofile = nofile.recheckOwner(freshOwner.identity);
+  if (launcher) nofile.recheckLauncher(launcher, replacementExecutable, options.minSoftLimit);
+  result.verification.before.softNofile = lockedSoftNofile;
+
+  if (typeof deps.collectInventory !== "function") refuse("proxy-recheck-unavailable");
+  const lockedInventory = deps.collectInventory();
+  const lockedClassified = classifyInventory(lockedInventory, { now: options.now ?? Date.now() });
+  if (
+    !lockedClassified.result.verification.complete
+    || lockedClassified.result.verification.missingEvidence.length
+  ) refuse("inventory-recheck-incomplete");
+  const lockedServer = lockedClassified.result.verification.servers.find((item) => item.pid === snapshot.owner.pid);
+  if (!lockedServer || lockedServer.classification !== "detached") {
+    refuse("selected-server-recheck-incomplete");
+  }
+  const lockedProxyPids = auditProxySelection(
+    lockedInventory,
+    lockedServer,
+    socket,
+    deps.canonicalPath,
+  );
+  const confirmedProxyPids = snapshot.targets
+    .filter((target) => target.role === "proxy")
+    .map((target) => target.pid)
+    .sort((left, right) => left - right);
+  if (stableJson(lockedProxyPids) !== stableJson(confirmedProxyPids)) refuse("proxy-set-changed");
+  const lockedChildren = childrenByParent(lockedInventory.processes ?? []);
+  const lockedTargetPids = unique([
+    ...descendantsOf(snapshot.owner.pid, lockedChildren).descendants.map((item) => item.pid),
+    ...lockedProxyPids,
+  ]).filter((pid) => pid !== snapshot.owner.pid).sort((left, right) => left - right);
+  const confirmedTargetPids = snapshot.targets
+    .map((target) => target.pid)
+    .sort((left, right) => left - right);
+  if (stableJson(lockedTargetPids) !== stableJson(confirmedTargetPids)) refuse("exact-tree-changed");
+
+  revalidateSnapshot(snapshot, deps.readIdentity);
+  if (parent && !exactSnapshotIdentityPresent(parent, deps.readIdentity(parent.pid))) {
+    refuse("parent-evidence-changed");
+  }
+  assertGuiPreserved(guiBaselines, deps.readIdentity);
+
+  const mutationSample = sampleDaemon(plan, deps);
+  if (stableJson(secondSample) !== stableJson(mutationSample)) refuse("daemon-attestation-unstable");
+}
+
+// Managed: the daemon's own restart, then an exact reap of what it left.
+function restartManaged(plan, deps, run, result, txn) {
+  const { uid, snapshot, socket, executable, receipt } = plan;
+  let { replacementExecutable } = plan;
+  if (typeof deps.reapResidue !== "function") refuse("residue-reaper-unavailable");
+  revalidateExecutableEvidence(executable, deps, uid, "selected-executable-changed");
+  // The native restart cannot take an expected PID. The daemon was
+  // re-sampled just above, and the adapter rechecks the native PID record
+  // immediately before invoking it; "refused" there means nothing changed.
+  let restarted;
+  try {
+    restarted = deps.restartManagedExact({
+      executable: executable.path,
+      expectedIdentity: receipt.server,
+      socketPath: socket,
+    });
+  } catch (error) {
+    txn.attempted();
+    refuse(error instanceof CleanupRefusal
+      ? safeFailureCode(error.code, "managed-restart-failed")
+      : "managed-restart-failed");
+  }
+  if (restarted?.status === "refused") {
+    refuse(safeFailureCode(restarted.failureCode, "managed-restart-precondition-failed"));
+  }
+  txn.attempted();
+  if (
+    !restarted
+    || restarted.status !== "restarted"
+    || restarted.backend !== "pid"
+    || !Number.isInteger(restarted.pid)
+    || restarted.pid <= 0
+    || canonicalPathOrRefuse(restarted.socketPath, deps.canonicalPath, "managed-restart-invalid") !== socket
+  ) refuse("managed-restart-invalid");
+  // A reused PID is a valid replacement only with a different birth.
+  // Bind the replacement's birth so a reused PID (owner or old target) is
+  // recognized instead of mistaken for residue.
+  let replacementStartTime = restarted.processStartTime ?? null;
+  if (!replacementStartTime) {
+    const observed = deps.readIdentity(restarted.pid);
+    replacementStartTime = observed?.state === "present" && validObservedIdentity(observed.identity)
+      ? observed.identity.startTime
       : null;
-    if (attestor && typeof deps.attestNofile !== "function") refuse("nofile-attestor-unavailable");
-    result.verification.nofileLimit = attestor ? "attested" : "unverified";
-    if (!attestor) {
-      result.warnings.push({
-        code: "nofile-limit-unverified",
-        pid: server.pid,
-        message: "descriptor limit unverified (no --nofile-attestor)",
-        authorizesAction: false,
-      });
-    }
-
-    let launcher = null;
-    let launcherNofileAttestation = null;
-    let replacementExecutable = executable;
-    if (mode === "unmanaged") {
-      if (!options.launcher) refuse("unmanaged-launcher-required");
-      launcher = executableEvidenceOrRefuse(options.launcher, {
+  }
+  if (restarted.pid === snapshot.owner.pid
+    && (!replacementStartTime || replacementStartTime === snapshot.owner.startTime)) {
+    refuse("managed-restart-invalid");
+  }
+  const ownerReplacement = replacementStartTime
+    ? { pid: restarted.pid, startTime: replacementStartTime }
+    : null;
+  if (typeof restarted.managedCodexPath === "string") {
+    // A native restart may activate a newer managed release.
+    const managedPath = canonicalPathOrRefuse(
+      restarted.managedCodexPath,
+      deps.canonicalPath,
+      "managed-restart-invalid",
+    );
+    if (managedPath !== executable.path) {
+      replacementExecutable = executableEvidenceOrRefuse(managedPath, {
         canonicalPath: deps.canonicalPath,
         fileIdentity: deps.fileIdentity,
         uid,
-        code: "unmanaged-launcher-invalid",
+        code: "replacement-executable-invalid",
         requireOwner: true,
       });
-      // Without an attestor, an unmanaged replacement must run the same
-      // executable as the old server. Prove that before anything is stopped:
-      // only the launcher itself can be compared, so it must be that executable.
-      if (!attestor && launcher.path !== executable.path) refuse("unmanaged-launcher-not-server-executable");
-    }
-    if (mode === "unmanaged" && attestor) {
-      if (typeof deps.attestLauncher !== "function") refuse("launcher-attestor-unavailable");
-      launcherNofileAttestation = deps.attestLauncher(launcher, {
-        attestorPath: attestor.path,
-      });
-      revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-      revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
-      replacementExecutable = executableEvidenceOrRefuse(
-        launcherNofileAttestation?.replacementExecutable,
-        {
-          canonicalPath: deps.canonicalPath,
-          fileIdentity: deps.fileIdentity,
-          uid,
-          code: "replacement-executable-invalid",
-          requireOwner: true,
-        },
-      );
-      validateLauncherNofileAttestation(
-        launcherNofileAttestation,
-        launcher,
-        replacementExecutable,
-        options.minSoftLimit,
-      );
-    }
-
-    const initialOwner = deps.readIdentity(snapshot.owner.pid);
-    if (!exactSnapshotIdentityPresent(snapshot.owner, initialOwner)) refuse("recycle-identity-changed");
-    let oldNofileAttestation = null;
-    if (attestor) {
-      oldNofileAttestation = deps.attestNofile(initialOwner.identity, {
-        attestorPath: attestor.path,
-      });
-      revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-      validatePidNofileAttestation(oldNofileAttestation, initialOwner.identity, 1);
-    }
-
-    const daemonEvidenceDigest = sha256(stableJson(secondSample));
-    const authorization = {
-      minimumSoftNofile: options.minSoftLimit,
-      attestor,
-      launcher,
-      replacementExecutable,
-      oldNofileAttestation,
-      launcherNofileAttestation,
-    };
-    const receipt = buildRecycleReceipt(
-      snapshot,
-      mode,
-      socket,
-      daemonEvidenceDigest,
-      authorization,
-      parent,
-    );
-    result.verification.receipt = receipt;
-    result.verification.before = {
-      pid: snapshot.owner.pid,
-      identity: receipt.server,
-      parent: receipt.parent,
-      socket: { path: socket, ownerPid: snapshot.owner.pid },
-      targetPids: snapshot.targets.map((target) => target.pid),
-      daemonEvidenceDigest,
-      softNofile: oldNofileAttestation?.softNofile ?? "unverified",
-    };
-    const selectedRoles = new Map([
-      [snapshot.owner.pid, "server"],
-      ...snapshot.targets.map((target) => [target.pid, target.role]),
-    ]);
-    result.selected = receipt.selectedPids.map((pid) => ({
-      pid,
-      role: selectedRoles.get(pid) ?? "target",
-    }));
-    if (mode === "managed" && typeof deps.restartManagedExact !== "function") {
-      refuse("managed-restart-unavailable");
-    }
-    if (!options.confirmation) refuse("confirmation-required");
-    if (options.confirmation !== receipt.confirmationToken) refuse("confirmation-mismatch");
-
-    if (!deps.lock || typeof deps.lock.acquire !== "function") refuse("mutation-lock-unavailable");
-    try {
-      release = deps.lock.acquire();
-    } catch (error) {
-      refuse(error?.code === "ELOCKED" || error?.code === "mutation-lock-held"
-        ? "mutation-lock-held"
-        : "mutation-lock-unavailable");
-    }
-    revalidateExecutableEvidence(executable, deps, uid, "selected-executable-changed");
-    if (attestor) revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-    if (launcher) revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
-    if (replacementExecutable !== executable) {
-      revalidateExecutableEvidence(replacementExecutable, deps, uid, "replacement-executable-changed");
-    }
-
-    const finalSample = takeDaemonSample();
-    if (stableJson(secondSample) !== stableJson(finalSample)) refuse("daemon-attestation-unstable");
-    revalidateSnapshot(snapshot, deps.readIdentity);
-    if (parent && !exactSnapshotIdentityPresent(parent, deps.readIdentity(parent.pid))) {
-      refuse("parent-evidence-changed");
-    }
-    assertGuiPreserved(guiBaselines, deps.readIdentity);
-
-    const freshOwner = deps.readIdentity(snapshot.owner.pid);
-    if (!exactSnapshotIdentityPresent(snapshot.owner, freshOwner)) refuse("recycle-identity-changed");
-    let oldSoftNofile = "unverified";
-    if (attestor) {
-      const lockedOldNofileAttestation = deps.attestNofile(freshOwner.identity, {
-        attestorPath: attestor.path,
-      });
-      revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-      oldSoftNofile = validatePidNofileAttestation(
-        lockedOldNofileAttestation,
-        freshOwner.identity,
-        1,
-      );
-      if (stableJson(lockedOldNofileAttestation) !== stableJson(oldNofileAttestation)) {
-        refuse("pid-nofile-attestation-changed");
-      }
-    }
-    if (launcher && attestor) {
-      revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
-      const lockedLauncherNofileAttestation = deps.attestLauncher(launcher, {
-        attestorPath: attestor.path,
-      });
-      revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-      revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
-      validateLauncherNofileAttestation(
-        lockedLauncherNofileAttestation,
-        launcher,
-        replacementExecutable,
-        options.minSoftLimit,
-      );
-      if (stableJson(lockedLauncherNofileAttestation) !== stableJson(launcherNofileAttestation)) {
-        refuse("launcher-nofile-attestation-changed");
-      }
-    }
-    result.verification.before.softNofile = oldSoftNofile;
-
-    if (typeof deps.collectInventory !== "function") refuse("proxy-recheck-unavailable");
-    const lockedInventory = deps.collectInventory();
-    const lockedClassified = classifyInventory(lockedInventory, { now: options.now ?? Date.now() });
-    if (
-      !lockedClassified.result.verification.complete
-      || lockedClassified.result.verification.missingEvidence.length
-    ) refuse("inventory-recheck-incomplete");
-    const lockedServer = lockedClassified.result.verification.servers.find((item) => item.pid === snapshot.owner.pid);
-    if (!lockedServer || lockedServer.classification !== "detached") {
-      refuse("selected-server-recheck-incomplete");
-    }
-    const lockedProxyPids = auditProxySelection(
-      lockedInventory,
-      lockedServer,
-      socket,
-      deps.canonicalPath,
-    );
-    const confirmedProxyPids = snapshot.targets
-      .filter((target) => target.role === "proxy")
-      .map((target) => target.pid)
-      .sort((left, right) => left - right);
-    if (stableJson(lockedProxyPids) !== stableJson(confirmedProxyPids)) refuse("proxy-set-changed");
-    const lockedChildren = childrenByParent(lockedInventory.processes ?? []);
-    const lockedTargetPids = unique([
-      ...descendantsOf(snapshot.owner.pid, lockedChildren).descendants.map((item) => item.pid),
-      ...lockedProxyPids,
-    ]).filter((pid) => pid !== snapshot.owner.pid).sort((left, right) => left - right);
-    const confirmedTargetPids = snapshot.targets
-      .map((target) => target.pid)
-      .sort((left, right) => left - right);
-    if (stableJson(lockedTargetPids) !== stableJson(confirmedTargetPids)) refuse("exact-tree-changed");
-
-    revalidateSnapshot(snapshot, deps.readIdentity);
-    if (parent && !exactSnapshotIdentityPresent(parent, deps.readIdentity(parent.pid))) {
-      refuse("parent-evidence-changed");
-    }
-    assertGuiPreserved(guiBaselines, deps.readIdentity);
-
-    const mutationSample = takeDaemonSample();
-    if (stableJson(secondSample) !== stableJson(mutationSample)) refuse("daemon-attestation-unstable");
-
-    let replacementPid;
-    if (mode === "managed") {
-      if (typeof deps.reapResidue !== "function") refuse("residue-reaper-unavailable");
-      revalidateExecutableEvidence(executable, deps, uid, "selected-executable-changed");
-      // The native restart cannot take an expected PID. The daemon was
-      // re-sampled just above, and the adapter rechecks the native PID record
-      // immediately before invoking it; "refused" there means nothing changed.
-      let restarted;
-      try {
-        restarted = deps.restartManagedExact({
-          executable: executable.path,
-          expectedIdentity: receipt.server,
-          socketPath: socket,
-        });
-      } catch (error) {
-        result.verification.mutationAttempted = true;
-        refuse(error instanceof CleanupRefusal
-          ? safeFailureCode(error.code, "managed-restart-failed")
-          : "managed-restart-failed");
-      }
-      if (restarted?.status === "refused") {
-        refuse(safeFailureCode(restarted.failureCode, "managed-restart-precondition-failed"));
-      }
-      result.verification.mutationAttempted = true;
-      if (
-        !restarted
-        || restarted.status !== "restarted"
-        || restarted.backend !== "pid"
-        || !Number.isInteger(restarted.pid)
-        || restarted.pid <= 0
-        || canonicalPathOrRefuse(restarted.socketPath, deps.canonicalPath, "managed-restart-invalid") !== socket
-      ) refuse("managed-restart-invalid");
-      // A reused PID is a valid replacement only with a different birth.
-      // Bind the replacement's birth so a reused PID (owner or old target) is
-      // recognized instead of mistaken for residue.
-      let replacementStartTime = restarted.processStartTime ?? null;
-      if (!replacementStartTime) {
-        const observed = deps.readIdentity(restarted.pid);
-        replacementStartTime = observed?.state === "present" && validObservedIdentity(observed.identity)
-          ? observed.identity.startTime
-          : null;
-      }
-      if (restarted.pid === snapshot.owner.pid
-        && (!replacementStartTime || replacementStartTime === snapshot.owner.startTime)) {
-        refuse("managed-restart-invalid");
-      }
-      const ownerReplacement = replacementStartTime
-        ? { pid: restarted.pid, startTime: replacementStartTime }
-        : null;
-      if (typeof restarted.managedCodexPath === "string") {
-        // A native restart may activate a newer managed release.
-        const managedPath = canonicalPathOrRefuse(
-          restarted.managedCodexPath,
-          deps.canonicalPath,
-          "managed-restart-invalid",
-        );
-        if (managedPath !== executable.path) {
-          replacementExecutable = executableEvidenceOrRefuse(managedPath, {
-            canonicalPath: deps.canonicalPath,
-            fileIdentity: deps.fileIdentity,
-            uid,
-            code: "replacement-executable-invalid",
-            requireOwner: true,
-          });
-        }
-      }
-      replacementPid = restarted.pid;
-      result.verification.actions.push({ kind: "native-daemon-restart", oldPid: snapshot.owner.pid, newPid: replacementPid });
-      const residue = deps.reapResidue(snapshot, { ownerReplacement });
-      if (residue?.exitCode !== EXIT_CODES.healthy) {
-        refuse(safeFailureCode(
-          residue?.result?.verification?.missingEvidence?.[0],
-          "residue-reap-incomplete",
-        ));
-      }
-      result.verification.actions.push({
-        kind: "reap-exact-residue",
-        pids: snapshot.targets.map((target) => target.pid),
-      });
-    } else {
-      if (typeof deps.stopUnmanaged !== "function" || typeof deps.launchUnmanaged !== "function") {
-        refuse("unmanaged-lifecycle-unavailable");
-      }
-      revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
-      revalidateExecutableEvidence(replacementExecutable, deps, uid, "replacement-executable-changed");
-      const stopped = deps.stopUnmanaged(snapshot);
-      result.verification.mutationAttempted = stopped?.mutationAttempted === true;
-      if (stopped?.exitCode !== EXIT_CODES.healthy) {
-        refuse(safeFailureCode(stopped?.failureCode, "unmanaged-stop-incomplete"));
-      }
-      result.verification.actions.push({
-        kind: "stop-exact-unmanaged-tree",
-        pids: receipt.selectedPids,
-      });
-      revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
-      revalidateExecutableEvidence(replacementExecutable, deps, uid, "replacement-executable-changed");
-      result.verification.mutationAttempted = true;
-      const launched = deps.launchUnmanaged({ launcher: launcher.path, socketPath: socket });
-      if (!Number.isInteger(launched?.pid) || launched.pid <= 0 || launched.pid === snapshot.owner.pid) {
-        refuse("unmanaged-launch-invalid");
-      }
-      replacementPid = launched.pid;
-      result.verification.actions.push({ kind: "launch-selected-wrapper", pid: replacementPid, launcher: launcher.path });
-    }
-
-    if (typeof deps.waitForReady !== "function") refuse("readiness-verifier-unavailable");
-    const ready = deps.waitForReady({
-      pid: replacementPid,
-      socketPath: socket,
-      mode,
-      executable: replacementExecutable.path,
-    });
-    if (!ready) refuse("replacement-readiness-timeout");
-    if (ready.failureCode) {
-      refuse(safeFailureCode(ready.failureCode, "replacement-readiness-timeout"));
-    }
-    if (
-      !validObservedIdentity(ready.identity)
-      || ready.identity.pid !== replacementPid
-      || ready.identity.uid !== uid
-      || ready.identity.executable !== replacementExecutable.path
-    ) refuse("replacement-identity-invalid");
-    const freshReplacement = deps.readIdentity(replacementPid);
-    if (!exactSnapshotIdentityPresent(ready.identity, freshReplacement)) {
-      refuse("replacement-identity-changed");
-    }
-    revalidateExecutableEvidence(replacementExecutable, deps, uid, "replacement-executable-changed");
-    takeDaemonSample(freshReplacement.identity, replacementExecutable);
-    const readySocket = canonicalPathOrRefuse(ready.socket?.path, deps.canonicalPath, "replacement-socket-invalid");
-    const readyOwners = normalizedSocketOwners(ready.socket?.owners);
-    if (
-      ready.socket?.ready !== true
-      || readySocket !== socket
-      || readyOwners.length !== 1
-      || readyOwners[0].pid !== replacementPid
-      || readyOwners[0].uid !== uid
-    ) refuse("replacement-socket-invalid");
-    if (
-      !exactKeys(ready.descriptors, ["count", "highest"])
-      || !Number.isInteger(ready.descriptors.count)
-      || ready.descriptors.count < 0
-      || (ready.descriptors.highest !== null
-        && (!Number.isInteger(ready.descriptors.highest) || ready.descriptors.highest < 0))
-      || !Number.isInteger(ready.directChildren)
-      || ready.directChildren < 0
-    ) refuse("replacement-metrics-invalid");
-    let replacementSoftNofile = "unverified";
-    if (attestor) {
-      revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-      const replacementNofileAttestation = deps.attestNofile(freshReplacement.identity, {
-        attestorPath: attestor.path,
-      });
-      revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-      replacementSoftNofile = validatePidNofileAttestation(
-        replacementNofileAttestation,
-        freshReplacement.identity,
-        options.minSoftLimit,
-      );
-    }
-    assertOldTreeGone(snapshot, deps.readIdentity);
-    assertExpectedIdentityGone(
-      parent,
-      deps.readIdentity,
-      "old-parent-survivor",
-      "old-parent-verification-unknown",
-    );
-    assertGuiPreserved(guiBaselines, deps.readIdentity);
-
-    result.verification.after = {
-      pid: replacementPid,
-      identity: snapshotIdentity(freshReplacement.identity, "server"),
-      socket: { path: readySocket, ownerPid: replacementPid, ready: true },
-      softNofile: replacementSoftNofile,
-      descriptors: { count: ready.descriptors.count, highest: ready.descriptors.highest },
-      directChildren: ready.directChildren,
-      oldTreeGone: true,
-      oldParent: parent ? { pid: parent.pid, gone: true } : { applicable: false },
-    };
-    result.verification.guiPreserved = true;
-    result.verification.complete = true;
-    result.status = "healthy";
-    exitCode = EXIT_CODES.healthy;
-  } catch (error) {
-    const code = error instanceof CleanupRefusal ? error.code : "recycle-evidence-failed";
-    result.verification.missingEvidence.push(code);
-    if (result.verification.mutationAttempted) {
-      result.status = "failed";
-      exitCode = EXIT_CODES.failed;
-    } else {
-      result.status = "refused";
-      exitCode = EXIT_CODES.refused;
-    }
-  } finally {
-    if (release) {
-      try {
-        release();
-      } catch {
-        result.verification.missingEvidence.push("mutation-lock-release-failed");
-        result.verification.complete = false;
-        if (result.verification.mutationAttempted) {
-          result.status = "failed";
-          exitCode = EXIT_CODES.failed;
-        } else {
-          result.status = "refused";
-          exitCode = EXIT_CODES.refused;
-        }
-      }
     }
   }
-  result.verification.missingEvidence = unique(result.verification.missingEvidence);
-  return { result, exitCode };
+  const replacementPid = restarted.pid;
+  result.verification.actions.push({ kind: "native-daemon-restart", oldPid: snapshot.owner.pid, newPid: replacementPid });
+  const residue = deps.reapResidue(snapshot, { ownerReplacement });
+  if (residue?.exitCode !== EXIT_CODES.healthy) {
+    refuse(safeFailureCode(
+      residue?.result?.verification?.missingEvidence?.[0],
+      "residue-reap-incomplete",
+    ));
+  }
+  result.verification.actions.push({
+    kind: "reap-exact-residue",
+    pids: snapshot.targets.map((target) => target.pid),
+  });
+  return { pid: replacementPid, executable: replacementExecutable };
+}
+
+// Unmanaged: stop the exact recorded tree, then start the launcher.
+function replaceUnmanaged(plan, deps, run, result, txn) {
+  const { uid, snapshot, socket, launcher, replacementExecutable, receipt } = plan;
+  if (typeof deps.stopUnmanaged !== "function" || typeof deps.launchUnmanaged !== "function") {
+    refuse("unmanaged-lifecycle-unavailable");
+  }
+  revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
+  revalidateExecutableEvidence(replacementExecutable, deps, uid, "replacement-executable-changed");
+  const stopped = deps.stopUnmanaged(snapshot);
+  if (stopped?.mutationAttempted === true) txn.attempted();
+  if (stopped?.exitCode !== EXIT_CODES.healthy) {
+    refuse(safeFailureCode(stopped?.failureCode, "unmanaged-stop-incomplete"));
+  }
+  result.verification.actions.push({
+    kind: "stop-exact-unmanaged-tree",
+    pids: receipt.selectedPids,
+  });
+  revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
+  revalidateExecutableEvidence(replacementExecutable, deps, uid, "replacement-executable-changed");
+  txn.attempted();
+  const launched = deps.launchUnmanaged({ launcher: launcher.path, socketPath: socket });
+  if (!Number.isInteger(launched?.pid) || launched.pid <= 0 || launched.pid === snapshot.owner.pid) {
+    refuse("unmanaged-launch-invalid");
+  }
+  const replacementPid = launched.pid;
+  result.verification.actions.push({ kind: "launch-selected-wrapper", pid: replacementPid, launcher: launcher.path });
+  return { pid: replacementPid, executable: replacementExecutable };
+}
+
+// The replacement must be ready, own the socket, and meet the limit; the old
+// tree and parent must be gone and every GUI server untouched.
+function verifyReplacement(plan, deps, { options }, result, replacement) {
+  const { uid, mode, snapshot, socket, nofile, guiBaselines, parent } = plan;
+  const { pid: replacementPid, executable: replacementExecutable } = replacement;
+  if (typeof deps.waitForReady !== "function") refuse("readiness-verifier-unavailable");
+  const ready = deps.waitForReady({
+    pid: replacementPid,
+    socketPath: socket,
+    mode,
+    executable: replacementExecutable.path,
+  });
+  if (!ready) refuse("replacement-readiness-timeout");
+  if (ready.failureCode) {
+    refuse(safeFailureCode(ready.failureCode, "replacement-readiness-timeout"));
+  }
+  if (
+    !validObservedIdentity(ready.identity)
+    || ready.identity.pid !== replacementPid
+    || ready.identity.uid !== uid
+    || ready.identity.executable !== replacementExecutable.path
+  ) refuse("replacement-identity-invalid");
+  const freshReplacement = deps.readIdentity(replacementPid);
+  if (!exactSnapshotIdentityPresent(ready.identity, freshReplacement)) {
+    refuse("replacement-identity-changed");
+  }
+  revalidateExecutableEvidence(replacementExecutable, deps, uid, "replacement-executable-changed");
+  sampleDaemon(plan, deps, freshReplacement.identity, replacementExecutable);
+  const readySocket = canonicalPathOrRefuse(ready.socket?.path, deps.canonicalPath, "replacement-socket-invalid");
+  const readyOwners = normalizedSocketOwners(ready.socket?.owners);
+  if (
+    ready.socket?.ready !== true
+    || readySocket !== socket
+    || readyOwners.length !== 1
+    || readyOwners[0].pid !== replacementPid
+    || readyOwners[0].uid !== uid
+  ) refuse("replacement-socket-invalid");
+  if (
+    !exactKeys(ready.descriptors, ["count", "highest"])
+    || !Number.isInteger(ready.descriptors.count)
+    || ready.descriptors.count < 0
+    || (ready.descriptors.highest !== null
+      && (!Number.isInteger(ready.descriptors.highest) || ready.descriptors.highest < 0))
+    || !Number.isInteger(ready.directChildren)
+    || ready.directChildren < 0
+  ) refuse("replacement-metrics-invalid");
+  const replacementSoftNofile = nofile.attestReplacement(freshReplacement.identity, options.minSoftLimit);
+  assertOldTreeGone(snapshot, deps.readIdentity);
+  assertExpectedIdentityGone(
+    parent,
+    deps.readIdentity,
+    "old-parent-survivor",
+    "old-parent-verification-unknown",
+  );
+  assertGuiPreserved(guiBaselines, deps.readIdentity);
+
+  result.verification.after = {
+    pid: replacementPid,
+    identity: snapshotIdentity(freshReplacement.identity, "server"),
+    socket: { path: readySocket, ownerPid: replacementPid, ready: true },
+    softNofile: replacementSoftNofile,
+    descriptors: { count: ready.descriptors.count, highest: ready.descriptors.highest },
+    directChildren: ready.directChildren,
+    oldTreeGone: true,
+    oldParent: parent ? { pid: parent.pid, gone: true } : { applicable: false },
+  };
+  result.verification.guiPreserved = true;
 }

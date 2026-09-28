@@ -407,3 +407,107 @@ export function auditProxySelection(inventory, server, socket, canonicalPath) {
   if (stableJson(linked) !== stableJson(classified)) refuse("proxy-selection-incomplete");
   return linked;
 }
+
+/**
+ * The descriptor-limit policy, chosen once per recycle. It holds the
+ * attestations it takes, puts them in the receipt, and returns each limit
+ * ready to report: a number when attested, "unverified" otherwise (the value
+ * the JSON has always carried). With an attestor every check runs it and
+ * re-proves its file; without one the checks are skipped, a warning says so,
+ * and an unmanaged launcher must be the old server's own executable.
+ */
+export function nofileLimitPolicy(attestorPath, deps, uid) {
+  if (!attestorPath) {
+    return {
+      limit: "unverified",
+      warnings: (pid) => [{
+        code: "nofile-limit-unverified",
+        pid,
+        message: "descriptor limit unverified (no --nofile-attestor)",
+        authorizesAction: false,
+      }],
+      receiptBindings: () => ({ attestor: null, oldNofileAttestation: null, launcherNofileAttestation: null }),
+      revalidate() {},
+      bindLauncher(launcher, executable) {
+        // Only the launcher itself can be compared, so it must be the
+        // executable the old server ran. Proven before anything is stopped.
+        if (launcher.path !== executable.path) refuse("unmanaged-launcher-not-server-executable");
+        return executable;
+      },
+      attestOwner: () => "unverified",
+      recheckOwner: () => "unverified",
+      recheckLauncher() {},
+      attestReplacement: () => "unverified",
+    };
+  }
+
+  const attestor = executableEvidenceOrRefuse(attestorPath, {
+    canonicalPath: deps.canonicalPath,
+    fileIdentity: deps.fileIdentity,
+    uid,
+    code: "nofile-attestor-invalid",
+    requireOwner: true,
+  });
+  if (typeof deps.attestNofile !== "function") refuse("nofile-attestor-unavailable");
+  const attestorOptions = { attestorPath: attestor.path };
+  let ownerAttestation = null;
+  let launcherAttestation = null;
+  const revalidate = () => revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
+  const revalidateLauncher = (launcher) => (
+    revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed")
+  );
+  const attestPid = (identity, minimum) => {
+    const attestation = deps.attestNofile(identity, attestorOptions);
+    revalidate();
+    return { attestation, softNofile: validatePidNofileAttestation(attestation, identity, minimum) };
+  };
+  return {
+    limit: "attested",
+    warnings: () => [],
+    receiptBindings: () => ({
+      attestor,
+      oldNofileAttestation: ownerAttestation,
+      launcherNofileAttestation: launcherAttestation,
+    }),
+    revalidate,
+    bindLauncher(launcher, executable, minimum) {
+      if (typeof deps.attestLauncher !== "function") refuse("launcher-attestor-unavailable");
+      const attestation = deps.attestLauncher(launcher, attestorOptions);
+      revalidate();
+      revalidateLauncher(launcher);
+      const replacementExecutable = executableEvidenceOrRefuse(attestation?.replacementExecutable, {
+        canonicalPath: deps.canonicalPath,
+        fileIdentity: deps.fileIdentity,
+        uid,
+        code: "replacement-executable-invalid",
+        requireOwner: true,
+      });
+      validateLauncherNofileAttestation(attestation, launcher, replacementExecutable, minimum);
+      launcherAttestation = attestation;
+      return replacementExecutable;
+    },
+    // The old server's own limit only has to be readable (minimum 1).
+    attestOwner(identity) {
+      const { attestation, softNofile } = attestPid(identity, 1);
+      ownerAttestation = attestation;
+      return softNofile;
+    },
+    recheckOwner(identity) {
+      const { attestation, softNofile } = attestPid(identity, 1);
+      if (stableJson(attestation) !== stableJson(ownerAttestation)) refuse("pid-nofile-attestation-changed");
+      return softNofile;
+    },
+    recheckLauncher(launcher, replacementExecutable, minimum) {
+      revalidateLauncher(launcher);
+      const attestation = deps.attestLauncher(launcher, attestorOptions);
+      revalidate();
+      revalidateLauncher(launcher);
+      validateLauncherNofileAttestation(attestation, launcher, replacementExecutable, minimum);
+      if (stableJson(attestation) !== stableJson(launcherAttestation)) refuse("launcher-nofile-attestation-changed");
+    },
+    attestReplacement(identity, minimum) {
+      revalidate();
+      return attestPid(identity, minimum).softNofile;
+    },
+  };
+}

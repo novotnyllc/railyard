@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   DEFAULT_THRESHOLDS,
   EXIT_CODES,
+  RECYCLE_MODES,
   classifyInventory,
   collectExactProcessIdentity,
   collectMacOSInventory,
@@ -42,6 +43,51 @@ test("defaults to read-only inspect with stable exit codes", () => {
     refused: 2,
     failed: 3,
   });
+});
+
+test("classification returns each GUI server's desktop host from the one ancestry walk", () => {
+  const direct = classifyInventory(guiFixture(), { now: NOW });
+  assert.equal(direct.hosts.get(101).record.pid, 10);
+  assert.equal(direct.hosts.get(101).bundlePath, "/Applications/ChatGPT.app");
+
+  // A server under a Frameworks helper is GUI at the helper; its host is the
+  // main app above it, and null when that app is not in the process list.
+  const helper = processRecord({
+    pid: 50,
+    parentPid: 10,
+    processGroupId: 10,
+    executable: "/Applications/ChatGPT.app/Contents/Frameworks/ChatGPT Helper.app/Contents/MacOS/ChatGPT Helper",
+    rawCommand: "/Applications/ChatGPT.app/Contents/Frameworks/ChatGPT Helper.app/Contents/MacOS/ChatGPT Helper",
+  });
+  const nested = guiFixture();
+  nested.processes.push(helper);
+  nested.processes.find((record) => record.pid === 101).parentPid = 50;
+  const underHelper = classifyInventory(nested, { now: NOW });
+  assert.equal(underHelper.result.verification.servers[0].classification, "gui");
+  assert.equal(underHelper.hosts.get(101).record.pid, 10);
+
+  nested.processes = nested.processes.filter((record) => record.pid !== 10);
+  helper.parentPid = 1;
+  const orphaned = classifyInventory(nested, { now: NOW });
+  assert.equal(orphaned.result.verification.servers[0].classification, "gui");
+  assert.equal(orphaned.hosts.get(101), null);
+});
+
+test("recycle flags parse into one mode that names its allowed flags", () => {
+  assert.equal(parseCliArgs(["recycle", "--pid", "5"]).mode, "managed");
+  assert.equal(parseCliArgs(["recycle", "--pid", "5", "--unmanaged", "--launcher", "/l"]).mode, "unmanaged");
+  assert.equal(parseCliArgs(["recycle", "--pid", "5", "--desktop"]).mode, "desktop");
+  assert.equal(Object.hasOwn(parseCliArgs(["inspect"]), "mode"), false);
+  assert.deepEqual(Object.keys(RECYCLE_MODES), ["managed", "unmanaged", "desktop"]);
+  for (const [argv, error] of [
+    [["recycle", "--pid", "5", "--launcher", "/l"], "launcher-requires-unmanaged"],
+    [["recycle", "--pid", "5", "--unmanaged", "--launcher", "/l", "--nofile-attestor", "/a"], null],
+    [["recycle", "--pid", "5", "--desktop", "--launcher", "/l"], "desktop-incompatible-arguments"],
+    [["recycle", "--pid", "5", "--desktop", "--min-soft-limit", "9000"], null],
+    [["reap", "--snapshot", "/s", "--min-soft-limit", "9000"], "recycle-argument-without-recycle"],
+  ]) {
+    assert.equal(parseCliArgs(argv).error, error, argv.join(" "));
+  }
 });
 
 test("inline CLI values preserve equals signs", () => {

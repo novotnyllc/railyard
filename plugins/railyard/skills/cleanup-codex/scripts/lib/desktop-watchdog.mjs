@@ -15,7 +15,9 @@ import { spawn } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
+  BUNDLE_ID,
   MAIN_APP_BUNDLE,
+  MAIN_APP_EXECUTABLE_NAME,
   OPEN,
   PS,
   WATCHDOG_GRACE_MS,
@@ -25,8 +27,6 @@ import {
 import { collectExactProcessIdentity } from "./inventory.mjs";
 import { defaultRunner, safeRun, sleepSync } from "./process-evidence.mjs";
 import { observeBirth } from "./snapshot.mjs";
-
-const BUNDLE_ID = /^[A-Za-z0-9][A-Za-z0-9.-]{0,254}$/;
 
 export function validRelaunchPath(bundlePath) {
   return typeof bundlePath === "string" && MAIN_APP_BUNDLE.test(bundlePath)
@@ -58,7 +58,7 @@ export function bundleRunning(bundlePath, runner = defaultRunner, uid = process.
   return run.stdout.split("\n").some((line) => {
     const match = /^\s*(\d+)\s+(.*)$/.exec(line);
     if (!match || Number(match[1]) !== uid || !match[2].startsWith(prefix)) return false;
-    return /^(?:Codex|ChatGPT)(?:\s|$)/i.test(match[2].slice(prefix.length));
+    return MAIN_APP_EXECUTABLE_NAME.test(match[2].slice(prefix.length));
   });
 }
 

@@ -5,20 +5,25 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  CleanupRefusal,
   EXIT_CODES,
   buildExactTreeSnapshot,
   classifyInventory,
   createMutationLock,
   readSnapshotSecure,
   reapSnapshot,
+  recycleDesktop,
   runCli,
   writeSnapshotAtomic,
 } from "./cleanup-codex.mjs";
 
 import {
   NOW,
+  desktopHarness,
+  desktopOptions,
   exactIdentity,
   inventory,
+  liveIdentity,
   processRecord,
   sequenceReader,
   snapshotFixture,
@@ -255,6 +260,66 @@ test("snapshot file validation rejects overwrite, bad schema, mode, owner, and s
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test("reap reports a refusal after its first signal as a failure", () => {
+  // Two targets; the reader refuses on the second target's pre-TERM read,
+  // after the first target has already been sent SIGTERM.
+  const snapshot = snapshotFixture({
+    targets: [
+      { role: "descendant", ...exactIdentity({ pid: 200, commandIdentity: "process" }) },
+      { role: "descendant", ...exactIdentity({ pid: 201, commandIdentity: "process" }) },
+    ],
+  });
+  const [first, second] = snapshot.targets;
+  const reads = new Map([[100, 0], [200, 0], [201, 0]]);
+  const readIdentity = (pid) => {
+    const count = reads.get(pid) + 1;
+    reads.set(pid, count);
+    if (pid === 100) return { state: "absent" };
+    if (pid === 201 && count === 2) throw new CleanupRefusal("reader-refused");
+    return { state: "present", identity: { ...(pid === 200 ? first : second) } };
+  };
+  const signals = [];
+
+  const { result, exitCode } = reapSnapshot(snapshot, {
+    platform: "darwin",
+    uid: 501,
+    readIdentity,
+    signalProcess: (...args) => signals.push(args),
+    sleep: () => {},
+    lock: unlocked(),
+  });
+
+  assert.equal(exitCode, EXIT_CODES.failed);
+  assert.equal(result.status, "failed");
+  assert.equal(result.verification.mutationAttempted, true);
+  assert.deepEqual(signals, [[200, "SIGTERM"]]);
+  assert.deepEqual(result.verification.missingEvidence, ["reader-refused"]);
+});
+
+test("a desktop recycle's residue reap (the real reaper) signals only exact leftovers, never the app or an unidentified child", () => {
+  const token = recycleDesktop(desktopOptions(), desktopHarness().deps).result.verification.receipt.confirmationToken;
+  const harness = desktopHarness();
+  const { exitCode, result } = recycleDesktop(desktopOptions({ confirmation: token }), harness.deps);
+  assert.equal(exitCode, EXIT_CODES.healthy, JSON.stringify(result.verification.missingEvidence));
+  // 200 reparented to launchd when the app quit; it is still the recorded birth.
+  assert.deepEqual(harness.calls.signals, [[200, "SIGTERM"], [201, "SIGTERM"]]);
+  assert.equal(harness.state.get(202).state, "unknown");
+
+  // An old server that outlives its host is still live: the real reaper
+  // refuses to reap its tree, and nothing is signalled.
+  const survivor = desktopHarness();
+  const quit = survivor.deps.quitApp;
+  survivor.deps.quitApp = (bundleId) => {
+    const outcome = quit(bundleId);
+    survivor.state.set(13125, { state: "present", identity: liveIdentity(survivor.fixture.processes.find((item) => item.pid === 13125)) });
+    return outcome;
+  };
+  const refused = recycleDesktop(desktopOptions({ confirmation: token }), survivor.deps);
+  assert.equal(refused.exitCode, EXIT_CODES.failed);
+  assert.deepEqual(survivor.calls.signals, []);
+  assert.ok(refused.result.verification.missingEvidence.includes("owner-still-live"));
 });
 
 test("reap refuses while the exact recorded owner is live", () => {

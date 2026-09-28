@@ -41,6 +41,7 @@ jobs:
             plugins/railyard/skills/cleanup-codex/scripts/desktop.test.mjs \
             plugins/railyard/skills/cleanup-codex/scripts/hook.test.mjs \
             plugins/railyard/skills/cleanup-codex/scripts/canary.test.mjs \
+            plugins/railyard/skills/cleanup-codex/scripts/transaction.test.mjs \
             plugins/railyard/hooks/lean-hooks.test.mjs \
             plugins/railyard/hooks/dispatch-gate.test.mjs \
             plugins/railyard/hooks/routing-charter.test.mjs \
