@@ -407,3 +407,94 @@ export function auditProxySelection(inventory, server, socket, canonicalPath) {
   if (stableJson(linked) !== stableJson(classified)) refuse("proxy-selection-incomplete");
   return linked;
 }
+
+// JSON keeps the "unverified" sentinel for an unattested limit: consumers
+// (and the recycle tests) read `softNofile` as a number or "unverified".
+// `verification.nofileLimit` names the policy either way.
+export function reportedSoftNofile(softNofile) {
+  return softNofile ?? "unverified";
+}
+
+/**
+ * The descriptor-limit policy, chosen once per recycle. With an attestor
+ * ("attested") every check runs the attestor and re-proves its file; without
+ * one ("unverified") the checks report `null` and an unmanaged launcher must
+ * be the old server's own executable.
+ */
+export function nofileLimitPolicy(attestorPath, deps, uid) {
+  if (!attestorPath) {
+    return {
+      limit: "unverified",
+      attestor: null,
+      revalidate() {},
+      bindLauncher(launcher, executable) {
+        // Only the launcher itself can be compared, so it must be the
+        // executable the old server ran. Proven before anything is stopped.
+        if (launcher.path !== executable.path) refuse("unmanaged-launcher-not-server-executable");
+        return { replacementExecutable: executable, attestation: null };
+      },
+      attestOwner: () => null,
+      recheckOwner: () => null,
+      recheckLauncher() {},
+      attestReplacement: () => null,
+    };
+  }
+
+  const attestor = executableEvidenceOrRefuse(attestorPath, {
+    canonicalPath: deps.canonicalPath,
+    fileIdentity: deps.fileIdentity,
+    uid,
+    code: "nofile-attestor-invalid",
+    requireOwner: true,
+  });
+  if (typeof deps.attestNofile !== "function") refuse("nofile-attestor-unavailable");
+  const attestorOptions = { attestorPath: attestor.path };
+  const revalidate = () => revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
+  const revalidateLauncher = (launcher) => (
+    revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed")
+  );
+  const attestPid = (identity, minimum) => {
+    const attestation = deps.attestNofile(identity, attestorOptions);
+    revalidate();
+    return { attestation, softNofile: validatePidNofileAttestation(attestation, identity, minimum) };
+  };
+  return {
+    limit: "attested",
+    attestor,
+    revalidate,
+    bindLauncher(launcher, executable, minimum) {
+      if (typeof deps.attestLauncher !== "function") refuse("launcher-attestor-unavailable");
+      const attestation = deps.attestLauncher(launcher, attestorOptions);
+      revalidate();
+      revalidateLauncher(launcher);
+      const replacementExecutable = executableEvidenceOrRefuse(attestation?.replacementExecutable, {
+        canonicalPath: deps.canonicalPath,
+        fileIdentity: deps.fileIdentity,
+        uid,
+        code: "replacement-executable-invalid",
+        requireOwner: true,
+      });
+      validateLauncherNofileAttestation(attestation, launcher, replacementExecutable, minimum);
+      return { replacementExecutable, attestation };
+    },
+    // The old server's own limit only has to be readable (minimum 1).
+    attestOwner: (identity) => attestPid(identity, 1).attestation,
+    recheckOwner(identity, confirmed) {
+      const { attestation, softNofile } = attestPid(identity, 1);
+      if (stableJson(attestation) !== stableJson(confirmed)) refuse("pid-nofile-attestation-changed");
+      return softNofile;
+    },
+    recheckLauncher(launcher, replacementExecutable, confirmed, minimum) {
+      revalidateLauncher(launcher);
+      const attestation = deps.attestLauncher(launcher, attestorOptions);
+      revalidate();
+      revalidateLauncher(launcher);
+      validateLauncherNofileAttestation(attestation, launcher, replacementExecutable, minimum);
+      if (stableJson(attestation) !== stableJson(confirmed)) refuse("launcher-nofile-attestation-changed");
+    },
+    attestReplacement(identity, minimum) {
+      revalidate();
+      return attestPid(identity, minimum).softNofile;
+    },
+  };
+}

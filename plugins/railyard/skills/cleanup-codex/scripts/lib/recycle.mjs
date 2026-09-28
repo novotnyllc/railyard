@@ -31,11 +31,11 @@ import {
   executableEvidenceOrRefuse,
   guiBaselinesOrRefuse,
   normalizeDaemonSample,
+  nofileLimitPolicy,
   normalizedSocketOwners,
+  reportedSoftNofile,
   revalidateExecutableEvidence,
   revalidateSnapshot,
-  validateLauncherNofileAttestation,
-  validatePidNofileAttestation,
 } from "./recycle-evidence.mjs";
 import {
   buildExactTreeSnapshot,
@@ -146,18 +146,9 @@ function prepareRecycle(options, deps, { platform, uid, result }) {
 
   // The descriptor-limit attestor is optional. Without one the limit is
   // reported as unverified; with one, the strict attestation contract holds.
-  const attestor = options.attestorPath
-    ? executableEvidenceOrRefuse(options.attestorPath, {
-        canonicalPath: deps.canonicalPath,
-        fileIdentity: deps.fileIdentity,
-        uid,
-        code: "nofile-attestor-invalid",
-        requireOwner: true,
-      })
-    : null;
-  if (attestor && typeof deps.attestNofile !== "function") refuse("nofile-attestor-unavailable");
-  result.verification.nofileLimit = attestor ? "attested" : "unverified";
-  if (!attestor) {
+  const nofile = nofileLimitPolicy(options.attestorPath, deps, uid);
+  result.verification.nofileLimit = nofile.limit;
+  if (nofile.limit === "unverified") {
     result.warnings.push({
       code: "nofile-limit-unverified",
       pid: server.pid,
@@ -178,51 +169,21 @@ function prepareRecycle(options, deps, { platform, uid, result }) {
       code: "unmanaged-launcher-invalid",
       requireOwner: true,
     });
-    // Without an attestor, an unmanaged replacement must run the same
-    // executable as the old server. Prove that before anything is stopped:
-    // only the launcher itself can be compared, so it must be that executable.
-    if (!attestor && launcher.path !== executable.path) refuse("unmanaged-launcher-not-server-executable");
-  }
-  if (mode === "unmanaged" && attestor) {
-    if (typeof deps.attestLauncher !== "function") refuse("launcher-attestor-unavailable");
-    launcherNofileAttestation = deps.attestLauncher(launcher, {
-      attestorPath: attestor.path,
-    });
-    revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-    revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
-    replacementExecutable = executableEvidenceOrRefuse(
-      launcherNofileAttestation?.replacementExecutable,
-      {
-        canonicalPath: deps.canonicalPath,
-        fileIdentity: deps.fileIdentity,
-        uid,
-        code: "replacement-executable-invalid",
-        requireOwner: true,
-      },
-    );
-    validateLauncherNofileAttestation(
-      launcherNofileAttestation,
+    ({ replacementExecutable, attestation: launcherNofileAttestation } = nofile.bindLauncher(
       launcher,
-      replacementExecutable,
+      executable,
       options.minSoftLimit,
-    );
+    ));
   }
 
   const initialOwner = deps.readIdentity(snapshot.owner.pid);
   if (!exactSnapshotIdentityPresent(snapshot.owner, initialOwner)) refuse("recycle-identity-changed");
-  let oldNofileAttestation = null;
-  if (attestor) {
-    oldNofileAttestation = deps.attestNofile(initialOwner.identity, {
-      attestorPath: attestor.path,
-    });
-    revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-    validatePidNofileAttestation(oldNofileAttestation, initialOwner.identity, 1);
-  }
+  const oldNofileAttestation = nofile.attestOwner(initialOwner.identity);
 
   const daemonEvidenceDigest = sha256(stableJson(secondSample));
   const authorization = {
     minimumSoftNofile: options.minSoftLimit,
-    attestor,
+    attestor: nofile.attestor,
     launcher,
     replacementExecutable,
     oldNofileAttestation,
@@ -244,7 +205,7 @@ function prepareRecycle(options, deps, { platform, uid, result }) {
     socket: { path: socket, ownerPid: snapshot.owner.pid },
     targetPids: snapshot.targets.map((target) => target.pid),
     daemonEvidenceDigest,
-    softNofile: oldNofileAttestation?.softNofile ?? "unverified",
+    softNofile: reportedSoftNofile(oldNofileAttestation?.softNofile ?? null),
   };
   const selectedRoles = new Map([
     [snapshot.owner.pid, "server"],
@@ -266,7 +227,7 @@ function prepareRecycle(options, deps, { platform, uid, result }) {
     executable,
     takeDaemonSample,
     secondSample,
-    attestor,
+    nofile,
     launcher,
     replacementExecutable,
     oldNofileAttestation,
@@ -287,7 +248,7 @@ function recheckUnderLock(plan, options, deps, result) {
     executable,
     takeDaemonSample,
     secondSample,
-    attestor,
+    nofile,
     launcher,
     replacementExecutable,
     oldNofileAttestation,
@@ -296,7 +257,7 @@ function recheckUnderLock(plan, options, deps, result) {
     parent,
   } = plan;
   revalidateExecutableEvidence(executable, deps, uid, "selected-executable-changed");
-  if (attestor) revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
+  nofile.revalidate();
   if (launcher) revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
   if (replacementExecutable !== executable) {
     revalidateExecutableEvidence(replacementExecutable, deps, uid, "replacement-executable-changed");
@@ -312,39 +273,11 @@ function recheckUnderLock(plan, options, deps, result) {
 
   const freshOwner = deps.readIdentity(snapshot.owner.pid);
   if (!exactSnapshotIdentityPresent(snapshot.owner, freshOwner)) refuse("recycle-identity-changed");
-  let oldSoftNofile = "unverified";
-  if (attestor) {
-    const lockedOldNofileAttestation = deps.attestNofile(freshOwner.identity, {
-      attestorPath: attestor.path,
-    });
-    revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-    oldSoftNofile = validatePidNofileAttestation(
-      lockedOldNofileAttestation,
-      freshOwner.identity,
-      1,
-    );
-    if (stableJson(lockedOldNofileAttestation) !== stableJson(oldNofileAttestation)) {
-      refuse("pid-nofile-attestation-changed");
-    }
+  const oldSoftNofile = nofile.recheckOwner(freshOwner.identity, oldNofileAttestation);
+  if (launcher) {
+    nofile.recheckLauncher(launcher, replacementExecutable, launcherNofileAttestation, options.minSoftLimit);
   }
-  if (launcher && attestor) {
-    revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
-    const lockedLauncherNofileAttestation = deps.attestLauncher(launcher, {
-      attestorPath: attestor.path,
-    });
-    revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-    revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed");
-    validateLauncherNofileAttestation(
-      lockedLauncherNofileAttestation,
-      launcher,
-      replacementExecutable,
-      options.minSoftLimit,
-    );
-    if (stableJson(lockedLauncherNofileAttestation) !== stableJson(launcherNofileAttestation)) {
-      refuse("launcher-nofile-attestation-changed");
-    }
-  }
-  result.verification.before.softNofile = oldSoftNofile;
+  result.verification.before.softNofile = reportedSoftNofile(oldSoftNofile);
 
   if (typeof deps.collectInventory !== "function") refuse("proxy-recheck-unavailable");
   const lockedInventory = deps.collectInventory();
@@ -504,7 +437,7 @@ function replaceUnmanaged(plan, deps, result) {
 // The replacement must be ready, own the socket, and meet the limit; the old
 // tree and parent must be gone and every GUI server untouched.
 function verifyReplacement(plan, replacement, options, deps, result) {
-  const { uid, mode, snapshot, socket, attestor, takeDaemonSample, guiBaselines, parent } = plan;
+  const { uid, mode, snapshot, socket, nofile, takeDaemonSample, guiBaselines, parent } = plan;
   const { pid: replacementPid, executable: replacementExecutable } = replacement;
   if (typeof deps.waitForReady !== "function") refuse("readiness-verifier-unavailable");
   const ready = deps.waitForReady({
@@ -547,19 +480,7 @@ function verifyReplacement(plan, replacement, options, deps, result) {
     || !Number.isInteger(ready.directChildren)
     || ready.directChildren < 0
   ) refuse("replacement-metrics-invalid");
-  let replacementSoftNofile = "unverified";
-  if (attestor) {
-    revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-    const replacementNofileAttestation = deps.attestNofile(freshReplacement.identity, {
-      attestorPath: attestor.path,
-    });
-    revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
-    replacementSoftNofile = validatePidNofileAttestation(
-      replacementNofileAttestation,
-      freshReplacement.identity,
-      options.minSoftLimit,
-    );
-  }
+  const replacementSoftNofile = nofile.attestReplacement(freshReplacement.identity, options.minSoftLimit);
   assertOldTreeGone(snapshot, deps.readIdentity);
   assertExpectedIdentityGone(
     parent,
@@ -573,7 +494,7 @@ function verifyReplacement(plan, replacement, options, deps, result) {
     pid: replacementPid,
     identity: snapshotIdentity(freshReplacement.identity, "server"),
     socket: { path: readySocket, ownerPid: replacementPid, ready: true },
-    softNofile: replacementSoftNofile,
+    softNofile: reportedSoftNofile(replacementSoftNofile),
     descriptors: { count: ready.descriptors.count, highest: ready.descriptors.highest },
     directChildren: ready.directChildren,
     oldTreeGone: true,
