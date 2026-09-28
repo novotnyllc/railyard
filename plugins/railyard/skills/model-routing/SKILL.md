@@ -46,7 +46,7 @@ refusals or fallbacks. Report them; don't silently switch models.
   `high` when the task's complexity or verification burden calls for it.
 - **GPT-6 Luna** is for bounded, repetitive, or bulk work.
 - **GPT-6 Astra** is for hard or high-risk work, or when Sol fell short. It
-  costs as much as Fable 5.1, so reserve it for hard work and review.
+  is the most expensive Codex model, so reserve it for hard work and review.
 - **Daybreak** (`gpt-daybreak-blue-latest`) is for defensive security work
   when the surface exposes it.
 - **Codex review** (`codex review`, including the end-of-PR review) always
