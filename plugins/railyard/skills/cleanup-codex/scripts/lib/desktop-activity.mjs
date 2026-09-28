@@ -123,7 +123,10 @@ function readRolloutTail(fsApi, rollout) {
 // The newest `state_N.sqlite` in the Codex home: the one the server has open
 // if any, else the highest N on disk. None is unknown.
 export function stateDatabaseIn(located, fsApi = fs) {
-  if (located.openState) return located.openState;
+  // The path goes into a SQLite URI, where `?`/`#` cut it short and `%` is
+  // decoded to another path; such a path is never used, open or not.
+  const usable = (database) => (database && !/[?#%]/.test(database) ? database : null);
+  if (located.openState) return usable(located.openState);
   let names;
   try {
     names = fsApi.readdirSync(located.home);
@@ -134,9 +137,7 @@ export function stateDatabaseIn(located, fsApi = fs) {
     .map((name) => ({ name, version: Number(/^state_(\d+)\.sqlite$/.exec(name)?.[1]) }))
     .filter((entry) => Number.isInteger(entry.version))
     .sort((left, right) => right.version - left.version)[0];
-  const database = newest ? path.join(located.home, newest.name) : null;
-  // The path goes into a SQLite URI; anything URI-special is not used.
-  return database && !/[?#%]/.test(database) ? database : null;
+  return usable(newest ? path.join(located.home, newest.name) : null);
 }
 
 // Read-only signals that the desktop app's own Codex work is running: its

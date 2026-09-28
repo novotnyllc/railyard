@@ -769,6 +769,11 @@ test("the Codex home is the one directory of the server's open Codex databases",
   assert.equal(stateDatabaseIn({ home: HOME, openState: null }, fsApi(["state_4.sqlite", "state_12.sqlite", "state_5.sqlite"])), `${HOME}/state_12.sqlite`);
   assert.equal(stateDatabaseIn({ home: HOME, openState: null }, fsApi(["logs_2.sqlite"])), null);
   assert.equal(stateDatabaseIn({ home: "/tmp/odd?dir", openState: null }, fsApi(["state_5.sqlite"])), null);
+  // The open database's path obeys the same URI rule (CodeRabbit).
+  assert.equal(stateDatabaseIn({ home: HOME, openState: `${HOME}/state_5.sqlite` }, fsApi([])), `${HOME}/state_5.sqlite`);
+  for (const home of ["/tmp/odd%41dir", "/tmp/odd#dir"]) {
+    assert.equal(stateDatabaseIn({ home, openState: `${home}/state_5.sqlite` }, fsApi(["state_5.sqlite"])), null);
+  }
 });
 
 // The detached relaunch watchdog, driven with fakes.
