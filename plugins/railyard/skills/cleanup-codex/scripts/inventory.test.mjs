@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   DEFAULT_THRESHOLDS,
   EXIT_CODES,
+  RECYCLE_MODES,
   classifyInventory,
   collectExactProcessIdentity,
   collectMacOSInventory,
@@ -70,6 +71,23 @@ test("classification returns each GUI server's desktop host from the one ancestr
   const orphaned = classifyInventory(nested, { now: NOW });
   assert.equal(orphaned.result.verification.servers[0].classification, "gui");
   assert.equal(orphaned.hosts.get(101), null);
+});
+
+test("recycle flags parse into one mode that names its allowed flags", () => {
+  assert.equal(parseCliArgs(["recycle", "--pid", "5"]).mode, "managed");
+  assert.equal(parseCliArgs(["recycle", "--pid", "5", "--unmanaged", "--launcher", "/l"]).mode, "unmanaged");
+  assert.equal(parseCliArgs(["recycle", "--pid", "5", "--desktop"]).mode, "desktop");
+  assert.equal(Object.hasOwn(parseCliArgs(["inspect"]), "mode"), false);
+  assert.deepEqual(Object.keys(RECYCLE_MODES), ["managed", "unmanaged", "desktop"]);
+  for (const [argv, error] of [
+    [["recycle", "--pid", "5", "--launcher", "/l"], "launcher-requires-unmanaged"],
+    [["recycle", "--pid", "5", "--unmanaged", "--launcher", "/l", "--nofile-attestor", "/a"], null],
+    [["recycle", "--pid", "5", "--desktop", "--launcher", "/l"], "desktop-incompatible-arguments"],
+    [["recycle", "--pid", "5", "--desktop", "--min-soft-limit", "9000"], null],
+    [["reap", "--snapshot", "/s", "--min-soft-limit", "9000"], "recycle-argument-without-recycle"],
+  ]) {
+    assert.equal(parseCliArgs(argv).error, error, argv.join(" "));
+  }
 });
 
 test("inline CLI values preserve equals signs", () => {

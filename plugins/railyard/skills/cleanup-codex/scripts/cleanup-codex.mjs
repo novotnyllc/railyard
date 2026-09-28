@@ -86,6 +86,34 @@ export * from "./lib/recycle-evidence.mjs";
 export * from "./lib/snapshot.mjs";
 export * from "./lib/transaction.mjs";
 
+// The recycle modes. Each names the recycle-only flags it accepts, the error
+// for any other, how it runs, and how its receipt reads.
+export const RECYCLE_MODES = Object.freeze({
+  managed: Object.freeze({
+    flags: new Set(["--pid", "--confirm", "--nofile-attestor", "--min-soft-limit"]),
+    conflict: "launcher-requires-unmanaged",
+    run: runDetachedRecycle,
+    receiptLines: detachedReceiptLines,
+  }),
+  unmanaged: Object.freeze({
+    flags: new Set(["--pid", "--confirm", "--unmanaged", "--launcher", "--nofile-attestor", "--min-soft-limit"]),
+    conflict: null,
+    run: runDetachedRecycle,
+    receiptLines: detachedReceiptLines,
+  }),
+  desktop: Object.freeze({
+    flags: new Set(["--pid", "--confirm", "--desktop", "--min-soft-limit"]),
+    conflict: "desktop-incompatible-arguments",
+    run: runDesktopRecycle,
+    receiptLines: desktopReceiptLines,
+  }),
+});
+
+export function recycleModeFor(flags) {
+  if (flags.has("--desktop")) return "desktop";
+  return flags.has("--unmanaged") ? "unmanaged" : "managed";
+}
+
 export function parseCliArgs(argv) {
   let action = "inspect";
   let actionSeen = false;
@@ -196,20 +224,21 @@ export function parseCliArgs(argv) {
   if (action === "reap" && !snapshot) error = "snapshot-required";
   if (action === "recycle" && pid === null) error = "recycle-pid-required";
   if (action === "recycle" && snapshot !== null) error = "snapshot-not-allowed-for-recycle";
-  if (action !== "recycle" && (
-    pid !== null
-    || confirmation !== null
-    || unmanaged
-    || desktop
-    || launcher
-    || nofileAttestor
-    || minSoftLimitSeen
-  )) {
-    error = "recycle-argument-without-recycle";
-  }
-  if (action === "recycle" && !unmanaged && launcher !== null && !desktop) error = "launcher-requires-unmanaged";
-  if (action === "recycle" && desktop && (unmanaged || launcher !== null || nofileAttestor !== null)) {
-    error = "desktop-incompatible-arguments";
+  // The recycle-only flags given (with a valid value), checked against the
+  // one mode they select.
+  const recycleFlags = new Set(Object.entries({
+    "--pid": pid !== null,
+    "--confirm": confirmation !== null,
+    "--unmanaged": unmanaged,
+    "--desktop": desktop,
+    "--launcher": launcher !== null,
+    "--nofile-attestor": nofileAttestor !== null,
+    "--min-soft-limit": minSoftLimitSeen,
+  }).filter(([, given]) => given).map(([flag]) => flag));
+  const mode = action === "recycle" ? recycleModeFor(recycleFlags) : null;
+  if (mode === null && recycleFlags.size) error = "recycle-argument-without-recycle";
+  if (mode !== null && [...recycleFlags].some((flag) => !RECYCLE_MODES[mode].flags.has(flag))) {
+    error = RECYCLE_MODES[mode].conflict;
   }
   if (hook && snapshot !== null) error = "hook-snapshot-not-allowed";
   if (hook && action !== "cleanup") error = "hook-requires-cleanup";
@@ -228,6 +257,7 @@ export function parseCliArgs(argv) {
     nofileAttestor,
     minSoftLimit,
     thresholds,
+    ...(mode === null ? {} : { mode }),
     error,
   };
 }
@@ -263,21 +293,8 @@ export function renderHuman(result) {
   if (result.action === "recycle" && result.verification.receipt) {
     const receipt = result.verification.receipt;
     lines.push(`mode: ${receipt.mode}`);
-    if (receipt.mode === "desktop") {
-      lines.push(`desktop app: ${receipt.host.bundleId} host pid ${receipt.host.pid} (${receipt.host.bundlePath})`);
-      const idle = result.verification.idle;
-      if (idle) {
-        lines.push(idle.idle
-          ? `idle: yes (no Codex activity for ${idle.idleSeconds}s; last at ${idle.lastActivityAt ?? "unknown"})`
-          : `idle: no (${idle.reasons.join(", ")}${idle.unknown ? `: ${idle.unknown}` : ""}); retry when Codex work in the app has finished`);
-        for (const turn of idle.openTurns ?? []) {
-          lines.push(`  open turn in thread ${JSON.stringify(turn.title ?? "untitled")} (${turn.threadId ?? "unknown id"}) since ${turn.since ?? "unknown"}:`
-            + " finish, cancel or archive that thread in the app, then retry");
-        }
-      }
-    } else {
-      lines.push(`descriptor limit: ${result.verification.nofileLimit ?? "attested"}`);
-    }
+    const mode = Object.hasOwn(RECYCLE_MODES, receipt.mode) ? RECYCLE_MODES[receipt.mode] : RECYCLE_MODES.managed;
+    lines.push(...mode.receiptLines(result));
     lines.push(`confirmation token: ${receipt.confirmationToken}`);
   }
   if (result.action === "recycle" && result.verification.after) {
@@ -301,6 +318,85 @@ export function renderHuman(result) {
     lines.push(`refused: missing ${result.verification.missingEvidence.join(", ")}`);
   }
   return lines.join("\n");
+}
+
+function detachedReceiptLines(result) {
+  return [`descriptor limit: ${result.verification.nofileLimit ?? "attested"}`];
+}
+
+function desktopReceiptLines(result) {
+  const { receipt, idle } = result.verification;
+  const lines = [`desktop app: ${receipt.host.bundleId} host pid ${receipt.host.pid} (${receipt.host.bundlePath})`];
+  if (idle) {
+    lines.push(idle.idle
+      ? `idle: yes (no Codex activity for ${idle.idleSeconds}s; last at ${idle.lastActivityAt ?? "unknown"})`
+      : `idle: no (${idle.reasons.join(", ")}${idle.unknown ? `: ${idle.unknown}` : ""}); retry when Codex work in the app has finished`);
+    for (const turn of idle.openTurns ?? []) {
+      lines.push(`  open turn in thread ${JSON.stringify(turn.title ?? "untitled")} (${turn.threadId ?? "unknown id"}) since ${turn.since ?? "unknown"}:`
+        + " finish, cancel or archive that thread in the app, then retry");
+    }
+  }
+  return lines;
+}
+
+function runDesktopRecycle(parsed, io) {
+  const dependencies = io.desktopDependencies ?? createDefaultDesktopDependencies({
+    inventory: io.inventory,
+    runner: io.runner,
+    uid: io.uid,
+    readIdentity: io.readIdentity,
+    signalProcess: io.signalProcess,
+    sleep: io.sleep,
+    graceMs: io.graceMs,
+    postSignalMs: io.postSignalMs,
+    monotonicNow: io.monotonicNow,
+    lock: io.lock,
+    spawnProcess: io.spawnProcess,
+  });
+  return recycleDesktop({
+    platform: io.platform,
+    uid: io.uid,
+    pid: parsed.pid,
+    confirmation: parsed.confirmation,
+    minSoftLimit: parsed.minSoftLimit,
+    now: io.now,
+  }, dependencies);
+}
+
+function runDetachedRecycle(parsed, io) {
+  const unmanaged = parsed.mode === "unmanaged";
+  const launcher = unmanaged
+    ? strictLauncherPath({ explicit: parsed.launcher, env: io.env, fsApi: io.fsApi })
+    : null;
+  const attestorPath = parsed.nofileAttestor ?? io.env.RAILYARD_NOFILE_ATTESTOR ?? null;
+  const dependencies = io.recycleDependencies ?? createDefaultRecycleDependencies({
+    inventory: io.inventory,
+    runner: io.runner,
+    fsApi: io.fsApi,
+    env: io.env,
+    uid: io.uid,
+    readIdentity: io.readIdentity,
+    signalProcess: io.signalProcess,
+    spawnProcess: io.spawnProcess,
+    sleep: io.sleep,
+    graceMs: io.graceMs,
+    postSignalMs: io.postSignalMs,
+    readyTimeoutMs: io.readyTimeoutMs,
+    readyPollMs: io.readyPollMs,
+    monotonicNow: io.monotonicNow,
+    lock: io.lock,
+  });
+  return recycleServer({
+    platform: io.platform,
+    uid: io.uid,
+    pid: parsed.pid,
+    unmanaged,
+    confirmation: parsed.confirmation,
+    launcher,
+    attestorPath,
+    minSoftLimit: parsed.minSoftLimit,
+    now: io.now,
+  }, dependencies);
 }
 
 export function usage() {
@@ -416,43 +512,16 @@ export function runCli(argv = process.argv.slice(2), {
   }
 
   const inventory = suppliedInventory ?? collectMacOSInventory({ runner, platform });
-  if (parsed.action === "recycle" && parsed.desktop) {
-    const dependencies = desktopDependencies ?? createDefaultDesktopDependencies({
+  if (parsed.action === "recycle") {
+    const outcome = RECYCLE_MODES[parsed.mode].run(parsed, {
       inventory,
       runner,
+      platform,
+      now,
       uid,
       readIdentity,
-      signalProcess,
-      sleep,
-      graceMs,
-      postSignalMs,
-      monotonicNow,
-      lock,
-      spawnProcess,
-    });
-    const outcome = recycleDesktop({
-      platform,
-      uid,
-      pid: parsed.pid,
-      confirmation: parsed.confirmation,
-      minSoftLimit: parsed.minSoftLimit,
-      now,
-    }, dependencies);
-    write(parsed.json ? JSON.stringify(outcome.result, null, 2) : renderHuman(outcome.result));
-    return outcome.exitCode;
-  }
-  if (parsed.action === "recycle") {
-    const launcher = parsed.unmanaged
-      ? strictLauncherPath({ explicit: parsed.launcher, env, fsApi })
-      : null;
-    const attestorPath = parsed.nofileAttestor ?? env.RAILYARD_NOFILE_ATTESTOR ?? null;
-    const dependencies = recycleDependencies ?? createDefaultRecycleDependencies({
-      inventory,
-      runner,
       fsApi,
       env,
-      uid,
-      readIdentity,
       signalProcess,
       spawnProcess,
       sleep,
@@ -462,18 +531,9 @@ export function runCli(argv = process.argv.slice(2), {
       readyPollMs,
       monotonicNow,
       lock,
+      recycleDependencies,
+      desktopDependencies,
     });
-    const outcome = recycleServer({
-      platform,
-      uid,
-      pid: parsed.pid,
-      unmanaged: parsed.unmanaged,
-      confirmation: parsed.confirmation,
-      launcher,
-      attestorPath,
-      minSoftLimit: parsed.minSoftLimit,
-      now,
-    }, dependencies);
     write(parsed.json ? JSON.stringify(outcome.result, null, 2) : renderHuman(outcome.result));
     return outcome.exitCode;
   }
