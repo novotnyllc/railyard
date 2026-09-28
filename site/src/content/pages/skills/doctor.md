@@ -13,6 +13,8 @@ Diagnose the delivery system as an ownership map: observe each surface, attach e
 
 Doctor reports a read-only health table for the requested surface: installed plugins, relevant tools, model policy, or a concrete runtime problem. Fleet readiness, account checks, and store health are inspected when that scope is requested. An unselected specialist is not a routine delivery failure.
 
+A quick local pass covers both harnesses on this host: declared marketplaces missing from `claude` or `codex` marketplace lists, Railyard, Roundhouse, and agent-utilities versions that differ between Claude and Codex or trail the newest catalog, leaked cleanup-codex canary listeners, and (on macOS) allow-listed login-shell variables that launchd lacks. Each row is pass, warn, or fail with a one-line fix, and reports names and versions only, never values.
+
 ## How it works
 
 Each row names the observed condition, evidence source, and owning fix surface. A follow-up fix travels through the skill that owns the affected surface, followed by a fresh check of the row.
