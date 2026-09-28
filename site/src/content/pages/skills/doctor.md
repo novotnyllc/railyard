@@ -13,16 +13,18 @@ Diagnose the delivery system as an ownership map: observe each surface, attach e
 
 Doctor reports a read-only health table for the requested surface: installed plugins, relevant tools, model policy, or a concrete runtime problem. Fleet readiness, account checks, and store health are inspected when that scope is requested. An unselected specialist is not a routine delivery failure.
 
+A quick local pass covers both harnesses on this host: declared marketplaces missing from the `claude` or `codex` marketplace list, and Railyard, Roundhouse, and agent-utilities versions that differ between Claude and Codex or trail the newest marketplace catalog. It also finds processes left behind by an interrupted cleanup-codex canary test. Each row is pass, warn, or fail with a one-line fix, or unknown inside a sandbox, and reports names and versions only.
+
 ## How it works
 
 Each row names the observed condition, evidence source, and owning fix surface. A follow-up fix travels through the skill that owns the affected surface, followed by a fresh check of the row.
 
 ```text
 > Run the read-only doctor pass and group each finding by its owning fix surface.
-row=model-guidance       state=ready     owner=model-routing
-row=plugin-bytes         state=ready     owner=fleet-agents
-row=github-auth          state=present   owner=delivery-tail
-row=fleet-readiness      state=unknown   owner=fleet-readiness
+row=model-guidance       state=pass      owner=model-routing
+row=plugin-bytes         state=warn      owner=fleet-agents
+row=github-auth          state=pass      owner=delivery-tail
+row=fleet-readiness      state=unknown (roundhouse CLI missing)   owner=fleet-readiness
 next=collect readiness evidence
 ```
 
@@ -37,8 +39,8 @@ Ships in the `railyard` plugin.
 ## Proof point
 
 ```text
-finding=fleet-readiness before=unknown after=ready
+finding=fleet-readiness before=unknown after=pass
 mutation=performed-by-owner
 recheck=complete
-result=ready
+result=pass
 ```
