@@ -80,7 +80,8 @@ as the fleet-wide form of the version check instead.
   `pgrep -fl '[c]leanup-codex-canary\.' </dev/null`. Skip the row while a
   canary test is running (`pgrep -f '[c]anary\.test\.mjs'`), and count a
   listener as leaked only when it is older than 10 minutes
-  (`ps -o etimes= -p <pid>`). Exit 1 passes, leaked listeners warn, and any
+  (`ps -o etime= -p <pid>`, which prints `[[dd-]hh:]mm:ss` on macOS and
+  Linux; older when it has an hours or days field or 10 or more minutes). Exit 1 passes, leaked listeners warn, and any
   other exit is unknown. Fix by stopping each leaked PID and removing its
   `cleanup-codex-canary.*` temporary directory.
 
