@@ -17,24 +17,36 @@ user's explicit model or effort choices always win.
 
 ## Claude Code
 
-- **Opus 5.5** (`opus`, `claude-opus-5-5`) is the default for substantive
-  subagents. Choose effort on purpose: `medium` for ordinary work, `high` for
-  multi-file or ambiguous work.
+- **Opus 5.5** (`opus`, `claude-opus-5-5`) is the default for substantive or
+  judgment-heavy subagents: design, ambiguous debugging, coordination, and
+  reviewers. Choose effort on purpose: `medium` for ordinary work, `high` for
+  multi-file or ambiguous work. The Thermos and review-bakeoff
+  evidence is on Opus 5.5.
 - **Fable 5.1** (`fable`) is for frontier-hard problems, long autonomous runs,
   or work where Opus 5.5 fell short.
-- **Sonnet 5** (`sonnet`) is for bounded, well-specified edits.
+- **Sonnet 5.5** (`sonnet`, Claude Code 2.1.284 or later; earlier versions
+  resolve `sonnet` to Sonnet 5) at `low` or `medium` is for well-scoped work
+  with a clear acceptance check: bug fixes with a repro, bounded edits, test
+  fixes, PR-feedback fixers, docs, and fast parallel fan-out. Don't raise it
+  to `high` or above as a stand-in for Opus; use Opus 5.5 at `medium`. For
+  long, cache-heavy, judgment-heavy loops, prefer Opus: cache reads cost the
+  same.
 - **Haiku 4.5** (`haiku`) is for read-only search. It has no effort setting.
 
 The Agent tool's `model` parameter accepts only these aliases. Effort comes
 from the session or from a subagent definition's `effort` field. `fork`
 subagents inherit both model and effort.
 
+Both 5.5 models apply cyber safeguards, so security-adjacent tasks may hit
+refusals or fallbacks. Report them; don't silently switch models.
+
 ## Codex
 
 - **GPT-6 Sol** at `medium` is the baseline for substantive work. Raise it to
   `high` when the task's complexity or verification burden calls for it.
-- **GPT-6 Luna** is for bounded, repetitive work.
-- **GPT-6 Astra** is for hard or high-risk work, or when Sol fell short.
+- **GPT-6 Luna** is for bounded, repetitive, or bulk work.
+- **GPT-6 Astra** is for hard or high-risk work, or when Sol fell short. It
+  is the most expensive Codex model, so reserve it for hard work and review.
 - **Daybreak** (`gpt-daybreak-blue-latest`) is for defensive security work
   when the surface exposes it.
 - **Codex review** (`codex review`, including the end-of-PR review) always

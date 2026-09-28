@@ -13,6 +13,21 @@ ship.
   ground-truth units, `ce-code-review` caught 4 at about twice the tokens and
   time, and Codex review on GPT-6 Astra at high caught 2, including the one
   nothing else found, with no false positives.
+  Codex review runs Astra rather than a cheaper GPT because, in a third-party
+  code-review benchmark (discussed on Hacker News, September 2026), Astra
+  reached 96% precision while Luna missed 23 bugs Astra caught, at about $0.11
+  versus $0.004 per review.
+- Model placement evidence (2026-09-28, not Railyard measurements):
+  For Sonnet 5.5, Anthropic reports it 30% faster than Sonnet 5 and up to 30% cheaper per task
+  on well-scoped everyday tasks. Artificial Analysis ranks it second to Opus 5.5
+  on its Intelligence Index (56). It scores 70.6% on Terminal-Bench against Opus
+  5.5's 66.4%, a gap commenters partly attribute to Opus hitting safeguard
+  fallbacks more often. Practitioners report that Sonnet 5.5 at `high` or
+  `xhigh` often costs about the same as Opus 5.5 at `low` or `medium` for
+  similar results. Its cache reads cost $0.20/MTok, the same as Opus 5.5, so
+  savings shrink in long cache-heavy loops. It is the first Sonnet with the cyber
+  safeguards that both 5.5 models apply, so security-adjacent code can see
+  refusals or fallbacks.
 
 - Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or
   pushing user-requested commits to an existing PR, and `gh-stack` for related

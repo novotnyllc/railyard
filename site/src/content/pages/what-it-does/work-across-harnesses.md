@@ -25,7 +25,7 @@ Native subagents in the same harness are the default. Crossing harnesses is opt-
 
 Pick the interactive session for the conversation, and pick the model for each delegated unit of work. Choose an effort with the model wherever the model exposes one; Haiku 4.5 has no effort setting.
 
-- **Claude Code:** Opus 5.5 at `medium` handles substantive subagent work, Fable 5.1 is the escalation for frontier-hard or long autonomous work, Sonnet 5 takes bounded edits, and Haiku 4.5 takes read-only search.
+- **Claude Code:** Opus 5.5 at `medium` handles substantive subagent work, Fable 5.1 is the escalation for frontier-hard or long autonomous work, Sonnet 5.5 takes well-scoped edits, bug fixes, and docs, and Haiku 4.5 takes read-only search.
 - **Codex:** GPT-6 Sol at `medium` is the baseline, Luna takes bounded work, and Astra takes hard work.
 
 Leaving the model unset means the child inherits the parent's. In Codex, a full-history fork inherits both settings; changing either one needs a limited-history or no-history fork and a sufficient brief. Check the actual tool schema before dispatch, and keep the requested selection separate from the runtime metadata that shows what ran.
