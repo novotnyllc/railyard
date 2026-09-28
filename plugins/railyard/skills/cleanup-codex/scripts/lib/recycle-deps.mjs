@@ -40,13 +40,13 @@ import {
   validObservedIdentity,
 } from "./process-evidence.mjs";
 import {
-  reapSnapshot,
+  residueReaper,
   signalExactPid,
 } from "./reap.mjs";
 import {
+  birthVerdict,
   createMutationLock,
   exactSnapshotIdentityPresent,
-  sameBirthIdentityPresent,
   sameSignalIdentityPresent,
 } from "./snapshot.mjs";
 
@@ -368,12 +368,7 @@ export function stopExactUnmanagedTree(snapshot, {
     const killed = [];
     for (const expected of ordered) {
       const observation = readIdentity(expected.pid);
-      if (observation?.state === "absent") continue;
-      if (
-        observation?.state === "present"
-        && validObservedIdentity(observation.identity)
-        && !sameBirthIdentityPresent(expected, observation)
-      ) continue;
+      if (birthVerdict(expected, observation) === "gone") continue;
       if (!sameSignalIdentityPresent(expected, observation)) {
         return outcome(EXIT_CODES.failed, "unmanaged-post-term-identity-unverified");
       }
@@ -387,13 +382,7 @@ export function stopExactUnmanagedTree(snapshot, {
     }
     if (killed.length) sleep(postSignalMs);
     for (const expected of ordered) {
-      const observation = readIdentity(expected.pid);
-      if (observation?.state === "absent") continue;
-      if (
-        observation?.state === "present"
-        && validObservedIdentity(observation.identity)
-        && !sameBirthIdentityPresent(expected, observation)
-      ) continue;
+      if (birthVerdict(expected, readIdentity(expected.pid)) === "gone") continue;
       return outcome(EXIT_CODES.failed, "unmanaged-survivor");
     }
     return outcome(EXIT_CODES.healthy);
@@ -524,19 +513,7 @@ export function createDefaultRecycleDependencies({
         readPidRecord: () => readNativePidRecord({ fsApi, codexHome, uid }),
       });
     },
-    reapResidue(snapshot, { ownerReplacement = null } = {}) {
-      return reapSnapshot(snapshot, {
-        platform: "darwin",
-        uid,
-        readIdentity,
-        signalProcess,
-        sleep,
-        graceMs,
-        postSignalMs,
-        lock: { acquire: () => () => {} },
-        ownerReplacement,
-      });
-    },
+    reapResidue: residueReaper({ uid, readIdentity, signalProcess, sleep, graceMs, postSignalMs }),
     stopUnmanaged(snapshot) {
       return stopExactUnmanagedTree(snapshot, {
         readIdentity,

@@ -14,8 +14,8 @@ import {
   EXIT_CODES,
   SNAPSHOT_SCHEMA,
   inspectHook,
-  reapSnapshot,
   recycleServer,
+  residueReaper,
 } from "./cleanup-codex.mjs";
 
 export const NOW = Date.parse("2026-08-02T16:00:00.000Z");
@@ -683,13 +683,19 @@ export function desktopHarness({
   const calls = { quit: [], launch: [], reaped: [], signals: [], activity: [], watchdog: [], lock: 0, order: [] };
   let relaunched = false;
   let clock = 0;
-  // The residue reap runs the real reapSnapshot; only signal delivery is
-  // faked. A signalled process exits; one already gone reports ESRCH.
-  const signalProcess = (pid, signal) => {
-    calls.signals.push([pid, signal]);
-    if (state.get(pid)?.state !== "present") throw Object.assign(new Error("no such process"), { code: "ESRCH" });
-    state.set(pid, { state: "absent" });
-  };
+  // The residue reap is the real reaper, wired as the default desktop
+  // dependencies wire it; only signal delivery is faked. A signalled process
+  // exits; one already gone reports ESRCH.
+  const reapResidue = residueReaper({
+    uid: 501,
+    readIdentity: (pid) => deps.readIdentity(pid),
+    signalProcess(pid, signal) {
+      calls.signals.push([pid, signal]);
+      if (state.get(pid)?.state !== "present") throw Object.assign(new Error("no such process"), { code: "ESRCH" });
+      state.set(pid, { state: "absent" });
+    },
+    sleep: (milliseconds) => deps.sleep(milliseconds),
+  });
   const deps = {
     inventory: fixture,
     selfPid: DESKTOP_SELF_PID,
@@ -758,17 +764,7 @@ export function desktopHarness({
       calls.reapContext = context;
       calls.reaped.push(snapshot.targets.map((target) => target.pid).sort((left, right) => left - right));
       calls.order.push("reap");
-      // Wired as createDefaultDesktopDependencies wires it: the recycle's own
-      // reader and sleep, and no second lock (the recycle holds it).
-      return reapSnapshot(snapshot, {
-        platform: "darwin",
-        uid: 501,
-        readIdentity: (pid) => deps.readIdentity(pid),
-        signalProcess,
-        sleep: (milliseconds) => deps.sleep(milliseconds),
-        lock: { acquire: () => () => {} },
-        ownerReplacement: context?.ownerReplacement ?? null,
-      });
+      return reapResidue(snapshot, context);
     },
     sleep(milliseconds) {
       clock += milliseconds;

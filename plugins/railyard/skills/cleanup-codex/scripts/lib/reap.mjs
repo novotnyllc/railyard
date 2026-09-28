@@ -15,6 +15,7 @@ import {
   validObservedIdentity,
 } from "./process-evidence.mjs";
 import {
+  birthVerdict,
   createMutationLock,
   sameBirthIdentityPresent,
   validateSnapshotObject,
@@ -60,6 +61,23 @@ export function skippedIdentity(pid, observation, expected) {
   return changed.length
     ? { pid, reasons: changed.map((field) => `identity-changed:${field}`) }
     : null;
+}
+
+// The residue reaper a recycle hands its dependencies: reapSnapshot bound to
+// the recycle's own reader, signaller and sleep, with no lock of its own
+// because the recycle already holds it.
+export function residueReaper({ uid, readIdentity, signalProcess, sleep, graceMs, postSignalMs }) {
+  return (snapshot, { ownerReplacement = null } = {}) => reapSnapshot(snapshot, {
+    platform: "darwin",
+    uid,
+    readIdentity,
+    signalProcess,
+    sleep,
+    graceMs,
+    postSignalMs,
+    lock: { acquire: () => () => {} },
+    ownerReplacement,
+  });
 }
 
 export function reapSnapshot(snapshot, {
@@ -249,20 +267,15 @@ function reapLocked(snapshot, result, {
   if (!attemptedFailure) {
     for (const target of killedTargets) {
       const observation = readIdentity(target.pid);
-      if (observation?.state === "absent") {
+      const verdict = birthVerdict(target, observation);
+      if (verdict === "gone") {
         result.verification.postKillVerifiedPids.push(target.pid);
-        continue;
-      }
-      if (observation?.state === "present" && validObservedIdentity(observation.identity)) {
-        if (!sameBirthIdentityPresent(target, observation)) {
-          result.verification.postKillVerifiedPids.push(target.pid);
+        if (observation.state !== "absent") {
           result.skipped.push({ pid: target.pid, reasons: ["pid-reused-after-kill"] });
-        } else {
-          fail("post-kill-survivor");
         }
         continue;
       }
-      fail("post-kill-verification-unknown");
+      fail(verdict === "present" ? "post-kill-survivor" : "post-kill-verification-unknown");
     }
   }
 

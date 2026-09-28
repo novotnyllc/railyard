@@ -85,6 +85,10 @@ export const GUI_HELPER_COMMAND = new RegExp(
   "i",
 );
 
+// A macOS bundle identifier. Validating against it is also what keeps one
+// safe inside the AppleScript string literal of the quit request.
+export const BUNDLE_ID = /^[A-Za-z0-9][A-Za-z0-9.-]{0,254}$/;
+
 export const LSAPPINFO = "/usr/bin/lsappinfo";
 
 export const SQLITE3 = "/usr/bin/sqlite3";

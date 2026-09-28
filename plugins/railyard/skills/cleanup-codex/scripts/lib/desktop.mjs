@@ -12,6 +12,7 @@ import path from "node:path";
 import { performance } from "node:perf_hooks";
 
 import {
+  BUNDLE_ID,
   DEFAULT_DESKTOP_IDLE_SECONDS,
   DEFAULT_DESKTOP_POLL_MS,
   DEFAULT_DESKTOP_QUIT_TIMEOUT_MS,
@@ -50,7 +51,7 @@ import {
   validObservedIdentity,
 } from "./process-evidence.mjs";
 import {
-  reapSnapshot,
+  residueReaper,
   signalExactPid,
 } from "./reap.mjs";
 import {
@@ -71,8 +72,6 @@ import {
 } from "./snapshot.mjs";
 import { runMutation } from "./transaction.mjs";
 
-
-const BUNDLE_ID = /^[A-Za-z0-9][A-Za-z0-9.-]{0,254}$/;
 
 export function readLaunchdMaxfiles(runner = defaultRunner) {
   const run = safeRun(runner, LAUNCHCTL, ["limit", "maxfiles"], { timeout: 5_000 });
@@ -812,19 +811,7 @@ export function createDefaultDesktopDependencies({
     // copy shares (checked before the quit).
     launchApp: (bundlePath, bundleId) => launchBundle(runner, { bundlePath, bundleId }),
     armRelaunchWatchdog: (args) => armRelaunchWatchdog(args, { spawnProcess }),
-    reapResidue(snapshot, { ownerReplacement = null } = {}) {
-      return reapSnapshot(snapshot, {
-        platform: "darwin",
-        uid,
-        readIdentity,
-        signalProcess,
-        sleep,
-        graceMs,
-        postSignalMs,
-        lock: { acquire: () => () => {} },
-        ownerReplacement,
-      });
-    },
+    reapResidue: residueReaper({ uid, readIdentity, signalProcess, sleep, graceMs, postSignalMs }),
     sleep,
     monotonicNow,
     quitTimeoutMs,
