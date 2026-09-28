@@ -132,7 +132,7 @@ test("the end-of-PR review is Thermos plus Codex review on GPT-6 Astra at high",
   assert.doesNotMatch(readFileSync(path.join(pluginRoot, "../../docs/agents/routing.md"), "utf8"), /gpt-6-astra|model_reasoning_effort/);
   const routing = flat(read("skills/model-routing/SKILL.md"));
   assert.match(routing, /\*\*Codex review\*\*[^.]*always runs GPT-6 Astra at `high`/);
-  assert.match(routing, /`codex review --base <base> -c model=gpt-6-astra -c model_reasoning_effort=high`/);
+  assert.match(routing, /`codex review --base <base> -c model=gpt-6-astra -c review_model=gpt-6-astra -c model_reasoning_effort=high`/);
   assert.match(flat(read("skills/thermos/SKILL.md")), /end-of-PR review in `railyard:deliver`/);
 });
 
