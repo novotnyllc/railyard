@@ -19,11 +19,11 @@ Report every row with one state:
 - **pass**: checked and healthy.
 - **warn**: drift or leftovers that work today; give a one-line fix.
 - **fail**: broken or missing; give a one-line fix.
-- **unknown (sandboxed)**: a probe errors, is blocked, or returns nothing
-  where output is expected, as process and host probes (`ps`, `pgrep`,
-  `launchctl`) often are inside a sandbox (`CODEX_SANDBOX` set). Report only
-  that row as unknown; rows whose read-only probes succeeded keep their real
-  result. Never guess pass or fail.
+- **unknown (cause)**: a probe errors, is blocked, or returns nothing where
+  output is expected. Name the observed cause (missing CLI, unreadable config,
+  command error); write `unknown (sandboxed)` only when `CODEX_SANDBOX` is set
+  and the probe was blocked. Report only that row as unknown; rows whose
+  read-only probes succeeded keep their real result. Never guess pass or fail.
 - **skipped**: out of scope, with the reason.
 
 Run probes with stdin from `/dev/null`. Print names and versions only. Read
@@ -77,10 +77,12 @@ as the fleet-wide form of the version check instead.
 **Process leftovers**
 
 - cleanup-codex canary listeners, left behind by an interrupted canary test:
-  `pgrep -fl '[c]leanup-codex-canary\.' </dev/null`. With no canary test
-  running, exit 1 passes and exit 0 warns; any other exit is unknown. Fix by
-  stopping each listed PID and removing its `cleanup-codex-canary.*`
-  temporary directory.
+  `pgrep -fl '[c]leanup-codex-canary\.' </dev/null`. Skip the row while a
+  canary test is running (`pgrep -f '[c]anary\.test\.mjs'`), and count a
+  listener as leaked only when it is older than 10 minutes
+  (`ps -o etimes= -p <pid>`). Exit 1 passes, leaked listeners warn, and any
+  other exit is unknown. Fix by stopping each leaked PID and removing its
+  `cleanup-codex-canary.*` temporary directory.
 
 **Configuration and state**
 

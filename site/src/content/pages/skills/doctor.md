@@ -21,10 +21,10 @@ Each row names the observed condition, evidence source, and owning fix surface. 
 
 ```text
 > Run the read-only doctor pass and group each finding by its owning fix surface.
-row=model-guidance       state=ready     owner=model-routing
-row=plugin-bytes         state=ready     owner=fleet-agents
-row=github-auth          state=present   owner=delivery-tail
-row=fleet-readiness      state=unknown   owner=fleet-readiness
+row=model-guidance       state=pass      owner=model-routing
+row=plugin-bytes         state=warn      owner=fleet-agents
+row=github-auth          state=pass      owner=delivery-tail
+row=fleet-readiness      state=unknown (roundhouse CLI missing)   owner=fleet-readiness
 next=collect readiness evidence
 ```
 
@@ -39,8 +39,8 @@ Ships in the `railyard` plugin.
 ## Proof point
 
 ```text
-finding=fleet-readiness before=unknown after=ready
+finding=fleet-readiness before=unknown after=pass
 mutation=performed-by-owner
 recheck=complete
-result=ready
+result=pass
 ```
