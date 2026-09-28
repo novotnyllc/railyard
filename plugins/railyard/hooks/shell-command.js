@@ -37,7 +37,6 @@ function commandText(args) {
 //     like a real `--help` option and skips the gate entirely.
 // So: tokenize once, honoring quotes, split into commands at UNQUOTED shell
 // separators, and read each command's identity from its own tokens.
-const SHELL_WRAPPERS = new Set(["bash", "sh", "zsh", "dash", "env"]);
 // Control words and grouping punctuation a merge can legitimately sit behind:
 // `(gh pr merge 7)`, `if gh pr merge 7; then ...`. Missing these means the
 // segment looks unrelated and the merge runs with no gate and no notice.
@@ -69,22 +68,91 @@ const VALUE_FLAGS = new Set([
 const SHORT_VALUE_FLAGS = new Set(
   [...VALUE_FLAGS].filter((f) => /^-[A-Za-z]$/.test(f)),
 );
-// A heredoc body is data the shell never executes, so a `gh pr merge` line
-// inside one must not be gated — otherwise writing a release script gets
-// refused. Only an unquoted operator starts a heredoc; quoted `<<EOF` is data
-// and must never hide a later executable merge, and neither may the `<<`
-// shift inside `$((…))` or `((…))` arithmetic. A body fed to an interpreter
-// (`bash <<EOF`, `source /dev/stdin <<EOF`) is a script, not data, so it is
-// kept and parsed as commands. (Here-strings are handled in commandPrefix.)
-const HEREDOC_INTERPRETERS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish", "source", "."]);
+// The one list of shells. A shell given a script (`-c`, a here-string, a
+// piped or redirected stdin, a file) runs text this guard does not attribute.
+const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "mksh", "ash", "fish", "tcsh", "csh", "busybox"]);
+// Shell options that take a separate value (`bash -o pipefail -c …`).
+const SHELL_VALUE_OPTIONS = new Set(["-o", "+o", "-O", "+O", "--rcfile", "--init-file"]);
 
-// Whether the simple command before a heredoc operator runs its input.
-function feedsInterpreter(before) {
-  const command = before.split(/;|&&|\|\||\||\(|\)|\{|\}/).pop();
-  return command.trim().split(/\s+/).some((word) => HEREDOC_INTERPRETERS.has(basename(word)));
+// Merge phrases, counted the same way in the raw text and in the parsed
+// pieces the guard can attribute. Quotes and backslashes are dropped and
+// `$IFS` reads as a space, so `gh pr 'merge'` or `pr${IFS}merge` still count.
+function normalizeForPhrases(text) {
+  return String(text).replace(/\\\r?\n/g, "").replace(/['"\\]/g, "").replace(/\$\{?IFS\}?/g, " ");
+}
+function mergePhraseCount(text, aliasNames = []) {
+  const source = normalizeForPhrases(text);
+  const patterns = [
+    /\bpr\b(?:\s+-\S+(?:\s+[^\s-]\S*)?)*\s+merge\b/g,
+    /pulls\/[^\s/]*\/merge\b/g,
+    /mergePullRequest/g,
+  ];
+  if (aliasNames.length) {
+    const names = aliasNames.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+    patterns.push(new RegExp(`\\bgh\\s+(?:${names})(?=\\s|$)`, "g"));
+  }
+  return patterns.reduce((total, pattern) => total + (source.match(pattern) || []).length, 0);
 }
 
+// Heredocs. A body is stripped from the executed text and reported, with
+// `inert` true only when its command is a known data sink (cat, tee, grep,
+// `git commit -F -`, `gh … --body-file -` and the like), is not inside
+// `$(…)`/`<(…)`/backticks, and is not piped into anything but a plain filter.
+// The caller still treats every body as live when the script runs a file
+// through a shell. Anything this reader cannot delimit exactly — a delimiter
+// that is not a bare or wholly quoted identifier, two heredocs on one line —
+// stops stripping and marks the script `unsure`. `<<` inside `$((…))`,
+// `((…))` or `$[…]` arithmetic is a shift, not a heredoc.
+const DATA_SINKS = new Set(["cat", "tee", "grep", "egrep", "fgrep", "rg", "head", "tail", "sort", "uniq", "wc", "less", "more", "column", "jq"]);
+const SAFE_FILTERS = new Set(["cat", "tee", "grep", "egrep", "fgrep", "rg", "head", "tail", "sort", "uniq", "wc", "cut", "tr", "less", "more", "column", "jq"]);
+
+function dataSinkCommand(words) {
+  const [head, ...rest] = words;
+  const name = basename(head || "");
+  if (DATA_SINKS.has(name)) return true;
+  if (name === "git") return ["commit", "tag", "notes"].includes(rest.find((word) => !word.startsWith("-"))) && !rest.includes("-c");
+  if (name === "gh") return !rest.some((word) => /merge|^api$/.test(word)) && rest.some((word) => /^(?:--body-file|-F)(?:=-)?$/.test(word));
+  return false;
+}
+
+// Words of the simple command around a heredoc operator, without redirections.
+function heredocCommandWords(before, after) {
+  const left = before.split(/;|&&|\|\||\||\(|\)|\{|\}|`/).pop();
+  const right = after.split(/;|&&|\|\||\||\)|`/)[0];
+  const words = `${left} ${right}`.trim().split(/\s+/).filter(Boolean)
+    .map((word) => word.replace(/['"]/g, ""));
+  const kept = [];
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index];
+    if (/^\d*(?:<<-?|<<<|<|>>|>|&>|>&)$/.test(word)) { index += 1; continue; } // operator then target
+    if (/^\d*(?:<<|<|>>|>|&>|>&)/.test(word)) continue; // attached target
+    if (!kept.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) continue;
+    kept.push(word);
+  }
+  return kept;
+}
+
+function heredocDelimiterWord(rest) {
+  const word = rest.match(/^<<-?[ \t]*([^\s;|&<>()]+)/)?.[1];
+  if (!word) return null;
+  const quoted = word.match(/^(?:'([A-Za-z_][A-Za-z0-9_]*)'|"([A-Za-z_][A-Za-z0-9_]*)"|\\([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*))$/);
+  return quoted ? { delimiter: quoted[1] ?? quoted[2] ?? quoted[3] ?? quoted[4], length: rest.indexOf(word) + word.length } : null;
+}
+
+function skipArithmetic(line, index) {
+  let depth = 0;
+  const open = line[index] === "[" ? "[" : "(";
+  const close = open === "[" ? "]" : ")";
+  for (; index < line.length; index += 1) {
+    if (line[index] === open) depth += 1;
+    else if (line[index] === close && --depth === 0) break;
+  }
+  return index;
+}
+
+// Scan one line: { opener, unsure }. `opener` is { delimiter, inert }.
 function heredocOpener(line, lexical) {
+  let opener = null;
   for (let index = 0; index < line.length; index += 1) {
     const char = line[index];
     if (char === "\\" && lexical.quote !== "'") { index += 1; continue; }
@@ -93,40 +161,63 @@ function heredocOpener(line, lexical) {
       continue;
     }
     if (char === "'" || char === '"') { lexical.quote = char; continue; }
-    if (char === "#" && (index === 0 || /\s/.test(line[index - 1]))) return null;
-    if (char === "(" && line[index + 1] === "(") {
-      // Arithmetic: skip to the matching `))` so a shift is not an operator.
-      let depth = 0;
-      for (; index < line.length; index += 1) {
-        if (line[index] === "(") depth += 1;
-        else if (line[index] === ")" && --depth === 0) break;
-      }
+    if (char === "#" && (index === 0 || /\s/.test(line[index - 1]))) break;
+    if ((char === "(" && line[index + 1] === "(") || (char === "$" && line[index + 1] === "[")) {
+      index = skipArithmetic(line, char === "$" ? index + 1 : index);
       continue;
     }
     if (char !== "<" || line[index + 1] !== "<") continue;
     if (line[index + 2] === "<") { index += 2; continue; } // here-string
-    const match = line.slice(index).match(/^<<-?[ \t]*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/);
-    if (!match) return null;
-    return { delimiter: match[2], interpreter: feedsInterpreter(line.slice(0, index)) };
+    const word = heredocDelimiterWord(line.slice(index));
+    if (!word || opener) return { opener: null, unsure: true };
+    const before = line.slice(0, index);
+    const after = line.slice(index + word.length);
+    const substituted = /\$\(|<\(|>\(|`/.test(before);
+    const pipes = [...after.matchAll(/(?<!\|)\|(?!\|)\s*([^\s|;&)]+)/g)].map((match) => basename(match[1]));
+    const inert = !substituted && dataSinkCommand(heredocCommandWords(before, after)) &&
+      pipes.every((consumer) => SAFE_FILTERS.has(consumer));
+    opener = { delimiter: word.delimiter, inert };
+    index += word.length - 1;
   }
-  return null;
+  return { opener, unsure: false };
 }
 
 function stripHeredocs(text) {
-  if (!text.includes("<<")) return text;
+  if (!text.includes("<<")) return { text, bodies: [], unsure: false };
   const out = [];
+  const bodies = [];
   let open = null;
+  let body = [];
   const lexical = { quote: null }; // Shell quotes may span physical lines.
-  for (const line of text.split("\n")) {
+  const lines = text.split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     if (open) {
-      if (line.trim() === open.delimiter) open = null;
-      else if (open.interpreter) out.push(line);
+      if (line.trim() === open.delimiter) {
+        bodies.push({ text: body.join("\n"), inert: open.inert });
+        open = null;
+        body = [];
+      } else body.push(line);
       continue;
     }
     out.push(line);
-    open = heredocOpener(line, lexical);
+    const scanned = heredocOpener(line, lexical);
+    if (scanned.unsure) {
+      return { text: [...out, ...lines.slice(index + 1)].join("\n"), bodies, unsure: true };
+    }
+    open = scanned.opener;
   }
-  return out.join("\n");
+  // An unterminated heredoc runs to the end of the script.
+  if (open) bodies.push({ text: body.join("\n"), inert: false });
+  return { text: out.join("\n"), bodies, unsure: false };
+}
+
+// Whether a simple command runs a script file or stdin through a shell, or a
+// script by path: then any text this script wrote may be executed.
+function runsScript(tokens) {
+  const head = tokens[0] || "";
+  return SHELLS.has(basename(head)) || head === "source" || head === "." ||
+    /^\.{1,2}\//.test(head) || /\.(?:sh|bash|zsh|command)$/.test(head);
 }
 
 // Also sheds grouping punctuation, so `(gh` and `7)` tokenize as `gh` and `7`.
@@ -140,7 +231,9 @@ function tokenizeSegments(text) {
   let tokens = [];
   let current = "";
   let quote = null;
-  let substitution = null;
+  // Substitutions opened inside double quotes, innermost last: each resumes
+  // the quote when it closes. `depth` counts parens nested inside it.
+  const substitutions = [];
   const endToken = () => {
     if (current) tokens.push(current);
     current = "";
@@ -160,12 +253,12 @@ function tokenizeSegments(text) {
         current += text[i + 1];
         i += 1;
       } else if (char === quote) quote = null;
-      else if (quote === '"' && char === "$" && text[i + 1] === "(") {
-        // `"$(gh pr merge 7)"` still runs the command: leave quote mode for
-        // the substitution so its contents are parsed as a command.
+      else if (quote === '"' && ((char === "$" && text[i + 1] === "(") || char === "`")) {
+        // `"$(gh pr merge 7)"` and "`gh pr merge 7`" still run the command:
+        // leave quote mode for the substitution so it is parsed as commands.
         endSegment();
-        i += 1;
-        substitution = quote;
+        if (char === "$") i += 1;
+        substitutions.push({ backtick: char === "`", depth: 0 });
         quote = null;
       } else current += char;
       continue;
@@ -177,6 +270,10 @@ function tokenizeSegments(text) {
     // `` `gh pr merge 7` `` runs the merge just like $( ).
     if (char === "`") {
       endSegment();
+      if (substitutions.at(-1)?.backtick) {
+        substitutions.pop();
+        quote = '"'; // back inside the surrounding quotes
+      }
       continue;
     }
     if (char === "\\" && i + 1 < text.length) {
@@ -197,10 +294,15 @@ function tokenizeSegments(text) {
     else if (char === ";") endSegment();
     else if (char === "(" || char === ")") {
       endSegment();
-      if (char === ")" && substitution) {
-        quote = substitution; // back inside the surrounding quotes
-        substitution = null;
-      } else segments.push([char]); // marker: a subshell scopes `cd`
+      const open = substitutions.at(-1);
+      if (open && !open.backtick && char === "(") open.depth += 1;
+      if (char === ")" && open && !open.backtick && open.depth === 0) {
+        substitutions.pop();
+        quote = '"'; // back inside the surrounding quotes
+      } else {
+        if (char === ")" && open && !open.backtick) open.depth -= 1;
+        segments.push([char]); // marker: a subshell scopes `cd`
+      }
     }
     else if (char === "&" || char === "|") {
       endSegment();
@@ -235,9 +337,10 @@ function dropWrapperFlags(tokens) {
   let splitString = null;
   let ignoreEnv = false;
   const unset = [];
-  while (rest[0] && rest[0].startsWith("-")) {
+  while (rest[0] && (rest[0].startsWith("-") || (!isEnv && rest[0].startsWith("+")))) {
     const token = rest[0];
     rest = rest.slice(1);
+    if (!isEnv && SHELL_VALUE_OPTIONS.has(token)) { rest = rest.slice(1); continue; }
     // `--chdir=DIR` / `--unset=NAME` are documented too, so normalize the
     // attached form before matching — an exact-match-only check drops the
     // value silently and the wrapper looks like it took no argument.
@@ -330,7 +433,7 @@ function commandPrefix(segmentTokens, baseCwd, inherited = {}) {
     }
     const wrapper = COMMAND_WRAPPERS.get(basename(head));
     if (wrapper) { tokens = skipWrapper(tokens.slice(1), wrapper); continue; }
-    if (!SHELL_WRAPPERS.has(basename(head))) return { ...context, tokens };
+    if (basename(head) !== "env" && !SHELLS.has(basename(head))) return { ...context, tokens };
     const dropped = dropWrapperFlags(tokens);
     if (basename(head) !== "env") context.shell = true;
     if (dropped.ignoreEnv) {
@@ -383,7 +486,6 @@ function parseArgs(tokens) {
       // `-X PUT`, `-Rowner/repo` is `-R owner/repo`. Walk the cluster; the
       // first value-taking flag consumes the remainder as its value.
       const chars = cluster[1];
-      let consumed = false;
       for (let c = 0; c < chars.length; c += 1) {
         const short = "-" + chars[c];
         if (SHORT_VALUE_FLAGS.has(short)) {
@@ -393,12 +495,10 @@ function parseArgs(tokens) {
             flags.set(short, tokens[i + 1] ?? true);
             i += 1;
           }
-          consumed = true;
           break;
         }
         flags.set(short, true);
       }
-      if (!consumed) { /* all boolean shorts recorded above */ }
     } else if (VALUE_FLAGS.has(token)) {
       flags.set(token, tokens[i + 1] ?? true);
       i += 1; // consume the value so it is never read as an option
@@ -409,21 +509,28 @@ function parseArgs(tokens) {
   return { words, flags };
 }
 
-// Codex's shell tool sends argv such as ["bash", "-lc", SCRIPT]. That outer
-// shell is the harness's own, like Claude Code's Bash string, so SCRIPT is the
-// command text. Every other shape joins its argv (see commandText).
+// Codex's shell tool sends argv such as ["bash", "-lc", SCRIPT] (or `-c`,
+// `-euc`, `-eu -o pipefail -c`). That outer shell is the harness's own, like
+// Claude Code's Bash string, so SCRIPT is the command text. Every other shape
+// joins its argv (see commandText).
 function commandScript(args) {
   const sources = [args.command, args.cmd, args.input].filter((v) => v !== undefined && v !== null);
   const [argv] = sources;
-  if (sources.length === 1 && Array.isArray(argv) && argv.length === 3 &&
-      argv.every((v) => typeof v === "string") &&
-      ["bash", "sh", "zsh", "dash"].includes(basename(argv[0])) && /^-(?:l?c|cl)$/.test(argv[1])) {
-    return argv[2];
+  if (sources.length !== 1 || !Array.isArray(argv) || argv.length < 3 ||
+      !argv.every((v) => typeof v === "string") || !SHELLS.has(basename(argv[0]))) {
+    return commandText(args);
   }
-  return commandText(args);
+  let command = false;
+  for (let index = 1; index < argv.length - 1; index += 1) {
+    const option = argv[index];
+    if (SHELL_VALUE_OPTIONS.has(option)) { index += 1; continue; }
+    if (!/^[-+][A-Za-z]+$/.test(option)) return commandText(args);
+    if (option.startsWith("-") && option.includes("c")) command = true;
+  }
+  return command ? argv.at(-1) : commandText(args);
 }
 
-
 module.exports = {
-  CONTROL_WORDS, basename, commandPrefix, commandScript, parseArgs, stripHeredocs, tokenizeSegments,
+  CONTROL_WORDS, SAFE_FILTERS, SHELLS, basename, commandPrefix, commandScript, mergePhraseCount,
+  parseArgs, runsScript, stripHeredocs, tokenizeSegments,
 };

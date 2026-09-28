@@ -208,7 +208,11 @@ function overrideShape(script) {
     env[assignment[1]] = assignment[2];
   }
   if (env[OVERRIDE_NAME] !== OVERRIDE_VALUE) {
-    return { reason: "it must be an inline assignment on the merge command itself" };
+    return {
+      reason: Object.hasOwn(env, OVERRIDE_NAME)
+        ? `its value must be ${OVERRIDE_VALUE}`
+        : "it must be an inline assignment on the merge command itself",
+    };
   }
   const [gh, group, verb] = words.slice(index, index + 3).map(unquoted);
   if (!gh || !GH.test(gh)) return { reason: "the merge must call gh directly" };
@@ -233,8 +237,12 @@ function evaluateOverride({ script, commands, input, defaultCwd, record }) {
   if (!script.includes(OVERRIDE_NAME)) return null;
   const { shape, reason } = overrideShape(script);
   if (!shape) return { reason };
-  // The gate's own parser must agree there is exactly this one merge.
-  if (commands.length !== 1 || commands[0].kind !== shape.kind) {
+  // The gate's own parser must agree there is exactly this one merge, with
+  // the same target and repository, so the two parsers cannot drift apart.
+  const [merge] = commands;
+  const parsedTarget = merge?.kind === "api" ? merge.endpoint?.[0] : merge?.ref;
+  const parsedRepo = merge?.kind === "api" ? shape.repo : merge?.flags?.get("--repo") ?? merge?.flags?.get("-R") ?? null;
+  if (commands.length !== 1 || merge.kind !== shape.kind || parsedTarget !== shape.target || parsedRepo !== shape.repo) {
     return { reason: "the command holds more than one merge, or one the guard cannot read" };
   }
   try {
@@ -254,4 +262,4 @@ function evaluateOverride({ script, commands, input, defaultCwd, record }) {
   }
 }
 
-module.exports = { OVERRIDE_NAME, OVERRIDE_VALUE, evaluateOverride, overrideShape, literalWords };
+module.exports = { evaluateOverride, overrideShape };

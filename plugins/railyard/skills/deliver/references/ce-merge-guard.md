@@ -2,13 +2,28 @@
 
 CE owns review settlement and CI. Railyard's shell guard consumes its completed
 result and checks PR identity; it never starts CE, watches CI, judges reviewer
-signals, or waits for a review timer. It covers recognized `gh` merge commands,
-including through `timeout`, `nice`, `nohup`, `sudo`, `env`, `command`,
-`time`, `xargs`, `find -exec`, `eval`, `sh -c` and a heredoc or here-string
-fed to a shell. It does not cover arbitrary API clients, `gh` aliases, a stack
-manager's internal transport, or `git push` to a default branch (the owner
-pushes some repositories to `main` directly). A command too long or nested
-too deeply to read whole refuses when its unread part mentions a merge.
+signals, or waits for a review timer.
+
+The guard fails closed. It reads a merge only as one directly executed
+`gh pr merge` or `gh api -X PUT repos/…/pulls/N/merge` (including through
+`timeout`, `nice`, `nohup`, `sudo`, `env`, `command`, `time`, `xargs`,
+`find -exec`, or a `gh` alias from the user's gh config) with a known working
+directory. If the command text mentions a merge anywhere else — a `-c` string
+for any shell, `eval`, `source`, a heredoc, here-string or pipe that feeds a
+shell or other interpreter, process substitution, `ssh`, `trap`, an unknown
+wrapper, a script file the command runs, or text the guard cannot delimit —
+the merge is refused. Only data that is plainly not executed passes: the
+arguments of commands like `grep`, `echo` or `git commit -m`, and heredocs
+written by `cat`, `tee`, `git commit -F -` or `gh … --body-file -`. Raw
+GraphQL `mergePullRequest` always refuses. Run a merge as its own command.
+Codex's own outer `bash -lc` (or `-c`, `-euc`, `-eu -o pipefail -c`) argv is
+the command text.
+
+The guard does not cover arbitrary API clients or a stack manager's internal
+transport. `git push` to a default branch is not a merge; it is refused only
+where a repository opts in with `git config railyard.guardDefaultBranchPush
+true` (or `RAILYARD_GUARD_DEFAULT_BRANCH_PUSH=1` in the environment), because
+some repositories are pushed to `main` directly.
 
 ## Handoff from the existing CE owner
 
@@ -57,24 +72,15 @@ and `--admin` is permitted:
 RAILYARD_MERGE_OVERRIDE=user-approved gh pr merge 123 --repo OWNER/REPO --squash --admin
 ```
 
-The override is an allow-list of one shape. The whole command must be exactly:
-
-```text
-[cd /ABSOLUTE/DIR &&] RAILYARD_MERGE_OVERRIDE=user-approved [RAILYARD_CE_*=…] gh pr merge REF [FLAGS]
-[cd /ABSOLUTE/DIR &&] RAILYARD_MERGE_OVERRIDE=user-approved [RAILYARD_CE_*=…] gh api -X PUT repos/OWNER/REPO/pulls/N/merge [-f FIELD=VALUE]
-```
-
-- `REF` is a literal PR number, branch or `https://HOST/OWNER/REPO/pull/N`;
-  `OWNER`, `REPO` and branch segments use only `A-Z a-z 0-9 . _ -`.
-- `FLAGS` are `--squash`/`--merge`/`--rebase`, `--admin`, `--delete-branch`,
-  `--repo OWNER/REPO`, `--subject`, `--body`, `--match-head-commit` and
-  `--author-email`; REST fields are `sha`, `merge_method`, `commit_title`
-  and `commit_message`. Only subject, body, title and message text may be
-  quoted, and double quotes may not contain `$`, backticks, `\` or `!`.
-- Nothing else: no other command, operator, redirect, expansion, glob, brace,
-  comment, wrapper, gh global flag, `--auto`, or line break. The `cd` target
-  must exist. An ambient or exported override is ignored. Codex's own outer
-  `bash -lc` argv counts as the command text.
+The override accepts exactly one command shape, defined by the allow-list in
+`hooks/merge-override.js`: an optional literal `cd /absolute/dir &&`, the
+override and optional `RAILYARD_CE_*` assignments, then `gh pr merge` with a
+literal PR number, branch or URL and plain merge flags, or a literal
+`gh api -X PUT repos/OWNER/REPO/pulls/N/merge` with plain fields. Only commit
+subject, body, title and message text may be quoted. No other command,
+operator, redirect, expansion, glob, wrapper, gh global flag, `--auto` or line
+break is accepted, the `cd` target must exist, and an ambient or exported
+override is ignored.
 
 Anything else falls back to the CE gate, whose refusal says why the override
 did not apply; refusals never suggest the override. Each used override

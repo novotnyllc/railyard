@@ -98,6 +98,9 @@ function prepare(fixtures = {}) {
     GH_FIXTURE_FAIL: fixtures.fail ? "1" : "", GH_FIXTURE_SLEEP: fixtures.sleep ?? "",
     // Override records land here, never in the developer's own state dir.
     RAILYARD_RUN_LOG_DIR: fixtures.runLogDir ?? path.join(dir, "run-log"),
+    // gh aliases come from this directory, never the developer's own config.
+    GH_CONFIG_DIR: path.join(dir, "gh-config"),
+    RAILYARD_GUARD_DEFAULT_BRANCH_PUSH: "",
   };
   const finish = (result) => {
     const calls = readFileSync(logs.calls, "utf8").trim().split("\n").filter(Boolean);
@@ -395,9 +398,6 @@ const parserCommands = [
   `/opt/homebrew/bin/gh pr merge 7 ${PIN}`,
   `GH_REPO=novotnyllc/railyard gh pr merge 7 ${PIN}`,
   `env GH_REPO=novotnyllc/railyard gh pr merge 7 ${PIN}`,
-  `bash -lc 'gh pr merge 7 ${PIN}'`,
-  `env bash -lc 'gh pr merge 7 ${PIN}'`,
-  `env -S 'gh pr merge 7 ${PIN}'`,
   `(gh pr merge 7 ${PIN})`,
   `{ gh pr merge 7 ${PIN}; }`,
   `if gh pr merge 7 ${PIN}; then echo merged; fi`,
@@ -405,6 +405,9 @@ const parserCommands = [
   `echo $(gh pr merge 7 ${PIN})`,
   `echo "$(gh pr merge 7 ${PIN})"`,
   `echo \`gh pr merge 7 ${PIN}\``,
+  `echo "\`gh pr merge 7 ${PIN}\`"`,
+  `command -p gh pr merge 7 ${PIN}`,
+  `timeout 60 gh pr merge 7 ${PIN}`,
   `gh pr merge 7 --body --help ${PIN}`,
   `gh pr merge 7 --body "normal text --help" ${PIN}`,
   `gh pr merge 7 --body "text \\" --help" ${PIN}`,
@@ -552,37 +555,31 @@ gated("env unsets remove the snapshot and mode from the command's environment", 
   allowed(run(bash(`env -u RAILYARD_CE_MODE ${fullMerge}`), { mode: "unknown" }));
 });
 
-gated("nested shell wrappers retain snapshot overrides, unsets and ignored environment", () => {
-  for (const prefix of ["env -u RAILYARD_CE_SNAPSHOT", "env -i", "RAILYARD_CE_SNAPSHOT=/missing/ce.json"]) {
-    const result = run(bash(`${prefix} bash -lc '${fullMerge}'`));
-    refused(result, /RAILYARD_CE_SNAPSHOT|CE snapshot is missing/);
+gated("a merge inside a string a shell interprets refuses; the script beside it does not", () => {
+  for (const command of [
+    `bash -lc '${fullMerge}'`,
+    `env bash -lc 'gh pr merge 7 ${PIN}'`,
+    `env -S 'gh pr merge 7 ${PIN}'`,
+    `RAILYARD_CE_SNAPSHOT=/missing/ce.json bash -lc '${fullMerge}'`,
+    `env -C /tmp bash -lc 'gh pr merge 7 ${PIN}'`,
+    `GH_TOKEN=wrapper-token bash -lc '${fullMerge}'`,
+    `eval ${fullMerge}`,
+  ]) {
+    const result = run(bash(command));
+    refused(result, /interprets/);
     assert.deepEqual(result.calls, []);
   }
-  allowed(run((filename) => bash(`RAILYARD_CE_SNAPSHOT='${filename}' bash -lc '${fullMerge}'`), { noPath: true }));
-  refused(run((filename) => bash(`RAILYARD_CE_SNAPSHOT='${filename}' env -u RAILYARD_CE_SNAPSHOT bash -lc '${fullMerge}'`)), /RAILYARD_CE_SNAPSHOT/);
-  allowed(run((filename) => bash(`env -u RAILYARD_CE_SNAPSHOT env RAILYARD_CE_SNAPSHOT='${filename}' bash -lc '${fullMerge}'`), { noPath: true }));
+  allowed(run(bash(`RAILYARD_CE_MODE=unknown bash -lc 'echo ready'; ${fullMerge}`)));
 });
 
-gated("nested shell wrappers retain cwd for PR resolution and relative query files", () => {
-  const result = run((filename) => bash(`env -C '${path.dirname(filename)}' bash -lc 'gh pr merge 7 ${PIN}'`));
-  allowed(result, ["pr view", "api graphql"]);
-  assert.ok(result.cwds.every((cwd) => path.basename(cwd).startsWith("ce-merge-gate-")));
-  const queryResult = run((filename) => bash(`env -C '${path.dirname(filename)}' bash -lc 'gh api graphql -F query=@request.graphql'`), {
+gated("a relative GraphQL query file resolves in the wrapper's working directory", () => {
+  const queryResult = run((filename) => bash(`env -C '${path.dirname(filename)}' gh api graphql -F query=@request.graphql`), {
     noPath: true,
     prepareFiles: ({ snapshotPath }) => writeFileSync(path.join(path.dirname(snapshotPath), "request.graphql"),
       'mutation { mergePullRequest(input:{pullRequestId:"PR_fixture"}) { clientMutationId } }'),
   });
   refused(queryResult, /mergePullRequest is unsupported/);
   assert.deepEqual(queryResult.calls, []);
-});
-
-gated("nested shell wrapper context stays scoped to that child shell", () => {
-  allowed(run(bash(`RAILYARD_CE_MODE=unknown bash -lc 'echo ready'; ${fullMerge}`)));
-  const result = run(bash(`RAILYARD_CE_MODE=unknown bash -lc '${fullMerge}'`));
-  refused(result, /pipeline or interactive/);
-  const credentialResult = run(bash(`GH_TOKEN=wrapper-token bash -lc '${fullMerge}'`));
-  allowed(credentialResult);
-  assert.equal(credentialResult.tokens.at(-1), "wrapper-token");
 });
 
 gated("unconditional cwd and shell workdir are preserved; pipeline/subshell cwd does not leak", () => {
@@ -826,7 +823,8 @@ gated("refusals do not advertise the override token", () => {
 });
 
 gated("eval and zsh repeat merges are gated, not skipped", () => {
-  for (const text of [`eval gh pr merge 7 ${PIN}`, `repeat 2 gh pr merge 7 ${PIN}`, `noglob gh pr merge 7 ${PIN}`]) {
+  refused(run(bash(`eval gh pr merge 7 ${PIN}`), { noPath: true }), /interprets/);
+  for (const text of [`repeat 2 gh pr merge 7 ${PIN}`, `noglob gh pr merge 7 ${PIN}`]) {
     refused(run(bash(text), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
   }
 });
@@ -952,10 +950,199 @@ gated("merges run through command wrappers are gated", () => {
 });
 
 gated("a merge past the parser's segment or depth cap refuses instead of being skipped", () => {
-  refused(run(bash(Array(600).fill("true").join(" && ") + " && gh pr merge 7 --admin"), { noPath: true }), /too long or nested/);
+  refused(run(bash(Array(600).fill("true").join(" && ") + " && gh pr merge 7 --admin"), { noPath: true }), /cannot attribute/);
   refused(run(bash(Array(40).fill("true").join("; ") + "; gh pr merge 7 --admin"), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
   let nested = "gh pr merge 7 --admin";
   for (let level = 0; level < 10; level += 1) nested = `eval ${nested}`;
-  refused(run(bash(nested), { noPath: true }), /too long or nested/);
+  refused(run(bash(nested), { noPath: true }), /interprets/);
   allowed(run(bash(Array(600).fill("true").join(" && ")), { noPath: true }), []);
+});
+
+// Round-2 probes (probes-r2/h1, h2, w1, b1, m1-shells, verify, f1). Every
+// merge the parser cannot attribute to one directly executed gh command
+// refuses, on Claude Code's string and on Codex's outer `bash -lc` argv.
+const ADMIN = "gh pr merge 7 --admin";
+const unattributable = {
+  "delimiter EOF-1": `cat <<EOF-1\nnotes\nEOF-1\n${ADMIN}\nEOF`,
+  "delimiter EOF-1 closing early": `cat <<EOF-1\nEOF\n${ADMIN}\nEOF-1`,
+  "delimiter E'OF'": `cat <<E'OF'\nnotes\nEOF\n${ADMIN}\nE`,
+  "old arithmetic $[1<<x]": `x=1; echo $[1<<x]\n${ADMIN}\nx`,
+  "arithmetic $((x<<y))": `echo $((x<<y))\n${ADMIN}`,
+  "heredoc piped to bash": `cat <<'EOF' | bash\n${ADMIN}\nEOF`,
+  "heredoc to bash": `bash <<EOF\n${ADMIN}\nEOF`,
+  "heredoc to ksh": `ksh <<EOF\n${ADMIN}\nEOF`,
+  "redirection first": `<<EOF bash\n${ADMIN}\nEOF`,
+  "$SHELL heredoc": `$SHELL <<EOF\n${ADMIN}\nEOF`,
+  "eval of a heredoc": `eval "$(cat <<'EOF'\n${ADMIN}\nEOF\n)"`,
+  "source process substitution": `source <(cat <<'EOF'\n${ADMIN}\nEOF\n)`,
+  "bash process substitution": `bash <(cat <<'EOF'\n${ADMIN}\nEOF\n)`,
+  "xargs heredoc": `xargs -L1 gh <<'EOF'\npr merge 7 --admin\nEOF`,
+  "tee a file then run it": `tee /tmp/x.sh <<'EOF' >/dev/null\n${ADMIN}\nEOF\nbash /tmp/x.sh`,
+  "write a file then run it by path": `cat > x.sh <<'EOF'\n${ADMIN}\nEOF\n./x.sh`,
+  "here-string to bash": `bash <<< '${ADMIN}'`,
+  "pipe into sh /dev/stdin": `echo '${ADMIN}' | sh /dev/stdin`,
+  "pipe into bash -s": `echo '${ADMIN}' | bash -s -- x`,
+  "ksh -c": `ksh -c '${ADMIN}'`,
+  "fish -c": `fish -c '${ADMIN}'`,
+  "dash -c": `dash -c '${ADMIN}'`,
+  "bash -o pipefail -c": `bash -o pipefail -c '${ADMIN}'`,
+  "bash -O extglob -c": `bash -O extglob -c '${ADMIN}'`,
+  "bash -euc": `bash -euc '${ADMIN}'`,
+  "find -exec sh -c": `find . -maxdepth 0 -exec sh -c '${ADMIN}' ';'`,
+  "op run --": `op run -- ${ADMIN}`,
+  "arch": `arch -arm64 ${ADMIN}`,
+  "stdbuf": `stdbuf -oL ${ADMIN}`,
+  "doas": `doas ${ADMIN}`,
+  "flock": `flock /tmp/l ${ADMIN}`,
+  "mise exec": `mise exec -- ${ADMIN}`,
+  "direnv exec": `direnv exec . ${ADMIN}`,
+  "script -q": `script -q /dev/null ${ADMIN}`,
+  "watch": `watch -n 1 ${ADMIN}`,
+  "ssh": `ssh host '${ADMIN}'`,
+  "trap": `trap '${ADMIN}' EXIT`,
+  "parallel": `parallel gh pr merge ::: 7`,
+  "coproc": `coproc ${ADMIN}`,
+  "shell function": `f(){ gh "$@"; }; f pr merge 7`,
+  "variable command": `G=gh; $G pr merge 7`,
+  "zsh =gh": `=gh pr merge 7`,
+  "alias then use": `alias g=gh\ng pr merge 7`,
+  "gh pr with IFS": "gh pr${IFS}merge 7",
+  "quoted merge word through timeout": `timeout 9 gh pr 'merge' 8 --admin`,
+  "python heredoc": `python3 - <<'EOF'\nprint('gh pr merge 7')\nEOF`,
+  "long chain": Array(600).fill("true").join(" && ") + ` && ${ADMIN}`,
+};
+gated("merges the parser cannot attribute refuse on both harnesses", () => {
+  for (const [name, text] of Object.entries(unattributable)) {
+    for (const input of [bash(text), codexArgv(text)]) {
+      const result = run(input, { noPath: true });
+      assert.equal(result.code, 2, `${name}: ${result.err}`);
+      assert.deepEqual(result.calls, [], name);
+    }
+  }
+});
+
+gated("data that only mentions merging passes on both harnesses", () => {
+  const long = Array.from({ length: 600 }, (_, i) => `echo line${i}`).join("\n") + "\ngit merge --ff-only origin/main";
+  for (const text of [
+    "git merge --no-ff feature",
+    "gh pr view 7 --json mergeable,mergeStateStatus",
+    "grep -rn 'gh pr merge' docs/",
+    "grep -rn 'gh pr merge' docs/ | head -5",
+    "gh pr merge --help",
+    "gh pr merge 7 --disable-auto",
+    "cat > notes.md <<'EOF'\nrun gh pr merge 7 --admin later\nEOF",
+    "cat > notes.md <<\\EOF\ngh pr merge 7\nEOF",
+    "grep -e . <<'EOF'\ngh pr merge 7\nEOF",
+    "git commit -F - <<'EOF'\nfix: gate gh pr merge shapes\nEOF",
+    "git commit -m 'docs: gh pr merge workflow'",
+    "gh pr create --title t --body-file - <<'EOF'\nThis PR fixes gh pr merge gating\nEOF",
+    "printf '%s\\n' '$(gh pr merge 7)'",
+    long,
+    "git merge-base HEAD main; curl -fsSL https://example.com/install.sh | sh",
+    "gh api repos/o/r/pulls/7/merge",
+    "echo y | gh pr view 7",
+  ]) {
+    allowed(run(bash(text), { noPath: true }), []);
+    allowed(run(codexArgv(text), { noPath: true }), []);
+  }
+});
+
+gated("Codex's outer shell argv forms are the command text", () => {
+  for (const options of [["-c"], ["-lc"], ["-euc"], ["-eu", "-o", "pipefail", "-c"]]) {
+    allowed(run({ tool_name: "shell", tool_input: { command: ["bash", ...options, fullMerge] } }));
+    allowed(run({ tool_name: "shell", tool_input: { command: ["/bin/zsh", ...options, fullMerge] } }));
+    overridden(run({ tool_name: "shell", tool_input: { command: ["bash", ...options, `${OVERRIDE} gh pr merge 7 --squash`] } }, { noPath: true }));
+  }
+  const pinned = `RAILYARD_CE_MODE=pipeline gh pr merge 7 --repo novotnyllc/railyard --squash ${PIN}`;
+  allowed(run((filename) => bash(`RAILYARD_CE_SNAPSHOT=${filename} ${pinned}`), { noPath: true }));
+  allowed(run((filename) => codexArgv(`RAILYARD_CE_SNAPSHOT=${filename} ${pinned}`), { noPath: true }));
+});
+
+gated("a cd behind command or builtin moves the merge's directory (Codex P1)", () => {
+  const target = mkdtempSync(path.join(tmpdir(), "ce-merge-cmdcd-"));
+  try {
+    for (const prefix of ["command cd", "builtin cd", "command -p cd"]) {
+      const result = run(bash(`${prefix} ${target} && gh pr merge 7 ${PIN}`));
+      allowed(result, ["pr view", "api graphql"]);
+      assert.ok(result.cwds.every((cwd) => cwd.endsWith(path.basename(target))), prefix);
+    }
+    refused(run(bash(`timeout 5 cd ${target}; gh pr merge 7 ${PIN}`)), /unresolved or conditional `cd`/);
+    refused(run(bash(`source ./env.sh; gh pr merge 7 ${PIN}`)), /unresolved or conditional `cd`/);
+  } finally {
+    rmSync(target, { recursive: true, force: true });
+  }
+});
+
+gated("a cd inside a heredoc-fed shell does not leak into the outer merge (Codex P1)", () => {
+  const other = mkdtempSync(path.join(tmpdir(), "ce-merge-other-"));
+  const outer = mkdtempSync(path.join(tmpdir(), "ce-merge-outer-"));
+  try {
+    for (const text of [`bash <<EOF\ncd ${other}\nEOF\ngh pr merge 7 ${PIN}`, `bash -c 'cd ${other}'; gh pr merge 7 ${PIN}`]) {
+      const result = run({ ...bash(text), cwd: outer });
+      allowed(result, ["pr view", "api graphql"]);
+      assert.ok(result.cwds.every((cwd) => cwd.endsWith(path.basename(outer))), text);
+    }
+  } finally {
+    rmSync(other, { recursive: true, force: true });
+    rmSync(outer, { recursive: true, force: true });
+  }
+});
+
+gated("a gh alias that expands to a merge is gated", () => {
+  const withAliases = (text) => ({
+    noPath: true,
+    prepareFiles: ({ snapshotPath }) => {
+      const dir = path.join(path.dirname(snapshotPath), "gh-config");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, "config.yml"), text);
+    },
+  });
+  const config = "version: 1\naliases:\n    pm: pr merge\n    co: pr checkout\n    sm: '!gh pr merge \"$1\" --admin'\ngit_protocol: https\n";
+  refused(run(bash("gh pm 7 --admin"), withAliases(config)), /RAILYARD_CE_SNAPSHOT/);
+  refused(run(bash("gh sm 7"), withAliases(config)), /alias runs a merge/);
+  allowed(run(bash("gh co 7"), withAliases(config)), []);
+  // An unreadable config never blocks a non-merge command.
+  allowed(run(bash("gh pm 7"), withAliases("aliases: [not: yaml")), []);
+});
+
+// A throwaway repository whose origin/HEAD names main.
+function pushRepo() {
+  const dir = mkdtempSync(path.join(tmpdir(), "ce-push-guard-"));
+  const git = (...args) => spawnSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { encoding: "utf8" });
+  git("init", "-q", "-b", "main");
+  git("commit", "-q", "--allow-empty", "-m", "init");
+  git("update-ref", "refs/remotes/origin/main", "HEAD");
+  git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+  return { dir, git };
+}
+const pushRefused = (result) => {
+  assert.equal(result.code, 2, result.err);
+  assert.match(result.err, /Push refused: this repository guards its default branch/);
+};
+
+gated("pushes to the default branch are gated only where the guard is on", () => {
+  const { dir, git } = pushRepo();
+  try {
+    const at = (command) => ({ ...bash(command), cwd: dir });
+    // Off by default: the owner pushes some repositories to main directly.
+    allowed(run(at("git push origin HEAD:main"), { noPath: true }), []);
+    pushRefused(run(at("RAILYARD_GUARD_DEFAULT_BRANCH_PUSH=1 git push origin HEAD:main"), { noPath: true }));
+    git("config", "railyard.guardDefaultBranchPush", "true");
+    for (const command of ["git push origin HEAD:main", "git push", "git push origin main", "git push --force origin +main",
+      "git push origin HEAD:refs/heads/main", "git push --all origin", `git -C ${dir} push origin main`]) {
+      pushRefused(run(at(command), { noPath: true }));
+    }
+    for (const command of ["git push origin HEAD:feature", "git push --dry-run origin main", "git push origin feature"]) {
+      allowed(run(at(command), { noPath: true }), []);
+    }
+    git("checkout", "-q", "-b", "feature");
+    allowed(run(at("git push"), { noPath: true }), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+gated("GraphQL mergePullRequest refuses, even in a query file", () => {
+  refused(run(bash(`gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}'`), { noPath: true }), /mergePullRequest is unsupported/);
+  refused(run(codexArgv(`gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}'`), { noPath: true }), /mergePullRequest is unsupported/);
 });
