@@ -33,7 +33,6 @@ import {
   normalizeDaemonSample,
   nofileLimitPolicy,
   normalizedSocketOwners,
-  reportedSoftNofile,
   revalidateExecutableEvidence,
   revalidateSnapshot,
 } from "./recycle-evidence.mjs";
@@ -147,17 +146,9 @@ function prepareRecycle(options, deps, { platform, uid, result }) {
   // reported as unverified; with one, the strict attestation contract holds.
   const nofile = nofileLimitPolicy(options.attestorPath, deps, uid);
   result.verification.nofileLimit = nofile.limit;
-  if (nofile.limit === "unverified") {
-    result.warnings.push({
-      code: "nofile-limit-unverified",
-      pid: server.pid,
-      message: "descriptor limit unverified (no --nofile-attestor)",
-      authorizesAction: false,
-    });
-  }
+  result.warnings.push(...nofile.warnings(server.pid));
 
   let launcher = null;
-  let launcherNofileAttestation = null;
   let replacementExecutable = executable;
   if (mode === "unmanaged") {
     if (!options.launcher) refuse("unmanaged-launcher-required");
@@ -168,25 +159,19 @@ function prepareRecycle(options, deps, { platform, uid, result }) {
       code: "unmanaged-launcher-invalid",
       requireOwner: true,
     });
-    ({ replacementExecutable, attestation: launcherNofileAttestation } = nofile.bindLauncher(
-      launcher,
-      executable,
-      options.minSoftLimit,
-    ));
+    replacementExecutable = nofile.bindLauncher(launcher, executable, options.minSoftLimit);
   }
 
   const initialOwner = deps.readIdentity(snapshot.owner.pid);
   if (!exactSnapshotIdentityPresent(snapshot.owner, initialOwner)) refuse("recycle-identity-changed");
-  const oldNofileAttestation = nofile.attestOwner(initialOwner.identity);
+  const oldSoftNofile = nofile.attestOwner(initialOwner.identity);
 
   const daemonEvidenceDigest = sha256(stableJson(secondSample));
   const authorization = {
     minimumSoftNofile: options.minSoftLimit,
-    attestor: nofile.attestor,
     launcher,
     replacementExecutable,
-    oldNofileAttestation,
-    launcherNofileAttestation,
+    ...nofile.receiptBindings(),
   };
   const receipt = buildRecycleReceipt(
     snapshot,
@@ -204,7 +189,7 @@ function prepareRecycle(options, deps, { platform, uid, result }) {
     socket: { path: socket, ownerPid: snapshot.owner.pid },
     targetPids: snapshot.targets.map((target) => target.pid),
     daemonEvidenceDigest,
-    softNofile: reportedSoftNofile(oldNofileAttestation?.softNofile ?? null),
+    softNofile: oldSoftNofile,
   };
   const selectedRoles = new Map([
     [snapshot.owner.pid, "server"],
@@ -229,8 +214,6 @@ function prepareRecycle(options, deps, { platform, uid, result }) {
     nofile,
     launcher,
     replacementExecutable,
-    oldNofileAttestation,
-    launcherNofileAttestation,
     guiBaselines,
     parent,
     receipt,
@@ -250,8 +233,6 @@ function recheckUnderLock(plan, options, deps, result) {
     nofile,
     launcher,
     replacementExecutable,
-    oldNofileAttestation,
-    launcherNofileAttestation,
     guiBaselines,
     parent,
   } = plan;
@@ -272,11 +253,9 @@ function recheckUnderLock(plan, options, deps, result) {
 
   const freshOwner = deps.readIdentity(snapshot.owner.pid);
   if (!exactSnapshotIdentityPresent(snapshot.owner, freshOwner)) refuse("recycle-identity-changed");
-  const oldSoftNofile = nofile.recheckOwner(freshOwner.identity, oldNofileAttestation);
-  if (launcher) {
-    nofile.recheckLauncher(launcher, replacementExecutable, launcherNofileAttestation, options.minSoftLimit);
-  }
-  result.verification.before.softNofile = reportedSoftNofile(oldSoftNofile);
+  const lockedSoftNofile = nofile.recheckOwner(freshOwner.identity);
+  if (launcher) nofile.recheckLauncher(launcher, replacementExecutable, options.minSoftLimit);
+  result.verification.before.softNofile = lockedSoftNofile;
 
   if (typeof deps.collectInventory !== "function") refuse("proxy-recheck-unavailable");
   const lockedInventory = deps.collectInventory();
@@ -493,7 +472,7 @@ function verifyReplacement(plan, replacement, options, deps, result) {
     pid: replacementPid,
     identity: snapshotIdentity(freshReplacement.identity, "server"),
     socket: { path: readySocket, ownerPid: replacementPid, ready: true },
-    softNofile: reportedSoftNofile(replacementSoftNofile),
+    softNofile: replacementSoftNofile,
     descriptors: { count: ready.descriptors.count, highest: ready.descriptors.highest },
     directChildren: ready.directChildren,
     oldTreeGone: true,

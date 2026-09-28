@@ -408,35 +408,36 @@ export function auditProxySelection(inventory, server, socket, canonicalPath) {
   return linked;
 }
 
-// JSON keeps the "unverified" sentinel for an unattested limit: consumers
-// (and the recycle tests) read `softNofile` as a number or "unverified".
-// `verification.nofileLimit` names the policy either way.
-export function reportedSoftNofile(softNofile) {
-  return softNofile ?? "unverified";
-}
-
 /**
- * The descriptor-limit policy, chosen once per recycle. With an attestor
- * ("attested") every check runs the attestor and re-proves its file; without
- * one ("unverified") the checks report `null` and an unmanaged launcher must
- * be the old server's own executable.
+ * The descriptor-limit policy, chosen once per recycle. It holds the
+ * attestations it takes, puts them in the receipt, and returns each limit
+ * ready to report: a number when attested, "unverified" otherwise (the value
+ * the JSON has always carried). With an attestor every check runs it and
+ * re-proves its file; without one the checks are skipped, a warning says so,
+ * and an unmanaged launcher must be the old server's own executable.
  */
 export function nofileLimitPolicy(attestorPath, deps, uid) {
   if (!attestorPath) {
     return {
       limit: "unverified",
-      attestor: null,
+      warnings: (pid) => [{
+        code: "nofile-limit-unverified",
+        pid,
+        message: "descriptor limit unverified (no --nofile-attestor)",
+        authorizesAction: false,
+      }],
+      receiptBindings: () => ({ attestor: null, oldNofileAttestation: null, launcherNofileAttestation: null }),
       revalidate() {},
       bindLauncher(launcher, executable) {
         // Only the launcher itself can be compared, so it must be the
         // executable the old server ran. Proven before anything is stopped.
         if (launcher.path !== executable.path) refuse("unmanaged-launcher-not-server-executable");
-        return { replacementExecutable: executable, attestation: null };
+        return executable;
       },
-      attestOwner: () => null,
-      recheckOwner: () => null,
+      attestOwner: () => "unverified",
+      recheckOwner: () => "unverified",
       recheckLauncher() {},
-      attestReplacement: () => null,
+      attestReplacement: () => "unverified",
     };
   }
 
@@ -449,6 +450,8 @@ export function nofileLimitPolicy(attestorPath, deps, uid) {
   });
   if (typeof deps.attestNofile !== "function") refuse("nofile-attestor-unavailable");
   const attestorOptions = { attestorPath: attestor.path };
+  let ownerAttestation = null;
+  let launcherAttestation = null;
   const revalidate = () => revalidateExecutableEvidence(attestor, deps, uid, "nofile-attestor-changed");
   const revalidateLauncher = (launcher) => (
     revalidateExecutableEvidence(launcher, deps, uid, "unmanaged-launcher-changed")
@@ -460,7 +463,12 @@ export function nofileLimitPolicy(attestorPath, deps, uid) {
   };
   return {
     limit: "attested",
-    attestor,
+    warnings: () => [],
+    receiptBindings: () => ({
+      attestor,
+      oldNofileAttestation: ownerAttestation,
+      launcherNofileAttestation: launcherAttestation,
+    }),
     revalidate,
     bindLauncher(launcher, executable, minimum) {
       if (typeof deps.attestLauncher !== "function") refuse("launcher-attestor-unavailable");
@@ -475,22 +483,27 @@ export function nofileLimitPolicy(attestorPath, deps, uid) {
         requireOwner: true,
       });
       validateLauncherNofileAttestation(attestation, launcher, replacementExecutable, minimum);
-      return { replacementExecutable, attestation };
+      launcherAttestation = attestation;
+      return replacementExecutable;
     },
     // The old server's own limit only has to be readable (minimum 1).
-    attestOwner: (identity) => attestPid(identity, 1).attestation,
-    recheckOwner(identity, confirmed) {
+    attestOwner(identity) {
       const { attestation, softNofile } = attestPid(identity, 1);
-      if (stableJson(attestation) !== stableJson(confirmed)) refuse("pid-nofile-attestation-changed");
+      ownerAttestation = attestation;
       return softNofile;
     },
-    recheckLauncher(launcher, replacementExecutable, confirmed, minimum) {
+    recheckOwner(identity) {
+      const { attestation, softNofile } = attestPid(identity, 1);
+      if (stableJson(attestation) !== stableJson(ownerAttestation)) refuse("pid-nofile-attestation-changed");
+      return softNofile;
+    },
+    recheckLauncher(launcher, replacementExecutable, minimum) {
       revalidateLauncher(launcher);
       const attestation = deps.attestLauncher(launcher, attestorOptions);
       revalidate();
       revalidateLauncher(launcher);
       validateLauncherNofileAttestation(attestation, launcher, replacementExecutable, minimum);
-      if (stableJson(attestation) !== stableJson(confirmed)) refuse("launcher-nofile-attestation-changed");
+      if (stableJson(attestation) !== stableJson(launcherAttestation)) refuse("launcher-nofile-attestation-changed");
     },
     attestReplacement(identity, minimum) {
       revalidate();
