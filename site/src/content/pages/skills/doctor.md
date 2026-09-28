@@ -13,7 +13,7 @@ Diagnose the delivery system as an ownership map: observe each surface, attach e
 
 Doctor reports a read-only health table for the requested surface: installed plugins, relevant tools, model policy, or a concrete runtime problem. Fleet readiness, account checks, and store health are inspected when that scope is requested. An unselected specialist is not a routine delivery failure.
 
-A quick local pass covers both harnesses on this host: declared marketplaces missing from `claude` or `codex` marketplace lists, Railyard, Roundhouse, and agent-utilities versions that differ between Claude and Codex or trail the newest catalog, leaked cleanup-codex canary listeners, and (on macOS) allow-listed login-shell variables that launchd lacks. Each row is pass, warn, or fail with a one-line fix, and reports names and versions only, never values.
+A quick local pass covers both harnesses on this host: declared marketplaces missing from the `claude` or `codex` marketplace list, and Railyard, Roundhouse, and agent-utilities versions that differ between Claude and Codex or trail the newest marketplace catalog. It also finds processes left behind by an interrupted cleanup-codex canary test. Each row is pass, warn, or fail with a one-line fix, or unknown inside a sandbox, and reports names and versions only.
 
 ## How it works
 

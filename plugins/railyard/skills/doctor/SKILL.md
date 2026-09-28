@@ -1,6 +1,6 @@
 ---
 name: doctor
-description: "Diagnose and repair the Railyard delivery setup: plugin and skill versions across harnesses and fleet hosts, marketplace freshness, hook trust, fleet config, host reachability and enrollment, desired-state sync, leaked canary listeners, and macOS launchd env gaps. Use when the user asks for doctor, a Railyard health check, or whether plugins, skills, or hosts are in sync. Not for bugs in the user's own code."
+description: "Diagnose and repair the Railyard delivery setup: plugin and skill versions across harnesses and fleet hosts, marketplace freshness, hook trust, fleet config, host reachability and enrollment, desired-state sync, and leftover test processes. Use when the user asks for doctor, a Railyard health check, or whether plugins, skills, or hosts are in sync. Not for bugs in the user's own code."
 ---
 
 # Railyard Doctor
@@ -14,63 +14,71 @@ existing fleet configuration alone does not authorize cross-host work.
 ## Checks
 
 Run the checks relevant to the reported failure or requested health scope.
+Report every row with one state:
 
-**Local health** (this host, both harnesses)
+- **pass**: checked and healthy.
+- **warn**: drift or leftovers that work today; give a one-line fix.
+- **fail**: broken or missing; give a one-line fix.
+- **unknown (sandboxed)**: inside a sandbox (`CODEX_SANDBOX` is set), or a
+  process or host probe (`ps`, `pgrep`, `launchctl`) errors or returns nothing
+  where output is expected. Never guess pass or fail.
+- **skipped**: out of scope, with the reason.
 
-Quick, read-only checks; each row is pass, warn, or fail with a one-line fix.
-Print names and versions only, never environment values or secrets.
+Run probes with stdin from `/dev/null`. Print names and versions only. Read
+config through the specific keys named here, never by printing whole files:
+`settings.json` and `config.toml` can hold secrets.
 
-- Marketplace registration. Claude: names under `extraKnownMarketplaces` in
-  `~/.claude/settings.json` vs `claude plugin marketplace list --json`
-  (`.[].name`). Codex: `[marketplaces.<name>]` tables in
-  `${CODEX_HOME:-~/.codex}/config.toml` vs `codex plugin marketplace list
-  --json` (`.marketplaces[].name`). A declared name missing from its
-  harness's list fails; fix with `claude plugin marketplace add <source>` or
-  `codex plugin marketplace add <source>` from the declared source. A
-  marketplace declared for only one harness is not a fault.
-- Plugin versions for `railyard`, `roundhouse`, and `agent-utilities`:
-  installed versions from `claude plugin list --json` and the `installed`
-  array of `codex plugin list --json`, vs the newest version either harness's
-  catalog offers (Codex `available`; Claude's
-  `<installLocation>/.claude-plugin/marketplace.json` from the marketplace
-  list). A Claude/Codex mismatch or an installed version behind
-  the newest warns; a stale local catalog is itself the finding, fixed by
-  `claude plugin marketplace update <name>` or
-  `codex plugin marketplace upgrade`, then the plugin update. Deliberate pins
-  and staged upgrades are not faults.
-- Leaked cleanup-codex canary listeners: `pgrep -fl
-  'nc .*-lU /private/tmp/cleanup-codex-canary\.'`. With no canary test
-  running, any match warns (an interrupted test left it); fix by stopping that PID and removing its
-  `/private/tmp/cleanup-codex-canary.*` directory.
-- launchd environment gaps, macOS only: when `export-login-env-to-launchd` is
-  on `PATH`, its `_launchd_env_names=( ... )` array is the allow-list; without
-  it, skip. List allow-listed names a login shell has but launchd lacks:
+**Plugins and marketplaces** (this host, both harnesses)
 
-  ```sh
-  awk '/_launchd_env_names=\(/{f=1;next} f&&/^\)/{exit} f{print $1}' \
-    "$(command -v export-login-env-to-launchd)" |
-    xargs "$SHELL" -lc 'for n; do printenv "$n" >/dev/null &&
-      [ -z "$(launchctl getenv "$n")" ] && echo "$n"; done; true' _
-  ```
-
-  Any name warns; fix by running `export-login-env-to-launchd` from a login
-  shell, then restarting affected GUI apps when idle.
-
-**Versions and dependencies**
-
-- Marketplace freshness beyond Railyard's plugins: installed versions vs the
-  current catalogs (`compound-engineering-plugin` when selected).
-  Distinguish an outdated catalog from an intentional pin.
+- Marketplace registration. Claude declares marketplaces with
+  `jq -r '.extraKnownMarketplaces // {} | keys[]'
+  "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"`; compare with
+  `claude plugin marketplace list --json` (`.[].name`). Codex declares them as
+  table headers, read with `grep -oE '^\[marketplaces\.[^]]+\]'
+  "${CODEX_HOME:-$HOME/.codex}/config.toml"`; compare with
+  `codex plugin marketplace list --json` (`.marketplaces[].name`). A declared
+  name missing from its harness's list fails; fix with
+  `claude plugin marketplace add <source>` or
+  `codex plugin marketplace add <source>`. A marketplace declared for only one
+  harness is not a fault.
+- Plugin versions, for `railyard`, `roundhouse`, `agent-utilities`, and
+  Compound Engineering when selected:
+  - Installed: `claude plugin list --json` (`.[] | {id, version}`, with
+    `id` as `name@marketplace`) and `codex plugin list --json`
+    (`.installed[] | {name, marketplaceName, version}`).
+  - Catalog: each marketplace clone. Claude:
+    `<installLocation>/.claude-plugin/marketplace.json`, from the Claude
+    marketplace list. Codex: `<root>/.agents/plugins/plugin-versions.json`,
+    from `.marketplaces[].root`. Where an entry's `version` is null or the
+    file is absent, read the plugin manifest at its source path in the clone.
+  - A Claude/Codex mismatch, or an install behind the newest catalog, warns.
+    A catalog behind the other harness's is itself the finding. Claude fix:
+    `claude plugin marketplace update <marketplace>`, then
+    `claude plugin update <name>@<marketplace>`. Codex fix:
+    `codex plugin marketplace upgrade <marketplace>`, then
+    `codex plugin add <name>@<marketplace>`. Deliberate pins and staged
+    upgrades are not faults.
 - Compound Engineering: the selected skills are exposed, including
   `ce-babysit-pr` when watching a PR.
 - Codex hook trust: current hashes for intentionally enabled hooks. Disabled
   optional hooks are healthy; never approve every hook as a generic repair.
   Before activating a selected merge guard, test the installed
   startup/dispatch path and the CE snapshot handoff.
-- Fleet-wide parity, only when requested: when `roundhouse --help` lists
-  `probe --plugins`, that is the fleet-wide form of the local version check;
-  otherwise delegate the cross-host comparison to `roundhouse:fleet-agents`
-  (inventory mode). Fold in its drift report rather than repeating it.
+
+**Fleet parity** (only when requested)
+
+Delegate the cross-host comparison to `roundhouse:fleet-agents` (inventory
+mode) and fold in its drift report rather than repeating it. If
+`roundhouse --help` lists a plugin probe (such as `probe --plugins`), use that
+as the fleet-wide form of the version check instead.
+
+**Process leftovers**
+
+- cleanup-codex canary listeners, left behind by an interrupted canary test:
+  `pgrep -fl '[c]leanup-codex-canary\.' </dev/null`. With no canary test
+  running, exit 1 passes and exit 0 warns; any other exit is unknown. Fix by
+  stopping each listed PID and removing its `cleanup-codex-canary.*`
+  temporary directory.
 
 **Configuration and state**
 
@@ -121,11 +129,13 @@ does not report:
 
 ## Findings and fixes
 
-Report one table: check, state (pass / warn / fail / skipped with reason),
-and for each non-pass row the minimal fix and its owner:
+Report one table: check, state (as defined under Checks), and for each
+non-pass row the minimal fix and its owner:
 
-- plugin/skill drift → `roundhouse:fleet-agents` refresh (locally, the direct
-  `plugin update` commands);
+- a declared marketplace missing from its harness → `railyard:setup`;
+- plugin/skill drift or a stale catalog → `roundhouse:fleet-agents` refresh
+  (locally, the marketplace and plugin commands above);
+- leaked canary listeners → `railyard:cleanup-codex`;
 - sshd faults → `roundhouse:ssh-doctor`;
 - enrollment or host prerequisites → `roundhouse:fleet-hosts`;
 - package baseline (tmux/jq) → `roundhouse:fleet-update`;
