@@ -22,7 +22,6 @@ import {
   DESKTOP_RECEIPT_SCHEMA,
   EXIT_CODES,
   LAUNCHCTL,
-  MAIN_APP_EXECUTABLE,
   OSASCRIPT,
   PLUTIL,
   SNAPSHOT_SCHEMA,
@@ -35,6 +34,7 @@ import {
   collectExactProcessIdentity,
   collectMacOSInventory,
   descendantsOf,
+  mainAppBundlePath,
 } from "./inventory.mjs";
 import {
   CleanupRefusal,
@@ -143,20 +143,6 @@ export function readBundleIdentifier(runner, bundlePath) {
   ], { timeout: 5_000 });
   const value = run.status === 0 ? run.stdout.trim() : "";
   return BUNDLE_ID.test(value) ? value : null;
-}
-
-export function findDesktopHost(server, byPid) {
-  const seen = new Set([server.pid]);
-  let parentPid = server.parentPid;
-  while (Number.isInteger(parentPid) && parentPid > 1 && !seen.has(parentPid)) {
-    seen.add(parentPid);
-    const record = byPid.get(parentPid);
-    if (!record) return null;
-    const match = MAIN_APP_EXECUTABLE.exec(record.executable ?? "");
-    if (match) return { record, bundlePath: match[1] };
-    parentPid = record.parentPid;
-  }
-  return null;
 }
 
 export function emptyDesktopResult(platform) {
@@ -305,6 +291,7 @@ export function processAncestry(pid, byPid) {
 function desktopEvidence(inventory, { pid, uid, now }, deps) {
   const classified = classifyInventory(inventory, { now });
   const verification = classified.result.verification;
+  const hostOf = (candidate) => classified.hosts.get(candidate.pid) ?? null;
   const inventoryGap = desktopServerEvidenceGap(verification);
   if (inventoryGap) refuse(inventoryGap);
   const server = verification.servers.find((candidate) => candidate.pid === pid);
@@ -316,7 +303,7 @@ function desktopEvidence(inventory, { pid, uid, now }, deps) {
 
   const processes = inventory.processes ?? [];
   const byPid = new Map(processes.map((item) => [item.pid, item]));
-  const host = findDesktopHost(server, byPid);
+  const host = hostOf(server);
   if (!host) refuse("desktop-host-unidentified");
   if (host.record.uid !== uid) refuse("desktop-host-wrong-user");
   if (processes.filter((item) => item.executable === host.record.executable).length !== 1) {
@@ -344,7 +331,7 @@ function desktopEvidence(inventory, { pid, uid, now }, deps) {
   // The quit is addressed by bundle id, so another running copy of the app
   // (a second install with the same id) could be the one that quits.
   const otherBundles = unique(processes
-    .map((item) => MAIN_APP_EXECUTABLE.exec(item.executable ?? "")?.[1])
+    .map((item) => mainAppBundlePath(item.executable))
     .filter((bundlePath) => bundlePath && bundlePath !== host.bundlePath));
   for (const bundlePath of otherBundles) {
     let other = null;
@@ -366,7 +353,7 @@ function desktopEvidence(inventory, { pid, uid, now }, deps) {
   // GUI servers hosted by any other app process must survive the recycle.
   const otherGui = verification.servers
     .filter((candidate) => candidate.classification === "gui" && candidate.pid !== server.pid)
-    .filter((candidate) => findDesktopHost(candidate, byPid)?.record.pid !== host.record.pid)
+    .filter((candidate) => hostOf(candidate)?.record.pid !== host.record.pid)
     .map((candidate) => {
       const observation = deps.readIdentity(candidate.pid);
       if (observation?.state !== "present" || !validObservedIdentity(observation.identity)) {
@@ -428,7 +415,7 @@ function findRelaunched(inventory, oldHost, oldOwner, uid, now) {
     const serverRecord = byPid.get(server.pid);
     // A reused PID with a new birth is a valid replacement.
     if (!serverRecord || (server.pid === oldOwner.pid && serverRecord.startTime === oldOwner.startTime)) continue;
-    const host = findDesktopHost(server, byPid);
+    const host = classified.hosts.get(server.pid);
     if (!host || host.record.executable !== oldHost.executable) continue;
     if (host.record.pid === oldHost.pid && host.record.startTime === oldHost.startTime) continue;
     return { server, serverRecord, host: host.record };

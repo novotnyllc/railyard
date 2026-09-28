@@ -4,7 +4,10 @@ import path from "node:path";
 import {
   DEFAULT_THRESHOLDS,
   EXIT_CODES,
+  GUI_HELPER_COMMAND,
+  GUI_MAIN_APP_COMMAND,
   LSOF,
+  MAIN_APP_EXECUTABLE,
   PS,
 } from "./constants.mjs";
 import {
@@ -166,10 +169,33 @@ export function collectExactProcessIdentity(pid, options = {}) {
 
 export function isGuiHost(processRecord) {
   const identity = `${processRecord.executable ?? ""} ${processRecord.rawCommand ?? ""}`;
-  return /\/(?:Codex|ChatGPT)\.app\/Contents\/MacOS\/(?:Codex|ChatGPT)(?:\s|$)/i.test(identity)
-    || /\/(?:Codex|ChatGPT)\.app\/Contents\/Frameworks\/.*(?:Codex|ChatGPT) Helper/i.test(identity);
+  return GUI_MAIN_APP_COMMAND.test(identity) || GUI_HELPER_COMMAND.test(identity);
 }
 
+// The bundle path of a ChatGPT/Codex main-app executable, or null.
+export function mainAppBundlePath(executable) {
+  return MAIN_APP_EXECUTABLE.exec(executable ?? "")?.[1] ?? null;
+}
+
+// From the first GUI ancestor (the main app or one of its helpers), the main
+// app process above it: `{ record, bundlePath }`, or null when the ancestry
+// breaks first. `seen` carries the PIDs already walked.
+function mainAppAncestor(record, byPid, seen) {
+  let current = record;
+  for (;;) {
+    const bundlePath = mainAppBundlePath(current.executable);
+    if (bundlePath) return { record: current, bundlePath };
+    const parentPid = current.parentPid;
+    if (!Number.isInteger(parentPid) || parentPid <= 1 || seen.has(parentPid)) return null;
+    seen.add(parentPid);
+    current = byPid.get(parentPid);
+    if (!current) return null;
+  }
+}
+
+// Walk the server's ancestry once. A GUI server also carries the desktop host
+// app it runs under (`host`, null when that app cannot be found); desktop
+// recycle uses this host rather than looking again.
 export function classifyAncestry(server, byPid, processListComplete) {
   if (!processListComplete) {
     return { classification: "ambiguous", reason: "process-list-incomplete" };
@@ -190,7 +216,7 @@ export function classifyAncestry(server, byPid, processListComplete) {
       return { classification: "ambiguous", reason: "ancestry-missing" };
     }
     if (isGuiHost(parent)) {
-      return { classification: "gui", reason: "codex-gui-ancestry" };
+      return { classification: "gui", reason: "codex-gui-ancestry", host: mainAppAncestor(parent, byPid, seen) };
     }
     parentPid = parent.parentPid;
   }
@@ -362,6 +388,8 @@ export function classifyInventory(inventory, {
     }
   }
 
+  // Each GUI server's desktop host app, found by the ancestry walk.
+  const hosts = new Map();
   const servers = appServers.map((processRecord) => {
     const missingEvidence = [];
     if (!processIdentityComplete(processRecord)) missingEvidence.push("process-identity");
@@ -383,6 +411,7 @@ export function classifyInventory(inventory, {
       missingEvidence,
     );
     let ancestry = classifyAncestry(processRecord, byPid, processListComplete);
+    if (ancestry.classification === "gui") hosts.set(processRecord.pid, ancestry.host);
     if (
       ancestry.classification === "detached"
       && controlSocket.state !== "owned"
@@ -482,7 +511,7 @@ export function classifyInventory(inventory, {
       servers,
     },
   };
-  return { result, exitCode };
+  return { result, exitCode, hosts };
 }
 
 export function invalidResult(code, platform) {

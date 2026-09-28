@@ -44,6 +44,34 @@ test("defaults to read-only inspect with stable exit codes", () => {
   });
 });
 
+test("classification returns each GUI server's desktop host from the one ancestry walk", () => {
+  const direct = classifyInventory(guiFixture(), { now: NOW });
+  assert.equal(direct.hosts.get(101).record.pid, 10);
+  assert.equal(direct.hosts.get(101).bundlePath, "/Applications/ChatGPT.app");
+
+  // A server under a Frameworks helper is GUI at the helper; its host is the
+  // main app above it, and null when that app is not in the process list.
+  const helper = processRecord({
+    pid: 50,
+    parentPid: 10,
+    processGroupId: 10,
+    executable: "/Applications/ChatGPT.app/Contents/Frameworks/ChatGPT Helper.app/Contents/MacOS/ChatGPT Helper",
+    rawCommand: "/Applications/ChatGPT.app/Contents/Frameworks/ChatGPT Helper.app/Contents/MacOS/ChatGPT Helper",
+  });
+  const nested = guiFixture();
+  nested.processes.push(helper);
+  nested.processes.find((record) => record.pid === 101).parentPid = 50;
+  const underHelper = classifyInventory(nested, { now: NOW });
+  assert.equal(underHelper.result.verification.servers[0].classification, "gui");
+  assert.equal(underHelper.hosts.get(101).record.pid, 10);
+
+  nested.processes = nested.processes.filter((record) => record.pid !== 10);
+  helper.parentPid = 1;
+  const orphaned = classifyInventory(nested, { now: NOW });
+  assert.equal(orphaned.result.verification.servers[0].classification, "gui");
+  assert.equal(orphaned.hosts.get(101), null);
+});
+
 test("inline CLI values preserve equals signs", () => {
   const parsed = parseCliArgs(["inspect", "--snapshot=/tmp/tree=a.json", "--json"]);
 

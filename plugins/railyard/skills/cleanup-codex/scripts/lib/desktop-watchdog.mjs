@@ -16,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   MAIN_APP_BUNDLE,
+  MAIN_APP_EXECUTABLE_NAME,
   OPEN,
   PS,
   WATCHDOG_GRACE_MS,
@@ -58,7 +59,7 @@ export function bundleRunning(bundlePath, runner = defaultRunner, uid = process.
   return run.stdout.split("\n").some((line) => {
     const match = /^\s*(\d+)\s+(.*)$/.exec(line);
     if (!match || Number(match[1]) !== uid || !match[2].startsWith(prefix)) return false;
-    return /^(?:Codex|ChatGPT)(?:\s|$)/i.test(match[2].slice(prefix.length));
+    return MAIN_APP_EXECUTABLE_NAME.test(match[2].slice(prefix.length));
   });
 }
 
