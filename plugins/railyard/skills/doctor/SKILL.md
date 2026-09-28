@@ -19,9 +19,11 @@ Report every row with one state:
 - **pass**: checked and healthy.
 - **warn**: drift or leftovers that work today; give a one-line fix.
 - **fail**: broken or missing; give a one-line fix.
-- **unknown (sandboxed)**: inside a sandbox (`CODEX_SANDBOX` is set), or a
-  process or host probe (`ps`, `pgrep`, `launchctl`) errors or returns nothing
-  where output is expected. Never guess pass or fail.
+- **unknown (sandboxed)**: a probe errors, is blocked, or returns nothing
+  where output is expected, as process and host probes (`ps`, `pgrep`,
+  `launchctl`) often are inside a sandbox (`CODEX_SANDBOX` set). Report only
+  that row as unknown; rows whose read-only probes succeeded keep their real
+  result. Never guess pass or fail.
 - **skipped**: out of scope, with the reason.
 
 Run probes with stdin from `/dev/null`. Print names and versions only. Read
@@ -34,8 +36,8 @@ config through the specific keys named here, never by printing whole files:
   `jq -r '.extraKnownMarketplaces // {} | keys[]'
   "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"`; compare with
   `claude plugin marketplace list --json` (`.[].name`). Codex declares them as
-  table headers, read with `grep -oE '^\[marketplaces\.[^]]+\]'
-  "${CODEX_HOME:-$HOME/.codex}/config.toml"`; compare with
+  table headers, read as bare names with `grep -oE '^\[marketplaces\.[^]]+\]'
+  "${CODEX_HOME:-$HOME/.codex}/config.toml" | sed -E 's/^\[marketplaces\.//; s/\]$//'`; compare with
   `codex plugin marketplace list --json` (`.marketplaces[].name`). A declared
   name missing from its harness's list fails; fix with
   `claude plugin marketplace add <source>` or
