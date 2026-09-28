@@ -168,7 +168,9 @@ function dataCommand(tokens) {
   if (name !== "git") return false;
   const sub = tokens.slice(1).find((token) => !token.startsWith("-"));
   return ["commit", "log", "grep", "show", "tag", "notes", "diff", "status"].includes(sub) &&
-    !tokens.some((token) => token === "-c" || token.startsWith("--config-env"));
+    !tokens.some((token) => token === "-c" || token.startsWith("--config-env") ||
+      // `git grep -O<pager>` runs the pager command.
+      /^(?:-O|--open-files-in-pager)/.test(token));
 }
 
 // git's subcommand after its global options, with `-C DIR` applied and the
@@ -266,6 +268,11 @@ function shellAssignments(bare, prefix) {
   return { set, unset };
 }
 
+const GIT_DATA_SUBCOMMANDS = new Set([
+  "add", "branch", "checkout", "commit", "diff", "fetch", "grep", "log", "notes", "reset", "restore",
+  "rev-parse", "show", "stash", "status", "switch", "tag",
+]);
+
 // Compound commands whose body may run conditionally, repeatedly, or never.
 // A newline-separated body tokenizes into its own segments, so a `cd` there
 // has no control word in front of it; the open-block depth marks it instead.
@@ -349,6 +356,7 @@ function mergeCommands(script, baseCwd) {
   // where it may not run (behind &&/||, in a block) has an unknown value.
   let shellEnv = {};
   let shellUnset = [];
+  let aliasesChanged = false; // an earlier `gh alias set/import` in this script
   for (let i = 0; i < queue.length && i < SEGMENT_CAP; i += 1) {
     const segment = queue[i];
     if (segment.length === 1 && (segment[0] === "&&" || segment[0] === "||")) {
@@ -423,6 +431,12 @@ function mergeCommands(script, baseCwd) {
     pipeline = false;
     const pieceCount = count(segment.join(" "));
     const pushPiece = pushPhraseCount(segment.join(" "));
+    // Only the command's own argv is ever credited: an assignment or wrapper
+    // option peeled off it (`GIT_EDITOR='gh pr merge 7 #' git commit`) can
+    // itself be run, so its phrases stay unattributed.
+    const argv = (prefix.tokens || []).join(" ");
+    const argvCount = count(argv);
+    const argvPushes = pushPhraseCount(argv);
     const site = { cwd: prefix.cwd, cwdUnknown: prefix.cwdUnknown, env: prefix.env };
     if (Object.hasOwn(prefix.env, "RAILYARD_GUARD_DEFAULT_BRANCH_PUSH")) {
       guardEnv = { RAILYARD_GUARD_DEFAULT_BRANCH_PUSH: prefix.env.RAILYARD_GUARD_DEFAULT_BRANCH_PUSH };
@@ -441,7 +455,7 @@ function mergeCommands(script, baseCwd) {
         if (inner.script === undefined && basename(inner.tokens?.[0] || "") === "gh") {
           const merge = mergeFromPrefix(inner);
           if (merge) found.push(merge);
-          attributed += count(group.join(" "));
+          attributed += count(inner.tokens.join(" "));
         }
       }
       continue;
@@ -450,14 +464,21 @@ function mergeCommands(script, baseCwd) {
       // xargs appends a PR, repository or flags read from stdin after the
       // gate has read the visible arguments.
       unattributed.add("xargs adds merge arguments this guard cannot see; run the merge as its own command");
-      pushesAttributed += pushPiece;
+      pushesAttributed += argvPushes;
       continue;
     }
     if (basename(head) === "gh") {
+      const words = prefix.tokens.slice(1).filter((token) => !token.startsWith("-"));
+      if (aliasesChanged && words[0] !== undefined && !GH_COMMANDS.has(words[0])) {
+        // `gh alias set p pr; gh p merge 7`: the alias exists only at run time.
+        unattributed.add("this command changes gh aliases and then runs one, which this guard cannot expand; run them separately");
+        continue;
+      }
+      if (words[0] === "alias" && (words[1] === "set" || words[1] === "import")) aliasesChanged = true;
       const merge = mergeFromPrefix(prefix);
       if (merge) found.push(merge);
-      attributed += pieceCount;
-      pushesAttributed += pushPiece; // gh never runs its arguments as git
+      attributed += argvCount;
+      pushesAttributed += argvPushes; // gh never runs its arguments as git
       continue;
     }
     let pushData = false;
@@ -470,13 +491,15 @@ function mergeCommands(script, baseCwd) {
           // `xargs git push origin` appends refspecs this hook never sees.
           appended: prefix.appendsArgs,
         });
-        pushesAttributed += pushPiece;
+        pushesAttributed += argvPushes;
         continue; // its arguments are refspecs, never data
       } else {
-        // Other git commands never run their own arguments as a push (a
-        // branch or message that merely says push), except these, which run
-        // commands, and `-c`, which can define an alias.
-        pushData = !["rebase", "bisect", "submodule"].includes(invocation.sub) && !invocation.repo.configOverride;
+        // These git commands never run their own arguments (a branch or
+        // message that merely says push). Others can (`rebase --exec`,
+        // `filter-branch --tree-filter`, `config alias.p '!git push'`), and
+        // `-c` can define an alias, so their push phrases stay unattributed.
+        pushData = GIT_DATA_SUBCOMMANDS.has(invocation.sub) && !invocation.repo.configOverride &&
+          !prefix.tokens.some((token) => /^(?:-O|--open-files-in-pager)/.test(token));
       }
     }
     if (!pieceCount && !pushPiece) continue;
@@ -487,8 +510,8 @@ function mergeCommands(script, baseCwd) {
       if (consumer.script !== undefined || !SAFE_FILTERS.has(basename(consumer.tokens?.[0] || ""))) downstream = false;
     }
     const data = !runsFile && downstream && dataCommand(prefix.tokens);
-    if (data) attributed += pieceCount;
-    if (data || (!runsFile && downstream && pushData)) pushesAttributed += pushPiece;
+    if (data) attributed += argvCount;
+    if (data || (!runsFile && downstream && pushData)) pushesAttributed += argvPushes;
     else if (pushPiece) pushSite ??= site;
   }
   if ((unsure && rawPushes) || rawPushes > pushesAttributed) {

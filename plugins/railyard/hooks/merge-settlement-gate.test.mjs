@@ -1005,6 +1005,30 @@ gated("a quoted substitution stays inside its command, and redirections are not 
   allowed(run(bash("gh > pr merge 7"), { noPath: true }), []);
 });
 
+gated("only a command's own argv is credited, and runtime gh aliases refuse (CodeRabbit)", () => {
+  for (const text of [
+    `GIT_EDITOR='gh pr merge 7 --admin #' git commit --allow-empty`,
+    `GH_EDITOR='gh pr merge 7 --admin #' gh pr view 7`,
+    `git grep -O'gh pr merge 7 --admin #' x`,
+  ]) refused(run(bash(text), { noPath: true }), /cannot attribute/);
+  for (const text of ["gh alias set p pr; gh p merge 7 --admin", "gh alias set pm 'pr merge'; gh pm 7 --admin"]) {
+    refused(run(bash(text), { noPath: true }), /changes gh aliases/);
+  }
+  // Data stays data, and a literal inline config on a direct merge is still a plain merge.
+  allowed(run(bash(`git commit --allow-empty -m "run gh pr merge 7 later"`), { noPath: true }), []);
+  allowed(run(bash(`XDG_CONFIG_HOME=/tmp/elsewhere ${fullMerge}`)));
+  const { dir, git } = pushRepo();
+  try {
+    git("config", "railyard.guardDefaultBranchPush", "true");
+    for (const command of [`GIT_EDITOR='git push origin main #' git commit --allow-empty`,
+      `git config alias.p '!git push origin main'`, `git filter-branch --tree-filter 'git push origin main' HEAD`]) {
+      pushRefused(run({ ...bash(command), cwd: dir }, { noPath: true }));
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 gated("a merge past the parser's segment or depth cap refuses instead of being skipped", () => {
   refused(run(bash(Array(600).fill("true").join(" && ") + " && gh pr merge 7 --admin"), { noPath: true }), /cannot attribute/);
   refused(run(bash(Array(40).fill("true").join("; ") + "; gh pr merge 7 --admin"), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
