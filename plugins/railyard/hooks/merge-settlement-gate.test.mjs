@@ -1155,10 +1155,50 @@ gated("a gh alias that expands to a merge is gated", () => {
   });
   const config = "version: 1\naliases:\n    pm: pr merge\n    co: pr checkout\n    sm: '!gh pr merge \"$1\" --admin'\ngit_protocol: https\n";
   refused(run(bash("gh pm 7 --admin"), withAliases(config)), /RAILYARD_CE_SNAPSHOT/);
-  refused(run(bash("gh sm 7"), withAliases(config)), /alias runs a merge/);
+  // A shell alias runs through sh: refused however it builds its command (Codex P1).
+  refused(run(bash("gh sm 7"), withAliases(config)), /shell alias/);
+  const dynamic = `${config}    boom: '!f(){ x=merge; gh pr $x 7 --admin; }; f'\n`.replace("git_protocol: https\n", "") ;
+  refused(run(bash("gh boom"), withAliases(dynamic)), /shell alias/);
   allowed(run(bash("gh co 7"), withAliases(config)), []);
   // An unreadable config never blocks a non-merge command.
   allowed(run(bash("gh pm 7"), withAliases("aliases: [not: yaml")), []);
+});
+
+gated("gh aliases come from the config directory the command itself selects (Codex P1)", () => {
+  const other = mkdtempSync(path.join(tmpdir(), "ce-gh-config-"));
+  try {
+    writeFileSync(path.join(other, "config.yml"), "aliases:\n    boom: pr merge\n");
+    for (const text of [`GH_CONFIG_DIR=${other} gh boom 7 --admin`, `export GH_CONFIG_DIR=${other}; gh boom 7 --admin`,
+      `XDG_CONFIG_HOME=${path.dirname(other)} GH_CONFIG_DIR= gh pr view 1; GH_CONFIG_DIR=${other} gh boom 7`]) {
+      refused(run(bash(text), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+    }
+    refused(run(bash(`GH_CONFIG_DIR="$CFG" gh boom 7`), { noPath: true }), /cannot resolve/);
+    // gh's own commands cannot be aliased, so an unknown config does not matter to them.
+    allowed(run(bash(`GH_CONFIG_DIR="$CFG" gh pr view 7`), { noPath: true }), []);
+  } finally {
+    rmSync(other, { recursive: true, force: true });
+  }
+});
+
+gated("exported GitHub routing and a backgrounded cd follow the shell's scoping (Codex P1)", () => {
+  const target = mkdtempSync(path.join(tmpdir(), "ce-merge-bg-"));
+  const outer = mkdtempSync(path.join(tmpdir(), "ce-merge-outer-"));
+  try {
+    // export GH_REPO / GH_HOST reach the merge; the identity query follows them.
+    const exported = run(bash(`export GH_REPO=novotnyllc/railyard; gh pr merge 7 ${PIN}`));
+    allowed(exported, ["api graphql"]);
+    // A conditional export leaves the repository unknown, so the lookup cannot be trusted.
+    refused(run(bash(`false && export GH_REPO=other/repo; gh pr merge 7 ${PIN}`)));
+    // `cd x &` runs in a background subshell: the merge stays in the original directory.
+    const result = run({ ...bash(`cd ${target} & gh pr merge 7 ${PIN}`), cwd: outer });
+    allowed(result, ["pr view", "api graphql"]);
+    assert.ok(result.cwds.every((cwd) => cwd.endsWith(path.basename(outer))));
+    // A subshell's export does not leak.
+    allowed(run(bash(`(export GH_REPO=other/repo); ${fullMerge}`)));
+  } finally {
+    rmSync(target, { recursive: true, force: true });
+    rmSync(outer, { recursive: true, force: true });
+  }
 });
 
 // A throwaway repository whose origin/HEAD names main.
@@ -1271,6 +1311,28 @@ gated("push-guard: --git-dir, --work-tree and GIT_DIR select the repository whos
   } finally {
     rmSync(dir, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+gated("push-guard: an exported opt-in holds, and an unknown remote default refuses (Codex P1)", () => {
+  const { dir, git } = pushRepo();
+  try {
+    const at = (command) => ({ ...bash(command), cwd: dir });
+    git("checkout", "-q", "-b", "feature");
+    pushRefused(run(at("export RAILYARD_GUARD_DEFAULT_BRANCH_PUSH=1; git push origin main"), { noPath: true }));
+    pushRefused(run(at("RAILYARD_GUARD_DEFAULT_BRANCH_PUSH=1\ngit push origin HEAD:main"), { noPath: true }));
+    allowed(run(at("export RAILYARD_GUARD_DEFAULT_BRANCH_PUSH=1; git push origin feature"), { noPath: true }), []);
+    git("config", "railyard.guardDefaultBranchPush", "true");
+    // A URL or a remote with no recorded default cannot be checked.
+    for (const command of ["git push https://example.com/o/r.git HEAD:release", "git push upstream HEAD:release"]) {
+      const result = run(at(command), { noPath: true });
+      pushRefused(result);
+      assert.match(result.err, /default branch of .* is unknown/);
+    }
+    git("symbolic-ref", "--delete", "refs/remotes/origin/HEAD");
+    pushRefused(run(at("git push origin feature"), { noPath: true }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 

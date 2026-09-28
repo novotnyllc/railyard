@@ -68,32 +68,54 @@ const SEGMENT_CAP = 512;
 
 // gh aliases from the user's gh config (`aliases:` in config.yml), read once
 // per hook run. An unreadable config means no aliases; it never blocks.
-let cachedAliases = null;
-function ghAliases() {
-  if (cachedAliases) return cachedAliases;
-  cachedAliases = new Map();
-  const dir = process.env.GH_CONFIG_DIR ||
-    path.join(process.env.XDG_CONFIG_HOME || path.join(process.env.HOME || "", ".config"), "gh");
+// gh reads aliases from GH_CONFIG_DIR, else $XDG_CONFIG_HOME/gh, else
+// ~/.config/gh, as the command itself sees them (inline or exported earlier
+// in the script). null when that directory is not a literal path.
+const aliasCache = new Map();
+function ghAliases(command = { env: {}, unset: [], ignoreEnv: false }) {
+  const setting = (name) => commandSetting(command, name);
+  const dir = setting("GH_CONFIG_DIR") ||
+    path.join(setting("XDG_CONFIG_HOME") || path.join(setting("HOME") || "", ".config"), "gh");
+  if (/[$`~*?[\]]/.test(dir)) return null;
+  if (aliasCache.has(dir)) return aliasCache.get(dir);
+  const aliases = new Map();
+  aliasCache.set(dir, aliases);
   let text = "";
-  try { text = readRegularText(path.join(dir, "config.yml")); } catch { return cachedAliases; }
+  try { text = readRegularText(path.join(dir, "config.yml")); } catch { return aliases; }
   let inAliases = false;
   for (const line of text.split("\n")) {
     if (/^\S/.test(line)) { inAliases = /^aliases:\s*$/.test(line); continue; }
     const entry = inAliases && line.match(/^\s+([^\s:#][^:]*?):\s*(.*?)\s*$/);
-    if (entry) cachedAliases.set(entry[1].replace(/^['"]|['"]$/g, ""), entry[2].replace(/^(['"])(.*)\1$/, "$2"));
+    if (entry) aliases.set(entry[1].replace(/^['"]|['"]$/g, ""), entry[2].replace(/^(['"])(.*)\1$/, "$2"));
   }
-  return cachedAliases;
+  return aliases;
 }
+// gh's own commands, which no alias can shadow.
+const GH_COMMANDS = new Set([
+  "accessibility", "agent-task", "alias", "api", "attestation", "auth", "browse", "cache", "codespace",
+  "completion", "config", "copilot", "extension", "gist", "gpg-key", "help", "issue", "label", "org", "pr",
+  "preview", "project", "release", "repo", "ruleset", "run", "search", "secret", "ssh-key", "status",
+  "variable", "version", "workflow",
+]);
 // Alias names whose expansion is itself a merge.
-const mergeAliasNames = () => [...ghAliases()].filter(([, expansion]) => mergePhraseCount(expansion)).map(([name]) => name);
+const mergeAliasNames = () => [...(ghAliases() || [])].filter(([, expansion]) => mergePhraseCount(expansion)).map(([name]) => name);
 
 // One simple command's merge, if it is one. `--help` is not a merge.
 function mergeFromPrefix(prefix) {
   let tokens = prefix.tokens.slice(1);
-  const alias = ghAliases().get(tokens.find((token) => !token.startsWith("-")));
+  const name = tokens.find((token) => !token.startsWith("-"));
+  const aliases = ghAliases(prefix);
+  if (aliases === null && name !== undefined && !GH_COMMANDS.has(name)) {
+    return { kind: "unsupported", why: "gh reads its aliases from a config directory this guard cannot resolve; run gh pr merge directly" };
+  }
+  const alias = aliases?.get(name);
   if (alias !== undefined) {
-    // A shell alias (`!…`) or one with `$1` placeholders cannot be expanded here.
-    if (alias.startsWith("!") || /\$\d|\$@|\$\*/.test(alias)) {
+    // A shell alias (`!…`) runs through sh, so what it does cannot be read
+    // from its text; one with `$1` placeholders cannot be expanded here.
+    if (alias.startsWith("!")) {
+      return { kind: "unsupported", why: "a gh shell alias runs commands this guard cannot inspect; run them directly" };
+    }
+    if (/\$\d|\$@|\$\*/.test(alias)) {
       return mergePhraseCount(alias)
         ? { kind: "unsupported", why: "a gh alias runs a merge this guard cannot expand; run gh pr merge directly" }
         : null;
@@ -216,6 +238,34 @@ function shadowedCommands(text) {
   return names;
 }
 
+// A command that only sets or unsets variables for the rest of the script:
+// `NAME=value` alone, `export`/`declare -x`/`typeset -x` with assignments,
+// or `unset NAME`. null for anything else.
+function shellAssignments(bare, prefix) {
+  const set = new Map();
+  const unset = [];
+  if (bare.length && !prefix.tokens?.length && prefix.script === undefined) {
+    for (const word of bare) {
+      const match = word.match(/^([A-Za-z_][A-Za-z0-9_]*)=([\s\S]*)$/);
+      if (!match) return null;
+      set.set(match[1], match[2]);
+    }
+    return { set, unset };
+  }
+  const head = bare[0];
+  if (head === "unset") {
+    for (const word of bare.slice(1)) if (!word.startsWith("-")) unset.push(word);
+    return { set, unset };
+  }
+  if (head !== "export" && !((head === "declare" || head === "typeset") && bare.includes("-x"))) return null;
+  for (const word of bare.slice(1)) {
+    if (word === "-n") return { set: new Map(), unset: [] }; // un-exporting: leave as is
+    const match = word.match(/^([A-Za-z_][A-Za-z0-9_]*)=([\s\S]*)$/);
+    if (match) set.set(match[1], match[2]);
+  }
+  return { set, unset };
+}
+
 // Compound commands whose body may run conditionally, repeatedly, or never.
 // A newline-separated body tokenizes into its own segments, so a `cd` there
 // has no control word in front of it; the open-block depth marks it instead.
@@ -294,6 +344,11 @@ function mergeCommands(script, baseCwd) {
   let pipeline = false; // the previous separator was a single |
   let blockDepth = 0; // open if/while/until/for/select/case/{ blocks
   let cwdUnknown = false;
+  // `export GH_REPO=o/r; gh pr merge 7` runs the merge in o/r: literal
+  // assignments and exports carry to later commands, as `cd` does. One made
+  // where it may not run (behind &&/||, in a block) has an unknown value.
+  let shellEnv = {};
+  let shellUnset = [];
   for (let i = 0; i < queue.length && i < SEGMENT_CAP; i += 1) {
     const segment = queue[i];
     if (segment.length === 1 && (segment[0] === "&&" || segment[0] === "||")) {
@@ -304,17 +359,42 @@ function mergeCommands(script, baseCwd) {
       pipeline = true; // stages run in subshells
       continue;
     }
+    if (segment.length === 1 && segment[0] === "&") continue; // handled by look-ahead
     if (segment.length === 1 && (segment[0] === "(" || segment[0] === ")")) {
-      // Bash restores the directory when a subshell closes.
-      if (segment[0] === "(") cwdStack.push({ cwd, cwdUnknown });
-      else if (cwdStack.length) ({ cwd, cwdUnknown } = cwdStack.pop());
+      // Bash restores the directory and variables when a subshell closes.
+      if (segment[0] === "(") cwdStack.push({ cwd, cwdUnknown, shellEnv, shellUnset });
+      else if (cwdStack.length) ({ cwd, cwdUnknown, shellEnv, shellUnset } = cwdStack.pop());
       continue;
     }
     blockDepth = blockDepthAfter(segment, blockDepth);
-    const prefix = commandPrefix(segment, cwd, { cwdUnknown });
-    const piped = pipeline || (queue[i + 1] && queue[i + 1].length === 1 && queue[i + 1][0] === "|");
+    const prefix = commandPrefix(segment, cwd, { cwdUnknown, env: shellEnv, unset: shellUnset });
+    const next = queue[i + 1];
+    // A pipeline stage or a backgrounded command (`cd /x &`) runs in a
+    // subshell; the marker follows the command it ends, so look ahead.
+    const piped = pipeline || (next && next.length === 1 && (next[0] === "|" || next[0] === "&"));
     const bare = directWords(segment);
     const head = prefix.tokens?.[0];
+    const assigned = shellAssignments(bare, prefix);
+    if (assigned) {
+      if (!piped) {
+        const unknown = conditional || blockDepth > 0 || bare.length !== segment.length;
+        shellEnv = { ...shellEnv };
+        for (const [name, value] of assigned.set) {
+          shellEnv[name] = unknown ? "$unknown" : value;
+          shellUnset = shellUnset.filter((item) => item !== name);
+        }
+        for (const name of assigned.unset) {
+          if (unknown) shellEnv[name] = "$unknown";
+          else {
+            delete shellEnv[name];
+            if (!shellUnset.includes(name)) shellUnset = [...shellUnset, name];
+          }
+        }
+      }
+      conditional = false;
+      pipeline = false;
+      continue;
+    }
     if (bare[0] === "cd" || bare[0] === "pushd" || bare[0] === "popd") {
       // A `cd` in a pipeline stage runs in a subshell and is discarded; the `|`
       // marker follows the stage it ends, so `piped` looks ahead as well.
@@ -766,6 +846,11 @@ function verifyMerge(command) {
   if (command.cwdUnknown) {
     throw new Error("an unresolved or conditional `cd` makes the merge's repository unknown; run the merge as its own command in an explicit workdir");
   }
+  // GH_REPO/GH_HOST from an expansion, or from an assignment that may not have
+  // run, pick a repository or host this guard cannot name.
+  if (["GH_REPO", "GH_HOST", "GH_CONFIG_DIR"].some((name) => /[$`]/.test(command.env?.[name] ?? ""))) {
+    throw new Error("GH_REPO, GH_HOST or GH_CONFIG_DIR is computed or conditionally set, so the merge's repository is unknown; set it literally on the merge");
+  }
   if (command.kind === "graphql") {
     throw new Error("raw GraphQL mergePullRequest is unsupported; use gh pr merge with --match-head-commit and CE's snapshot");
   }
@@ -891,13 +976,17 @@ function defaultBranchPush(command, repo) {
   const explicitRemote = typeof flags.get("--repo") === "string" ? flags.get("--repo") : words[0];
   const remote = explicitRemote || config.get(`branch.${currentBranch()}.pushremote`) ||
     config.get("remote.pushdefault") || config.get(`branch.${currentBranch()}.remote`) || "origin";
+  // The remote's default branch as this clone records it. Without that record
+  // (a URL, or no refs/remotes/<remote>/HEAD) the guard cannot name the branch
+  // to protect, so it refuses rather than guessing. It does not go to the
+  // network; `git remote set-head <remote> --auto` refreshes a stale record.
   let branch;
   try {
     branch = git([...repo.args, "symbolic-ref", "--short", `refs/remotes/${remote}/HEAD`], command.cwd).replace(`${remote}/`, "");
   } catch {
-    branch = null;
+    return `the default branch of ${remote} is unknown here; run \`git remote set-head ${remote} --auto\``;
   }
-  const defaults = branch ? [branch] : ["main", "master"];
+  const defaults = [branch];
   const isDefault = (target) => defaults.includes(String(target).replace(/^refs\/heads\//, ""));
   const remotePush = config.has(`remote.${remote}.push`);
   const refspecs = words.slice(explicitRemote === words[0] ? 1 : 0);

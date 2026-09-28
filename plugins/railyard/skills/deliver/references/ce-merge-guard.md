@@ -28,7 +28,9 @@ the same way: a push refuses unless its destination is provably not the
 default branch. That refuses a push inside a script, heredoc, pipe or
 wrapper; a matching (`:`), `--all` or `--mirror` push; and a push with no
 refspec whose `remote.<name>.push` or `push.default` could reach the default
-branch. The opt-in is read from the repository the push names with `-C`,
+branch, or whose remote has no recorded default branch (a URL, or no
+`refs/remotes/<remote>/HEAD`; `git remote set-head <remote> --auto` records
+it). The opt-in is read from the repository the push names with `-C`,
 `--git-dir`, `--work-tree` or `GIT_DIR`, and a named repository the guard
 cannot resolve refuses.
 

@@ -345,10 +345,12 @@ function tokenizeSegments(text) {
       endSegment();
       const doubled = text[i + 1] === char;
       if (doubled) i += 1;
+      else if (char === "|" && text[i + 1] === "&") i += 1; // `|&` pipes stderr too
       // Marker: `&&`/`||` make what FOLLOWS conditional. A single `|` is a
       // pipeline, whose stages run in subshells — a `cd` there never persists.
+      // A single `&` backgrounds what PRECEDES it, also in a subshell.
       if (doubled) segments.push([char + char]);
-      else if (char === "|") segments.push(["|"]);
+      else segments.push([char]);
     } else current += char;
   }
   endSegment();
