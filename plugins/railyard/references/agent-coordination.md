@@ -27,7 +27,7 @@ ownership. Verify returned artifacts before accepting completion.
 | --- | --- |
 | Codex native subagents | Consume pushed messages and final results. When blocked, use `wait_agent` if exposed; it wakes on mailbox activity. Do not loop over `list_agents`, log files, or status requests. |
 | Explicitly requested Codex tasks | Use `wait_threads` with the returned task ID, host ID, and latest cursor as `afterCursor`. Batch independent targets within the tool's limit. Use a nonzero timeout; `timeoutMs: 0` is a one-off snapshot. |
-| Claude Code subagents | Use native completion notifications. Use `Monitor` or another wait capability only when it is exposed and documents the needed wake-up behavior. |
+| Claude Code subagents | A top-level session can background children and use native completion notifications. A subagent that coordinates its own children launches them as foreground (blocking) `Agent` calls issued together: a nested background child's completion notice goes to the top-level session, not to it. Use `Monitor` or another wait capability only when it is exposed and documents the needed wake-up behavior. |
 | Remote or provider workers | Prefer the carrier's completion stream, callback, or native wait; fall back to bounded result/log inspection with backoff. |
 
 A `wait_threads` cursor suppresses already-delivered results; keep it across
