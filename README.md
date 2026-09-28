@@ -14,9 +14,10 @@ remain explicit choices.
   CE workflows for planning, debugging, review, and PR delivery when useful.
 - 🧠 **Deliberate allocation.** Choose model and reasoning effort together.
   In Claude Code, Opus 5.5 at medium effort handles substantive subagent work,
-  with Fable 5.1 for frontier-hard or long autonomous work, Sonnet 5 for
-  bounded edits, and Haiku 4.5 for read-only search. In Codex, GPT-6 Sol at
-  medium is the baseline, with Luna for bounded work and Astra for hard work.
+  with Fable 5.1 for frontier-hard or long autonomous work, Sonnet 5.5 for
+  well-scoped edits, bug fixes, and docs, and Haiku 4.5 for read-only search.
+  In Codex, GPT-6 Sol at medium is the baseline, with Luna for bounded work
+  and Astra for hard work.
   An omitted model inherits the parent's, and unsupported selections are
   disclosed.
 - 🔍 **One completion owner.** CE owns review settlement and CI watching for

@@ -15,7 +15,7 @@ Compare model and effort choices by accepted task outcomes and by total cost and
 > Choose a model and reasoning effort for this task and explain the tradeoff.
 ```
 
-`railyard:model-routing` gives the defaults for each harness. In Claude Code, Opus 5.5 at `medium` handles substantive subagent work, Sonnet 5 takes bounded edits, and Haiku 4.5 takes read-only search. In Codex, GPT-6 Sol at `medium` is the baseline and Luna takes bounded work. Use deterministic tools directly for mechanical work.
+`railyard:model-routing` gives the defaults for each harness. In Claude Code, Opus 5.5 at `medium` handles substantive subagent work, Sonnet 5.5 at `low` or `medium` takes well-scoped edits, bug fixes, and docs, and Haiku 4.5 takes read-only search. In Codex, GPT-6 Sol at `medium` is the baseline and Luna takes bounded work. Use deterministic tools directly for mechanical work.
 
 Railyard itself is free and open source (MIT). You pay only for your own Claude or Codex usage, billed like any other session in that harness.
 
