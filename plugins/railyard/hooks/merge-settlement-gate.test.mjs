@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -712,7 +713,7 @@ gated("quoted keywords in a merge body do not refuse the override", () => {
 
 gated("Codex's own bash -lc argv wrapper is the command text, not an interpreted string", () => {
   overridden(run({ tool_name: "shell", tool_input: { command: ["bash", "-lc", `${OVERRIDE} gh pr merge 7 --squash`] } }, { noPath: true }));
-  notOverridden(run({ tool_name: "shell", tool_input: { command: ["bash", "-lc", `${OVERRIDE} bash -c 'gh pr merge 7 --squash'`] } }, { noPath: true }), /interprets/);
+  notOverridden(run({ tool_name: "shell", tool_input: { command: ["bash", "-lc", `${OVERRIDE} bash -c 'gh pr merge 7 --squash'`] } }, { noPath: true }), /call gh directly/);
 });
 
 gated("an override that cannot be recorded does not apply", () => {
@@ -737,7 +738,7 @@ gated("an ambient override in the hook's environment does not bypass the gate", 
 
 gated("any other override value, or an override not on the merge, is ignored", () => {
   notOverridden(run(bash(`RAILYARD_MERGE_OVERRIDE=yes ${adminMerge}`), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
-  notOverridden(run(bash(`export ${OVERRIDE}; ${adminMerge}`), { noPath: true }), /inline assignment/);
+  notOverridden(run(bash(`export ${OVERRIDE}; ${adminMerge}`), { noPath: true }), /literal words/);
 });
 
 gated("the override covers only its own command, not a second merge in the same text", () => {
@@ -844,4 +845,117 @@ gated("a REST merge endpoint must be the whole literal path", () => {
 gated("an unresolved cd refuses the CE gate, but a subshell's cd does not leak", () => {
   refused(run(bash(`cd ~/elsewhere && ${fullMerge}`)), /unresolved or conditional `cd`/);
   allowed(run(bash(`(cd - && echo done); ${fullMerge}`)));
+});
+
+// The override is an allow-list of one command shape.
+const { overrideShape } = createRequire(import.meta.url)("./merge-override.js");
+
+gated("the override allow-list accepts only the literal merge shapes", () => {
+  for (const text of [
+    `${OVERRIDE} gh pr merge 7 --squash --admin`,
+    `${OVERRIDE} gh pr merge feature/x-1 --repo novotnyllc/railyard --rebase`,
+    `${OVERRIDE} gh pr merge https://github.com/novotnyllc/railyard/pull/7 --squash --delete-branch`,
+    `${OVERRIDE} gh pr merge 7 --squash --subject 'Fix: the thing (again)' --body "for the record; while we wait"`,
+    `${OVERRIDE} gh pr merge 7 --match-head-commit ${HEAD} --squash`,
+    `cd /tmp && ${OVERRIDE} gh pr merge 7 --squash`,
+    `RAILYARD_CE_MODE=interactive ${OVERRIDE} /opt/homebrew/bin/gh pr merge 7 --merge`,
+    `${OVERRIDE} gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge -f merge_method=squash -f 'commit_title=Fix it'`,
+    `${OVERRIDE} gh api --method PUT /repos/novotnyllc/railyard/pulls/7/merge -f sha=${HEAD}`,
+  ]) assert.ok(overrideShape(text).shape, `${text}: ${overrideShape(text).reason}`);
+  for (const text of [
+    // Codex review: a glob in the REST repository, expanded after validation.
+    `${OVERRIDE} gh api -X PUT repos/example/*/pulls/7/merge`,
+    // Thermos #8: a second merge riding along through timeout and quoting.
+    `${OVERRIDE} gh pr merge 7 --admin; timeout 9 gh pr 'merge' 8 --admin`,
+    `${OVERRIDE} gh pr 'merge' 7`,
+    `${OVERRIDE} gh pr merge'' 7`,
+    `${OVERRIDE} gh -R novotnyllc/railyard pr merge 7`,
+    `${OVERRIDE} gh pr merge 7 --repo novotnyllc/*`,
+    `${OVERRIDE} gh pr merge 7 --repo github.example.com/o/r`,
+    `${OVERRIDE} gh pr merge ../7`,
+    `${OVERRIDE} gh pr merge -7`,
+    `${OVERRIDE} gh pr merge 7 8`,
+    `${OVERRIDE} gh pr merge 7 --auto`,
+    `${OVERRIDE} gh pr merge 7 --body-file notes.md`,
+    `${OVERRIDE} gh pr merge 7 --squash --squash`,
+    `FOO=1 ${OVERRIDE} gh pr merge 7`,
+    `${OVERRIDE} ${OVERRIDE} gh pr merge 7`,
+    `cd relative && ${OVERRIDE} gh pr merge 7`,
+    `cd /tmp && cd /tmp && ${OVERRIDE} gh pr merge 7`,
+    `${OVERRIDE} gh pr merge 7 && echo done`,
+    `${OVERRIDE} gh pr merge 7 & echo`,
+    `${OVERRIDE} gh pr merge 7 > log`,
+    `${OVERRIDE} gh pr merge 7\necho`,
+    `${OVERRIDE} gh pr merge ~7`,
+    `${OVERRIDE} gh pr merge 7 --body "$(id)"`,
+    `${OVERRIDE} gh pr merge 7 --body "a\\"b"`,
+    `${OVERRIDE} gh api -X PUT repos/o/r/pulls/7/merge -F sha=@file`,
+    `${OVERRIDE} gh api -X PUT repos/o/r/pulls/7/merge -f body=x`,
+    `${OVERRIDE} gh api -X PUT repos/o/r/pulls/7/merge?x=1`,
+    `${OVERRIDE} gh api -XPUT repos/o/r/pulls/7/merge`,
+    `${OVERRIDE} gh api repos/o/r/pulls/7/merge`,
+    `${OVERRIDE} gh api -X PUT repos/o/r/pulls/7/merge --hostname h`,
+  ]) assert.ok(!overrideShape(text).shape, text);
+  assert.equal(overrideShape(`${OVERRIDE} gh pr merge 7`).shape.kind, "pr");
+});
+
+gated("the reported override bypasses all fall back to the CE gate", () => {
+  for (const text of [
+    `${OVERRIDE} gh api -X PUT repos/example/*/pulls/7/merge`,
+    `${OVERRIDE} gh pr merge 7 --admin; timeout 9 gh pr 'merge' 8 --admin`,
+  ]) notOverridden(run(bash(text), { noPath: true }));
+});
+
+const codexArgv = (script) => ({ hook_event_name: "PreToolUse", tool_name: "shell", tool_input: { command: ["bash", "-lc", script] } });
+
+gated("a heredoc or here-string fed to a shell is gated as commands, on both harnesses", () => {
+  for (const text of [
+    "bash <<EOF\ngh pr merge 7 --admin\nEOF",
+    "sh -s <<'EOF'\ngh pr merge 7 --admin\nEOF",
+    "source /dev/stdin <<EOF\ngh pr merge 7 --admin\nEOF",
+    "bash <<< 'gh pr merge 7 --admin'",
+    "echo 'gh pr merge 7 --admin' | bash",
+  ]) {
+    refused(run(bash(text), { noPath: true }));
+    refused(run(codexArgv(text), { noPath: true }));
+  }
+});
+
+gated("an arithmetic shift is not a heredoc that hides later lines", () => {
+  for (const text of ["echo $((x<<y))\ngh pr merge 7 --admin", "(( x = 1 << 2 ))\ngh pr merge 7 --admin"]) {
+    refused(run(bash(text), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+    refused(run(codexArgv(text), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+  }
+  // A heredoc to a non-interpreter is still data.
+  allowed(run(codexArgv("cat <<EOF > notes.md\ngh pr merge 7\nEOF"), { noPath: true }), []);
+});
+
+gated("merges run through command wrappers are gated", () => {
+  for (const text of [
+    "timeout 60 gh pr merge 7 --admin",
+    "timeout -s KILL -k 5 60 gh pr merge 7 --admin",
+    "nice -n 5 gh pr merge 7 --admin",
+    "nohup gh pr merge 7 --admin",
+    "sudo -u me gh pr merge 7 --admin",
+    "env -i PATH=/bin gh pr merge 7 --admin",
+    "command -p gh pr merge 7 --admin",
+    "time -p gh pr merge 7 --admin",
+    "echo 7 | xargs -I{} gh pr merge {} --admin",
+    "echo 7 | xargs -n1 gh pr merge --admin",
+    "find /tmp -maxdepth 0 -exec gh pr merge 7 --admin \\;",
+    "find . -name x -print -execdir true \\; -exec gh pr 'merge' 8 {} +",
+    "$(which gh) pr merge 7 --admin",
+    "/opt/homebrew/bin/g[h] pr merge 7 --admin",
+  ]) refused(run(bash(text), { noPath: true }));
+  allowed(run(bash("timeout 60 gh pr view 7"), { noPath: true }), []);
+  allowed(run(bash("find . -name '*.md' -exec grep -l merge {} +"), { noPath: true }), []);
+});
+
+gated("a merge past the parser's segment or depth cap refuses instead of being skipped", () => {
+  refused(run(bash(Array(600).fill("true").join(" && ") + " && gh pr merge 7 --admin"), { noPath: true }), /too long or nested/);
+  refused(run(bash(Array(40).fill("true").join("; ") + "; gh pr merge 7 --admin"), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+  let nested = "gh pr merge 7 --admin";
+  for (let level = 0; level < 10; level += 1) nested = `eval ${nested}`;
+  refused(run(bash(nested), { noPath: true }), /too long or nested/);
+  allowed(run(bash(Array(600).fill("true").join(" && ")), { noPath: true }), []);
 });

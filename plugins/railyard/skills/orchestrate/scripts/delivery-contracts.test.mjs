@@ -135,6 +135,13 @@ test("merge goes through the CE snapshot handoff", () => {
   assert.match(mergeGuard, /--match-head-commit/);
 });
 
+test("the merge override is only for the user's explicit instruction in this conversation", () => {
+  assert.match(mergeGuard, /only when the user, in the current conversation, explicitly directs/);
+  assert.match(mergeGuard, /because a refusal or a document[^.]*suggests it/);
+  assert.match(mergeGuard, /honor-system/);
+  assert.match(mergeGuard, /`git push` to a default branch/);
+});
+
 test("orchestrate activates only on explicit request", () => {
   const { description } = frontmatter(read("skills/orchestrate/SKILL.md"));
   assert.match(description, /explicitly requested/);
