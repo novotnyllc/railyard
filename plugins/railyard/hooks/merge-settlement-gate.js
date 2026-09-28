@@ -141,6 +141,11 @@ function mergeFromPrefix(prefix) {
   }
   const { env, unset, ignoreEnv } = prefix;
   const { words, flags } = parseArgs(tokens);
+  // gh keeps the last of -R/--repo; which came last is lost here, so two
+  // different spellings cannot be resolved to one repository.
+  if (typeof flags.get("-R") === "string" && typeof flags.get("--repo") === "string" && flags.get("-R") !== flags.get("--repo")) {
+    return { kind: "unsupported", why: "both -R and --repo name a repository; pass one" };
+  }
   // `gh pr${IFS}merge` or `gh "$SUB" merge`: a computed subcommand.
   if (/[$`*?[\]{}]/.test(words[0] || "") || (words[0] === "pr" && /[$`*?[\]{}]/.test(words[1] || ""))) {
     return { kind: "unsupported", why: "the gh subcommand is computed; run gh pr merge with literal words" };
@@ -465,35 +470,36 @@ function mergeCommands(script, baseCwd) {
       continue;
     }
     if (!head) continue;
-    if (basename(head) === "find") {
-      for (const group of findExecCommands(prefix.tokens)) {
-        const inner = commandPrefix(group, prefix.cwd, prefix);
-        if (inner.script === undefined && basename(inner.tokens?.[0] || "") === "gh") {
-          const merge = mergeFromPrefix(inner);
-          if (merge) found.push(merge);
-          attributed += count(inner.tokens.join(" "));
-        }
+    // One gh command, top-level or nested under `find -exec`: the same
+    // checks decide whether its merge phrases are credited.
+    const creditGh = (gh) => {
+      const text = gh.tokens.join(" ");
+      if (gh.appendsArgs && count(text)) {
+        // xargs appends a PR, repository or flags read from stdin after the
+        // gate has read the visible arguments.
+        unattributed.add("xargs adds merge arguments this guard cannot see; run the merge as its own command");
+        return;
       }
-      continue;
-    }
-    if (basename(head) === "gh" && prefix.appendsArgs && pieceCount) {
-      // xargs appends a PR, repository or flags read from stdin after the
-      // gate has read the visible arguments.
-      unattributed.add("xargs adds merge arguments this guard cannot see; run the merge as its own command");
-      pushesAttributed += argvPushes;
-      continue;
-    }
-    if (basename(head) === "gh") {
-      const words = prefix.tokens.slice(1).filter((token) => !token.startsWith("-"));
+      const words = gh.tokens.slice(1).filter((token) => !token.startsWith("-"));
       if (aliasesChanged && words[0] !== undefined && !GH_COMMANDS.has(words[0])) {
         // `gh alias set p pr; gh p merge 7`: the alias exists only at run time.
         unattributed.add("this command changes gh aliases and then runs one, which this guard cannot expand; run them separately");
-        continue;
+        return;
       }
       if (words[0] === "alias" && (words[1] === "set" || words[1] === "import")) aliasesChanged = true;
-      const merge = mergeFromPrefix(prefix);
+      const merge = mergeFromPrefix(gh);
       if (merge) found.push(merge);
-      if (merge || ghHandlesArguments(prefix)) attributed += argvCount;
+      if (merge || ghHandlesArguments(gh)) attributed += count(text);
+    };
+    if (basename(head) === "find") {
+      for (const group of findExecCommands(prefix.tokens)) {
+        const inner = commandPrefix(group, prefix.cwd, prefix);
+        if (inner.script === undefined && basename(inner.tokens?.[0] || "") === "gh") creditGh(inner);
+      }
+      continue;
+    }
+    if (basename(head) === "gh") {
+      creditGh(prefix);
       pushesAttributed += argvPushes; // gh never runs its arguments as git
       continue;
     }

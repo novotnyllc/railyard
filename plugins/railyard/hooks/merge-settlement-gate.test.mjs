@@ -1029,6 +1029,18 @@ gated("only a command's own argv is credited, and runtime gh aliases refuse (Cod
   }
 });
 
+gated("find -exec applies the same gh checks as a top-level command (Codex P1)", () => {
+  refused(run(bash(`find . -maxdepth 0 -exec xargs gh pr merge ${PIN} ';'`)), /xargs adds merge arguments/);
+  refused(run(bash(`find . -maxdepth 0 -exec gh extension exec forward pr merge 7 --admin ';'`), { noPath: true }), /cannot attribute/);
+  refused(run(bash(`find . -maxdepth 0 -exec gh pr merge 7 --admin ';'`), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+});
+
+gated("-R and --repo naming different repositories refuse (Codex P1)", () => {
+  refused(run(bash(`gh pr merge 7 -R approved/repo --repo target/repo ${PIN}`)), /both -R and --repo/);
+  refused(run(bash(`gh pr merge 7 --repo target/repo -R approved/repo ${PIN}`)), /both -R and --repo/);
+  allowed(run(bash(`gh pr merge 7 -R novotnyllc/railyard --repo novotnyllc/railyard ${PIN}`)), ["api graphql"]);
+});
+
 gated("a merge past the parser's segment or depth cap refuses instead of being skipped", () => {
   refused(run(bash(Array(600).fill("true").join(" && ") + " && gh pr merge 7 --admin"), { noPath: true }), /cannot attribute/);
   refused(run(bash(Array(40).fill("true").join("; ") + "; gh pr merge 7 --admin"), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
