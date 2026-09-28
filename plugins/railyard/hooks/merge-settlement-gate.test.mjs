@@ -988,6 +988,23 @@ gated("a gh or git shadowed by a function or alias in the same command refuses (
   }
 });
 
+gated("a quoted substitution stays inside its command, and redirections are not arguments (Codex P1)", () => {
+  // The enclosing gh command keeps its computed word instead of splitting.
+  for (const text of [`gh "$(printf pr)" merge 7 --admin`, "gh \"`printf pr`\" merge 7 --admin"]) {
+    refused(run(bash(text), { noPath: true }), /computed/);
+    refused(run(codexArgv(text), { noPath: true }), /computed/);
+  }
+  // A redirection between words is dropped, so the merge is seen and gated.
+  for (const text of ["gh pr 2>/dev/null merge 7 --admin", "gh pr &>/dev/null merge 7 --admin", "gh >log pr merge 7 --admin"]) {
+    refused(run(bash(text), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+    refused(run(codexArgv(text), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+  }
+  // A settled, pinned merge with redirections still verifies.
+  allowed(run(bash(`${fullMerge} >merge.log 2>&1`)));
+  // Redirecting to a file named pr leaves `gh merge 7`, which merges nothing.
+  allowed(run(bash("gh > pr merge 7"), { noPath: true }), []);
+});
+
 gated("a merge past the parser's segment or depth cap refuses instead of being skipped", () => {
   refused(run(bash(Array(600).fill("true").join(" && ") + " && gh pr merge 7 --admin"), { noPath: true }), /cannot attribute/);
   refused(run(bash(Array(40).fill("true").join("; ") + "; gh pr merge 7 --admin"), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);

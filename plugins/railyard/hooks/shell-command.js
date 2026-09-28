@@ -77,8 +77,12 @@ const SHELL_VALUE_OPTIONS = new Set(["-o", "+o", "-O", "+O", "--rcfile", "--init
 // Merge phrases, counted the same way in the raw text and in the parsed
 // pieces the guard can attribute. Quotes and backslashes are dropped and
 // `$IFS` reads as a space, so `gh pr 'merge'` or `pr${IFS}merge` still count.
+// A redirection and its target are dropped too, as the tokenizer drops them,
+// so `gh pr 2>/dev/null merge` still reads as `pr merge`.
+const REDIRECTION = /(^|[\s;&|()])\d*(?:&>>?|>&|<&|<>|>\||>>?|<(?![<(]))(?!\()\s*[^\s;&|()<>]*/g;
 function normalizeForPhrases(text) {
-  return String(text).replace(/\\\r?\n/g, "").replace(/['"\\]/g, "").replace(/\$\{?IFS\}?/g, " ");
+  return String(text).replace(/\\\r?\n/g, "").replace(/['"\\]/g, "").replace(/\$\{?IFS\}?/g, " ")
+    .replace(REDIRECTION, "$1 ");
 }
 function mergePhraseCount(text, aliasNames = []) {
   const source = normalizeForPhrases(text);
@@ -239,16 +243,38 @@ function tokenizeSegments(text) {
   let current = "";
   let quote = null;
   // Substitutions opened inside double quotes, innermost last: each resumes
-  // the quote when it closes. `depth` counts parens nested inside it.
+  // the quote when it closes. `depth` counts parens nested inside it, and
+  // `outer` holds the enclosing command, which continues after the close.
   const substitutions = [];
+  // A redirection is not an argument: `gh pr 2>/dev/null merge 7` runs
+  // `gh pr merge 7`, so the operator and its target word are dropped.
+  let dropTarget = false;
   const endToken = () => {
-    if (current) tokens.push(current);
+    if (current && dropTarget) dropTarget = false;
+    else if (current) tokens.push(current);
     current = "";
   };
   const endSegment = () => {
     endToken();
+    dropTarget = false;
     if (tokens.length) segments.push(tokens);
     tokens = [];
+  };
+  // The substitution's commands are their own segments; the enclosing command
+  // resumes with a computed word in its place, so `gh "$(printf pr)" merge`
+  // stays one command whose subcommand is computed.
+  const openSubstitution = (backtick) => {
+    substitutions.push({ backtick, depth: 0, outer: { tokens, current, dropTarget } });
+    tokens = [];
+    current = "";
+    dropTarget = false;
+  };
+  const closeSubstitution = () => {
+    endSegment();
+    const { outer } = substitutions.pop();
+    ({ tokens, dropTarget } = outer);
+    current = `${outer.current}$`;
+    quote = '"'; // back inside the surrounding quotes
   };
   for (let i = 0; i < text.length; i += 1) {
     const char = text[i];
@@ -263,9 +289,8 @@ function tokenizeSegments(text) {
       else if (quote === '"' && ((char === "$" && text[i + 1] === "(") || char === "`")) {
         // `"$(gh pr merge 7)"` and "`gh pr merge 7`" still run the command:
         // leave quote mode for the substitution so it is parsed as commands.
-        endSegment();
         if (char === "$") i += 1;
-        substitutions.push({ backtick: char === "`", depth: 0 });
+        openSubstitution(char === "`");
         quote = null;
       } else current += char;
       continue;
@@ -276,11 +301,17 @@ function tokenizeSegments(text) {
     }
     // `` `gh pr merge 7` `` runs the merge just like $( ).
     if (char === "`") {
-      endSegment();
-      if (substitutions.at(-1)?.backtick) {
-        substitutions.pop();
-        quote = '"'; // back inside the surrounding quotes
-      }
+      if (substitutions.at(-1)?.backtick) closeSubstitution();
+      else endSegment();
+      continue;
+    }
+    // `>`, `>>`, `2>&1`, `&>`, `<`, `>|`… but not a heredoc or here-string
+    // (`<<`), which the callers read, nor process substitution (`<(`).
+    if (/^\d*$/.test(current) && ((char === ">" && text[i + 1] !== "(") ||
+        (char === "<" && text[i + 1] !== "<" && text[i + 1] !== "(") || (char === "&" && text[i + 1] === ">"))) {
+      current = "";
+      while (i + 1 < text.length && /[<>&|]/.test(text[i + 1])) i += 1;
+      dropTarget = true;
       continue;
     }
     if (char === "\\" && i + 1 < text.length) {
@@ -304,8 +335,7 @@ function tokenizeSegments(text) {
       const open = substitutions.at(-1);
       if (open && !open.backtick && char === "(") open.depth += 1;
       if (char === ")" && open && !open.backtick && open.depth === 0) {
-        substitutions.pop();
-        quote = '"'; // back inside the surrounding quotes
+        closeSubstitution();
       } else {
         if (char === ")" && open && !open.backtick) open.depth -= 1;
         segments.push([char]); // marker: a subshell scopes `cd`
