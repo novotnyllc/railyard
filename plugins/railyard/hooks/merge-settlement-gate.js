@@ -7,6 +7,11 @@
 const { execFileSync } = require("child_process");
 const { readFileSync, statSync } = require("fs");
 const path = require("path");
+const { evaluateOverride } = require("./merge-override");
+const {
+  CONTROL_WORDS, SAFE_FILTERS, basename, commandPrefix, commandScript, mergePhraseCount, parseArgs,
+  pushPhraseCount, runsScript, stripHeredocs, tokenizeSegments,
+} = require("./shell-command");
 
 const VIEW_TIMEOUT_MS = 1200;
 const GRAPHQL_TIMEOUT_MS = 2500;
@@ -26,53 +31,6 @@ query($owner:String!,$name:String!,$number:Int!){
   }
 }`;
 
-// Every shell surface both harnesses expose, in one pass. Claude Code's Bash
-// tool sends tool_input.command as a STRING; Codex's shell/local_shell send an
-// argv ARRAY there, exec_command uses `cmd`, unified_exec uses `input`.
-// Unknown shapes contribute nothing and the gate skips.
-// An argv ARRAY already carries its word boundaries, so joining on spaces
-// destroys them: ["--body","normal text --help"] would turn the body's text
-// into separate tokens and `--help` back into a real option. Re-quote any
-// element containing whitespace OR a shell metacharacter, so that a literal
-// argument like ";" stays data instead of becoming a command separator and
-// refusing a harmless command.
-const requote = (item) => (/[\s'"`;|&()<>{}$]/.test(item)
-  ? "'" + item.replace(/'/g, "'\\''") + "'"
-  : item);
-
-function commandText(args) {
-  const parts = [];
-  for (const value of [args.command, args.cmd, args.input]) {
-    if (typeof value === "string") parts.push(value);
-    else if (Array.isArray(value)) {
-      for (const item of value) if (typeof item === "string") parts.push(requote(item));
-    }
-  }
-  return parts.join(" ");
-}
-
-// Parsing is SEGMENT-SCOPED and QUOTE-AWARE, not a phrase search. Two things
-// break a naive scan, and both let a real merge through unchecked:
-//   - `gh --repo o/r pr merge 7` puts a global flag between `gh` and `pr`, and
-//     a decoy phrase in an unrelated segment can hijack identity onto another
-//     PR whose settled state then wrongly ALLOWS the real merge.
-//   - a whitespace split shreds quoted values, so `--body "text --help"` looks
-//     like a real `--help` option and skips the gate entirely.
-// So: tokenize once, honoring quotes, split into commands at UNQUOTED shell
-// separators, and read each command's identity from its own tokens.
-const SHELL_WRAPPERS = new Set(["bash", "sh", "zsh", "dash", "env"]);
-// Control words and grouping punctuation a merge can legitimately sit behind:
-// `(gh pr merge 7)`, `if gh pr merge 7; then ...`. Missing these means the
-// segment looks unrelated and the merge runs with no gate and no notice.
-const CONTROL_WORDS = new Set([
-  "if", "then", "else", "elif", "fi", "do", "done", "while", "until", "for",
-  "case", "esac", "in", "select", "function", "time", "command", "exec",
-  "nohup", "builtin",
-  // Bash runs `{ gh pr merge 7; }` as a command group. These are standalone
-  // TOKENS, never split at the character level — `repos/{owner}/{repo}/…`
-  // must stay one token.
-  "{", "}",
-]);
 // Forward inline authentication so the identity read uses the same account
 // as the requested merge. Authentication failures refuse the merge.
 const AUTH_ENV = [
@@ -81,246 +39,13 @@ const AUTH_ENV = [
   // then $HOME/.config/gh — so credentials can live behind any of these.
   "GH_CONFIG_DIR", "XDG_CONFIG_HOME", "HOME",
 ];
-// Flags that consume the following token, so `--match-head-commit 7` never
-// yields `7` as the PR number. One union set covers gh's global flags and
-// `gh pr merge`'s own; over-listing is harmless, under-listing is a bug.
-const VALUE_FLAGS = new Set([
-  "-R", "--repo", "-b", "--body", "-F", "--body-file", "-t", "--subject",
-  "--match-head-commit", "--author-email", "-A",
-  // gh api's own value-taking flags, so `--hostname HOST` is read as a host,
-  // `--method PUT` does not leak `PUT` into the positional words, and a value
-  // that happens to be `--help` (e.g. `--jq --help`) is never read as the help
-  // option and used to skip the gate.
-  "--hostname", "--method", "-X", "-f", "-H", "--header", "--input",
-  "-q", "--jq", "-p", "--preview", "--template", "--cache", "--raw-field",
-  "--field",
-]);
-// Single-dash flags gh also accepts with the value attached (`-Rowner/repo`).
-// Missing these records the whole token as a boolean flag, so the selector is
-// lost and the gate silently resolves the PR in the wrong repository.
-const SHORT_VALUE_FLAGS = new Set(
-  [...VALUE_FLAGS].filter((f) => /^-[A-Za-z]$/.test(f)),
-);
 const NON_MERGE_FLAGS = new Set(["--help", "-h", "--disable-auto"]);
 const flagEnabled = (value) => value !== undefined && !/^(?:false|f|0)$/i.test(String(value));
-const REST_MERGE_RE = /repos\/([^\s/]+)\/([^\s/]+)\/pulls\/(\d+)\/merge/;
-
-// Also sheds grouping punctuation, so `(gh` and `7)` tokenize as `gh` and `7`.
-// One quote-aware pass over the whole command text: quoted runs stay a single
-// token (so a quoted separator cannot manufacture a segment and a quoted
-// `--help` is a value, not an option), and unquoted separators end a command.
-// Parens separate too — they close a subshell, terminate a case pattern, and
-// open a substitution, all places a merge hides behind a non-gh first token.
-// A heredoc body is data the shell never executes, so a `gh pr merge` line
-// inside one must not be gated — otherwise writing a release script gets
-// refused. Only an unquoted operator starts a heredoc; quoted `<<EOF` is data
-// and must never hide a later executable merge.
-function heredocDelimiter(line, lexical) {
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    if (char === "\\" && lexical.quote !== "'") { index += 1; continue; }
-    if (lexical.quote) {
-      if (char === lexical.quote) lexical.quote = null;
-      continue;
-    }
-    if (char === "'" || char === '"') { lexical.quote = char; continue; }
-    if (char === "#" && (index === 0 || /\s/.test(line[index - 1]))) return null;
-    if (char !== "<" || line[index - 1] === "<" || line[index + 1] !== "<" || line[index + 2] === "<") continue;
-    const match = line.slice(index).match(/^<<-?[ \t]*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/);
-    return match ? match[2] : null;
-  }
-  return null;
-}
-
-function stripHeredocs(text) {
-  if (!text.includes("<<")) return text;
-  const out = [];
-  let delimiter = null;
-  const lexical = { quote: null }; // Shell quotes may span physical lines.
-  for (const line of text.split("\n")) {
-    if (delimiter !== null) {
-      if (line.trim() === delimiter) delimiter = null;
-      continue;
-    }
-    out.push(line);
-    // `<<<` is a here-string (inline data, no delimiter). Matching it made
-    // every following line vanish, silently disabling the gate.
-    delimiter = heredocDelimiter(line, lexical);
-  }
-  return out.join("\n");
-}
-
-function tokenizeSegments(text) {
-  const segments = [];
-  let tokens = [];
-  let current = "";
-  let quote = null;
-  let substitution = null;
-  const endToken = () => {
-    if (current) tokens.push(current);
-    current = "";
-  };
-  const endSegment = () => {
-    endToken();
-    if (tokens.length) segments.push(tokens);
-    tokens = [];
-  };
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i];
-    if (quote) {
-      // A backslash escape survives inside double quotes, so `"text \" --help"`
-      // does not end the quote — treating it as the close let `--help` become
-      // a real option again.
-      if (char === "\\" && quote === '"' && i + 1 < text.length) {
-        current += text[i + 1];
-        i += 1;
-      } else if (char === quote) quote = null;
-      else if (quote === '"' && char === "$" && text[i + 1] === "(") {
-        // `"$(gh pr merge 7)"` still runs the command: leave quote mode for
-        // the substitution so its contents are parsed as a command.
-        endSegment();
-        i += 1;
-        substitution = quote;
-        quote = null;
-      } else current += char;
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    // `` `gh pr merge 7` `` runs the merge just like $( ).
-    if (char === "`") {
-      endSegment();
-      continue;
-    }
-    if (char === "\\" && i + 1 < text.length) {
-      // Line continuation: the shell removes the backslash AND the newline,
-      // so keeping the newline made it the PR reference.
-      if (text[i + 1] === "\n") {
-        i += 1;
-        continue;
-      }
-      current += text[i + 1];
-      i += 1;
-      continue;
-    }
-    // A newline separates commands exactly like `;` — a multiline script is
-    // the ordinary shape, and treating it as whitespace hid the merge.
-    if (char === "\n") endSegment();
-    else if (/\s/.test(char)) endToken();
-    else if (char === ";") endSegment();
-    else if (char === "(" || char === ")") {
-      endSegment();
-      if (char === ")" && substitution) {
-        quote = substitution; // back inside the surrounding quotes
-        substitution = null;
-      } else segments.push([char]); // marker: a subshell scopes `cd`
-    }
-    else if (char === "&" || char === "|") {
-      endSegment();
-      const doubled = text[i + 1] === char;
-      if (doubled) i += 1;
-      // Marker: `&&`/`||` make what FOLLOWS conditional. A single `|` is a
-      // pipeline, whose stages run in subshells — a `cd` there never persists.
-      if (doubled) segments.push([char + char]);
-      else if (char === "|") segments.push(["|"]);
-    } else current += char;
-  }
-  endSegment();
-  return segments;
-}
-
-function basename(token) {
-  const cut = token.lastIndexOf("/");
-  return cut < 0 ? token : token.slice(cut + 1);
-}
-
-// Reduce one shell command to gh's own arguments, or null when it is not a gh
-// invocation. Strips leading env assignments and any shell wrapper, so
-// `FOO=1 bash -lc "/usr/local/bin/gh pr merge 7"` still resolves.
-// Drop the wrapper and its own options. `env -u GH_HOST gh …` must consume
-// `GH_HOST` too, or it is left at the front and the segment stops looking
-// like a gh invocation at all.
-const ENV_VALUE_FLAGS = new Set(["-u", "--unset", "-C", "--chdir", "-S", "--split-string"]);
-function dropWrapperFlags(tokens) {
-  const isEnv = basename(tokens[0]) === "env";
-  let rest = tokens.slice(1);
-  let chdir = null;
-  let splitString = null;
-  let ignoreEnv = false;
-  const unset = [];
-  while (rest[0] && rest[0].startsWith("-")) {
-    const token = rest[0];
-    rest = rest.slice(1);
-    // `--chdir=DIR` / `--unset=NAME` are documented too, so normalize the
-    // attached form before matching — an exact-match-only check drops the
-    // value silently and the wrapper looks like it took no argument.
-    const eq = token.indexOf("=");
-    const flag = eq > 0 ? token.slice(0, eq) : token;
-    let value = eq > 0 ? token.slice(eq + 1) : null;
-    if (isEnv && (flag === "-i" || flag === "--ignore-environment")) {
-      ignoreEnv = true;
-      continue;
-    }
-    if (isEnv && ENV_VALUE_FLAGS.has(flag)) {
-      if (value === null && rest.length) {
-        value = rest[0];
-        rest = rest.slice(1);
-      }
-      // `-C DIR` runs the command from DIR, so the gate must look there too.
-      if (flag === "-C" || flag === "--chdir") chdir = value;
-      // `-u NAME` REMOVES the variable, so the child must not inherit it —
-      // otherwise the merge runs without it while the gate runs with it.
-      if ((flag === "-u" || flag === "--unset") && value) unset.push(value);
-      if ((flag === "-S" || flag === "--split-string") && value) splitString = value;
-    }
-  }
-  return { rest, chdir, unset, splitString, ignoreEnv };
-}
-
-// Peel only the known env/shell wrappers. Keep their context with an extracted
-// script instead of re-parsing it later against the hook's ambient settings.
-function commandPrefix(segmentTokens, baseCwd, inherited = {}) {
-  let tokens = segmentTokens.map((t) => t.replace(/^!+/, "")).filter(Boolean);
-  const context = {
-    env: { ...inherited.env }, unset: [...(inherited.unset || [])],
-    ignoreEnv: inherited.ignoreEnv || false, cwd: baseCwd,
-    cwdUnknown: inherited.cwdUnknown || false,
-  };
-  for (;;) {
-    const head = tokens[0];
-    if (!head) return { ...context, tokens };
-    if (CONTROL_WORDS.has(head)) { tokens = tokens.slice(1); continue; }
-    const assignment = head.match(/^([A-Za-z_][A-Za-z0-9_]*)=([\s\S]*)$/);
-    if (assignment) {
-      context.env[assignment[1]] = assignment[2];
-      context.unset = context.unset.filter((name) => name !== assignment[1]);
-      tokens = tokens.slice(1);
-      continue;
-    }
-    if (!SHELL_WRAPPERS.has(basename(head))) return { ...context, tokens };
-    const dropped = dropWrapperFlags(tokens);
-    if (dropped.ignoreEnv) {
-      context.env = {};
-      context.unset = [];
-      context.ignoreEnv = true;
-    }
-    for (const name of dropped.unset) {
-      delete context.env[name];
-      if (!context.unset.includes(name)) context.unset.push(name);
-    }
-    if (dropped.chdir) {
-      if (/[\$`]/.test(dropped.chdir)) context.cwdUnknown = true;
-      else context.cwd = path.resolve(context.cwd || process.cwd(), dropped.chdir);
-    }
-    if (dropped.splitString) return { ...context, script: dropped.splitString };
-    tokens = dropped.rest;
-    if (basename(head) !== "env" && tokens[0] && /\s/.test(tokens[0])) {
-      return { ...context, script: tokens[0] };
-    }
-  }
-}
+// Anchored: the whole endpoint must be the literal REST merge path. Anything
+// else that still looks like a merge endpoint (a `${P}` prefix, an absolute
+// URL, a query string) cannot be tied to a repository and is unsupported.
+const REST_MERGE_RE = /^\/?repos\/([^\s/]+)\/([^\s/]+)\/pulls\/(\d+)\/merge\/?$/;
+const LOOSE_MERGE_RE = /pulls\/[^\s/]*\/merge(?![\w-])/i;
 
 // gh accepts `[HOST/]OWNER/REPO`. Keep the HOST: dropping it makes the gate
 // query github.com while the merge targets an enterprise host, which usually
@@ -337,67 +62,323 @@ function parseRepo(value) {
   return { host: parts.length > 2 ? parts[parts.length - 3] : null, owner, name };
 }
 
-// One pass over gh's arguments yielding positionals and real options. A
-// value is never mistaken for an option: `gh pr merge 7 --body --help` uses
-// `--help` as the commit body, and a token-wide scan for `--help` would skip
-// the gate entirely. Everything downstream reads this, so the rule holds once.
-function parseArgs(tokens) {
-  const words = [];
-  const flags = new Map();
-  for (let i = 0; i < tokens.length; i += 1) {
-    const token = tokens[i];
-    if (token === "--") {
-      for (const rest of tokens.slice(i + 1)) words.push(rest);
-      break;
-    }
-    if (!token.startsWith("-")) {
-      words.push(token);
-      continue;
-    }
-    const eq = token.indexOf("=");
-    const cluster = token.match(/^-([A-Za-z].*)$/);
-    if (eq > 0 && (token.startsWith("--") || /^-[A-Za-z]=/.test(token))) {
-      flags.set(token.slice(0, eq), token.slice(eq + 1)); // --flag=value
-    } else if (cluster && !token.startsWith("--")) {
-      // gh accepts clustered and attached short flags: `-iXPUT` is `-i` plus
-      // `-X PUT`, `-Rowner/repo` is `-R owner/repo`. Walk the cluster; the
-      // first value-taking flag consumes the remainder as its value.
-      const chars = cluster[1];
-      let consumed = false;
-      for (let c = 0; c < chars.length; c += 1) {
-        const short = "-" + chars[c];
-        if (SHORT_VALUE_FLAGS.has(short)) {
-          const attached = chars.slice(c + 1).replace(/^=/, "");
-          if (attached) flags.set(short, attached);
-          else {
-            flags.set(short, tokens[i + 1] ?? true);
-            i += 1;
-          }
-          consumed = true;
-          break;
-        }
-        flags.set(short, true);
-      }
-      if (!consumed) { /* all boolean shorts recorded above */ }
-    } else if (VALUE_FLAGS.has(token)) {
-      flags.set(token, tokens[i + 1] ?? true);
-      i += 1; // consume the value so it is never read as an option
-    } else {
-      flags.set(token, true);
-    }
+// Parser bound: a pathological script cannot spin the hook inside its budget.
+// A merge phrase past it is simply unattributed, so it refuses.
+const SEGMENT_CAP = 512;
+
+// gh aliases from the user's gh config (`aliases:` in config.yml), read once
+// per hook run. An unreadable config means no aliases; it never blocks.
+// gh reads aliases from GH_CONFIG_DIR, else $XDG_CONFIG_HOME/gh, else
+// ~/.config/gh, as the command itself sees them (inline or exported earlier
+// in the script). null when that directory is not a literal path.
+const aliasCache = new Map();
+function ghAliases(command = { env: {}, unset: [], ignoreEnv: false }) {
+  const setting = (name) => commandSetting(command, name);
+  const dir = setting("GH_CONFIG_DIR") ||
+    path.join(setting("XDG_CONFIG_HOME") || path.join(setting("HOME") || "", ".config"), "gh");
+  if (/[$`~*?[\]]/.test(dir)) return null;
+  if (aliasCache.has(dir)) return aliasCache.get(dir);
+  const aliases = new Map();
+  aliasCache.set(dir, aliases);
+  let text = "";
+  try { text = readRegularText(path.join(dir, "config.yml")); } catch { return aliases; }
+  let inAliases = false;
+  for (const line of text.split("\n")) {
+    if (/^\S/.test(line)) { inAliases = /^aliases:\s*$/.test(line); continue; }
+    const entry = inAliases && line.match(/^\s+([^\s:#][^:]*?):\s*(.*?)\s*$/);
+    if (entry) aliases.set(entry[1].replace(/^['"]|['"]$/g, ""), entry[2].replace(/^(['"])(.*)\1$/, "$2"));
   }
-  return { words, flags };
+  return aliases;
+}
+// gh's own commands, which no alias can shadow.
+const GH_COMMANDS = new Set([
+  "accessibility", "agent-task", "alias", "api", "attestation", "auth", "browse", "cache", "codespace",
+  "completion", "config", "copilot", "extension", "gist", "gpg-key", "help", "issue", "label", "org", "pr",
+  "preview", "project", "release", "repo", "ruleset", "run", "search", "secret", "ssh-key", "status",
+  "variable", "version", "workflow",
+]);
+// Alias names whose expansion is itself a merge.
+const mergeAliasNames = () => [...(ghAliases() || [])].filter(([, expansion]) => mergePhraseCount(expansion)).map(([name]) => name);
+
+// One simple command's merge, if it is one. `--help` is not a merge.
+// gh's command word and its index, past options and their values
+// (`gh -R owner/repo pm 7` runs alias `pm`, not `owner/repo`).
+function ghCommandWord(tokens) {
+  const name = parseArgs(tokens).words[0];
+  if (name === undefined) return { name, at: -1 };
+  const at = tokens.findIndex((token, index) => token === name && !parseArgs(tokens.slice(0, index)).words.length);
+  return { name, at };
 }
 
-// EVERY merge command in this text. A shell runs them all, so checking only
-// the first lets `gh pr merge 5 && gh pr merge 8` merge PR 8 unverified the
-// moment PR 5 is settled. `--help` is not a merge.
-// `bash -lc "gh pr merge 7"` carries its whole script as one quoted token, so
-// the wrapper's payload has to be parsed as command text in its own right.
-// (Codex's argv form joins to separate tokens and is handled by commandPrefix.)
-function mergeCommands(text, baseCwd, inherited = {}, depth = 0) {
+// Whether gh itself handles this command, so its arguments are data to it:
+// a built-in (not `extension exec`) or a plain alias. An extension receives
+// every argument and may run it, so a merge phrase there is not credited.
+function ghHandlesArguments(prefix) {
+  const tokens = prefix.tokens.slice(1);
+  const alias = ghAliasAt(tokens, ghCommandWord(tokens).at, ghAliases(prefix));
+  if (alias) return !alias.expansion.startsWith("!");
+  const { words } = parseArgs(tokens);
+  if (words[0] === "extension" && words[1] === "exec") return false;
+  return GH_COMMANDS.has(words[0]);
+}
+
+// The configured alias this command runs: the longest alias name, one or
+// more words (`gh alias set 'pr land' 'pr merge'`), matching the tokens from
+// the command word on. null when none matches.
+function ghAliasAt(tokens, at, aliases) {
+  if (!aliases || at < 0) return null;
+  let best = null;
+  for (const [name, expansion] of aliases) {
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length && parts.every((part, k) => tokens[at + k] === part) && (!best || parts.length > best.length)) {
+      best = { expansion, length: parts.length };
+    }
+  }
+  return best;
+}
+
+function mergeFromPrefix(prefix) {
+  let tokens = prefix.tokens.slice(1);
+  const { name, at } = ghCommandWord(tokens);
+  const aliases = ghAliases(prefix);
+  if (aliases === null && name !== undefined && !GH_COMMANDS.has(name)) {
+    return { kind: "unsupported", why: "gh reads its aliases from a config directory this guard cannot resolve; run gh pr merge directly" };
+  }
+  const match = ghAliasAt(tokens, at, aliases);
+  const alias = match?.expansion;
+  if (match) {
+    // A shell alias (`!…`) or one with `$1` placeholders cannot be expanded
+    // here; it refuses when its text contains a merge.
+    if (alias.startsWith("!") || /\$\d|\$@|\$\*/.test(alias)) {
+      return mergePhraseCount(alias)
+        ? { kind: "unsupported", why: "a gh alias runs a merge this guard cannot expand; run gh pr merge directly" }
+        : null;
+    }
+    tokens = [...tokens.slice(0, at), ...alias.split(/\s+/).filter(Boolean), ...tokens.slice(at + match.length)];
+  }
+  const { env, unset, ignoreEnv } = prefix;
+  const { words, flags } = parseArgs(tokens);
+  // gh keeps the last of -R/--repo; which came last is lost here, so two
+  // different spellings cannot be resolved to one repository.
+  if (typeof flags.get("-R") === "string" && typeof flags.get("--repo") === "string" && flags.get("-R") !== flags.get("--repo")) {
+    return { kind: "unsupported", why: "both -R and --repo name a repository; pass one" };
+  }
+  // `gh pr${IFS}merge` or `gh "$SUB" merge`: a computed subcommand.
+  if (/[$`*?[\]{}]/.test(words[0] || "") || (words[0] === "pr" && /[$`*?[\]{}]/.test(words[1] || ""))) {
+    return { kind: "unsupported", why: "the gh subcommand is computed; run gh pr merge with literal words" };
+  }
+  // `--help` prints usage; `--disable-auto` TURNS OFF auto-merge, which is
+  // the mitigation to reach for during a settlement window. Refusing either
+  // blocks a command that merges nothing. Checked against real options only.
+  if ([...NON_MERGE_FLAGS].some((f) => flagEnabled(flags.get(f)))) return null;
+  const base = { tokens, env, unset, ignoreEnv, flags, cwd: prefix.cwd, cwdUnknown: prefix.cwdUnknown };
+  if (words[0] === "pr" && words[1] === "merge") return { ...base, kind: "pr", ref: words[2] || null };
+  if (words[0] !== "api") return null;
+  // Only the endpoint positional — a `-H 'X-Test: repos/x/y/pulls/5/merge'`
+  // header value must not be mistaken for the endpoint being called.
+  const method = String(flags.get("-X") || flags.get("--method") || "GET").toUpperCase();
+  // gh api defaults to GET; only PUT actually merges. Refusing a merge-status
+  // check would block a read-only call.
+  const endpoint = words[1];
+  const route = typeof endpoint === "string" ? endpoint.match(REST_MERGE_RE) : null;
+  if (route && method === "PUT") {
+    // Placeholders expand from the current repo, exactly as `gh pr view N`
+    // resolves, so hand the number to that path rather than a literal `{owner}`.
+    return { ...base, kind: "api", endpoint: route, ref: route[3] };
+  }
+  if ((method === "PUT" && (!endpoint || /[$`]/.test(endpoint) || LOOSE_MERGE_RE.test(endpoint))) ||
+      ((route || LOOSE_MERGE_RE.test(endpoint || "")) && /[$`]/.test(method))) {
+    return { kind: "unsupported", why: "the gh api merge endpoint or method is unresolved; use a literal REST PUT endpoint or gh pr merge with --match-head-commit" };
+  }
+  if (endpoint !== "graphql") return null;
+  try {
+    return graphqlMerges(base) ? { ...base, kind: "graphql", ref: null } : null;
+  } catch (error) {
+    return { kind: "unsupported", why: String(error.message) };
+  }
+}
+
+// Commands whose arguments are only ever data (`grep 'gh pr merge' docs`).
+const DATA_COMMANDS = new Set(["echo", "printf", "grep", "egrep", "fgrep", "rg", "ag", "cat", "head", "tail", "less", "wc", "sort", "uniq", "jq", "true", ":"]);
+function dataCommand(tokens) {
+  const name = basename(tokens[0] || "");
+  if (DATA_COMMANDS.has(name)) return true;
+  if (name !== "git") return false;
+  const sub = tokens.slice(1).find((token) => !token.startsWith("-"));
+  return ["commit", "log", "grep", "show", "tag", "notes", "diff", "status"].includes(sub) &&
+    !tokens.some((token) => token === "-c" || token.startsWith("--config-env") ||
+      // `git grep -O<pager>` runs the pager command.
+      /^(?:-O|--open-files-in-pager)/.test(token));
+}
+
+// git's subcommand after its global options, with `-C DIR` applied and the
+// repository selection (`--git-dir`, `--work-tree`, inline GIT_DIR and
+// GIT_WORK_TREE) kept for the push guard's own git queries. `repo.explicit`
+// means the command names its repository; `repo.unknown` that it names one
+// this hook cannot resolve literally.
+const GIT_VALUE_OPTIONS = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"]);
+const NON_LITERAL_PATH = /[$`~*?[\]]/;
+function gitInvocation(tokens, cwd, env = {}) {
+  let at = cwd;
+  let cwdUnknown = false;
+  const repo = { explicit: false, unknown: false, configOverride: false };
+  const selected = { "--git-dir": env.GIT_DIR, "--work-tree": env.GIT_WORK_TREE };
+  const finish = (sub, args) => {
+    repo.args = [];
+    for (const [flag, value] of Object.entries(selected)) {
+      if (value === undefined) continue;
+      repo.explicit = true;
+      if (!value || NON_LITERAL_PATH.test(value)) repo.unknown = true;
+      else repo.args.push(flag, path.resolve(at || process.cwd(), value));
+    }
+    return { sub, args, cwd: at, cwdUnknown, repo };
+  };
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!token.startsWith("-")) return finish(token, tokens.slice(index + 1));
+    const cut = token.startsWith("--") ? token.indexOf("=") : -1;
+    const name = cut > 0 ? token.slice(0, cut) : token;
+    if (!GIT_VALUE_OPTIONS.has(name)) continue;
+    const value = cut > 0 ? token.slice(cut + 1) : (tokens[index + 1] ?? "");
+    if (cut < 0) index += 1;
+    if (name === "-C") {
+      repo.explicit = true;
+      if (NON_LITERAL_PATH.test(value)) cwdUnknown = true;
+      else at = path.resolve(at || process.cwd(), value);
+    } else if (name === "--git-dir" || name === "--work-tree") selected[name] = value;
+    else if (name === "-c" || name === "--config-env") repo.configOverride = true;
+  }
+  return finish(null, []);
+}
+
+// `find … -exec CMD {} ;` (and -execdir/-ok/-okdir) runs CMD per match.
+function findExecCommands(tokens) {
+  const commands = [];
+  for (let index = 1; index < tokens.length; index += 1) {
+    if (!/^-(?:exec|execdir|ok|okdir)$/.test(tokens[index])) continue;
+    const end = tokens.findIndex((token, at) => at > index && (token === ";" || token === "+"));
+    commands.push(tokens.slice(index + 1, end < 0 ? tokens.length : end));
+    if (end > 0) index = end;
+  }
+  return commands;
+}
+
+// Names this script redefines as a shell function or alias (`gh() {…}`,
+// `function git {…}`, `alias gh=…`): a later `gh pr merge` then runs that
+// definition, not the CLI this hook verifies.
+function shadowedCommands(text) {
+  const source = String(text).replace(/['"\\]/g, "");
+  const names = new Set();
+  const patterns = [
+    /(?:^|[\s;&|({])(?:function\s+)?(gh|git)\s*\(\s*\)/g,
+    /(?:^|[\s;&|({])function\s+(gh|git)(?![\w.-])/g,
+    /(?:^|[\s;&|({])alias\s+(?:-\S+\s+)*(gh|git)=/g,
+  ];
+  for (const pattern of patterns) for (const match of source.matchAll(pattern)) names.add(match[1]);
+  return names;
+}
+
+// A command that only sets or unsets variables for the rest of the script:
+// `NAME=value` alone, `export`/`declare -x`/`typeset -x` with assignments,
+// or `unset NAME`. null for anything else.
+function shellAssignments(bare, prefix) {
+  const set = new Map();
+  const unset = [];
+  if (bare.length && !prefix.tokens?.length && prefix.script === undefined) {
+    for (const word of bare) {
+      const match = word.match(/^([A-Za-z_][A-Za-z0-9_]*)=([\s\S]*)$/);
+      if (!match) return null;
+      set.set(match[1], match[2]);
+    }
+    return { set, unset };
+  }
+  const head = bare[0];
+  if (head === "unset") {
+    for (const word of bare.slice(1)) if (!word.startsWith("-")) unset.push(word);
+    return { set, unset };
+  }
+  if (head !== "export" && !((head === "declare" || head === "typeset") && bare.includes("-x"))) return null;
+  for (const word of bare.slice(1)) {
+    if (word === "-n") return { set: new Map(), unset: [] }; // un-exporting: leave as is
+    const match = word.match(/^([A-Za-z_][A-Za-z0-9_]*)=([\s\S]*)$/);
+    if (match) set.set(match[1], match[2]);
+  }
+  return { set, unset };
+}
+
+const GIT_DATA_SUBCOMMANDS = new Set([
+  "add", "branch", "checkout", "commit", "diff", "fetch", "grep", "log", "notes", "reset", "restore",
+  "rev-parse", "show", "stash", "status", "switch", "tag",
+]);
+
+// Compound commands whose body may run conditionally, repeatedly, or never.
+// A newline-separated body tokenizes into its own segments, so a `cd` there
+// has no control word in front of it; the open-block depth marks it instead.
+const BLOCK_OPENERS = new Set(["if", "while", "until", "for", "select", "case", "{"]);
+const BLOCK_CLOSERS = new Set(["fi", "done", "esac", "}"]);
+function blockDepthAfter(segment, depth) {
+  for (const word of segment) {
+    if (!CONTROL_WORDS.has(word)) break;
+    if (BLOCK_OPENERS.has(word)) depth += 1;
+    else if (BLOCK_CLOSERS.has(word)) depth = Math.max(0, depth - 1);
+  }
+  return depth;
+}
+
+// Strip leading control words and the `command`/`builtin` builtins, which
+// run a `cd` in this shell exactly like a bare one.
+function directWords(segment) {
+  let words = segment;
+  for (;;) {
+    if (CONTROL_WORDS.has(words[0])) words = words.slice(1);
+    else if (words[0] === "command" || words[0] === "builtin") {
+      words = words.slice(1);
+      while (words[0] === "-p" || words[0] === "--") words = words.slice(1);
+    } else return words;
+  }
+}
+
+// Every merge in this script, plus refusals for what cannot be attributed.
+//
+// The rule is fail-closed. After line continuations are joined, every merge
+// phrase in the raw text (`pr … merge`, `pulls/…/merge`, `mergePullRequest`,
+// or a gh alias that expands to one) must belong to a piece this parser read
+// whole: a directly executed gh command, the arguments of a data-only command
+// (grep, echo, a `git commit` message…) that is not piped into anything but a
+// plain filter, or an inert heredoc body. A phrase anywhere else — a shell
+// `-c` string, `eval`, a here-string or heredoc fed to a shell, a pipe into a
+// shell, `ssh`, `trap`, an unknown wrapper, a script file run later, or text
+// the parser cannot delimit — refuses the merge.
+//
+// `git … push` phrases are counted the same way. Any the parser cannot
+// attribute to a directly executed `git push` (or to data) become one
+// `push-unresolved` entry, which the opt-in push guard refuses when enabled.
+function mergeCommands(script, baseCwd) {
   const found = [];
+  const aliasNames = mergeAliasNames();
+  const count = (text) => mergePhraseCount(text, aliasNames);
+  const joined = script.replace(/\\\r?\n/g, "");
+  const raw = count(joined);
+  const { text, bodies, unsure } = stripHeredocs(joined);
   const queue = tokenizeSegments(text);
+  // A script that runs a file or stdin through a shell can execute anything it
+  // wrote, so none of its data counts as inert.
+  const runsFile = queue.some((segment) => runsScript(commandPrefix(segment, baseCwd).tokens || []));
+  const inertBodies = runsFile ? [] : bodies.filter((body) => body.inert);
+  let attributed = inertBodies.reduce((total, body) => total + count(body.text), 0);
+  const rawPushes = pushPhraseCount(joined);
+  let pushesAttributed = inertBodies.reduce((total, body) => total + pushPhraseCount(body.text), 0);
+  let pushSite = null; // where the first unattributed push phrase was seen
+  let guardEnv = {}; // an inline RAILYARD_GUARD_DEFAULT_BRANCH_PUSH on any command
+  const unattributed = new Set();
+  const shadowed = shadowedCommands(text);
+  if ((shadowed.has("gh") && raw) || (shadowed.has("git") && rawPushes)) {
+    // Nothing after the definition is what it appears to be.
+    return [
+      ...(shadowed.has("gh") && raw ? [{ kind: "unsupported", why: "this command redefines gh as a shell function or alias, so its merge cannot be checked; run the merge as its own command" }] : []),
+      ...(shadowed.has("git") && rawPushes ? [{ kind: "push-unresolved", cwd: baseCwd || undefined, cwdUnknown: false, env: {} }] : []),
+    ];
+  }
   // `cd ../other && gh pr merge 7` resolves PR 7 in ../other, so the gate's own
   // lookup has to run there too — otherwise a settled PR 7 here authorizes an
   // unsettled PR 7 there. Tracked across segments, not interpreted deeply: an
@@ -406,17 +387,16 @@ function mergeCommands(text, baseCwd, inherited = {}, depth = 0) {
   const cwdStack = [];
   let conditional = false; // the previous separator was && or ||
   let pipeline = false; // the previous separator was a single |
-  let cwdUnknown = inherited.cwdUnknown || false;
-  // Bounded: a pathological nest cannot spin the hook inside its budget.
-  for (let i = 0; i < queue.length && i < 64; i += 1) {
+  let blockDepth = 0; // open if/while/until/for/select/case/{ blocks
+  let cwdUnknown = false;
+  // `export GH_REPO=o/r; gh pr merge 7` runs the merge in o/r: literal
+  // assignments and exports carry to later commands, as `cd` does. One made
+  // where it may not run (behind &&/||, in a block) has an unknown value.
+  let shellEnv = {};
+  let shellUnset = [];
+  let aliasesChanged = false; // an earlier `gh alias set/import` in this script
+  for (let i = 0; i < queue.length && i < SEGMENT_CAP; i += 1) {
     const segment = queue[i];
-    const prefix = commandPrefix(segment, cwd, { ...inherited, cwdUnknown });
-    if (prefix.script && depth < 8) {
-      found.push(...mergeCommands(prefix.script, prefix.cwd, prefix, depth + 1));
-      conditional = false;
-      pipeline = false;
-      continue;
-    }
     if (segment.length === 1 && (segment[0] === "&&" || segment[0] === "||")) {
       conditional = true;
       continue;
@@ -425,81 +405,163 @@ function mergeCommands(text, baseCwd, inherited = {}, depth = 0) {
       pipeline = true; // stages run in subshells
       continue;
     }
+    if (segment.length === 1 && segment[0] === "&") continue; // handled by look-ahead
     if (segment.length === 1 && (segment[0] === "(" || segment[0] === ")")) {
-      // Bash restores the directory when a subshell closes.
-      if (segment[0] === "(") cwdStack.push(cwd);
-      else if (cwdStack.length) cwd = cwdStack.pop();
+      // Bash restores the directory and variables when a subshell closes.
+      if (segment[0] === "(") cwdStack.push({ cwd, cwdUnknown, shellEnv, shellUnset });
+      else if (cwdStack.length) ({ cwd, cwdUnknown, shellEnv, shellUnset } = cwdStack.pop());
       continue;
     }
-    // `if true; then cd ../other; fi` puts `cd` behind control words. Strip
-    // them to see it, but treat it as conditional: the branch is not knowable.
-    const bare = segment[0] !== "cd"
-      ? segment.filter((t, idx) => !(idx < segment.length && CONTROL_WORDS.has(t) && segment.slice(0, idx).every((p) => CONTROL_WORDS.has(p))))
-      : segment;
-    if (bare[0] === "cd" && bare[1]) {
-      if (bare !== segment) {
-        cwdUnknown = true; // behind a control word: branch not evaluable
-        conditional = false;
-        continue;
+    blockDepth = blockDepthAfter(segment, blockDepth);
+    const prefix = commandPrefix(segment, cwd, { cwdUnknown, env: shellEnv, unset: shellUnset });
+    const next = queue[i + 1];
+    // A pipeline stage or a backgrounded command (`cd /x &`) runs in a
+    // subshell; the marker follows the command it ends, so look ahead.
+    const piped = pipeline || (next && next.length === 1 && (next[0] === "|" || next[0] === "&"));
+    const bare = directWords(segment);
+    const head = prefix.tokens?.[0];
+    const assigned = shellAssignments(bare, prefix);
+    if (assigned) {
+      if (!piped) {
+        const unknown = conditional || blockDepth > 0 || bare.length !== segment.length;
+        shellEnv = { ...shellEnv };
+        for (const [name, value] of assigned.set) {
+          shellEnv[name] = unknown ? "$unknown" : value;
+          shellUnset = shellUnset.filter((item) => item !== name);
+        }
+        for (const name of assigned.unset) {
+          if (unknown) shellEnv[name] = "$unknown";
+          else {
+            delete shellEnv[name];
+            if (!shellUnset.includes(name)) shellUnset = [...shellUnset, name];
+          }
+        }
       }
-      // `false && cd ../other; gh pr merge 7` never runs the cd, so applying
-      // it would query the wrong repository. We cannot evaluate the branch,
-      // so mark the directory unknown and let the merge degrade rather than
-      // verify somewhere the merge will not happen.
-      // A `cd` in a pipeline stage runs in a subshell and is discarded, so it
-      // must not move the gate's directory either. The `|` marker follows the
-      // stage it terminates, so look ahead as well as behind.
-      const piped = pipeline ||
-        (queue[i + 1] && queue[i + 1].length === 1 && queue[i + 1][0] === "|");
-      if (conditional) cwdUnknown = true;
-      else if (!piped) cwd = path.resolve(cwd || process.cwd(), bare[1]);
       conditional = false;
       pipeline = false;
       continue;
     }
+    if (bare[0] === "cd" || bare[0] === "pushd" || bare[0] === "popd") {
+      // A `cd` in a pipeline stage runs in a subshell and is discarded; the `|`
+      // marker follows the stage it ends, so `piped` looks ahead as well.
+      // Behind `&&`/`||`, a control word, or inside an open compound block
+      // (`if …\ncd x\nfi`) the branch cannot be evaluated, and
+      // a bare `cd` (HOME), `cd -`, `cd ~…`, an option, an expansion, a glob or
+      // pushd/popd lands somewhere this hook cannot name: all mark the
+      // directory unknown rather than resolving it against the wrong place.
+      const literal = bare[0] === "cd" && bare[1] && !/^[-~]|[$`*?[\]{}]/.test(bare[1]);
+      const guarded = bare.length !== segment.length && CONTROL_WORDS.has(segment[0]);
+      if (!piped) {
+        if (!literal || guarded || conditional || blockDepth > 0) cwdUnknown = true;
+        else cwd = path.resolve(cwd || process.cwd(), bare[1]);
+      }
+      conditional = false;
+      pipeline = false;
+      continue;
+    }
+    // A wrapped `cd` (`env cd`, `timeout 5 cd`) or anything run in this shell
+    // from elsewhere (`source`, `.`, `eval`) may move it somewhere unknown.
+    if (!piped && (head === "cd" || head === "pushd" || head === "popd" || bare[0] === "source" ||
+        bare[0] === "." || bare[0] === "eval")) {
+      cwdUnknown = true;
+    }
     conditional = false;
     pipeline = false;
-    if (!prefix.tokens || basename(prefix.tokens[0] || "") !== "gh") continue;
-    const { env, unset, ignoreEnv } = prefix;
-    const tokens = prefix.tokens.slice(1);
-    const at = prefix.cwd;
-    const commandCwdUnknown = prefix.cwdUnknown;
-    const { words, flags } = parseArgs(tokens);
-    // `--help` prints usage; `--disable-auto` TURNS OFF auto-merge, which is
-    // the mitigation to reach for during a settlement window. Refusing either
-    // blocks a command that merges nothing. Checked against real options only.
-    if ([...NON_MERGE_FLAGS].some((f) => flagEnabled(flags.get(f)))) continue;
-    if (words[0] === "pr" && words[1] === "merge") {
-      found.push({ kind: "pr", tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown: commandCwdUnknown, ref: words[2] || null });
-    } else if (words[0] === "api") {
-      // Only the endpoint positional — a `-H 'X-Test: repos/x/y/pulls/5/merge'`
-      // header value must not be mistaken for the endpoint being called.
-      const method = String(flags.get("-X") || flags.get("--method") || "GET")
-        .toUpperCase();
-      // gh api defaults to GET; only PUT actually merges. Refusing a
-      // merge-status check would block a read-only call.
-      const endpoint = words[1];
-      const path = typeof endpoint === "string" ? endpoint.match(REST_MERGE_RE) : null;
-      if (path && method === "PUT") {
-        // Placeholders expand from the current repo, exactly as `gh pr view N`
-        // resolves, so hand the number to that path rather than querying a
-        // literal `{owner}`.
+    const pieceCount = count(segment.join(" "));
+    const pushPiece = pushPhraseCount(segment.join(" "));
+    // Only the command's own argv is ever credited: an assignment or wrapper
+    // option peeled off it (`GIT_EDITOR='gh pr merge 7 #' git commit`) can
+    // itself be run, so its phrases stay unattributed.
+    const argv = (prefix.tokens || []).join(" ");
+    const argvCount = count(argv);
+    const argvPushes = pushPhraseCount(argv);
+    const site = { cwd: prefix.cwd, cwdUnknown: prefix.cwdUnknown, env: prefix.env };
+    if (Object.hasOwn(prefix.env, "RAILYARD_GUARD_DEFAULT_BRANCH_PUSH")) {
+      guardEnv = { RAILYARD_GUARD_DEFAULT_BRANCH_PUSH: prefix.env.RAILYARD_GUARD_DEFAULT_BRANCH_PUSH };
+    }
+    if (prefix.script !== undefined) {
+      if (pieceCount || count(prefix.script)) {
+        unattributed.add("a merge inside a string a shell or eval interprets cannot be checked; run the merge as its own command");
+      }
+      if (pushPiece || pushPhraseCount(prefix.script)) pushSite ??= site;
+      continue;
+    }
+    if (!head) continue;
+    // One gh command, top-level or nested under `find -exec`: the same
+    // checks decide whether its merge phrases are credited.
+    const creditGh = (gh) => {
+      const text = gh.tokens.join(" ");
+      if (gh.appendsArgs && count(text)) {
+        // xargs appends a PR, repository or flags read from stdin after the
+        // gate has read the visible arguments.
+        unattributed.add("xargs adds merge arguments this guard cannot see; run the merge as its own command");
+        return;
+      }
+      const words = gh.tokens.slice(1).filter((token) => !token.startsWith("-"));
+      if (aliasesChanged && words[0] !== undefined && !GH_COMMANDS.has(words[0])) {
+        // `gh alias set p pr; gh p merge 7`: the alias exists only at run time.
+        unattributed.add("this command changes gh aliases and then runs one, which this guard cannot expand; run them separately");
+        return;
+      }
+      if (words[0] === "alias" && (words[1] === "set" || words[1] === "import")) aliasesChanged = true;
+      const merge = mergeFromPrefix(gh);
+      if (merge) found.push(merge);
+      if (merge || ghHandlesArguments(gh)) attributed += count(text);
+    };
+    if (basename(head) === "find") {
+      for (const group of findExecCommands(prefix.tokens)) {
+        const inner = commandPrefix(group, prefix.cwd, prefix);
+        if (inner.script === undefined && basename(inner.tokens?.[0] || "") === "gh") creditGh(inner);
+      }
+      continue;
+    }
+    if (basename(head) === "gh") {
+      creditGh(prefix);
+      pushesAttributed += argvPushes; // gh never runs its arguments as git
+      continue;
+    }
+    let pushData = false;
+    if (basename(head) === "git") {
+      const invocation = gitInvocation(prefix.tokens.slice(1), prefix.cwd, prefix.env);
+      if (invocation.sub === "push") {
         found.push({
-          kind: "api", tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown: commandCwdUnknown, endpoint: path, ref: path[3],
+          kind: "push", tokens: invocation.args, env: prefix.env, cwd: invocation.cwd,
+          cwdUnknown: prefix.cwdUnknown || invocation.cwdUnknown, repo: invocation.repo,
+          // `xargs git push origin` appends refspecs this hook never sees.
+          appended: prefix.appendsArgs,
         });
-      } else if ((method === "PUT" && (!endpoint || /[$`]/.test(endpoint))) ||
-          (path && /[$`]/.test(method))) {
-        found.push({ kind: "unsupported", why: "the gh api merge endpoint or method is unresolved; use a literal REST PUT endpoint or gh pr merge with --match-head-commit" });
-      } else if (endpoint === "graphql") {
-        const command = { tokens, env, unset, ignoreEnv, flags, cwd: at, cwdUnknown: commandCwdUnknown };
-        try {
-          if (graphqlMerges(command)) found.push({ ...command, kind: "graphql", ref: null });
-        } catch (error) {
-          found.push({ kind: "unsupported", why: String(error.message) });
-        }
+        pushesAttributed += argvPushes;
+        continue; // its arguments are refspecs, never data
+      } else {
+        // These git commands never run their own arguments (a branch or
+        // message that merely says push). Others can (`rebase --exec`,
+        // `filter-branch --tree-filter`, `config alias.p '!git push'`), and
+        // `-c` can define an alias, so their push phrases stay unattributed.
+        pushData = GIT_DATA_SUBCOMMANDS.has(invocation.sub) && !invocation.repo.configOverride &&
+          !prefix.tokens.some((token) => /^(?:-O|--open-files-in-pager)/.test(token));
       }
     }
+    if (!pieceCount && !pushPiece) continue;
+    // Data is inert only when nothing downstream in its pipeline runs it.
+    let downstream = true;
+    for (let j = i + 1; queue[j]?.length === 1 && queue[j][0] === "|"; j += 2) {
+      const consumer = commandPrefix(queue[j + 1] || [], cwd);
+      if (consumer.script !== undefined || !SAFE_FILTERS.has(basename(consumer.tokens?.[0] || ""))) downstream = false;
+    }
+    const data = !runsFile && downstream && dataCommand(prefix.tokens);
+    if (data) attributed += argvCount;
+    if (data || (!runsFile && downstream && pushData)) pushesAttributed += argvPushes;
+    else if (pushPiece) pushSite ??= site;
   }
+  if ((unsure && rawPushes) || rawPushes > pushesAttributed) {
+    const at = pushSite ?? { cwd: baseCwd || undefined, cwdUnknown: false, env: {} };
+    found.push({ kind: "push-unresolved", ...at, env: { ...guardEnv, ...at.env } });
+  }
+  if (unsure && raw) unattributed.add("a heredoc in this command cannot be delimited exactly, so a merge in it cannot be checked");
+  if (raw > attributed && !unattributed.size) {
+    unattributed.add("this command mentions a merge this guard cannot attribute to one directly executed gh command (for example inside a heredoc, pipe, wrapper or interpreted string); run the merge as its own command");
+  }
+  for (const why of unattributed) found.push({ kind: "unsupported", why });
   return found;
 }
 
@@ -844,7 +906,12 @@ function currentIdentity(target, command) {
 function verifyMerge(command) {
   if (command.kind === "unsupported") throw new Error(command.why);
   if (command.cwdUnknown) {
-    throw new Error("a conditional `cd` makes the merge's repository unknown; run the merge as its own command in an explicit workdir");
+    throw new Error("an unresolved or conditional `cd` makes the merge's repository unknown; run the merge as its own command in an explicit workdir");
+  }
+  // GH_REPO/GH_HOST from an expansion, or from an assignment that may not have
+  // run, pick a repository or host this guard cannot name.
+  if (["GH_REPO", "GH_HOST", "GH_CONFIG_DIR"].some((name) => /[$`]/.test(command.env?.[name] ?? ""))) {
+    throw new Error("GH_REPO, GH_HOST or GH_CONFIG_DIR is computed or conditionally set, so the merge's repository is unknown; set it literally on the merge");
   }
   if (command.kind === "graphql") {
     throw new Error("raw GraphQL mergePullRequest is unsupported; use gh pr merge with --match-head-commit and CE's snapshot");
@@ -875,52 +942,193 @@ function verifyMerge(command) {
   }
 }
 
-// A user who explicitly directs a merge (including an admin bypass of branch
-// protection) can skip CE settlement for that one merge. The override must be
-// an inline assignment in the command text, never ambient process env, so it
-// cannot linger as a blanket bypass and stays visible in the command the user
-// approved. It applies only to one merge site that can run only once against a
-// fixed PR: exactly one supported `gh pr merge` or REST merge in the text (a
-// wrapper such as `bash -c` would otherwise pass it to every merge inside), a
-// literal PR selector with no shell expansion, and no loop, function or fan-out
-// construct that could re-run the site. Raw GraphQL and unresolved merge forms
-// keep their refusals. Anything uncertain falls back to the CE gate.
-const OVERRIDE_NAME = "RAILYARD_MERGE_OVERRIDE";
-const OVERRIDE_VALUE = "user-approved";
-const REPEATING = /(?:^|[\s;&|(){}'"])(?:for|while|until|select|function|xargs|parallel)(?=[\s;&|(){}'"]|$)|\(\s*\)/;
-const EXPANDING = /[$`*?[\]]/;
-function userOverride(commands, text) {
-  if (commands.length !== 1 || REPEATING.test(text)) return false;
-  const [command] = commands;
-  if (command.kind !== "pr" && command.kind !== "api") return false;
-  if (!Object.hasOwn(command.env, OVERRIDE_NAME) || command.env[OVERRIDE_NAME] !== OVERRIDE_VALUE) return false;
-  const selectors = [command.ref, command.flags.get("--repo"), command.flags.get("-R")]
-    .concat(command.kind === "api" ? [command.endpoint?.join?.("/")] : []);
-  return nonempty(command.ref) && selectors.every((value) => value == null || !EXPANDING.test(String(value)));
+function recordOverride(entry) {
+  const runLog = require("./run-log");
+  return runLog.append({ ...entry, session_id: runLog.clip(entry.session_id), tool: runLog.clip(entry.tool) });
+}
+
+// Opt-in guard for `git push` to a repository's default branch. Off unless
+// RAILYARD_GUARD_DEFAULT_BRANCH_PUSH=1 (inline or in the environment) or the
+// repository sets `git config railyard.guardDefaultBranchPush true`.
+//
+// Like the merge gate it fails closed instead of modelling git: once enabled,
+// a push refuses unless its destination provably is not the default branch.
+function git(args, cwd) {
+  return execFileSync("git", args, {
+    encoding: "utf8", cwd, timeout: Math.max(1, Math.min(1500, DEADLINE - Date.now())),
+    stdio: ["ignore", "pipe", "ignore"],
+  }).trim();
+}
+
+// The push's repository: `known` only when the selection is literal and git
+// resolves it. The guard's own queries carry the same `--git-dir`/`--work-tree`.
+function pushRepository(command) {
+  const repo = command.repo || { explicit: false, unknown: false, args: [] };
+  if (repo.unknown || command.cwdUnknown) return { ...repo, known: false };
+  try {
+    git([...repo.args, "rev-parse", "--git-dir"], command.cwd);
+    return { ...repo, known: true };
+  } catch {
+    return { ...repo, known: false };
+  }
+}
+
+// On only when the environment says so or a repository this hook can resolve
+// opts in. Anything unresolvable is not opted in: the guard never refuses a
+// push nobody asked it to guard.
+function pushGuardEnabled(command, repo) {
+  if (commandSetting({ env: command.env, unset: [], ignoreEnv: false }, "RAILYARD_GUARD_DEFAULT_BRANCH_PUSH") === "1") return true;
+  if (!repo.known) return false;
+  try {
+    return git([...repo.args, "config", "--type=bool", "--get", "railyard.guardDefaultBranchPush"], command.cwd) === "true";
+  } catch {
+    return false;
+  }
+}
+
+// The push-relevant config: push.default, remote.pushDefault, remote.<r>.push
+// and each branch's remote, pushRemote and upstream.
+function pushConfig(command, repo) {
+  const config = new Map();
+  let text = "";
+  try {
+    text = git([...repo.args, "config", "--get-regexp",
+      "^(push\\.default|remote\\.pushdefault|remote\\..+\\.push|branch\\..+\\.(merge|remote|pushremote))$"], command.cwd);
+  } catch (error) {
+    if (error?.status !== 1) throw error; // 1: none set
+  }
+  for (const line of text.split("\n").filter(Boolean)) {
+    const cut = line.indexOf(" ");
+    const key = cut < 0 ? line : line.slice(0, cut);
+    if (!config.has(key)) config.set(key, cut < 0 ? "" : line.slice(cut + 1));
+  }
+  return config;
+}
+
+// `--signed` is a boolean with an optional `=mode`, never a separate value.
+const PUSH_VALUE_FLAGS = new Set(["-o", "--push-option", "--repo", "--receive-pack", "--exec"]);
+// Why this push may reach the default branch, or null when it provably does not.
+function defaultBranchPush(command, repo) {
+  const words = [];
+  const flags = new Map();
+  const args = command.tokens;
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index];
+    if (token === "--") { words.push(...args.slice(index + 1)); break; }
+    if (!token.startsWith("-")) words.push(token);
+    else {
+      const cut = token.indexOf("=");
+      const name = cut > 0 ? token.slice(0, cut) : token;
+      let value = cut > 0 ? token.slice(cut + 1) : true;
+      if (cut < 0 && PUSH_VALUE_FLAGS.has(token)) { value = args[index + 1]; index += 1; }
+      flags.set(name, value);
+    }
+  }
+  if (flags.has("-n") || flags.has("--dry-run")) return null;
+  if (command.cwdUnknown || !repo.known) return "the push's repository is unknown";
+  if (command.appended) return "xargs may append refspecs this guard cannot see";
+  if (repo.configOverride) return "`git -c` may change where it pushes";
+  if (flags.has("--all") || flags.has("--mirror") || flags.has("--branches")) return "--all/--mirror pushes every branch";
+  let config;
+  try { config = pushConfig(command, repo); } catch { return "its push configuration is unreadable"; }
+  let current = null;
+  const currentBranch = () => {
+    try { current ??= git([...repo.args, "symbolic-ref", "--short", "HEAD"], command.cwd); } catch { current = ""; }
+    return current;
+  };
+  const explicitRemote = typeof flags.get("--repo") === "string" ? flags.get("--repo") : words[0];
+  const remote = explicitRemote || config.get(`branch.${currentBranch()}.pushremote`) ||
+    config.get("remote.pushdefault") || config.get(`branch.${currentBranch()}.remote`) || "origin";
+  // The remote's default branch as this clone records it. Without that record
+  // (a URL, or no refs/remotes/<remote>/HEAD) the guard cannot name the branch
+  // to protect, so it refuses rather than guessing. It does not go to the
+  // network; `git remote set-head <remote> --auto` refreshes a stale record.
+  let branch;
+  try {
+    branch = git([...repo.args, "symbolic-ref", "--short", `refs/remotes/${remote}/HEAD`], command.cwd).replace(`${remote}/`, "");
+  } catch {
+    return `the default branch of ${remote} is unknown here; run \`git remote set-head ${remote} --auto\``;
+  }
+  const defaults = [branch];
+  const isDefault = (target) => defaults.includes(String(target).replace(/^refs\/heads\//, ""));
+  const remotePush = config.has(`remote.${remote}.push`);
+  const refspecs = words.slice(explicitRemote === words[0] ? 1 : 0);
+  if (!refspecs.length) {
+    // No refspec: remote.<r>.push, then push.default (simple unless set) decide.
+    if (remotePush) return `remote.${remote}.push decides where it pushes`;
+    const mode = (config.get("push.default") || "simple").toLowerCase();
+    if (mode === "nothing") return null;
+    if (mode === "matching") return "push.default=matching pushes every matching branch";
+    const branchName = currentBranch();
+    if (!branchName) return "it has no explicit refspec on a detached HEAD";
+    if (isDefault(branchName)) return `it pushes the current branch ${branchName}`;
+    const upstream = config.get(`branch.${branchName}.merge`);
+    if ((mode === "upstream" || mode === "tracking") && upstream && isDefault(upstream)) {
+      return `push.default=${mode} pushes ${branchName} to its upstream ${upstream}`;
+    }
+    return null;
+  }
+  for (const refspec of refspecs) {
+    const spec = refspec.replace(/^\+/, "");
+    if (spec === ":") return `the matching refspec ${refspec} pushes every matching branch`;
+    const colon = spec.lastIndexOf(":");
+    // Without `:dst`, remote.<r>.push maps the source to its destination.
+    if (colon < 0 && remotePush) return `remote.${remote}.push decides where ${refspec} goes`;
+    let target = colon >= 0 ? spec.slice(colon + 1) : spec;
+    if (target === "HEAD" || (colon < 0 && spec === "HEAD")) target = currentBranch();
+    if (/[$`*?[\]]/.test(target)) return `the refspec ${refspec} is not literal`;
+    if (isDefault(target)) return `it updates ${target}`;
+  }
+  return null;
 }
 
 function handlePayload(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return;
   if (input.hook_event_name && input.hook_event_name !== "PreToolUse") return;
   const args = input.tool_input && typeof input.tool_input === "object" ? input.tool_input : {};
-  const text = commandText(args);
-  if (!text) return;
+  const script = commandScript(args);
+  if (!script) return;
   const requestedCwd = [args.working_directory, args.workdir, args.cwd, input.cwd]
     .find((value) => typeof value === "string" && value);
-  const commands = mergeCommands(stripHeredocs(text), requestedCwd);
-  if (!commands.length) return;
-  if (userOverride(commands, text)) {
-    process.stderr.write(`[railyard] Merge allowed by ${OVERRIDE_NAME}=${OVERRIDE_VALUE} without CE settlement.\n`);
-    return;
-  }
+  let found = null;
+  let overrideNote = "";
+  // Everything, parsing and the override included, runs inside this try: an
+  // exception refuses the merge instead of crashing the hook open.
   try {
+    found = mergeCommands(script, requestedCwd);
+    for (const push of found.filter((command) => command.kind === "push" || command.kind === "push-unresolved")) {
+      const repo = pushRepository(push);
+      if (!pushGuardEnabled(push, repo)) continue;
+      const why = push.kind === "push-unresolved"
+        ? "a `git push` inside a script, heredoc, pipe or wrapper cannot be checked; run the push as its own command"
+        : defaultBranchPush(push, repo);
+      if (why) {
+        process.stderr.write(`[railyard] Push refused: this repository guards its default branch and ${why}; push a branch and open a PR instead.\n`);
+        process.exitCode = 2;
+        return;
+      }
+    }
+    const commands = found.filter((command) => command.kind !== "push" && command.kind !== "push-unresolved");
+    if (!commands.length) return;
+    const override = evaluateOverride({
+      script, commands, input, defaultCwd: requestedCwd, record: recordOverride,
+    });
+    if (override?.file) {
+      process.stderr.write(`[railyard] Merge allowed by the user-directed override without CE settlement; recorded in ${override.file}.\n`);
+      return;
+    }
+    if (override) overrideNote = ` The user-directed override did not apply: ${override.reason}.`;
+    const blocked = commands.find((command) => command.kind === "unsupported");
+    if (blocked) throw new Error(blocked.why);
     if (commands.length !== 1) throw new Error("merge one PR per command with that PR's CE snapshot");
     verifyMerge(commands[0]);
   } catch (error) {
+    // A parser failure on text that never mentions a merge is not a merge.
+    if (!found && !/merge|push/i.test(script)) return;
     const why = String(error?.message || error).split("\n")[0];
     process.stderr.write("[railyard] Merge refused: " + why +
       ". Have ce-babysit-pr complete readiness and save its final snapshot stdout beside state.json; then retry the pinned merge." +
-      ` Only when the user explicitly directs this merge without CE settlement, prefix the merge command with ${OVERRIDE_NAME}=${OVERRIDE_VALUE}.\n`);
+      overrideNote + "\n");
     process.exitCode = 2;
   }
 }

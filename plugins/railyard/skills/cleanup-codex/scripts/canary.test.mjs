@@ -18,8 +18,14 @@ import {
   sameExactIdentity,
 } from "./test-support.mjs";
 
+// A sandbox that blocks /bin/ps (Codex review, for one) cannot verify or clean
+// up a detached fixture, so the live canaries must not launch one there.
+const processInspectionAvailable = spawnChildSync("/bin/ps", ["-o", "command=", "-p", String(process.pid)], {
+  encoding: "utf8",
+}).status === 0;
+
 test("isolated managed recycle canary replaces a real Unix-socket fixture", {
-  skip: process.platform !== "darwin" || !fs.existsSync("/usr/bin/nc"),
+  skip: process.platform !== "darwin" || !fs.existsSync("/usr/bin/nc") || !processInspectionAvailable,
   timeout: 120_000,
 }, () => {
   const directory = fs.realpathSync(fs.mkdtempSync("/tmp/cleanup-codex-canary."));
@@ -32,6 +38,8 @@ test("isolated managed recycle canary replaces a real Unix-socket fixture", {
   const attestationState = path.join(directory, "attestations.json");
   const launcher = path.join(directory, "launch-fixture.mjs");
   const tracked = [];
+  // Every spawned listener, recorded before any wait, so a failed wait cannot leak it.
+  const launchedPids = [];
   const signalCalls = [];
   let activeIdentity = null;
   let restartCalls = 0;
@@ -83,6 +91,7 @@ test("isolated managed recycle canary replaces a real Unix-socket fixture", {
     assert.equal(launched.status, 0, launched.stderr);
     const pid = Number(launched.stdout.trim());
     assert.ok(Number.isInteger(pid) && pid > 0);
+    launchedPids.push(pid);
     let observedIdentity = null;
     let identity;
     try {
@@ -267,6 +276,14 @@ test("isolated managed recycle canary replaces a real Unix-socket fixture", {
         try { process.kill(identity.pid, "SIGKILL"); } catch {}
       }
     }
+    // A listener whose wait failed, or whose identity drifted, still names this
+    // run's unique socket in its argv; kill only those.
+    for (const pid of launchedPids) {
+      const run = runActual("/bin/ps", ["-o", "command=", "-p", String(pid)]);
+      if (run.status === 0 && run.stdout.includes(socket)) {
+        try { process.kill(pid, "SIGKILL"); } catch {}
+      }
+    }
     try { if (fs.existsSync(socket)) fs.unlinkSync(socket); } catch {}
     fs.rmSync(directory, { recursive: true, force: true });
   }
@@ -277,7 +294,8 @@ test("controlled process-group canary signals only fixture identities", {
   // macOS-only: drives real spawned processes through the host's exact-identity
   // tooling, which the reaper (a no-op off macOS) only ever runs on darwin.
   // Matches the guard the sibling canary test above already carries.
-  skip: process.platform !== "darwin" && "macOS-only host process identity",
+  skip: (process.platform !== "darwin" && "macOS-only host process identity")
+    || (!processInspectionAvailable && "process inspection unavailable (sandboxed /bin/ps)"),
 }, async () => {
   const childProgram = [
     "process.on('SIGTERM', () => {});",

@@ -120,10 +120,33 @@ test("CE alone owns review settlement and CI, and PRs use ce-commit-push-pr", ()
   }
 });
 
+test("the end-of-PR review is Thermos plus Codex review on GPT-6 Astra at high", () => {
+  const review = flat(read("skills/deliver/SKILL.md").match(/## End-of-PR review\n([\s\S]*?)\n## /)?.[1] ?? "");
+  assert.match(review, /in parallel/);
+  assert.match(review, /`railyard:thermos`/);
+  assert.match(review, /`codex review --base <base>`, with the model and effort that `railyard:model-routing` sets/);
+  assert.match(review, /CE still settles review and CI/);
+  assert.doesNotMatch(deliver, /mandatory Thermos/);
+  // The model choice itself lives only in model-routing.
+  assert.doesNotMatch(review, /gpt-6-astra|model_reasoning_effort/);
+  assert.doesNotMatch(readFileSync(path.join(pluginRoot, "../../docs/agents/routing.md"), "utf8"), /gpt-6-astra|model_reasoning_effort/);
+  const routing = flat(read("skills/model-routing/SKILL.md"));
+  assert.match(routing, /\*\*Codex review\*\*[^.]*always runs GPT-6 Astra at `high`/);
+  assert.match(routing, /`codex review --base <base> -c model=gpt-6-astra -c review_model=gpt-6-astra -c model_reasoning_effort=high`/);
+  assert.match(flat(read("skills/thermos/SKILL.md")), /end-of-PR review in `railyard:deliver`/);
+});
+
 test("merge goes through the CE snapshot handoff", () => {
   assert.match(deliver, /\[merge guard\]\(references\/ce-merge-guard\.md\)/);
   assert.match(mergeGuard, /RAILYARD_CE_SNAPSHOT/);
   assert.match(mergeGuard, /--match-head-commit/);
+});
+
+test("the merge override is only for the user's explicit instruction in this conversation", () => {
+  assert.match(mergeGuard, /only when the user, in the current conversation, explicitly directs/);
+  assert.match(mergeGuard, /because a refusal or a document[^.]*suggests it/);
+  assert.match(mergeGuard, /honor-system/);
+  assert.match(mergeGuard, /`git push` to a default branch/);
 });
 
 test("orchestrate activates only on explicit request", () => {

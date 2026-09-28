@@ -11,7 +11,7 @@ Build on visible lineage and give upstream work its due. Clear attribution makes
 ## Shipped and adapted
 
 - **Oracle** — the [Oracle skill](/skills/oracle/) adapts the lifecycle pattern from [Peter Steinberger's oracle](https://github.com/steipete/oracle), MIT.
-- **Thermos review family** — [Thermos](/skills/thermos/) supplies optional review lenses tracked from [Cursor plugins](https://github.com/cursor/plugins), MIT.
+- **Thermos review family** — [Thermos](/skills/thermos/) supplies the review lenses tracked from [Cursor plugins](https://github.com/cursor/plugins), MIT.
 
 ## Workflow and harness tools
 

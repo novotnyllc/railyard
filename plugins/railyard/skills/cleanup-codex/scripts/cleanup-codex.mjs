@@ -73,6 +73,8 @@ import {
 
 export * from "./lib/constants.mjs";
 export * from "./lib/desktop.mjs";
+export * from "./lib/desktop-activity.mjs";
+export * from "./lib/desktop-watchdog.mjs";
 export * from "./lib/hook.mjs";
 export * from "./lib/hook-receipts.mjs";
 export * from "./lib/inventory.mjs";
@@ -266,7 +268,11 @@ export function renderHuman(result) {
       if (idle) {
         lines.push(idle.idle
           ? `idle: yes (no Codex activity for ${idle.idleSeconds}s; last at ${idle.lastActivityAt ?? "unknown"})`
-          : `idle: no (${idle.reasons.join(", ")}); retry when Codex work in the app has finished`);
+          : `idle: no (${idle.reasons.join(", ")}${idle.unknown ? `: ${idle.unknown}` : ""}); retry when Codex work in the app has finished`);
+        for (const turn of idle.openTurns ?? []) {
+          lines.push(`  open turn in thread ${JSON.stringify(turn.title ?? "untitled")} (${turn.threadId ?? "unknown id"}) since ${turn.since ?? "unknown"}:`
+            + " finish, cancel or archive that thread in the app, then retry");
+        }
       }
     } else {
       lines.push(`descriptor limit: ${result.verification.nofileLimit ?? "attested"}`);
@@ -304,7 +310,8 @@ export function usage() {
     "Recycle is two-pass: the first pass prints a confirmation token; rerun the same command with --confirm TOKEN.",
     "Detached servers restart through `codex app-server daemon restart` by default, or with --unmanaged",
     "and --launcher PATH (or RAILYARD_CODEX_BIN). --nofile-attestor PATH is optional; without it the limit is unverified.",
-    "--desktop quits and relaunches the ChatGPT/Codex app hosting a GUI app-server, only when it has been idle for 5 minutes.",
+    "--desktop quits and relaunches the ChatGPT/Codex app hosting a GUI app-server, closing its session, only when the app's",
+    "own threads have been idle for 5 minutes. Run it from outside the app.",
     "Threshold options: --fd-count-warn, --highest-fd-warn, --age-hours-warn, --descendant-warn",
     "Exit codes: 0 healthy, 1 warning, 2 refused/invalid, 3 attempted cleanup verification failure.",
   ].join("\n");
@@ -420,6 +427,7 @@ export function runCli(argv = process.argv.slice(2), {
       postSignalMs,
       monotonicNow,
       lock,
+      spawnProcess,
     });
     const outcome = recycleDesktop({
       platform,

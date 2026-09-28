@@ -1,18 +1,19 @@
 ---
 name: thermos
-description: "Combine targeted correctness/security and maintainability reviews when explicitly requested or justified by substantial risk. Optional deep review; not a routine delivery gate."
+description: "Combine targeted correctness/security and maintainability reviews. Railyard's recommended end-of-PR review, run beside Codex review; also use when the user asks or a change's risk justifies it. Supplies findings; not a merge gate."
 ---
 
 # Thermos
 
 Run the two thermo review passes as async background subagents in parallel, then synthesize their results.
 
-Use it when the user asks for it or when a change's risk needs both
-correctness/security and maintainability depth; for a single concern, use the
-relevant sibling skill directly. Choose each reviewer's model and reasoning
-effort with `railyard:model-routing`. When Compound Engineering owns a
-cross-model review mechanism, use it rather than launching a separate provider
-runner.
+Use it as the end-of-PR review in `railyard:deliver`, where it runs beside
+`codex review` and its findings go to the CE owner; also use it when the user
+asks for it or when a change's risk needs both correctness/security and
+maintainability depth. For a single concern, use the relevant sibling skill
+directly. Choose each reviewer's model and reasoning effort with
+`railyard:model-routing`. Thermos itself launches no other provider's review;
+the Codex review beside it is the caller's to run.
 
 ## Workflow
 

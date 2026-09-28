@@ -2,9 +2,17 @@
 
 Use native tools for ordinary local work and select Compound Engineering
 stages when they help: `ce-debug` for difficult diagnosis, `ce-plan` for
-substantial planning, `ce-code-review` for meaningful review, and `lfg` for a
-coordinated full workflow. `railyard:deliver` coordinates these stages when
-the user asks to deliver or ship.
+substantial planning, and `lfg` for a coordinated full workflow.
+`railyard:deliver` coordinates these stages when the user asks to deliver or
+ship.
+
+- End-of-PR review: run `railyard:thermos` and `codex review --base <base>`
+  in parallel, and feed their findings to the CE owner. The Codex review model
+  and effort come from `railyard:model-routing`. Why: in a bakeoff on
+  five past commits with known later-fixed bugs, Thermos caught 6.5 of 8
+  ground-truth units, `ce-code-review` caught 4 at about twice the tokens and
+  time, and Codex review on GPT-6 Astra at high caught 2, including the one
+  nothing else found, with no false positives.
 
 - Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or
   pushing user-requested commits to an existing PR, and `gh-stack` for related

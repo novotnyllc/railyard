@@ -24,7 +24,7 @@ import {
 } from "./process-evidence.mjs";
 import {
   exactSnapshotIdentityPresent,
-  sameBirthIdentityPresent,
+  observeBirth,
   snapshotIdentity,
 } from "./snapshot.mjs";
 
@@ -304,19 +304,9 @@ export function applicableParentOrRefuse(server, inventory, readIdentity, uid) {
 
 export function assertExpectedIdentityGone(expected, readIdentity, survivorCode, unknownCode) {
   if (!expected) return;
-  let observation;
-  try {
-    observation = readIdentity(expected.pid);
-  } catch {
-    refuse(unknownCode);
-  }
-  if (observation?.state === "absent") return;
-  if (
-    observation?.state === "present"
-    && validObservedIdentity(observation.identity)
-    && !sameBirthIdentityPresent(expected, observation)
-  ) return;
-  refuse(observation?.state === "present" ? survivorCode : unknownCode);
+  const verdict = observeBirth(expected, readIdentity);
+  if (verdict === "gone") return;
+  refuse(verdict === "present" ? survivorCode : unknownCode);
 }
 
 export function revalidateSnapshot(snapshot, readIdentity) {

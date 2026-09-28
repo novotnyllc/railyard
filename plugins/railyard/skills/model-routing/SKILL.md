@@ -37,6 +37,9 @@ subagents inherit both model and effort.
 - **GPT-6 Astra** is for hard or high-risk work, or when Sol fell short.
 - **Daybreak** (`gpt-daybreak-blue-latest`) is for defensive security work
   when the surface exposes it.
+- **Codex review** (`codex review`, including the end-of-PR review) always
+  runs GPT-6 Astra at `high`:
+  `codex review --base <base> -c model=gpt-6-astra -c review_model=gpt-6-astra -c model_reasoning_effort=high`.
 
 `spawn_agent` accepts `model` and `reasoning_effort` only with `fork_turns`
 set to `"none"` or a history count. A full-history fork (`"all"` or omitted)

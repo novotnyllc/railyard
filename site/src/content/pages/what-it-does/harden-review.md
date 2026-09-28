@@ -15,7 +15,7 @@ An orchestrator change touches many mechanical call sites and one gnarly concurr
 > Review this change deeply, settle findings, and merge it.
 ```
 
-Compound Engineering (CE) owns review settlement and CI monitoring. Select the optional Thermos pair when its correctness and code-quality lenses help answer the review question.
+Compound Engineering (CE) owns review settlement and CI monitoring. Before settlement, run the Thermos pair and `codex review` (GPT-6 Astra, high effort) in parallel; their findings go to the CE owner.
 
 ## Illustrative workflow
 

@@ -7,8 +7,7 @@
  * same machinery as `reap`.
  */
 
-import fs from "node:fs";
-import os from "node:os";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 
@@ -23,12 +22,12 @@ import {
   DESKTOP_RECEIPT_SCHEMA,
   EXIT_CODES,
   LAUNCHCTL,
-  LSAPPINFO,
-  OPEN,
+  MAIN_APP_EXECUTABLE,
   OSASCRIPT,
   PLUTIL,
   SNAPSHOT_SCHEMA,
-  SQLITE3,
+  WATCHDOG_LATE_QUIT_MS,
+  WATCHDOG_TIMEOUT_MS,
 } from "./constants.mjs";
 import {
   childrenByParent,
@@ -41,6 +40,7 @@ import {
   CleanupRefusal,
   callerUid,
   defaultRunner,
+  REVALIDATED_IDENTITY_FIELDS,
   identityDifferences,
   refuse,
   safeFailureCode,
@@ -59,19 +59,19 @@ import {
   assertOldTreeGone,
   recycleConfirmationToken,
 } from "./recycle-evidence.mjs";
+import { desktopBusyReasons, readDesktopActivity } from "./desktop-activity.mjs";
+import { armRelaunchWatchdog, launchBundle, validRelaunchPath } from "./desktop-watchdog.mjs";
 import {
   createMutationLock,
+  observeBirth,
+  stillExactlyPresent,
   processBirthObservation,
-  sameBirthIdentityPresent,
   snapshotIdentity,
   validateSnapshotObject,
 } from "./snapshot.mjs";
 
-const MAIN_APP_EXECUTABLE = /^(\/.+\/(?:Codex|ChatGPT)\.app)\/Contents\/MacOS\/(?:Codex|ChatGPT)$/i;
 
 const BUNDLE_ID = /^[A-Za-z0-9][A-Za-z0-9.-]{0,254}$/;
-
-const HOST_IDENTITY_FIELDS = ["pid", "uid", "startTime", "executable", "processGroupId"];
 
 export function readLaunchdMaxfiles(runner = defaultRunner) {
   const run = safeRun(runner, LAUNCHCTL, ["limit", "maxfiles"], { timeout: 5_000 });
@@ -175,6 +175,7 @@ export function emptyDesktopResult(platform) {
       mode: "desktop",
       launchdMaxfiles: null,
       idle: null,
+      relaunch: null,
       receipt: null,
       before: null,
       actions: [],
@@ -274,14 +275,42 @@ export function stillMatchingResidue(snapshot, readIdentity, uid) {
   }, uid);
 }
 
+// The one completeness rule for choosing a server before the quit and for
+// accepting its replacement after the relaunch: no inventory collection error,
+// and complete evidence for that server itself. Another server's gap (say a
+// VS Code-hosted stdio app-server) is not this recycle's to prove.
+export function desktopServerEvidenceGap(verification, server = null) {
+  if (verification?.missingEvidence?.length) return "inventory-incomplete";
+  if (server && (!Array.isArray(server.missingEvidence) || server.missingEvidence.length)) {
+    return "selected-server-ambiguous";
+  }
+  return null;
+}
+
+// PIDs from `pid` up to launchd, or null when any link is missing.
+export function processAncestry(pid, byPid) {
+  const chain = [];
+  let current = pid;
+  while (Number.isInteger(current) && current > 1) {
+    if (chain.includes(current)) return null;
+    const record = byPid.get(current);
+    if (!record) return null;
+    chain.push(current);
+    current = record.parentPid;
+  }
+  return current === 1 || current === 0 ? chain : null;
+}
+
 function desktopEvidence(inventory, { pid, uid, now }, deps) {
   const classified = classifyInventory(inventory, { now });
   const verification = classified.result.verification;
-  if (verification.missingEvidence.length) refuse("inventory-incomplete");
+  const inventoryGap = desktopServerEvidenceGap(verification);
+  if (inventoryGap) refuse(inventoryGap);
   const server = verification.servers.find((candidate) => candidate.pid === pid);
   if (!server) refuse("selected-pid-not-app-server");
   if (server.classification !== "gui") refuse("selected-server-not-gui");
-  if (server.missingEvidence.length) refuse("selected-server-ambiguous");
+  const serverGap = desktopServerEvidenceGap(verification, server);
+  if (serverGap) refuse(serverGap);
   if (server.uid !== uid) refuse("selected-server-wrong-user");
 
   const processes = inventory.processes ?? [];
@@ -292,17 +321,38 @@ function desktopEvidence(inventory, { pid, uid, now }, deps) {
   if (processes.filter((item) => item.executable === host.record.executable).length !== 1) {
     refuse("desktop-host-ambiguous");
   }
+  // Quitting the host ends every process under it. A recycle run from inside
+  // the app (its terminal, or a Codex turn under the server) would kill its
+  // own controller before the relaunch, so it refuses instead.
+  const selfChain = processAncestry(deps.selfPid, byPid);
+  if (!selfChain) refuse("desktop-self-ancestry-unknown");
+  if (selfChain.includes(host.record.pid) || selfChain.includes(server.pid)) {
+    refuse("desktop-recycle-inside-app");
+  }
   const hostObservation = deps.readIdentity(host.record.pid);
   if (
     hostObservation?.state !== "present"
     || !validObservedIdentity(hostObservation.identity)
-    || identityDifferences(host.record, hostObservation.identity, HOST_IDENTITY_FIELDS).length
+    || identityDifferences(host.record, hostObservation.identity, REVALIDATED_IDENTITY_FIELDS).length
   ) refuse("desktop-host-changed");
   let bundleId = null;
   try {
     bundleId = deps.readBundleIdentifier(host.bundlePath);
   } catch {}
   if (typeof bundleId !== "string" || !BUNDLE_ID.test(bundleId)) refuse("desktop-bundle-id-unavailable");
+  // The quit is addressed by bundle id, so another running copy of the app
+  // (a second install with the same id) could be the one that quits.
+  const otherBundles = unique(processes
+    .map((item) => MAIN_APP_EXECUTABLE.exec(item.executable ?? "")?.[1])
+    .filter((bundlePath) => bundlePath && bundlePath !== host.bundlePath));
+  for (const bundlePath of otherBundles) {
+    let other = null;
+    try {
+      other = deps.readBundleIdentifier(bundlePath);
+    } catch {}
+    if (typeof other !== "string" || !BUNDLE_ID.test(other)) refuse("desktop-bundle-id-unavailable");
+    if (other === bundleId) refuse("desktop-bundle-id-ambiguous");
+  }
 
   const ownerObservation = deps.readIdentity(server.pid);
   if (
@@ -353,68 +403,6 @@ export function buildDesktopReceipt(evidence, snapshot, launchdMaxfiles) {
   };
 }
 
-// Read-only signals that Codex work is running: the newest rollout write or
-// thread update in Codex's state database, and which app is frontmost.
-// Anything unreadable leaves `complete` false, which counts as busy.
-export function readDesktopActivity({ runner = defaultRunner, codexHome, fsApi = fs } = {}) {
-  const activity = { complete: false, latestActivityMs: null, frontmostBundleId: null };
-  const database = path.join(codexHome, "state_5.sqlite");
-  const query = safeRun(runner, SQLITE3, [
-    "-readonly",
-    "-json",
-    `file:${database}?mode=ro`,
-    "SELECT rollout_path, updated_at_ms FROM threads WHERE archived = 0 ORDER BY updated_at_ms DESC LIMIT 50",
-  ], { timeout: 5_000 });
-  if (query.status !== 0 || typeof query.stdout !== "string") return activity;
-  let rows;
-  try {
-    rows = query.stdout.trim() ? JSON.parse(query.stdout) : [];
-  } catch {
-    return activity;
-  }
-  if (!Array.isArray(rows)) return activity;
-  let latest = 0;
-  for (const row of rows) {
-    if (Number.isFinite(row?.updated_at_ms)) latest = Math.max(latest, row.updated_at_ms);
-    if (typeof row?.rollout_path !== "string") continue;
-    try {
-      latest = Math.max(latest, fsApi.statSync(row.rollout_path).mtimeMs);
-    } catch {}
-  }
-  activity.latestActivityMs = latest;
-  const front = safeRun(runner, LSAPPINFO, ["front"], { timeout: 5_000 });
-  const asn = typeof front.stdout === "string" ? front.stdout.trim() : "";
-  if (front.status !== 0 || !/^ASN:[0-9a-fx-]+:?$/i.test(asn)) return activity;
-  const info = safeRun(runner, LSAPPINFO, ["info", "-only", "bundleid", asn], { timeout: 5_000 });
-  const match = typeof info.stdout === "string"
-    ? info.stdout.match(/bundle(?:ID|identifier)"?\s*=\s*"([^"]+)"/i)
-    : null;
-  // An unparsed frontmost app is unknown, which counts as busy.
-  if (info.status !== 0 || !match) return activity;
-  activity.frontmostBundleId = match[1];
-  activity.complete = true;
-  return activity;
-}
-
-// Reasons the desktop app looks busy; empty means idle enough to recycle.
-export function desktopBusyReasons({ activity, inventory, serverPid, bundleId, nowMs, idleMs }) {
-  const reasons = [];
-  if (!activity?.complete) return ["desktop-activity-unknown"];
-  if (Number.isFinite(activity.latestActivityMs) && nowMs - activity.latestActivityMs < idleMs) {
-    reasons.push("codex-activity-recent");
-  }
-  if (activity.frontmostBundleId && activity.frontmostBundleId === bundleId) {
-    reasons.push("desktop-app-frontmost");
-  }
-  const processes = Array.isArray(inventory?.processes) ? inventory.processes : [];
-  const recentChild = descendantsOf(serverPid, childrenByParent(processes)).descendants.some((item) => {
-    const started = Date.parse(item.startTime ?? "");
-    return !Number.isFinite(started) || nowMs - started < idleMs;
-  });
-  if (recentChild) reasons.push("recent-app-server-child");
-  return reasons;
-}
-
 function waitUntil(deps, timeoutMs, probe) {
   const deadline = deps.monotonicNow() + timeoutMs;
   for (;;) {
@@ -426,21 +414,16 @@ function waitUntil(deps, timeoutMs, probe) {
   }
 }
 
-function goneOrReused(expected, observation) {
-  if (observation?.state === "absent") return true;
-  return observation?.state === "present"
-    && validObservedIdentity(observation.identity)
-    && !sameBirthIdentityPresent(expected, observation);
-}
-
 function findRelaunched(inventory, oldHost, oldOwner, uid, now) {
   const classified = classifyInventory(inventory, { now });
-  // An incomplete inventory is not proof of a healthy replacement; keep polling.
-  if (!classified.result.verification.complete) return null;
+  const { verification } = classified.result;
+  // A collection error is not proof of a healthy replacement; keep polling.
+  // The same rule as the pre-flight: only the candidate's own evidence counts.
+  if (desktopServerEvidenceGap(verification)) return null;
   const byPid = new Map((inventory.processes ?? []).map((item) => [item.pid, item]));
-  for (const server of classified.result.verification.servers) {
+  for (const server of verification.servers) {
     if (server.classification !== "gui" || server.uid !== uid) continue;
-    if (server.missingEvidence?.length) continue;
+    if (desktopServerEvidenceGap(verification, server)) continue;
     const serverRecord = byPid.get(server.pid);
     // A reused PID with a new birth is a valid replacement.
     if (!serverRecord || (server.pid === oldOwner.pid && serverRecord.startTime === oldOwner.startTime)) continue;
@@ -454,17 +437,7 @@ function findRelaunched(inventory, oldHost, oldOwner, uid, now) {
 
 // The replacement host and server must still be the processes the inventory saw.
 function relaunchStillLive(relaunched, readIdentity) {
-  return [relaunched.host, relaunched.serverRecord].every((record) => {
-    let observation;
-    try {
-      observation = readIdentity(record.pid);
-    } catch {
-      return false;
-    }
-    return observation?.state === "present"
-      && validObservedIdentity(observation.identity)
-      && !identityDifferences(record, observation.identity, ["pid", "uid", "startTime", "executable"]).length;
-  });
+  return [relaunched.host, relaunched.serverRecord].every((record) => stillExactlyPresent(record, readIdentity));
 }
 
 export function recycleDesktop(options, deps) {
@@ -482,8 +455,11 @@ export function recycleDesktop(options, deps) {
     if (!Number.isInteger(minSoftLimit) || minSoftLimit <= 0) refuse("invalid-minimum-soft-limit");
     if (
       !deps?.inventory
-      || ["readIdentity", "collectInventory", "readBundleIdentifier", "quitApp", "launchApp", "reapResidue", "sleep", "monotonicNow"]
-        .some((name) => typeof deps[name] !== "function")
+      || [
+        "readIdentity", "collectInventory", "readBundleIdentifier", "readDesktopActivity",
+        "quitApp", "launchApp", "armRelaunchWatchdog", "reapResidue", "sleep", "monotonicNow",
+      ].some((name) => typeof deps[name] !== "function")
+      || !Number.isInteger(deps.selfPid)
     ) refuse("desktop-evidence-unavailable");
 
     let launchdMaxfiles = null;
@@ -526,14 +502,18 @@ export function recycleDesktop(options, deps) {
     // Quitting interrupts any running turn, so only an idle app is recycled.
     const idleSeconds = options.idleSeconds ?? DEFAULT_DESKTOP_IDLE_SECONDS;
     if (!Number.isInteger(idleSeconds) || idleSeconds < 0) refuse("invalid-idle-seconds");
-    // The process tree is read after the activity probe, so a child started
-    // while the probe ran is still seen.
+    // Activity is read first. Given a reader, the process tree is read after
+    // it, so a child started while the activity probe ran is still seen;
+    // given an inventory already read, only the activity is fresh.
     const checkIdle = (inventorySource) => {
       let activity = null;
       try {
-        activity = deps.readDesktopActivity?.() ?? null;
+        activity = deps.readDesktopActivity({ serverPid: receipt.server.pid, nowMs: options.now ?? Date.now() });
       } catch {}
-      const inventory = typeof inventorySource === "function" ? inventorySource() : inventorySource;
+      let inventory = null;
+      try {
+        inventory = typeof inventorySource === "function" ? inventorySource() : inventorySource;
+      } catch {}
       const reasons = desktopBusyReasons({
         activity,
         inventory,
@@ -546,11 +526,16 @@ export function recycleDesktop(options, deps) {
         idle: reasons.length === 0,
         idleSeconds,
         reasons,
+        unknown: activity?.complete ? null : activity?.unknown ?? "desktop-activity-unavailable",
+        // An open turn (even one a crash abandoned) keeps the app busy until
+        // it is finished, cancelled or archived in the app.
+        openTurns: activity?.openTurns ?? [],
         lastActivityAt: Number.isFinite(activity?.latestActivityMs) && activity.latestActivityMs > 0
           ? new Date(activity.latestActivityMs).toISOString()
           : null,
       };
       if (reasons.length) refuse("desktop-busy");
+      return inventory;
     };
     checkIdle(deps.inventory);
     if (!options.confirmation) refuse("confirmation-required");
@@ -577,36 +562,44 @@ export function recycleDesktop(options, deps) {
       now,
       skipped: result.skipped,
     });
-    if (buildDesktopReceipt(locked, lockedSnapshot, launchdMaxfiles).confirmationToken !== receipt.confirmationToken) {
-      refuse("desktop-identity-changed");
-    }
+    const lockedReceipt = buildDesktopReceipt(locked, lockedSnapshot, launchdMaxfiles);
+    if (lockedReceipt.confirmationToken !== receipt.confirmationToken) refuse("desktop-identity-changed");
     // Descendants churn; report what the locked snapshot will actually act on.
-    const lockedSelectedPids = [lockedSnapshot.owner.pid, ...lockedSnapshot.targets.map((target) => target.pid)]
-      .sort((left, right) => left - right);
-    result.verification.receipt = { ...receipt, targets: lockedSnapshot.targets, selectedPids: lockedSelectedPids };
+    result.verification.receipt = lockedReceipt;
     result.verification.before.targetPids = lockedSnapshot.targets.map((target) => target.pid);
-    result.selected = lockedSelectedPids.map((pid) => ({
+    result.selected = lockedReceipt.selectedPids.map((pid) => ({
       pid,
       role: pid === lockedSnapshot.owner.pid ? "server" : "descendant",
     }));
     assertGuiPreserved(evidence.otherGui, deps.readIdentity);
-    checkIdle(() => deps.collectInventory());
+    const lockedInventoryAfterIdle = checkIdle(() => deps.collectInventory());
     // The app can restart on its own during the idle check; quit only the bound births.
-    const stillBound = (expected, fields) => {
-      let observation;
-      try {
-        observation = deps.readIdentity(expected.pid);
-      } catch {
-        return false;
-      }
-      return observation?.state === "present"
-        && validObservedIdentity(observation.identity)
-        && !identityDifferences(expected, observation.identity, fields).length;
-    };
-    if (!stillBound(receipt.host, HOST_IDENTITY_FIELDS)
-      || !stillBound(receipt.server, ["pid", "uid", "startTime", "executable"])) {
+    if (!stillExactlyPresent(receipt.host, deps.readIdentity)
+      || !stillExactlyPresent(receipt.server, deps.readIdentity)) {
       refuse("desktop-identity-changed");
     }
+    // The relaunch target must be usable before anything is quit.
+    if (!validRelaunchPath(receipt.host.bundlePath)
+      || !receipt.host.executable.startsWith(`${receipt.host.bundlePath}/Contents/MacOS/`)) {
+      refuse("desktop-relaunch-path-invalid");
+    }
+    // One last activity read, immediately before the quit: a turn started
+    // while the process inventory above ran is still caught.
+    checkIdle(lockedInventoryAfterIdle);
+    // A detached watchdog reopens the app if this process dies after the
+    // quit, the quit lands after this process gives up, or anything throws.
+    const watchTarget = {
+      hostPid: receipt.host.pid,
+      hostStartTime: receipt.host.startTime,
+      bundlePath: receipt.host.bundlePath,
+      bundleId: receipt.host.bundleId,
+    };
+    let watchdog = null;
+    try {
+      watchdog = deps.armRelaunchWatchdog(watchTarget);
+    } catch {}
+    if (!watchdog?.ok) refuse("desktop-watchdog-unavailable");
+    result.verification.watchdog = { armed: true, pid: watchdog.pid ?? null };
 
     // Ask the app to quit. The host is never signalled. The quit event can
     // land even when osascript reports failure, so record the attempt first.
@@ -616,92 +609,23 @@ export function recycleDesktop(options, deps) {
     try {
       quit = deps.quitApp(receipt.host.bundleId);
     } catch {}
-    // Even a failed request may have delivered the quit event, so always wait.
-    const quitTimeoutMs = deps.quitTimeoutMs ?? DEFAULT_DESKTOP_QUIT_TIMEOUT_MS;
-    const hostGone = waitUntil(deps, quitTimeoutMs, () => goneOrReused(receipt.host, deps.readIdentity(receipt.host.pid)));
-    if (!hostGone) refuse(quit?.ok ? "desktop-host-quit-timeout" : "desktop-quit-request-failed");
-    const serverGone = waitUntil(deps, quitTimeoutMs, () => goneOrReused(receipt.server, deps.readIdentity(receipt.server.pid)));
-    if (!serverGone) refuse("desktop-server-survived-host");
-
-    // Reap exact leftovers of the old app-server tree.
-    const residue = stillMatchingResidue(lockedSnapshot, deps.readIdentity, uid);
-    if (residue.targets.length) {
-      const reaped = deps.reapResidue(residue);
-      if (reaped?.exitCode !== EXIT_CODES.healthy) {
-        refuse(safeFailureCode(reaped?.result?.verification?.missingEvidence?.[0], "residue-reap-incomplete"));
-      }
-    }
-    result.verification.actions.push({
-      kind: "reap-exact-residue",
-      pids: residue.targets.map((target) => target.pid),
-    });
-
-    // Relaunch and wait for a fresh host and GUI app-server.
-    let launched = null;
-    try {
-      launched = deps.launchApp(receipt.host.bundleId);
-    } catch {}
-    if (!launched?.ok) refuse("desktop-relaunch-failed");
-    result.verification.actions.push({ kind: "relaunch-desktop-app", bundleId: receipt.host.bundleId });
-    const relaunched = waitUntil(
-      deps,
-      deps.relaunchTimeoutMs ?? DEFAULT_DESKTOP_RELAUNCH_TIMEOUT_MS,
-      () => {
-        try {
-          const found = findRelaunched(deps.collectInventory(), receipt.host, receipt.server, uid, now);
-          return found && relaunchStillLive(found, deps.readIdentity) ? found : null;
-        } catch {
-          return null;
-        }
-      },
-    );
-    if (!relaunched) refuse("desktop-relaunch-timeout");
-
-    assertOldTreeGone(lockedSnapshot, deps.readIdentity);
-    if (typeof deps.readBirth === "function") {
-      for (const item of result.skipped.filter((entry) => entry.reasons.includes("identity-unavailable"))) {
-        let birth = null;
-        try {
-          birth = deps.readBirth(item.pid);
-        } catch {}
-        if (birth?.state === "present" && item.startTime && birth.startTime === item.startTime) {
-          result.warnings.push({
-            code: "desktop-unidentified-survivor",
-            pid: item.pid,
-            message: `old descendant ${item.pid} outlived the app but lacks exact identity, so it was not signalled`,
-            authorizesAction: false,
-          });
-        }
-      }
-    }
-    assertExpectedIdentityGone(receipt.host, deps.readIdentity, "old-host-survivor", "old-host-verification-unknown");
-    assertGuiPreserved(evidence.otherGui, deps.readIdentity);
-    if (!relaunchStillLive(relaunched, deps.readIdentity)) refuse("replacement-identity-changed");
-
-    result.verification.after = {
-      hostPid: relaunched.host.pid,
-      pid: relaunched.server.pid,
-      descriptors: {
-        count: relaunched.server.descriptorCount,
-        highest: relaunched.server.highestDescriptor,
-      },
-      descendants: relaunched.server.descendants,
-      oldTreeGone: true,
-    };
-    result.verification.guiPreserved = true;
-    result.verification.complete = true;
-    result.status = "healthy";
-    exitCode = EXIT_CODES.healthy;
-  } catch (error) {
-    const code = error instanceof CleanupRefusal ? error.code : "desktop-recycle-evidence-failed";
-    result.verification.missingEvidence.push(code);
-    if (result.verification.mutationAttempted) {
+    const failures = quitAndRestore({ receipt, lockedSnapshot, evidence, quit, uid, now, deps, result, watchdog, watchTarget });
+    if (failures.length) {
+      result.verification.missingEvidence.push(...failures);
       result.status = "failed";
       exitCode = EXIT_CODES.failed;
     } else {
-      result.status = "refused";
-      exitCode = EXIT_CODES.refused;
+      result.verification.guiPreserved = true;
+      result.verification.complete = true;
+      result.status = "healthy";
+      exitCode = EXIT_CODES.healthy;
     }
+  } catch (error) {
+    // Only reached before the quit: quitAndRestore never throws.
+    const code = error instanceof CleanupRefusal ? error.code : "desktop-recycle-evidence-failed";
+    result.verification.missingEvidence.push(code);
+    result.status = "refused";
+    exitCode = EXIT_CODES.refused;
   } finally {
     if (release) {
       try {
@@ -718,6 +642,174 @@ export function recycleDesktop(options, deps) {
   return { result, exitCode };
 }
 
+// Everything after the quit request. It never throws: once the app is not
+// shown running, the relaunch always happens (from `finally` if need be), and
+// every failure is returned to be reported beside it.
+function quitAndRestore({ receipt, lockedSnapshot, evidence, quit, uid, now, deps, result, watchdog, watchTarget }) {
+  const failures = [];
+  const fail = (error, fallback) => {
+    failures.push(error instanceof CleanupRefusal ? error.code : fallback);
+  };
+  let launchAttempted = false;
+  let relaunched = null;
+  const relaunch = () => {
+    launchAttempted = true;
+    let launched = null;
+    try {
+      launched = deps.launchApp(receipt.host.bundlePath, receipt.host.bundleId);
+    } catch {}
+    result.verification.actions.push({
+      kind: "relaunch-desktop-app", bundlePath: receipt.host.bundlePath, ok: launched?.ok === true, by: launched?.by ?? null,
+    });
+    result.verification.relaunch = { attempted: true, requested: launched?.ok === true, verified: false };
+    if (!launched?.ok) failures.push("desktop-relaunch-failed");
+    return launched?.ok === true;
+  };
+  try {
+    // Even a failed request may have delivered the quit event, so always wait.
+    const quitTimeoutMs = deps.quitTimeoutMs ?? DEFAULT_DESKTOP_QUIT_TIMEOUT_MS;
+    const hostGone = waitUntil(deps, quitTimeoutMs, () => observeBirth(receipt.host, deps.readIdentity) === "gone");
+    if (!hostGone) {
+      // Still running (say, a dialog is open): nothing is forced. The long
+      // watchdog is replaced by a short one, so a quit that lands soon is
+      // still reopened but an app the user quits later on purpose is not.
+      if (observeBirth(receipt.host, deps.readIdentity) === "present") {
+        failures.push(quit?.ok ? "desktop-host-quit-timeout" : "desktop-quit-request-failed");
+        // Arm the short watchdog first: the long one is stopped only once its
+        // replacement runs, so a quit that still lands is always reopened.
+        let late = null;
+        try {
+          late = deps.armRelaunchWatchdog({ ...watchTarget, timeoutMs: WATCHDOG_LATE_QUIT_MS });
+        } catch {}
+        const replaced = late?.ok === true;
+        if (replaced) {
+          try { watchdog?.disarm?.(); } catch {}
+        }
+        result.verification.watchdog = replaced
+          ? { armed: true, pid: late.pid ?? null, lateQuitMs: WATCHDOG_LATE_QUIT_MS }
+          : { armed: watchdog?.ok === true, pid: watchdog?.pid ?? null, lateQuitArmFailed: true };
+        result.warnings.push({
+          code: "desktop-quit-may-still-land",
+          pid: receipt.host.pid,
+          message: replaced
+            ? `the app did not quit; if it quits within ${WATCHDOG_LATE_QUIT_MS / 1000} seconds it is reopened, `
+              + `otherwise reopen it yourself (the recycle's first watchdog, up to ${WATCHDOG_TIMEOUT_MS / 60_000} minutes, was stopped)`
+            : `the app did not quit; the shorter watchdog could not be started, so the recycle's first watchdog stays armed `
+              + `and reopens the app if it quits within ${WATCHDOG_TIMEOUT_MS / 60_000} minutes`,
+          authorizesAction: false,
+        });
+        return failures;
+      }
+      // Unknown: the app may still be running. Touch nothing more: no reopen
+      // aimed at a possibly live app and no reaping of what may be its live
+      // tree. The armed watchdog reopens the app once it sees the host gone.
+      failures.push("desktop-host-quit-unverified");
+      result.verification.watchdog = { armed: watchdog?.ok === true, pid: watchdog?.pid ?? null };
+      result.warnings.push({
+        code: "desktop-host-state-unknown",
+        pid: receipt.host.pid,
+        message: "whether the app quit could not be read; nothing else was stopped, and the recycle's watchdog "
+          + `reopens the app once it sees it gone (up to ${WATCHDOG_TIMEOUT_MS / 60_000} minutes)`,
+        authorizesAction: false,
+      });
+      return failures;
+    }
+
+    // The app is closed: reopen that exact
+    // bundle at once, then check what the quit left behind.
+    if (relaunch()) {
+      relaunched = waitUntil(deps, deps.relaunchTimeoutMs ?? DEFAULT_DESKTOP_RELAUNCH_TIMEOUT_MS, () => {
+        try {
+          const found = findRelaunched(deps.collectInventory(), receipt.host, receipt.server, uid, now);
+          return found && relaunchStillLive(found, deps.readIdentity) ? found : null;
+        } catch {
+          return null;
+        }
+      });
+      if (!relaunched) failures.push("desktop-relaunch-timeout");
+    }
+    if (!waitUntil(deps, quitTimeoutMs, () => observeBirth(receipt.server, deps.readIdentity) === "gone")) {
+      failures.push("desktop-server-survived-host");
+    }
+
+    // Reap exact leftovers of the old app-server tree. They are bound to exact
+    // identities, so the new app's processes are never mistaken for them.
+    try {
+      const residue = stillMatchingResidue(lockedSnapshot, deps.readIdentity, uid);
+      if (residue.targets.length) {
+        const ownerReplacement = relaunched?.serverRecord.pid === lockedSnapshot.owner.pid
+          ? { pid: relaunched.serverRecord.pid, startTime: relaunched.serverRecord.startTime }
+          : null;
+        const reaped = deps.reapResidue(residue, { ownerReplacement });
+        if (reaped?.exitCode !== EXIT_CODES.healthy) {
+          refuse(safeFailureCode(reaped?.result?.verification?.missingEvidence?.[0], "residue-reap-incomplete"));
+        }
+      }
+      result.verification.actions.push({ kind: "reap-exact-residue", pids: residue.targets.map((target) => target.pid) });
+    } catch (error) {
+      fail(error, "residue-reap-incomplete");
+    }
+    for (const [check, fallback] of [
+      [() => assertOldTreeGone(lockedSnapshot, deps.readIdentity), "old-tree-verification-unknown"],
+      [() => assertExpectedIdentityGone(receipt.host, deps.readIdentity, "old-host-survivor", "old-host-verification-unknown"), "old-host-verification-unknown"],
+      [() => assertGuiPreserved(evidence.otherGui, deps.readIdentity), "gui-verification-unknown"],
+    ]) {
+      try {
+        check();
+      } catch (error) {
+        fail(error, fallback);
+      }
+    }
+    warnUnidentifiedSurvivors(result, deps);
+    if (relaunched && !relaunchStillLive(relaunched, deps.readIdentity)) {
+      failures.push("replacement-identity-changed");
+      relaunched = null;
+    }
+    if (relaunched) {
+      result.verification.relaunch.verified = true;
+      result.verification.after = {
+        hostPid: relaunched.host.pid,
+        pid: relaunched.server.pid,
+        descriptors: {
+          count: relaunched.server.descriptorCount,
+          highest: relaunched.server.highestDescriptor,
+        },
+        descendants: relaunched.server.descendants,
+        oldTreeGone: !failures.some((code) => code.startsWith("old-tree")),
+      };
+    }
+  } catch (error) {
+    fail(error, "desktop-recycle-evidence-failed");
+  } finally {
+    // Whatever failed above, an app shown gone is reopened. One whose state
+    // cannot be read is left to the armed watchdog, never reopened blind.
+    if (!launchAttempted && observeBirth(receipt.host, deps.readIdentity) === "gone") {
+      try {
+        relaunch();
+      } catch {}
+    }
+  }
+  return failures;
+}
+
+function warnUnidentifiedSurvivors(result, deps) {
+  if (typeof deps.readBirth !== "function") return;
+  for (const item of result.skipped.filter((entry) => entry.reasons.includes("identity-unavailable"))) {
+    let birth = null;
+    try {
+      birth = deps.readBirth(item.pid);
+    } catch {}
+    if (birth?.state === "present" && item.startTime && birth.startTime === item.startTime) {
+      result.warnings.push({
+        code: "desktop-unidentified-survivor",
+        pid: item.pid,
+        message: `old descendant ${item.pid} outlived the app but lacks exact identity, so it was not signalled`,
+        authorizesAction: false,
+      });
+    }
+  }
+}
+
 export function createDefaultDesktopDependencies({
   inventory,
   runner = defaultRunner,
@@ -732,18 +824,19 @@ export function createDefaultDesktopDependencies({
   quitTimeoutMs = DEFAULT_DESKTOP_QUIT_TIMEOUT_MS,
   relaunchTimeoutMs = DEFAULT_DESKTOP_RELAUNCH_TIMEOUT_MS,
   pollMs = DEFAULT_DESKTOP_POLL_MS,
-  env = process.env,
+  selfPid = process.pid,
+  spawnProcess = spawn,
 } = {}) {
   readIdentity ??= (pid) => collectExactProcessIdentity(pid, { runner });
-  const codexHome = path.resolve(env.CODEX_HOME || path.join(os.homedir(), ".codex"));
   return {
     inventory,
+    selfPid,
     collectInventory: () => collectMacOSInventory({ runner, platform: "darwin" }),
     readIdentity,
     readBundleIdentifier: (bundlePath) => readBundleIdentifier(runner, bundlePath),
     readLaunchdMaxfiles: () => readLaunchdMaxfiles(runner),
     readBirth: (pid) => processBirthObservation(pid, runner),
-    readDesktopActivity: () => readDesktopActivity({ runner, codexHome }),
+    readDesktopActivity: ({ serverPid, nowMs }) => readDesktopActivity({ runner, serverPid, nowMs }),
     // The bundle id is validated against BUNDLE_ID, so it cannot break out of
     // the AppleScript string literal.
     quitApp(bundleId) {
@@ -751,12 +844,12 @@ export function createDefaultDesktopDependencies({
       const run = safeRun(runner, OSASCRIPT, ["-e", `tell application id "${bundleId}" to quit`], { timeout: 20_000 });
       return { ok: run.status === 0 };
     },
-    launchApp(bundleId) {
-      if (!BUNDLE_ID.test(bundleId)) return { ok: false };
-      const run = safeRun(runner, OPEN, ["-b", bundleId], { timeout: 20_000 });
-      return { ok: run.status === 0 };
-    },
-    reapResidue(snapshot) {
+    // Reopen the exact bundle that was quit. Only if that path fails (say it
+    // was translocated) fall back to the bundle id, which no other running
+    // copy shares (checked before the quit).
+    launchApp: (bundlePath, bundleId) => launchBundle(runner, { bundlePath, bundleId }),
+    armRelaunchWatchdog: (args) => armRelaunchWatchdog(args, { spawnProcess }),
+    reapResidue(snapshot, { ownerReplacement = null } = {}) {
       return reapSnapshot(snapshot, {
         platform: "darwin",
         uid,
@@ -766,6 +859,7 @@ export function createDefaultDesktopDependencies({
         graceMs,
         postSignalMs,
         lock: { acquire: () => () => {} },
+        ownerReplacement,
       });
     },
     sleep,

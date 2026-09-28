@@ -40,9 +40,32 @@ export const DEFAULT_DESKTOP_RELAUNCH_TIMEOUT_MS = 90_000;
 
 export const DEFAULT_DESKTOP_POLL_MS = 1_000;
 
+// The desktop idle gate, in one place.
 // A desktop recycle only proceeds when Codex has been quiet this long: no
 // rollout written, no new app-server child, and the app not in front.
 export const DEFAULT_DESKTOP_IDLE_SECONDS = 300;
+// Desktop threads updated this recently are checked for an open turn or tool
+// call (a tool call can sit silent far longer than the idle window), and a
+// missing rollout among them is unknown rather than ignored.
+export const DESKTOP_OPEN_TURN_WINDOW_MS = 24 * 60 * 60 * 1000;
+// The newest desktop threads always read for the latest activity.
+export const DESKTOP_LATEST_THREADS = 20;
+// Rows read from the thread table; a full page still inside the window is unknown.
+export const DESKTOP_THREAD_QUERY_LIMIT = 500;
+// Bytes read from the end of each rollout to find its last turn.
+export const DESKTOP_ROLLOUT_TAIL_BYTES = 256 * 1024;
+
+// The relaunch watchdog: how long it waits for the quit to land, how long it
+// waits after that for the recycle's own relaunch, and its shorter window
+// once the recycle has given up on a quit that did not land.
+export const WATCHDOG_TIMEOUT_MS = 10 * 60 * 1000;
+export const WATCHDOG_GRACE_MS = 5_000;
+export const WATCHDOG_POLL_MS = 1_000;
+export const WATCHDOG_LATE_QUIT_MS = 60_000;
+
+// The ChatGPT/Codex main app: its executable, and the bundle that holds it.
+export const MAIN_APP_EXECUTABLE = /^(\/.+\/(?:Codex|ChatGPT)\.app)\/Contents\/MacOS\/(?:Codex|ChatGPT)$/i;
+export const MAIN_APP_BUNDLE = /^\/.+\/(?:Codex|ChatGPT)\.app$/i;
 
 export const LSAPPINFO = "/usr/bin/lsappinfo";
 
