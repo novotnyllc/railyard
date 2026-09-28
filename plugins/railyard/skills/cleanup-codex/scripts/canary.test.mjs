@@ -18,8 +18,14 @@ import {
   sameExactIdentity,
 } from "./test-support.mjs";
 
+// A sandbox that blocks /bin/ps (Codex review, for one) cannot verify or clean
+// up a detached fixture, so the live canaries must not launch one there.
+const processInspectionAvailable = spawnChildSync("/bin/ps", ["-o", "command=", "-p", String(process.pid)], {
+  encoding: "utf8",
+}).status === 0;
+
 test("isolated managed recycle canary replaces a real Unix-socket fixture", {
-  skip: process.platform !== "darwin" || !fs.existsSync("/usr/bin/nc"),
+  skip: process.platform !== "darwin" || !fs.existsSync("/usr/bin/nc") || !processInspectionAvailable,
   timeout: 120_000,
 }, () => {
   const directory = fs.realpathSync(fs.mkdtempSync("/tmp/cleanup-codex-canary."));
@@ -288,7 +294,8 @@ test("controlled process-group canary signals only fixture identities", {
   // macOS-only: drives real spawned processes through the host's exact-identity
   // tooling, which the reaper (a no-op off macOS) only ever runs on darwin.
   // Matches the guard the sibling canary test above already carries.
-  skip: process.platform !== "darwin" && "macOS-only host process identity",
+  skip: (process.platform !== "darwin" && "macOS-only host process identity")
+    || (!processInspectionAvailable && "process inspection unavailable (sandboxed /bin/ps)"),
 }, async () => {
   const childProgram = [
     "process.on('SIGTERM', () => {});",
