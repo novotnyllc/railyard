@@ -10,7 +10,7 @@ const path = require("path");
 const { evaluateOverride } = require("./merge-override");
 const {
   CONTROL_WORDS, SAFE_FILTERS, basename, commandPrefix, commandScript, mergePhraseCount, parseArgs,
-  runsScript, stripHeredocs, tokenizeSegments,
+  pushPhraseCount, runsScript, stripHeredocs, tokenizeSegments,
 } = require("./shell-command");
 
 const VIEW_TIMEOUT_MS = 1200;
@@ -149,24 +149,44 @@ function dataCommand(tokens) {
     !tokens.some((token) => token === "-c" || token.startsWith("--config-env"));
 }
 
-// git's subcommand after its global options, with `-C DIR` applied.
+// git's subcommand after its global options, with `-C DIR` applied and the
+// repository selection (`--git-dir`, `--work-tree`, inline GIT_DIR and
+// GIT_WORK_TREE) kept for the push guard's own git queries. `repo.explicit`
+// means the command names its repository; `repo.unknown` that it names one
+// this hook cannot resolve literally.
 const GIT_VALUE_OPTIONS = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"]);
-function gitInvocation(tokens, cwd) {
+const NON_LITERAL_PATH = /[$`~*?[\]]/;
+function gitInvocation(tokens, cwd, env = {}) {
   let at = cwd;
   let cwdUnknown = false;
+  const repo = { explicit: false, unknown: false, configOverride: false };
+  const selected = { "--git-dir": env.GIT_DIR, "--work-tree": env.GIT_WORK_TREE };
+  const finish = (sub, args) => {
+    repo.args = [];
+    for (const [flag, value] of Object.entries(selected)) {
+      if (value === undefined) continue;
+      repo.explicit = true;
+      if (!value || NON_LITERAL_PATH.test(value)) repo.unknown = true;
+      else repo.args.push(flag, path.resolve(at || process.cwd(), value));
+    }
+    return { sub, args, cwd: at, cwdUnknown, repo };
+  };
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
-    if (!token.startsWith("-")) return { sub: token, args: tokens.slice(index + 1), cwd: at, cwdUnknown };
-    if (GIT_VALUE_OPTIONS.has(token)) {
-      if (token === "-C") {
-        const dir = tokens[index + 1] || "";
-        if (/[$`~*?[\]]/.test(dir)) cwdUnknown = true;
-        else at = path.resolve(at || process.cwd(), dir);
-      }
-      index += 1;
-    }
+    if (!token.startsWith("-")) return finish(token, tokens.slice(index + 1));
+    const cut = token.startsWith("--") ? token.indexOf("=") : -1;
+    const name = cut > 0 ? token.slice(0, cut) : token;
+    if (!GIT_VALUE_OPTIONS.has(name)) continue;
+    const value = cut > 0 ? token.slice(cut + 1) : (tokens[index + 1] ?? "");
+    if (cut < 0) index += 1;
+    if (name === "-C") {
+      repo.explicit = true;
+      if (NON_LITERAL_PATH.test(value)) cwdUnknown = true;
+      else at = path.resolve(at || process.cwd(), value);
+    } else if (name === "--git-dir" || name === "--work-tree") selected[name] = value;
+    else if (name === "-c" || name === "--config-env") repo.configOverride = true;
   }
-  return { sub: null, args: [], cwd: at, cwdUnknown };
+  return finish(null, []);
 }
 
 // `find … -exec CMD {} ;` (and -execdir/-ok/-okdir) runs CMD per match.
@@ -179,6 +199,20 @@ function findExecCommands(tokens) {
     if (end > 0) index = end;
   }
   return commands;
+}
+
+// Compound commands whose body may run conditionally, repeatedly, or never.
+// A newline-separated body tokenizes into its own segments, so a `cd` there
+// has no control word in front of it; the open-block depth marks it instead.
+const BLOCK_OPENERS = new Set(["if", "while", "until", "for", "select", "case", "{"]);
+const BLOCK_CLOSERS = new Set(["fi", "done", "esac", "}"]);
+function blockDepthAfter(segment, depth) {
+  for (const word of segment) {
+    if (!CONTROL_WORDS.has(word)) break;
+    if (BLOCK_OPENERS.has(word)) depth += 1;
+    else if (BLOCK_CLOSERS.has(word)) depth = Math.max(0, depth - 1);
+  }
+  return depth;
 }
 
 // Strip leading control words and the `command`/`builtin` builtins, which
@@ -205,6 +239,10 @@ function directWords(segment) {
 // `-c` string, `eval`, a here-string or heredoc fed to a shell, a pipe into a
 // shell, `ssh`, `trap`, an unknown wrapper, a script file run later, or text
 // the parser cannot delimit — refuses the merge.
+//
+// `git … push` phrases are counted the same way. Any the parser cannot
+// attribute to a directly executed `git push` (or to data) become one
+// `push-unresolved` entry, which the opt-in push guard refuses when enabled.
 function mergeCommands(script, baseCwd) {
   const found = [];
   const aliasNames = mergeAliasNames();
@@ -216,7 +254,12 @@ function mergeCommands(script, baseCwd) {
   // A script that runs a file or stdin through a shell can execute anything it
   // wrote, so none of its data counts as inert.
   const runsFile = queue.some((segment) => runsScript(commandPrefix(segment, baseCwd).tokens || []));
-  let attributed = runsFile ? 0 : bodies.filter((body) => body.inert).reduce((total, body) => total + count(body.text), 0);
+  const inertBodies = runsFile ? [] : bodies.filter((body) => body.inert);
+  let attributed = inertBodies.reduce((total, body) => total + count(body.text), 0);
+  const rawPushes = pushPhraseCount(joined);
+  let pushesAttributed = inertBodies.reduce((total, body) => total + pushPhraseCount(body.text), 0);
+  let pushSite = null; // where the first unattributed push phrase was seen
+  let guardEnv = {}; // an inline RAILYARD_GUARD_DEFAULT_BRANCH_PUSH on any command
   const unattributed = new Set();
   // `cd ../other && gh pr merge 7` resolves PR 7 in ../other, so the gate's own
   // lookup has to run there too — otherwise a settled PR 7 here authorizes an
@@ -226,6 +269,7 @@ function mergeCommands(script, baseCwd) {
   const cwdStack = [];
   let conditional = false; // the previous separator was && or ||
   let pipeline = false; // the previous separator was a single |
+  let blockDepth = 0; // open if/while/until/for/select/case/{ blocks
   let cwdUnknown = false;
   for (let i = 0; i < queue.length && i < SEGMENT_CAP; i += 1) {
     const segment = queue[i];
@@ -243,6 +287,7 @@ function mergeCommands(script, baseCwd) {
       else if (cwdStack.length) ({ cwd, cwdUnknown } = cwdStack.pop());
       continue;
     }
+    blockDepth = blockDepthAfter(segment, blockDepth);
     const prefix = commandPrefix(segment, cwd, { cwdUnknown });
     const piped = pipeline || (queue[i + 1] && queue[i + 1].length === 1 && queue[i + 1][0] === "|");
     const bare = directWords(segment);
@@ -250,14 +295,15 @@ function mergeCommands(script, baseCwd) {
     if (bare[0] === "cd" || bare[0] === "pushd" || bare[0] === "popd") {
       // A `cd` in a pipeline stage runs in a subshell and is discarded; the `|`
       // marker follows the stage it ends, so `piped` looks ahead as well.
-      // Behind `&&`/`||` or a control word the branch cannot be evaluated, and
+      // Behind `&&`/`||`, a control word, or inside an open compound block
+      // (`if …\ncd x\nfi`) the branch cannot be evaluated, and
       // a bare `cd` (HOME), `cd -`, `cd ~…`, an option, an expansion, a glob or
       // pushd/popd lands somewhere this hook cannot name: all mark the
       // directory unknown rather than resolving it against the wrong place.
       const literal = bare[0] === "cd" && bare[1] && !/^[-~]|[$`*?[\]{}]/.test(bare[1]);
       const guarded = bare.length !== segment.length && CONTROL_WORDS.has(segment[0]);
       if (!piped) {
-        if (!literal || guarded || conditional) cwdUnknown = true;
+        if (!literal || guarded || conditional || blockDepth > 0) cwdUnknown = true;
         else cwd = path.resolve(cwd || process.cwd(), bare[1]);
       }
       conditional = false;
@@ -273,10 +319,16 @@ function mergeCommands(script, baseCwd) {
     conditional = false;
     pipeline = false;
     const pieceCount = count(segment.join(" "));
+    const pushPiece = pushPhraseCount(segment.join(" "));
+    const site = { cwd: prefix.cwd, cwdUnknown: prefix.cwdUnknown, env: prefix.env };
+    if (Object.hasOwn(prefix.env, "RAILYARD_GUARD_DEFAULT_BRANCH_PUSH")) {
+      guardEnv = { RAILYARD_GUARD_DEFAULT_BRANCH_PUSH: prefix.env.RAILYARD_GUARD_DEFAULT_BRANCH_PUSH };
+    }
     if (prefix.script !== undefined) {
       if (pieceCount || count(prefix.script)) {
         unattributed.add("a merge inside a string a shell or eval interprets cannot be checked; run the merge as its own command");
       }
+      if (pushPiece || pushPhraseCount(prefix.script)) pushSite ??= site;
       continue;
     }
     if (!head) continue;
@@ -295,22 +347,43 @@ function mergeCommands(script, baseCwd) {
       const merge = mergeFromPrefix(prefix);
       if (merge) found.push(merge);
       attributed += pieceCount;
+      pushesAttributed += pushPiece; // gh never runs its arguments as git
       continue;
     }
+    let pushData = false;
     if (basename(head) === "git") {
-      const invocation = gitInvocation(prefix.tokens.slice(1), prefix.cwd);
+      const invocation = gitInvocation(prefix.tokens.slice(1), prefix.cwd, prefix.env);
       if (invocation.sub === "push") {
-        found.push({ kind: "push", tokens: invocation.args, env: prefix.env, cwd: invocation.cwd, cwdUnknown: prefix.cwdUnknown || invocation.cwdUnknown });
+        found.push({
+          kind: "push", tokens: invocation.args, env: prefix.env, cwd: invocation.cwd,
+          cwdUnknown: prefix.cwdUnknown || invocation.cwdUnknown, repo: invocation.repo,
+          // `xargs git push origin` appends refspecs this hook never sees.
+          appended: prefix.tokens.length < segment.length && segment.some((token) => basename(token) === "xargs"),
+        });
+        pushesAttributed += pushPiece;
+        continue; // its arguments are refspecs, never data
+      } else {
+        // Other git commands never run their own arguments as a push (a
+        // branch or message that merely says push), except these, which run
+        // commands, and `-c`, which can define an alias.
+        pushData = !["rebase", "bisect", "submodule"].includes(invocation.sub) && !invocation.repo.configOverride;
       }
     }
-    if (!pieceCount) continue;
+    if (!pieceCount && !pushPiece) continue;
     // Data is inert only when nothing downstream in its pipeline runs it.
     let downstream = true;
     for (let j = i + 1; queue[j]?.length === 1 && queue[j][0] === "|"; j += 2) {
       const consumer = commandPrefix(queue[j + 1] || [], cwd);
       if (consumer.script !== undefined || !SAFE_FILTERS.has(basename(consumer.tokens?.[0] || ""))) downstream = false;
     }
-    if (!runsFile && downstream && dataCommand(prefix.tokens)) attributed += pieceCount;
+    const data = !runsFile && downstream && dataCommand(prefix.tokens);
+    if (data) attributed += pieceCount;
+    if (data || (!runsFile && downstream && pushData)) pushesAttributed += pushPiece;
+    else if (pushPiece) pushSite ??= site;
+  }
+  if ((unsure && rawPushes) || rawPushes > pushesAttributed) {
+    const at = pushSite ?? { cwd: baseCwd || undefined, cwdUnknown: false, env: {} };
+    found.push({ kind: "push-unresolved", ...at, env: { ...guardEnv, ...at.env } });
   }
   if (unsure && raw) unattributed.add("a heredoc in this command cannot be delimited exactly, so a merge in it cannot be checked");
   if (raw > attributed && !unattributed.size) {
@@ -700,6 +773,9 @@ function recordOverride(entry) {
 // Opt-in guard for `git push` to a repository's default branch. Off unless
 // RAILYARD_GUARD_DEFAULT_BRANCH_PUSH=1 (inline or in the environment) or the
 // repository sets `git config railyard.guardDefaultBranchPush true`.
+//
+// Like the merge gate it fails closed instead of modelling git: once enabled,
+// a push refuses unless its destination provably is not the default branch.
 function git(args, cwd) {
   return execFileSync("git", args, {
     encoding: "utf8", cwd, timeout: Math.max(1, Math.min(1500, DEADLINE - Date.now())),
@@ -707,57 +783,119 @@ function git(args, cwd) {
   }).trim();
 }
 
-function pushGuardEnabled(command) {
-  if (commandSetting({ env: command.env, unset: [], ignoreEnv: false }, "RAILYARD_GUARD_DEFAULT_BRANCH_PUSH") === "1") return true;
+// The push's repository: `known` only when the selection is literal and git
+// resolves it. The guard's own queries carry the same `--git-dir`/`--work-tree`.
+function pushRepository(command) {
+  const repo = command.repo || { explicit: false, unknown: false, args: [] };
+  if (repo.unknown || command.cwdUnknown) return { ...repo, known: false };
   try {
-    return git(["config", "--type=bool", "--get", "railyard.guardDefaultBranchPush"], command.cwd) === "true";
+    git([...repo.args, "rev-parse", "--git-dir"], command.cwd);
+    return { ...repo, known: true };
   } catch {
-    return false; // unset, or not a repository
+    return { ...repo, known: false };
   }
 }
 
-const PUSH_VALUE_FLAGS = new Set(["-o", "--push-option", "--repo", "--receive-pack", "--exec", "--signed"]);
-// Why this push reaches the default branch, or null.
-function defaultBranchPush(command) {
+function pushGuardEnabled(command, repo) {
+  if (commandSetting({ env: command.env, unset: [], ignoreEnv: false }, "RAILYARD_GUARD_DEFAULT_BRANCH_PUSH") === "1") return true;
+  // A repository the command names but this hook cannot read may have opted
+  // in; with no named repository, a failed lookup is simply not opted in.
+  if (!repo.known && repo.explicit) return true;
+  try {
+    return git([...repo.args, "config", "--type=bool", "--get", "railyard.guardDefaultBranchPush"], command.cwd) === "true";
+  } catch (error) {
+    return error?.status !== 1 && repo.known; // 1: unset; anything else fails closed
+  }
+}
+
+// The push-relevant config: push.default, remote.pushDefault, remote.<r>.push
+// and each branch's remote, pushRemote and upstream.
+function pushConfig(command, repo) {
+  const config = new Map();
+  let text = "";
+  try {
+    text = git([...repo.args, "config", "--get-regexp",
+      "^(push\\.default|remote\\.pushdefault|remote\\..+\\.push|branch\\..+\\.(merge|remote|pushremote))$"], command.cwd);
+  } catch (error) {
+    if (error?.status !== 1) throw error; // 1: none set
+  }
+  for (const line of text.split("\n").filter(Boolean)) {
+    const cut = line.indexOf(" ");
+    const key = cut < 0 ? line : line.slice(0, cut);
+    if (!config.has(key)) config.set(key, cut < 0 ? "" : line.slice(cut + 1));
+  }
+  return config;
+}
+
+// `--signed` is a boolean with an optional `=mode`, never a separate value.
+const PUSH_VALUE_FLAGS = new Set(["-o", "--push-option", "--repo", "--receive-pack", "--exec"]);
+// Why this push may reach the default branch, or null when it provably does not.
+function defaultBranchPush(command, repo) {
   const words = [];
-  const flags = new Set();
+  const flags = new Map();
   const args = command.tokens;
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
     if (token === "--") { words.push(...args.slice(index + 1)); break; }
     if (!token.startsWith("-")) words.push(token);
     else {
-      flags.add(token.split("=")[0]);
-      if (PUSH_VALUE_FLAGS.has(token)) index += 1;
+      const cut = token.indexOf("=");
+      const name = cut > 0 ? token.slice(0, cut) : token;
+      let value = cut > 0 ? token.slice(cut + 1) : true;
+      if (cut < 0 && PUSH_VALUE_FLAGS.has(token)) { value = args[index + 1]; index += 1; }
+      flags.set(name, value);
     }
   }
   if (flags.has("-n") || flags.has("--dry-run")) return null;
-  if (command.cwdUnknown) return "the push's repository is unknown";
-  const remote = words[0] || "origin";
+  if (command.cwdUnknown || !repo.known) return "the push's repository is unknown";
+  if (command.appended) return "xargs may append refspecs this guard cannot see";
+  if (repo.configOverride) return "`git -c` may change where it pushes";
+  if (flags.has("--all") || flags.has("--mirror") || flags.has("--branches")) return "--all/--mirror pushes every branch";
+  let config;
+  try { config = pushConfig(command, repo); } catch { return "its push configuration is unreadable"; }
+  let current = null;
+  const currentBranch = () => {
+    try { current ??= git([...repo.args, "symbolic-ref", "--short", "HEAD"], command.cwd); } catch { current = ""; }
+    return current;
+  };
+  const explicitRemote = typeof flags.get("--repo") === "string" ? flags.get("--repo") : words[0];
+  const remote = explicitRemote || config.get(`branch.${currentBranch()}.pushremote`) ||
+    config.get("remote.pushdefault") || config.get(`branch.${currentBranch()}.remote`) || "origin";
   let branch;
   try {
-    branch = git(["symbolic-ref", "--short", `refs/remotes/${remote}/HEAD`], command.cwd).replace(`${remote}/`, "");
+    branch = git([...repo.args, "symbolic-ref", "--short", `refs/remotes/${remote}/HEAD`], command.cwd).replace(`${remote}/`, "");
   } catch {
     branch = null;
   }
   const defaults = branch ? [branch] : ["main", "master"];
-  if (flags.has("--all") || flags.has("--mirror") || flags.has("--branches")) return `--all/--mirror pushes ${defaults[0]}`;
-  let current = null;
-  const currentBranch = () => {
-    try { current ??= git(["symbolic-ref", "--short", "HEAD"], command.cwd); } catch { current = ""; }
-    return current;
-  };
-  const refspecs = words.slice(1);
+  const isDefault = (target) => defaults.includes(String(target).replace(/^refs\/heads\//, ""));
+  const remotePush = config.has(`remote.${remote}.push`);
+  const refspecs = words.slice(explicitRemote === words[0] ? 1 : 0);
   if (!refspecs.length) {
-    return defaults.includes(currentBranch()) ? `it pushes the current branch ${current}` : null;
+    // No refspec: remote.<r>.push, then push.default (simple unless set) decide.
+    if (remotePush) return `remote.${remote}.push decides where it pushes`;
+    const mode = (config.get("push.default") || "simple").toLowerCase();
+    if (mode === "nothing") return null;
+    if (mode === "matching") return "push.default=matching pushes every matching branch";
+    const branchName = currentBranch();
+    if (!branchName) return "it has no explicit refspec on a detached HEAD";
+    if (isDefault(branchName)) return `it pushes the current branch ${branchName}`;
+    const upstream = config.get(`branch.${branchName}.merge`);
+    if ((mode === "upstream" || mode === "tracking") && upstream && isDefault(upstream)) {
+      return `push.default=${mode} pushes ${branchName} to its upstream ${upstream}`;
+    }
+    return null;
   }
   for (const refspec of refspecs) {
     const spec = refspec.replace(/^\+/, "");
+    if (spec === ":") return `the matching refspec ${refspec} pushes every matching branch`;
     const colon = spec.lastIndexOf(":");
+    // Without `:dst`, remote.<r>.push maps the source to its destination.
+    if (colon < 0 && remotePush) return `remote.${remote}.push decides where ${refspec} goes`;
     let target = colon >= 0 ? spec.slice(colon + 1) : spec;
     if (target === "HEAD" || (colon < 0 && spec === "HEAD")) target = currentBranch();
     if (/[$`*?[\]]/.test(target)) return `the refspec ${refspec} is not literal`;
-    if (defaults.includes(target.replace(/^refs\/heads\//, ""))) return `it updates ${target}`;
+    if (isDefault(target)) return `it updates ${target}`;
   }
   return null;
 }
@@ -776,15 +914,19 @@ function handlePayload(input) {
   // exception refuses the merge instead of crashing the hook open.
   try {
     found = mergeCommands(script, requestedCwd);
-    for (const push of found.filter((command) => command.kind === "push")) {
-      const why = pushGuardEnabled(push) && defaultBranchPush(push);
+    for (const push of found.filter((command) => command.kind === "push" || command.kind === "push-unresolved")) {
+      const repo = pushRepository(push);
+      if (!pushGuardEnabled(push, repo)) continue;
+      const why = push.kind === "push-unresolved"
+        ? "a `git push` inside a script, heredoc, pipe or wrapper cannot be checked; run the push as its own command"
+        : defaultBranchPush(push, repo);
       if (why) {
         process.stderr.write(`[railyard] Push refused: this repository guards its default branch and ${why}; push a branch and open a PR instead.\n`);
         process.exitCode = 2;
         return;
       }
     }
-    const commands = found.filter((command) => command.kind !== "push");
+    const commands = found.filter((command) => command.kind !== "push" && command.kind !== "push-unresolved");
     if (!commands.length) return;
     const override = evaluateOverride({
       script, commands, input, defaultCwd: requestedCwd, record: recordOverride,

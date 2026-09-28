@@ -94,6 +94,13 @@ function mergePhraseCount(text, aliasNames = []) {
   return patterns.reduce((total, pattern) => total + (source.match(pattern) || []).length, 0);
 }
 
+// `git … push` phrases, counted the same way so the default-branch push guard
+// can tell a push it parsed from one hidden in a script, heredoc or wrapper.
+// `push` must be its own word: a `push-fix` branch is not a push.
+function pushPhraseCount(text) {
+  return (normalizeForPhrases(text).match(/(?<![\w.-])git\b[^\n;&|()`]*?\spush(?![\w-])/g) || []).length;
+}
+
 // Heredocs. A body is stripped from the executed text and reported, with
 // `inert` true only when its command is a known data sink (cat, tee, grep,
 // `git commit -F -`, `gh … --body-file -` and the like), is not inside
@@ -532,5 +539,5 @@ function commandScript(args) {
 
 module.exports = {
   CONTROL_WORDS, SAFE_FILTERS, SHELLS, basename, commandPrefix, commandScript, mergePhraseCount,
-  parseArgs, runsScript, stripHeredocs, tokenizeSegments,
+  parseArgs, pushPhraseCount, runsScript, stripHeredocs, tokenizeSegments,
 };

@@ -23,7 +23,14 @@ The guard does not cover arbitrary API clients or a stack manager's internal
 transport. `git push` to a default branch is not a merge; it is refused only
 where a repository opts in with `git config railyard.guardDefaultBranchPush
 true` (or `RAILYARD_GUARD_DEFAULT_BRANCH_PUSH=1` in the environment), because
-some repositories are pushed to `main` directly.
+some repositories are pushed to `main` directly. Once enabled it fails closed
+the same way: a push refuses unless its destination is provably not the
+default branch. That refuses a push inside a script, heredoc, pipe or
+wrapper; a matching (`:`), `--all` or `--mirror` push; and a push with no
+refspec whose `remote.<name>.push` or `push.default` could reach the default
+branch. The opt-in is read from the repository the push names with `-C`,
+`--git-dir`, `--work-tree` or `GIT_DIR`, and a named repository the guard
+cannot resolve refuses.
 
 ## Handoff from the existing CE owner
 

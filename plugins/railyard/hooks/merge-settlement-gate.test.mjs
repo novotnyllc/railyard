@@ -101,6 +101,8 @@ function prepare(fixtures = {}) {
     // gh aliases come from this directory, never the developer's own config.
     GH_CONFIG_DIR: path.join(dir, "gh-config"),
     RAILYARD_GUARD_DEFAULT_BRANCH_PUSH: "",
+    // The push guard reads git config; the developer's own must not leak in.
+    GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1",
   };
   const finish = (result) => {
     const calls = readFileSync(logs.calls, "utf8").trim().split("\n").filter(Boolean);
@@ -453,8 +455,12 @@ gated("one CE snapshot cannot authorize several merge commands", () => {
 
 gated("unknown raw GraphQL merge and conditional cwd refuse actionably", () => {
   refused(run(bash('gh api graphql -f query=\'mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}\'')), /mergePullRequest is unsupported/);
-  for (const prefix of ["false && cd /tmp", "if true; then cd /tmp; fi"]) {
-    const result = run(bash(`${prefix}; ${fullMerge}`));
+  for (const prefix of [
+    "false && cd /tmp", "if true; then cd /tmp; fi",
+    // A newline-separated block body has no control word in front of its cd.
+    "if false; then\ncd /tmp\nfi", "while false; do\ncd /tmp\ndone", "f() {\ncd /tmp\n}",
+  ]) {
+    const result = run(bash(`${prefix}\n${fullMerge}`));
     refused(result, /conditional `cd`/);
     assert.deepEqual(result.calls, []);
   }
@@ -597,6 +603,10 @@ gated("unconditional cwd and shell workdir are preserved; pipeline/subshell cwd 
       allowed(result, ["pr view", "api graphql"]);
       assert.ok(result.cwds.every((cwd) => cwd.endsWith(path.basename(target))));
     }
+    // A closed block does not taint a later literal cd.
+    const afterBlock = run(bash(`if true; then\necho ready\nfi\ncd ${target} && gh pr merge 7 ${PIN}`));
+    allowed(afterBlock, ["pr view", "api graphql"]);
+    assert.ok(afterBlock.cwds.every((cwd) => cwd.endsWith(path.basename(target))));
     for (const command of [`(cd ${target} && echo done); gh pr merge 7 ${PIN}`, `cd ${target} | cat; gh pr merge 7 ${PIN}`]) {
       const result = run({ ...bash(command), cwd: outer });
       allowed(result, ["pr view", "api graphql"]);
@@ -1137,6 +1147,100 @@ gated("pushes to the default branch are gated only where the guard is on", () =>
     }
     git("checkout", "-q", "-b", "feature");
     allowed(run(at("git push"), { noPath: true }), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+gated("push-guard: an implicit push refuses unless its configured destination is provably not the default", () => {
+  const { dir, git } = pushRepo();
+  try {
+    const at = (command) => ({ ...bash(command), cwd: dir });
+    git("config", "railyard.guardDefaultBranchPush", "true");
+    git("checkout", "-q", "-b", "feature");
+    git("config", "remote.origin.push", "HEAD:refs/heads/main");
+    for (const command of ["git push origin", "git push", "git push origin feature"]) pushRefused(run(at(command), { noPath: true }));
+    git("config", "--unset", "remote.origin.push");
+    git("config", "branch.feature.remote", "origin");
+    git("config", "branch.feature.merge", "refs/heads/main");
+    // simple (the default) and current push feature to feature.
+    allowed(run(at("git push"), { noPath: true }), []);
+    git("config", "push.default", "current");
+    allowed(run(at("git push origin"), { noPath: true }), []);
+    for (const mode of ["upstream", "tracking", "matching"]) {
+      git("config", "push.default", mode);
+      pushRefused(run(at("git push"), { noPath: true }));
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+gated("push-guard: a push inside a script, heredoc, pipe or wrapper refuses when enabled", () => {
+  const { dir, git } = pushRepo();
+  try {
+    const at = (command) => ({ ...bash(command), cwd: dir });
+    const hidden = [
+      `bash -lc "git push origin HEAD:main"`,
+      `sh -c 'git push origin feature'`,
+      `bash <<EOF\ngit push origin main\nEOF`,
+      `echo 'git push origin main' | bash`,
+      `find . -maxdepth 0 -exec git push origin main ';'`,
+      `echo main | xargs git push origin`,
+      `eval git push origin main`,
+    ];
+    // Off by default: nothing is refused.
+    for (const command of hidden) allowed(run(at(command), { noPath: true }), []);
+    pushRefused(run(at(`RAILYARD_GUARD_DEFAULT_BRANCH_PUSH=1 bash -lc "git push origin HEAD:main"`), { noPath: true }));
+    git("config", "railyard.guardDefaultBranchPush", "true");
+    for (const command of hidden) pushRefused(run(at(command), { noPath: true }));
+    // Text that only mentions a push is still data.
+    for (const command of [`git commit --allow-empty -m "document git push"`, `git checkout -b push-fix`, `grep -n "git push" README.md`]) {
+      allowed(run(at(command), { noPath: true }), []);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+gated("push-guard: --git-dir, --work-tree and GIT_DIR select the repository whose opt-in applies", () => {
+  const { dir, git } = pushRepo();
+  const outside = mkdtempSync(path.join(tmpdir(), "ce-push-outside-"));
+  try {
+    const at = (command) => ({ ...bash(command), cwd: outside });
+    git("config", "railyard.guardDefaultBranchPush", "true");
+    for (const command of [
+      `git --git-dir=${dir}/.git push origin HEAD:main`,
+      `git --git-dir ${dir}/.git --work-tree ${dir} push origin main`,
+      `GIT_DIR=${dir}/.git git push origin main`,
+      // A named repository this hook cannot resolve may have opted in.
+      `git --git-dir="$D" push origin feature`,
+      `git --git-dir=${outside}/missing push origin feature`,
+    ]) pushRefused(run(at(command), { noPath: true }));
+    allowed(run(at(`git --git-dir=${dir}/.git push origin HEAD:feature`), { noPath: true }), []);
+    git("config", "--unset", "railyard.guardDefaultBranchPush");
+    allowed(run(at(`git --git-dir=${dir}/.git push origin HEAD:main`), { noPath: true }), []);
+    // No named repository and none here: not opted in.
+    allowed(run(at("git push origin HEAD:main"), { noPath: true }), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+gated("push-guard: --signed is a boolean and matching refspecs refuse", () => {
+  const { dir, git } = pushRepo();
+  try {
+    const at = (command) => ({ ...bash(command), cwd: dir });
+    git("config", "railyard.guardDefaultBranchPush", "true");
+    git("checkout", "-q", "-b", "feature");
+    for (const command of ["git push --signed origin main", "git push --signed=if-asked origin main",
+      "git push origin :", "git push origin +:", "git push --force origin feature :"]) {
+      pushRefused(run(at(command), { noPath: true }));
+    }
+    for (const command of ["git push --signed origin feature", "git push --signed=if-asked origin HEAD:feature"]) {
+      allowed(run(at(command), { noPath: true }), []);
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
