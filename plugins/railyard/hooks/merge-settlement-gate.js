@@ -201,6 +201,21 @@ function findExecCommands(tokens) {
   return commands;
 }
 
+// Names this script redefines as a shell function or alias (`gh() {…}`,
+// `function git {…}`, `alias gh=…`): a later `gh pr merge` then runs that
+// definition, not the CLI this hook verifies.
+function shadowedCommands(text) {
+  const source = String(text).replace(/['"\\]/g, "");
+  const names = new Set();
+  const patterns = [
+    /(?:^|[\s;&|({])(?:function\s+)?(gh|git)\s*\(\s*\)/g,
+    /(?:^|[\s;&|({])function\s+(gh|git)(?![\w.-])/g,
+    /(?:^|[\s;&|({])alias\s+(?:-\S+\s+)*(gh|git)=/g,
+  ];
+  for (const pattern of patterns) for (const match of source.matchAll(pattern)) names.add(match[1]);
+  return names;
+}
+
 // Compound commands whose body may run conditionally, repeatedly, or never.
 // A newline-separated body tokenizes into its own segments, so a `cd` there
 // has no control word in front of it; the open-block depth marks it instead.
@@ -261,6 +276,14 @@ function mergeCommands(script, baseCwd) {
   let pushSite = null; // where the first unattributed push phrase was seen
   let guardEnv = {}; // an inline RAILYARD_GUARD_DEFAULT_BRANCH_PUSH on any command
   const unattributed = new Set();
+  const shadowed = shadowedCommands(text);
+  if ((shadowed.has("gh") && raw) || (shadowed.has("git") && rawPushes)) {
+    // Nothing after the definition is what it appears to be.
+    return [
+      ...(shadowed.has("gh") && raw ? [{ kind: "unsupported", why: "this command redefines gh as a shell function or alias, so its merge cannot be checked; run the merge as its own command" }] : []),
+      ...(shadowed.has("git") && rawPushes ? [{ kind: "push-unresolved", cwd: baseCwd || undefined, cwdUnknown: false, env: {} }] : []),
+    ];
+  }
   // `cd ../other && gh pr merge 7` resolves PR 7 in ../other, so the gate's own
   // lookup has to run there too — otherwise a settled PR 7 here authorizes an
   // unsettled PR 7 there. Tracked across segments, not interpreted deeply: an

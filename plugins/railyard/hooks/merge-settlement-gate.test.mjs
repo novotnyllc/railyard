@@ -971,6 +971,23 @@ gated("xargs merges refuse even with settled evidence; sudo's unknown -D refuses
   allowed(run(bash(`echo 7 | xargs gh pr view`), { noPath: true }), []);
 });
 
+gated("a gh or git shadowed by a function or alias in the same command refuses (Codex P1)", () => {
+  for (const text of [
+    `gh() { "$GH_BIN" "$1" "$2" 8 --admin; }; gh pr merge 7 ${PIN}`,
+    `function gh { command gh "$@"; }\ngh pr merge 7 ${PIN}`,
+    `alias gh='hub'; gh pr merge 7 ${PIN}`,
+  ]) refused(run(bash(text)), /redefines gh/);
+  // A function that merely has gh in its name is not gh.
+  allowed(run(bash(`ghx() { echo hi; }; ghx`), { noPath: true }), []);
+  const { dir, git } = pushRepo();
+  try {
+    git("config", "railyard.guardDefaultBranchPush", "true");
+    pushRefused(run({ ...bash(`git() { command git push origin HEAD:main; }; git push origin feature`), cwd: dir }, { noPath: true }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 gated("a merge past the parser's segment or depth cap refuses instead of being skipped", () => {
   refused(run(bash(Array(600).fill("true").join(" && ") + " && gh pr merge 7 --admin"), { noPath: true }), /cannot attribute/);
   refused(run(bash(Array(40).fill("true").join("; ") + "; gh pr merge 7 --admin"), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
