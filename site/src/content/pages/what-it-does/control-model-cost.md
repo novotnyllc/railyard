@@ -15,7 +15,9 @@ Compare model and effort choices by accepted task outcomes and by total cost and
 > Choose a model and reasoning effort for this task and explain the tradeoff.
 ```
 
-`railyard:model-routing` gives the defaults for each harness. In Claude Code, Opus 5.5 at `medium` handles substantive subagent work, Sonnet 5.5 at `low` or `medium` takes well-scoped edits, bug fixes, and docs, and Haiku 4.5 takes read-only search. In Codex, GPT-6.1 Sol at `medium` is the baseline and Luna takes bounded, repetitive bulk work. Use deterministic tools directly for mechanical work.
+`railyard:model-routing` gives the defaults for each harness. In Claude Code, Opus 5.5 at `medium` handles substantive subagent work, Sonnet 5.5 at `low` or `medium` takes well-scoped edits, bug fixes, and docs, and Haiku 4.5 takes read-only search. In Codex, GPT-6.1 Sol at `medium` is the baseline for implementation, debugging, planning, and ambiguous or multi-file work, even when small or bounded. Use Luna only for routine or repetitive work with no substantial engineering judgment and an inexpensive acceptance check, such as extraction, classification, large repetitive transforms, or narrowly specified edits. Use deterministic tools first for fully mechanical work.
+
+At the published Standard API rates, Sol 6.1 input and output tokens cost 20× Luna's and cached input costs 10× Luna's. See the official [Sol 6.1 pricing](https://developers.openai.com/api/docs/models/gpt-6.1-sol.md) and [Luna pricing](https://developers.openai.com/api/docs/models/gpt-6-luna.md). Both apply higher full-request rates above 272K input tokens. These token-price ratios do not establish savings per accepted task; use Luna only when the work meets the limits above.
 
 Railyard itself is free and open source (MIT). You pay only for your own Claude or Codex usage, billed like any other session in that harness.
 

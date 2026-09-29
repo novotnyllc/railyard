@@ -45,8 +45,12 @@ refusals or fallbacks. Report them; don't silently switch models.
 - **GPT-6.1 Sol** (`gpt-6.1-sol`) at `medium` is the default for substantive
   work and subagents. Use `high`, `xhigh`, or `max` when complexity or
   verification warrants more effort. Do not select legacy GPT-6 Sol.
-- **GPT-6 Luna** is for bounded, repetitive, or bulk work with a clear
-  acceptance check.
+- **GPT-6 Luna** is for routine extraction, classification, repetitive
+  transforms, and narrowly specified edits with an inexpensive acceptance
+  check and little engineering judgment. A small or bounded task alone does
+  not qualify: use Sol 6.1 for implementation, debugging, review, planning,
+  and ambiguous or cross-file decisions. Use deterministic tools first for
+  fully mechanical work.
 - **GPT-6 Astra** is a rare escalation after a concrete Sol 6.1 shortfall
   remains at suitable effort. Record the gap and acceptance check; a task
   being hard, high-risk, or a review does not by itself justify Astra.

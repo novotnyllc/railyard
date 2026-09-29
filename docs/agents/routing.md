@@ -23,7 +23,8 @@ ship.
   It matches Astra on DeepSWE v1.1 in OpenAI's evaluation; Astra retains an
   advantage on the most difficult scientific research. Use Sol 6.1 for
   ordinary work, subagents, and reviews, with effort suited to the task.
-  Reserve Astra for a demonstrated residual gap, and Luna for bounded work.
+  Reserve Astra for a demonstrated residual gap, and Luna for routine work
+  with little engineering judgment and an inexpensive acceptance check.
 - Model placement evidence (2026-09-28, not Railyard measurements):
   For Sonnet 5.5, Anthropic reports it 30% faster than Sonnet 5 and up to 30% cheaper per task
   on well-scoped everyday tasks. Artificial Analysis ranks it second to Opus 5.5

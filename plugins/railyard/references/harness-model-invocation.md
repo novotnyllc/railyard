@@ -62,6 +62,14 @@ gap after suitable Sol 6.1 effort. Difficult scientific research is a
 published exception worth evaluating; older Astra-versus-Luna review results
 do not establish an Astra advantage over Sol 6.1.
 
+Luna is substantially cheaper: Sol 6.1 costs 20 times Luna's standard input
+and output rates, and 10 times its cached-input rate. Keep Luna for routine
+extraction, classification, repetitive transforms, and narrowly specified
+edits that need little engineering judgment and have an inexpensive check.
+Use Sol 6.1 for implementation, debugging, review, planning, and ambiguous
+or cross-file decisions; small or bounded scope alone is not a Luna signal.
+Prefer deterministic tools for fully mechanical operations.
+
 The standard API/Codex selector is `gpt-6.1-sol`. Provider catalogs may expose
 `openai/gpt-6.1-sol`; use the exact live native selector, not a guessed alias.
 A catalog or CLI route does not prove native availability. If the required
