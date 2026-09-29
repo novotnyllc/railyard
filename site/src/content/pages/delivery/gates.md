@@ -22,7 +22,7 @@ Thermos runs two lenses against the same bounded packet:
 - `thermo-nuclear-review`: correctness, security, breakage, developer experience, and feature-leak risk.
 - `thermo-nuclear-code-quality-review`: structure, duplication, maintainability, and complexity.
 
-The recommended end-of-PR review runs both lenses in parallel with `codex review` on GPT-6 Astra before CE settles the PR. Elsewhere, choose the pair or a single lens when it adds a useful perspective. Findings return to the implementation owner and the existing CE review loop. [Oracle](/skills/oracle/) is another optional advisor for a second-model opinion. None of these is a merge gate or a blanket pre-commit requirement.
+The recommended end-of-PR review runs both lenses in parallel with `codex review` on GPT-6.1 Sol at `high` effort before CE settles the PR. Elsewhere, choose the pair or a single lens when it adds a useful perspective. Findings return to the implementation owner and the existing CE review loop. [Oracle](/skills/oracle/) is another optional advisor for a second-model opinion. None of these is a merge gate or a blanket pre-commit requirement.
 
 The following is an example with Thermos explicitly selected. Its final review step checks existing evidence; it does not automatically dispatch another reviewer.
 

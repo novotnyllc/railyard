@@ -27,7 +27,7 @@ List prices and controls are in the
    | --- | --- | --- |
    | `io_ratio` (input:output) | 10:1 | Agents resend a large stable prefix every turn |
    | `cache_hit` | 0.90 | Prefixes are resent every turn |
-   | `cache_read_rate` | per model; 0.10 × input unless listed | Anthropic: 0.05 for Opus 5.5, 0.025 for Fable 5.1; OpenAI about a tenth of list |
+   | `cache_read_rate` | per model; 0.10 × input unless listed | 0.05 for Opus 5.5 and Sol 6.1, 0.025 for Fable 5.1; Astra and Luna 0.10 |
    | effective input multiplier | 0.19 at 0.10; 0.145 at 0.05; 0.1225 at 0.025 | 0.9 × `cache_read_rate` + 0.1 |
 
    The cache-read rate is per model: use each model's published rate, not a
@@ -41,7 +41,7 @@ List prices and controls are in the
 5. **Measured outcomes win.** Once cost per accepted task has been measured
    for a model and effort, use that number instead of this arithmetic.
 
-## Current table (checked 2026-09-28)
+## Current table (Claude checked 2026-09-28; OpenAI checked 2026-09-29)
 
 ### Claude (reference: Fable 5.1 = 100)
 
@@ -73,16 +73,25 @@ as Opus 5.5.
 | --- | --- | --- | --- | --- | --- |
 | GPT-5.6 Sol (reference only) | 4.00 | 0.40 | 20.00 | 27.60 | 100 |
 | GPT-6 Astra | 10.00 | 1.00 | 50.00 | 69.00 | **250** |
-| GPT-6 Sol | 2.00 | 0.20 | 10.00 | 13.80 | **50** |
+| GPT-6.1 Sol (default) | 2.00 | 0.10 | 10.00 | 12.90 | **47** |
 | GPT-6 Luna | 0.10 | 0.01 | 0.50 | 0.69 | **3** |
 
-These are standard short-context rates; above each model's long-context
-threshold, OpenAI charges Astra $20 / $2 / $75, Sol $4 / $0.40 / $15, and Luna
-$0.20 / $0.02 / $0.75.
+These are standard short-context rates. Above 272K input tokens, the full
+Sol 6.1 request uses $4 / $0.20 / $15 for input / cached input / output;
+Astra uses $20 / $2 / $75. Luna's long-context rates remain
+$0.20 / $0.02 / $0.75. Sol 6.1 cache writes are $2.50/MTok short-context
+and $5/MTok long-context; Astra's are $12.50 and $25. The work-unit estimate
+above excludes cache writes and assumes the listed cache-hit rate.
+
+Sol 6.1's standard input/output prices are one-fifth of Astra's; cached input
+is one-tenth. Its 12.90 work unit is `10 × (0.9 × 0.10 + 0.1 × 2) + 10`.
+Near-Astra performance is OpenAI's evaluation claim, not a local benchmark.
+Legacy GPT-6 Sol is no longer an allocation candidate; Sol 6.1 replaces it.
 
 Sources: [OpenAI API pricing](https://developers.openai.com/api/docs/pricing)
-(checked 2026-09-28) and
-[Introducing GPT-6 Sol and Luna](https://openai.com/index/introducing-gpt-6-sol-and-luna/).
+(checked 2026-09-29),
+[GPT-6.1 Sol model](https://developers.openai.com/api/docs/models/gpt-6.1-sol),
+and [Introducing GPT-6.1 Sol](https://openai.com/index/introducing-gpt-6-1-sol/).
 
 Daybreak (`gpt-daybreak-blue-latest`) is not
 separately priced, and because its alias can be repointed, don't derive a

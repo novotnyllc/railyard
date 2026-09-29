@@ -17,7 +17,7 @@ Consult Jev only when all of these hold:
 - At least two options are eligible, and the owning skill's default does not
   already settle the choice.
 - The choice matters for cost or outcome. Examples: a substantive subagent,
-  an escalation (Opus 5.5 to Fable 5.1, or Sol `medium` to `high` or Astra),
+  an escalation (Opus 5.5 to Fable 5.1, or Sol 6.1 `medium` to `high`),
   a workflow fork (a direct fix, `ce-debug`, or `ce-plan`), or the order of
   several ready investigations.
 
@@ -58,7 +58,7 @@ merge, or write code.
      [model-routing](../model-routing/SKILL.md) for the current harness.
      Railyard keeps no capability table, so that skill and the live tool
      schema are the roster. Include the default pair: `opus` at `medium` in
-     Claude Code, or `gpt-6-sol` at `medium` in Codex. Use
+     Claude Code, or the live selector for `gpt-6.1-sol` at `medium` in Codex. Use
      `"reasoning_effort": null` for a model with no effort setting, such as
      Haiku. Claude Code's Agent tool sets only the model, so list the effort
      that will actually apply: the session's, or the subagent definition's.

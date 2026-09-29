@@ -120,7 +120,7 @@ test("CE alone owns review settlement and CI, and PRs use ce-commit-push-pr", ()
   }
 });
 
-test("the end-of-PR review is Thermos plus Codex review on GPT-6 Astra at high", () => {
+test("the end-of-PR review is Thermos plus Codex review on GPT-6.1 Sol at high", () => {
   const review = flat(read("skills/deliver/SKILL.md").match(/## End-of-PR review\n([\s\S]*?)\n## /)?.[1] ?? "");
   assert.match(review, /in parallel/);
   assert.match(review, /`railyard:thermos`/);
@@ -131,8 +131,8 @@ test("the end-of-PR review is Thermos plus Codex review on GPT-6 Astra at high",
   assert.doesNotMatch(review, /gpt-6-astra|model_reasoning_effort/);
   assert.doesNotMatch(readFileSync(path.join(pluginRoot, "../../docs/agents/routing.md"), "utf8"), /gpt-6-astra|model_reasoning_effort/);
   const routing = flat(read("skills/model-routing/SKILL.md"));
-  assert.match(routing, /\*\*Codex review\*\*[^.]*always runs GPT-6 Astra at `high`/);
-  assert.match(routing, /`codex review --base <base> -c model=gpt-6-astra -c review_model=gpt-6-astra -c model_reasoning_effort=high`/);
+  assert.match(routing, /\*\*Codex review\*\*[\s\S]*?defaults to GPT-6\.1 Sol at `high`/);
+  assert.match(routing, /`codex review --base <base> -c model=gpt-6.1-sol -c review_model=gpt-6.1-sol -c model_reasoning_effort=high`/);
   assert.match(flat(read("skills/thermos/SKILL.md")), /end-of-PR review in `railyard:deliver`/);
 });
 

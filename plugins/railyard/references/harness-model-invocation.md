@@ -3,8 +3,8 @@
 This is Railyard's reference for choosing models and effort in Claude Code and
 Codex. [`railyard:model-routing`](../skills/model-routing/SKILL.md) says which
 model fits which work. This page covers the controls that apply the choice.
-Snapshot as of 2026-09; Codex prices checked 2026-09-28. OpenAI DevDay is
-2026-09-29, so the Codex lineup may change. When the live tool schema or
+OpenAI model and pricing guidance checked 2026-09-29 after DevDay; Claude
+guidance remains the 2026-09-28 snapshot. When the live tool schema or
 harness docs disagree with this page, they are correct.
 
 ## Models
@@ -17,7 +17,7 @@ harness docs disagree with this page, they are correct.
 | Claude Code | Sonnet 5.5 | `claude-sonnet-5-5` | `sonnet` (2.1.284 or later) | `low`–`max`, API default `high` | $2 / $10 |
 | Claude Code | Sonnet 5 | `claude-sonnet-5` | `sonnet` before 2.1.284 | `low`–`max` | $2 / $10 |
 | Claude Code | Haiku 4.5 | `claude-haiku-4-5` | `haiku` | none | $1 / $5 |
-| Codex | GPT-6 Sol | `gpt-6-sol` | — | check live schema | $2 / $10 |
+| Codex | GPT-6.1 Sol | `gpt-6.1-sol` | — | `low`–`max`, default `medium`; check native schema | $2 / $10 |
 | Codex | GPT-6 Luna | `gpt-6-luna` | — | check live schema | $0.10 / $0.50 |
 | Codex | GPT-6 Astra | `gpt-6-astra` | — | check live schema | $10 / $50 |
 | Codex | Daybreak | `gpt-daybreak-blue-latest` | — | check live schema | not separately priced |
@@ -40,16 +40,32 @@ Bedrock the ID is `anthropic.claude-sonnet-5-5`.
 
 Why Sonnet 5.5 is placed this way: see `docs/agents/routing.md`.
 
-For Codex, OpenAI's published API efforts are `none` through `max` for Sol and
-Luna, and `low` through `max` for Astra. Some native surfaces have also listed
-an `ultra` level for Sol, Astra, or Daybreak. Railyard has not verified
-`ultra`, so use it only when the live `spawn_agent` schema lists it for that
-model. Daybreak appears only on some accounts and hosts. Effort names are
-model-specific: Codex's `ultra` is not a Claude effort, and Claude's levels
-don't map one-to-one onto Codex's.
+Sol 6.1 API efforts are `low`, `medium` (default), `high`, `xhigh`, and
+`max`; `none` and `minimal` are unsupported. Astra also starts at `low`;
+Luna retains its model-specific effort range. Some Codex/native surfaces
+expose `ultra`, but it is not a documented Sol 6.1 single-agent API effort.
+Codex describes Ultra as using subagents. Select it only when the live
+schema supports it, and account for child cost. Daybreak availability is
+account- and host-specific. Claude and Codex effort levels do not map
+one-to-one.
 
-Astra's list price matches Fable 5.1's, and Sol's matches Sonnet 5.5's, so
-reserve Astra for hard work and review.
+Sol 6.1 supports text/image input, text output, a 1,050,000-token context
+window, up to 922,000 input tokens, and 128,000 output tokens. Use Responses
+for tool calling; its Chat Completions support does not include tool calling.
+For API migration, preserve supported effort, replace `none`/`minimal` with
+`low`, and remove unsupported sampling and log-probability parameters.
+
+OpenAI reports near-Astra performance at one-fifth of Astra's standard input
+and output prices. Sol 6.1 is the ordinary and review default; legacy GPT-6
+Sol is retired from Railyard allocations. Astra needs a demonstrated residual
+gap after suitable Sol 6.1 effort. Difficult scientific research is a
+published exception worth evaluating; older Astra-versus-Luna review results
+do not establish an Astra advantage over Sol 6.1.
+
+The standard API/Codex selector is `gpt-6.1-sol`. Provider catalogs may expose
+`openai/gpt-6.1-sol`; use the exact live native selector, not a guessed alias.
+A catalog or CLI route does not prove native availability. If the required
+selector is rejected, report it rather than substituting old Sol or Astra.
 
 Prices are list API rates. They are a planning input, not the cost of an
 accepted result. The Railyard repository's
@@ -58,7 +74,11 @@ Sources: [Claude Code model configuration](https://code.claude.com/docs/en/model
 [Sonnet 5.5 overview](https://platform.claude.com/docs/en/models/sonnet-5-5/overview),
 [subagents](https://code.claude.com/docs/en/sub-agents),
 [OpenAI API pricing](https://developers.openai.com/api/docs/pricing), and
-[Introducing GPT-6 Sol and Luna](https://openai.com/index/introducing-gpt-6-sol-and-luna/).
+[GPT-6.1 Sol model](https://developers.openai.com/api/docs/models/gpt-6.1-sol),
+[Introducing GPT-6.1 Sol](https://openai.com/index/introducing-gpt-6-1-sol/),
+[model selection](https://developers.openai.com/api/docs/guides/model-selection),
+[migration guide](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-6-astra),
+and [Codex models](https://learn.chatgpt.com/docs/models).
 
 ## Claude Code controls
 
@@ -89,7 +109,8 @@ settings or bypass managed policy to do it.
 
 ## Codex `spawn_agent` controls
 
-The native tool exposes `model`, `reasoning_effort`, and `fork_turns`.
+Native surfaces differ. Inspect the schema before sending fields. A surface
+with `fork_turns` exposes `model`, `reasoning_effort`, and `fork_turns`:
 
 - `fork_turns` omitted or `"all"` gives a full-history fork. The child
   inherits the parent's model and effort and cannot take either override.
@@ -106,13 +127,17 @@ The native tool exposes `model`, `reasoning_effort`, and `fork_turns`.
 - Some existing Codex tasks expose `model` and `thinking` on
   `send_message_to_thread`. Check the live schema before using them.
 
-A Codex example for a hard investigation:
+On a surface with `fork_context`, use `false` (or omit it when the schema
+default is false) for explicit model/effort, and `true` with no overrides for
+deliberate inheritance. It does not accept `fork_turns` or `task_name`.
+
+A Codex example for a hard investigation on the `fork_turns` surface:
 
 ```json
 {
   "task_name": "investigate_importer",
   "message": "Investigate the importer concurrency failure in src/importer/ and return a causal explanation with a focused reproduction. Do not edit files. <failure output and constraints here>",
-  "model": "gpt-6-astra",
+  "model": "gpt-6.1-sol",
   "reasoning_effort": "high",
   "fork_turns": "none"
 }
@@ -121,6 +146,19 @@ A Codex example for a hard investigation:
 For deliberate inheritance, send `fork_turns: "all"` with no `model` or
 `reasoning_effort`. Never pair overrides with `"all"`, even values that match
 the parent's.
+
+On a provider-backed `fork_context` surface, a corresponding allocation is:
+
+```json
+{
+  "message": "Investigate the importer concurrency failure in src/importer/; return a causal explanation and focused reproduction. Do not edit files. <failure output and constraints here>",
+  "model": "openai/gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "fork_context": false
+}
+```
+
+Use that provider prefix only when the live schema lists it.
 
 A provider catalog, a working CLI route, or an App Server model list does not
 prove that `spawn_agent` accepts a selector. Native spawn also has no

@@ -51,8 +51,8 @@ For an illustrative allocation comparison:
   "mode": "allocation",
   "state": "Compare these locally supported allocations for a cross-module concurrency defect. Correctness matters; no comparable lower-effort result has been measured.",
   "candidates": [
-    {"id": "baseline", "model": "gpt-6-sol", "reasoning_effort": "high", "description": "Supported candidate for this cross-module defect."},
-    {"id": "escalation", "model": "gpt-6-astra", "reasoning_effort": "high", "description": "Use if the investigation needs Astra's broader reasoning."}
+    {"id": "baseline", "model": "gpt-6.1-sol", "reasoning_effort": "medium", "description": "Supported candidate for this cross-module defect."},
+    {"id": "escalation", "model": "gpt-6.1-sol", "reasoning_effort": "high", "description": "Use when the investigation warrants greater reasoning effort."}
   ]
 }
 ```

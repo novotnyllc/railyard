@@ -40,4 +40,4 @@ Routine work runs natively, and useful CE workflows are selected automatically. 
 
 - A [receipt](/delivery/lifecycle/) is the evidence chain from intent through merge and post-merge proof.
 - A [run log](/delivery/audit/) records decisions when an audit is useful; audit and retrospective are optional.
-- [Thermos](/skills/thermos/) is the recommended end-of-PR review, paired with `codex review` on GPT-6 Astra, and feeds CE's review settlement.
+- [Thermos](/skills/thermos/) is the recommended end-of-PR review, paired with `codex review` on GPT-6.1 Sol at `high` effort, and feeds CE's review settlement.

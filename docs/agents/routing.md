@@ -8,15 +8,22 @@ ship.
 
 - End-of-PR review: run `railyard:thermos` and `codex review --base <base>`
   in parallel, and feed their findings to the CE owner. The Codex review model
-  and effort come from `railyard:model-routing`. Why: in a bakeoff on
+  and effort come from `railyard:model-routing`: Sol 6.1 at high by default.
+  Historical evidence, collected before Sol 6.1 launched: in a bakeoff on
   five past commits with known later-fixed bugs, Thermos caught 6.5 of 8
   ground-truth units, `ce-code-review` caught 4 at about twice the tokens and
   time, and Codex review on GPT-6 Astra at high caught 2, including the one
   nothing else found, with no false positives.
-  Codex review runs Astra rather than a cheaper GPT because, in a third-party
-  code-review benchmark (discussed on Hacker News, September 2026), Astra
-  reached 96% precision while Luna missed 23 bugs Astra caught, at about $0.11
-  versus $0.004 per review.
+  The old Astra-versus-Luna comparison does not establish an Astra advantage
+  over Sol 6.1. Recheck cost per accepted review before escalating; review
+  alone is not a reason to select Astra.
+- OpenAI placement evidence (2026-09-29, not Railyard measurements):
+  [GPT-6.1 Sol](https://openai.com/index/introducing-gpt-6-1-sol/) offers
+  near-Astra performance at one-fifth of standard input/output list prices.
+  It matches Astra on DeepSWE v1.1 in OpenAI's evaluation; Astra retains an
+  advantage on the most difficult scientific research. Use Sol 6.1 for
+  ordinary work, subagents, and reviews, with effort suited to the task.
+  Reserve Astra for a demonstrated residual gap, and Luna for bounded work.
 - Model placement evidence (2026-09-28, not Railyard measurements):
   For Sonnet 5.5, Anthropic reports it 30% faster than Sonnet 5 and up to 30% cheaper per task
   on well-scoped everyday tasks. Artificial Analysis ranks it second to Opus 5.5

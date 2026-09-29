@@ -42,21 +42,34 @@ refusals or fallbacks. Report them; don't silently switch models.
 
 ## Codex
 
-- **GPT-6 Sol** at `medium` is the baseline for substantive work. Raise it to
-  `high` when the task's complexity or verification burden calls for it.
-- **GPT-6 Luna** is for bounded, repetitive, or bulk work.
-- **GPT-6 Astra** is for hard or high-risk work, or when Sol fell short. It
-  is the most expensive Codex model, so reserve it for hard work and review.
+- **GPT-6.1 Sol** (`gpt-6.1-sol`) at `medium` is the default for substantive
+  work and subagents. Use `high`, `xhigh`, or `max` when complexity or
+  verification warrants more effort. Do not select legacy GPT-6 Sol.
+- **GPT-6 Luna** is for bounded, repetitive, or bulk work with a clear
+  acceptance check.
+- **GPT-6 Astra** is a rare escalation after a concrete Sol 6.1 shortfall
+  remains at suitable effort. Record the gap and acceptance check; a task
+  being hard, high-risk, or a review does not by itself justify Astra.
+  OpenAI reports an advantage on the most difficult scientific research;
+  near-Astra performance elsewhere is not a guarantee on every task.
 - **Daybreak** (`gpt-daybreak-blue-latest`) is for defensive security work
   when the surface exposes it.
-- **Codex review** (`codex review`, including the end-of-PR review) always
-  runs GPT-6 Astra at `high`:
-  `codex review --base <base> -c model=gpt-6-astra -c review_model=gpt-6-astra -c model_reasoning_effort=high`.
+- **Codex review** (`codex review`, including the end-of-PR review) defaults
+  to GPT-6.1 Sol at `high`:
+  `codex review --base <base> -c model=gpt-6.1-sol -c review_model=gpt-6.1-sol -c model_reasoning_effort=high`.
+  Astra requires the same demonstrated-gap rationale as any other escalation.
 
-`spawn_agent` accepts `model` and `reasoning_effort` only with `fork_turns`
-set to `"none"` or a history count. A full-history fork (`"all"` or omitted)
-inherits the parent's settings and cannot take overrides. When you narrow the
-history, give the child a brief that is complete on its own.
+The API and standard Codex selector is `gpt-6.1-sol`. A provider may expose
+`openai/gpt-6.1-sol` instead; use the exact selector in the live native schema
+for that surface, including both `model` and `review_model` for review.
+If Sol 6.1 is unavailable, report the blocker; do not silently fall back to
+GPT-6 Sol or Astra.
+
+Check the live `spawn_agent` schema before allocating. On surfaces with
+`fork_turns`, overrides require `"none"` or a history count; a full-history
+fork (`"all"` or omitted) inherits the parent. On surfaces with
+`fork_context`, use `false` for an explicit allocation. Do not send fields
+from another schema. Give a child without full history a self-contained brief.
 
 ## Judgment
 

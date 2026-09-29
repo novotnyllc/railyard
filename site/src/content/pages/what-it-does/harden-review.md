@@ -15,7 +15,7 @@ An orchestrator change touches many mechanical call sites and one gnarly concurr
 > Review this change deeply, settle findings, and merge it.
 ```
 
-Compound Engineering (CE) owns review settlement and CI monitoring. Before settlement, run the Thermos pair and `codex review` (GPT-6 Astra, high effort) in parallel; their findings go to the CE owner.
+Compound Engineering (CE) owns review settlement and CI monitoring. Before settlement, run the Thermos pair and `codex review` (GPT-6.1 Sol, high effort) in parallel; their findings go to the CE owner.
 
 The [review bakeoff](/delivery/review-bakeoff/) compares Thermos, `codex review`, and other reviewers on past Railyard and Roundhouse bugs.
 

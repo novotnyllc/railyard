@@ -47,7 +47,7 @@ Illustrative result for an explicitly requested task:
 ```text
 host=host-w platform=windows transport=codex-remote-control
 project=web-app match=exact-native-path
-task=task-opaque-01 model=gpt-6-sol effort=medium
+task=task-opaque-01 model=gpt-6.1-sol effort=medium
 native_canary=passed executor_sha=sha256:12af...
 postcondition=passed archive=separate-user-directed-action
 ```

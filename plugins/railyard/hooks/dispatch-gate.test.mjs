@@ -33,7 +33,7 @@ const codex = (args = {}, extra = {}) => ({
   hook_event_name: "PreToolUse",
   tool_name: "agentsspawn_agent",
   session_id: "codex-session",
-  model: "gpt-6-sol",
+  model: "gpt-6.1-sol",
   tool_input: { task_name: "worker", message: "Fix the parser and report.", ...args },
   ...extra,
 });
@@ -85,7 +85,7 @@ test("Codex dispatches log explicit pairs and inheritance", () => {
   const inherited = run(codex());
   assert.equal(inherited.code, 0, inherited.err);
   assert.equal(inherited.log[0].allocation, "inherit");
-  assert.equal(inherited.log[0].model, "gpt-6-sol", "inheritance records the parent model");
+  assert.equal(inherited.log[0].model, "gpt-6.1-sol", "inheritance records the parent model");
   assert.equal(inherited.log[0].effort, undefined);
 
   const limited = run(codex({ model: "gpt-6-astra", reasoning_effort: "xhigh", fork_turns: "3" }));
@@ -119,7 +119,7 @@ test("a Codex full-history fork refuses model or effort overrides", () => {
 
 test("other tools, events, and malformed input pass without logging", () => {
   for (const input of [
-    { tool_name: "Bash", tool_input: { command: "codex exec -m gpt-6-sol 'do it'" } },
+    { tool_name: "Bash", tool_input: { command: "codex exec -m gpt-6.1-sol 'do it'" } },
     { tool_name: "agents__spawn_agent", tool_input: { model: "x" } },
     { hook_event_name: "PostToolUse", tool_name: "Agent", tool_input: {} },
     "not json", "", "[]",
