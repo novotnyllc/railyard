@@ -13,7 +13,7 @@ The requested finish line determines the workflow. An explicit Deliver implement
 
 Name the behavior to change, preserve unrelated work, and use the repository's existing checks. Delegate independent bounded subtasks to native children when useful.
 
-Choose model and reasoning effort together. In Claude Code, Opus 5.5 at `medium` is the default for substantive subagent work, with Fable 5.1 for frontier-hard or long autonomous work. In Codex, GPT-6 Sol at `medium` is the baseline, with Astra at `high` for hard work. Omitting the model means the child inherits. See [model routing](/delivery/model-routing/).
+Choose model and reasoning effort together. In Claude Code, Opus 5.5 at `medium` is the default for substantive subagent work, with Fable 5.1 for frontier-hard or long autonomous work. In Codex, GPT-6.1 Sol at `medium` is the baseline for implementation, debugging, planning, and ambiguous or multi-file work, even when small or bounded. Raise Sol 6.1 to `high`, `xhigh`, or `max` for justified demanding work. Astra is a rare, explicitly justified escalation after a concrete residual failure or quality gap on Sol 6.1. Omitting the model means the child inherits. See [model routing](/delivery/model-routing/).
 
 If the current host can't run a selection, report it; don't fall back to another model, effort, provider, or host without saying so.
 

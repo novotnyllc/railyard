@@ -23,7 +23,7 @@ The operator asks for webhook retries to survive load and land on the base branc
 
 ## What happens
 
-Choose model and effort together when delegating: Opus 5.5 at `medium` in Claude Code or GPT-6 Sol at `medium` in Codex, escalating to Fable 5.1 or Astra when the work is harder. Omitting the model means the child inherits. Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR. Resolve CE when the selected stage needs it; the recommended end-of-PR review, [Thermos](/skills/thermos/) plus `codex review`, feeds its existing loop. After CE settles review and CI, the authorized delivery tail verifies merge ancestry and the smallest applicable post-merge check.
+Choose model and effort together when delegating: Opus 5.5 at `medium` in Claude Code or GPT-6.1 Sol at `medium` in Codex. Sol owns implementation, debugging, planning, and ambiguous or multi-file work even when small or bounded. Escalate to Fable 5.1 for harder Claude Code work. For demanding Codex work, raise Sol 6.1 to `high`, `xhigh`, or `max` when justified; reserve Astra for a rare, explicitly justified escalation after a concrete residual failure or quality gap on Sol 6.1. Omitting the model means the child inherits. Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR. Resolve CE when the selected stage needs it; the recommended end-of-PR review, [Thermos](/skills/thermos/) plus `codex review`, feeds its existing loop. After CE settles review and CI, the authorized delivery tail verifies merge ancestry and the smallest applicable post-merge check.
 
 ## Proof point
 

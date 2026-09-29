@@ -11,7 +11,7 @@ const lines = [
   "  through merge, required release or deployment, and consumer verification unless narrowed; honor",
   "  plan-only, local-only, and PR-only stops. Merges go through deliver's CE snapshot handoff.",
   "- Choose model and effort per subagent. Claude Code: Opus 5.5 (`opus`, 2.1.280+) by default, Fable 5.1 for",
-  "  frontier-hard work. Codex: GPT-6 Sol at medium, Luna for bounded work, Astra when hard.",
+  "  frontier-hard work. Codex: Sol 6.1 medium (review high), Luna for routine checked work, Astra only for a proven gap.",
   "- Create visible user-owned tasks only when asked. Use railyard:orchestrate only for requested",
   "  fleet or remote work. Wait on completion events rather than polling.",
 ];

@@ -88,9 +88,10 @@ test("startup names the default models for both harnesses", (t) => {
   assert.match(out, /Opus 5\.5/);
   assert.match(out, /`opus`/);
   assert.match(out, /Fable 5\.1/);
-  assert.match(out, /GPT-6 Sol at medium/);
+  assert.match(out, /Sol 6\.1 medium \(review high\)/);
+  assert.doesNotMatch(out, /GPT-6 Sol/);
   assert.match(out, /Luna/);
-  assert.match(out, /Astra/);
+  assert.match(out, /Astra only for a proven gap/);
 });
 
 test("startup keeps CE ownership, the deliver endpoint, and explicit-only orchestration", (t) => {

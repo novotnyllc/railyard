@@ -16,8 +16,8 @@ remain explicit choices.
   In Claude Code, Opus 5.5 at medium effort handles substantive subagent work,
   with Fable 5.1 for frontier-hard or long autonomous work, Sonnet 5.5 for
   well-scoped edits, bug fixes, and docs, and Haiku 4.5 for read-only search.
-  In Codex, GPT-6 Sol at medium is the baseline, with Luna for bounded work
-  and Astra for hard work.
+  In Codex, GPT-6.1 Sol at medium is the baseline, with Sol 6.1 at high
+  for review, Luna for routine checked work, and Astra only for a demonstrated gap.
   An omitted model inherits the parent's, and unsupported selections are
   disclosed.
 - 🔍 **One completion owner.** CE owns review settlement and CI watching for

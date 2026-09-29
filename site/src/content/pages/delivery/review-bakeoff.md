@@ -9,6 +9,8 @@ nav_order: 5
 
 [Railyard's end-of-PR review](/skills/deliver/) pairs [Thermos](/skills/thermos/) with `codex review`. A small bakeoff on past Railyard and Roundhouse bugs chose that pairing: Thermos caught the most known bugs, and one `codex review` run caught the only bug no other tool found.
 
+This historical bakeoff predates Sol 6.1 and provides no comparison to it. The model identities and measurements below describe the original runs. Current Codex reviews default to GPT-6.1 Sol at `high`; Astra requires explicit justification after a concrete residual failure or quality gap on Sol 6.1. See [current model routing](/delivery/model-routing/).
+
 ## Method
 
 There were five cases, each a past Railyard or Roundhouse commit reviewed as it was before a later fix. Each tool reviewed each case once, and every Claude arm ran on Opus 5.5.

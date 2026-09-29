@@ -22,13 +22,13 @@ and effort selection, workflow choice, evidence selection, work priority, and
 review triage throughout delivery. Explicit choices and privacy restrictions
 take precedence; uncertainty or service failure falls back to ordinary judgment.
 
-For delegation, choose model and reasoning effort together: Opus 5.5 at `medium` in Claude Code, GPT-6 Sol at `medium` in Codex, with Fable 5.1 or Astra for harder work. Omitting the model means the child inherits. Native children handle ordinary subtasks, and visible tasks require an explicit user request.
+For delegation, choose model and reasoning effort together: Opus 5.5 at `medium` in Claude Code, GPT-6.1 Sol at `medium` in Codex. Sol owns implementation, debugging, planning, and ambiguous or multi-file work even when small or bounded. Use Fable 5.1 for harder Claude Code work. Raise Sol 6.1 to `high`, `xhigh`, or `max` for justified demanding Codex work; reserve Astra for a rare, explicitly justified escalation after a concrete residual failure or quality gap on Sol 6.1. Omitting the model means the child inherits. Native children handle ordinary subtasks, and visible tasks require an explicit user request.
 
 Illustrative delivery outline:
 
 ```text
 > Use Deliver to fix the retry path in the webhook worker through consumer verification.
-model=gpt-6-sol  effort=medium
+model=gpt-6.1-sol  effort=medium
 scope=bounded-change  review_and_ci=CE
 tail=CE-disposition -> merge -> required-release/deployment -> consumer-check
 stop=report observed delivery state and verification

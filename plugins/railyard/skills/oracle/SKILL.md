@@ -12,7 +12,7 @@ on the user's ChatGPT subscription**, which native subagents cannot reach.
 Use it when the user asks for Oracle or GPT-6 Pro, or when a hard question
 justifies a long Pro consult. For an ordinary second opinion, a native child
 is usually enough and easier to coordinate: a Claude subagent on Fable 5.1 or
-Opus 5.5, or a Codex child on GPT-6 Astra. For a cross-family opinion, use the
+Opus 5.5, or a Codex child on GPT-6.1 Sol. For a cross-family opinion, use the
 other family's native agent. Oracle is advisory. It is not a review gate, so
 return verified findings to whoever owns the review.
 

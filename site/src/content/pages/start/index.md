@@ -24,11 +24,11 @@ For a request to fix an issue and get it merged, begin with native execution and
 
 Routine work runs natively. Select CE workflows automatically when they help, and resolve CE only when a selected stage needs it. Startup loads routing guidance without bootstrapping workflow dependencies.
 
-Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or pushing user-requested commits to an existing PR. CE owns one review settlement and CI loop. The recommended end-of-PR review runs [Thermos](/skills/thermos/) and `codex review` on GPT-6 Astra (high effort) in parallel before settlement; it supplies findings and is not a merge gate. [Audits or retrospectives](/delivery/audit/) remain optional.
+Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or pushing user-requested commits to an existing PR. CE owns one review settlement and CI loop. The recommended end-of-PR review runs [Thermos](/skills/thermos/) and `codex review` on GPT-6.1 Sol (high effort) in parallel before settlement; it supplies findings and is not a merge gate. [Audits or retrospectives](/delivery/audit/) remain optional.
 
 Use native child agents for useful parallel work. Create visible Codex tasks only when the user explicitly requests them. Fleet or account orchestration also requires explicit scope.
 
-Choose both model and reasoning effort deliberately. In Claude Code, Opus 5.5 at `medium` is the default for substantive subagent work; in Codex, GPT-6 Sol at `medium` is the baseline. Omitting the model means the child inherits. Disclose an unavailable selection instead of silently substituting one. The [model routing guide](/delivery/model-routing/) explains the choice.
+Choose both model and reasoning effort deliberately. In Claude Code, Opus 5.5 at `medium` is the default for substantive subagent work; in Codex, GPT-6.1 Sol at `medium` is the baseline for implementation, debugging, planning, and ambiguous or multi-file work, even when small or bounded. Omitting the model means the child inherits. Disclose an unavailable selection instead of silently substituting one. The [model routing guide](/delivery/model-routing/) explains the choice.
 
 ## Choose the path
 

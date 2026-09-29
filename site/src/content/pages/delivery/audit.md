@@ -25,7 +25,7 @@ node "$RAILYARD_PLUGIN_ROOT/hooks/run-log.js" note \
 
 Model and effort choices should be evaluated against comparable accepted results. Include all subagents, retries, repairs, verification, elapsed time, and available usage data. A lower per-token rate or slower quota burn does not establish a lower cost per completed task.
 
-The harness defaults (Opus 5.5 at `medium` in Claude Code, GPT-6 Sol at `medium` in Codex) aren't claims of universal cost superiority. Fable 5.1, Astra, and higher effort can fit harder work when the full accepted outcome supports them. Report missing or incomparable cost data explicitly.
+The harness defaults (Opus 5.5 at `medium` in Claude Code, GPT-6.1 Sol at `medium` in Codex) aren't claims of universal cost superiority. Fable 5.1 can fit harder Claude Code work; demanding Codex work can justify Sol 6.1 at `high`, `xhigh`, or `max`. Astra requires explicit justification after a concrete residual failure or quality gap on Sol 6.1. Report missing or incomparable cost data explicitly.
 
 ## Optional learning
 
