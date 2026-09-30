@@ -78,7 +78,7 @@ const flat = (text) => text.replace(/\s+/g, " ");
 test("startup guide stays short and plain", (t) => {
   const { out } = run(fixture(t));
   assert.match(out, /^Railyard routing:/);
-  assert.ok(words(out) <= 140, `SessionStart guide is ${words(out)} words`);
+  assert.ok(words(out) <= 220, `SessionStart guide is ${words(out)} words`);
   assert.doesNotMatch(out, /\b[A-Z]{4,}\b/, "no all-caps emphasis");
   assert.doesNotMatch(out, /do not claim|Allocation:/i);
 });
@@ -102,9 +102,20 @@ test("startup keeps CE ownership, the deliver endpoint, and explicit-only orches
   assert.match(out, /through merge, required release or deployment, and consumer verification unless narrowed/);
   assert.match(out, /plan-only, local-only, and PR-only stops/);
   assert.match(out, /CE snapshot handoff/);
-  assert.match(out, /railyard:orchestrate only for requested/);
+  assert.match(out, /railyard:orchestrate only for requested fleet or remote work that needs separate agents/);
+  assert.match(out, /propagating config across hosts is direct work/);
   assert.match(out, /user-owned tasks only when asked/);
   assert.match(out, /completion events rather than polling/);
+});
+
+test("startup steers toward the fastest route and a time check", (t) => {
+  const out = flat(run(fixture(t)).out);
+  assert.match(out, /Take the fastest route to the result: reuse existing tools/);
+  assert.match(out, /propagate settings that already exist instead of rebuilding them/);
+  assert.match(out, /verify settings by reading them back/);
+  assert.match(out, /State the simplest path and a rough time estimate first/);
+  assert.match(out, /at about twice it, or when the user presses on time, find a faster route to the same result/);
+  assert.match(out, /Gates and the endpoint still apply/);
 });
 
 test("startup supplies the shared publication gate to direct CE and LFG callers", (t) => {
@@ -121,7 +132,7 @@ test("configured Jev adds one line without exposing credentials or startup conte
   const { out } = run(home, { TYPESAFE_API_KEY: "test-only-secret-canary" }, input);
   assert.equal(out.split("\n").length, base.split("\n").length + 1);
   assert.match(out, /railyard:jev/);
-  assert.ok(words(out) <= 160);
+  assert.ok(words(out) <= 240);
   const recorded = JSON.stringify(entries(home));
   for (const secret of ["test-only-secret-canary", "private-task-canary"]) {
     assert.ok(!out.includes(secret));

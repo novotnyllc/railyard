@@ -7,7 +7,7 @@ nav_order: 1
 
 # Deliver
 
-An explicit Deliver request for an implementation or fix runs through commit, push, PR, review and CI settlement, merge, required release or deployment, and consumer verification. Explicit plan-only, diagnosis-only, review-only, local-only, or PR-only requests retain their narrower endpoints. Routine edits and verification run natively; internal skill selection does not expand user authorization.
+An explicit Deliver request for an implementation or fix runs through commit, push, PR, review and CI settlement, merge, required release or deployment, and consumer verification. Explicit plan-only, diagnosis-only, review-only, local-only, or PR-only requests retain their narrower endpoints. Routine edits and verification run natively; internal skill selection does not expand user authorization. For configuration and settings, consumer verification means reading the value back where it is consumed, such as the config file, a CLI readback, or a model list; live-process adoption, restarts, and inference canaries are out of scope unless requested.
 
 ## What it adds
 
