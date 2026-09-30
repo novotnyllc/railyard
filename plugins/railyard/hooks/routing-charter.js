@@ -13,15 +13,12 @@ const lines = [
   "  plan-only, local-only, and PR-only stops. Merges go through deliver's CE snapshot handoff.",
   "- Choose model and effort per subagent. Claude Code: Opus 5.5 (`opus`, 2.1.280+) by default, Fable 5.1 for",
   "  frontier-hard work. Codex: Sol 6.1 medium (review high), Luna for routine checked work, Astra only for a proven gap.",
-  "- Take the fastest route to the requested result: reuse existing tools and paths before building anything,",
-  "  do small or mechanical work directly, and verify by reading the result back. Settings that already exist",
-  "  on a machine propagate from there; never rebuild them.",
-  "- Before substantive work, state the simplest path and a rough time estimate. At about twice the estimate,",
-  "  stop and find a faster route to the same result. When the user presses on time, do that first; process",
-  "  changes come later.",
+  "- Take the fastest route to the result: reuse existing tools, propagate settings that already exist instead",
+  "  of rebuilding them, do small work directly, and verify by reading the result back. At about twice your",
+  "  estimate, or when the user presses on time, find a faster route before anything else.",
   "- Create visible user-owned tasks only when asked. Use railyard:orchestrate only for requested fleet or",
-  "  remote work that needs separate agents; propagating config, or running the same step on several hosts,",
-  "  is one operator's direct work. Wait on completion events rather than polling.",
+  "  remote work that needs separate agents; propagating config across hosts is direct work. Wait on",
+  "  completion events rather than polling.",
 ];
 // Presence enables advice, not an inference call or a credential disclosure.
 if (process.env.TYPESAFE_API_KEY?.trim()) {

@@ -241,7 +241,7 @@ test("startup text and shipped instructions stay within word budgets", () => {
       env: { ...process.env, TYPESAFE_API_KEY: "present", RAILYARD_RUN_LOG_DIR: logDirectory },
     });
     assert.equal(run.status, 0);
-    assert.ok(words(run.stdout) <= 270, `SessionStart charter is ${words(run.stdout)} words`);
+    assert.ok(words(run.stdout) <= 230, `SessionStart charter is ${words(run.stdout)} words`);
     assert.doesNotMatch(run.stdout, /Allocation:|model-routing\/v1/);
   } finally {
     rmSync(logDirectory, { recursive: true, force: true });
