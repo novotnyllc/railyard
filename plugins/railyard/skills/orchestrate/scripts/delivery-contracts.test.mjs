@@ -425,6 +425,8 @@ test("orchestrate prefers the direct route and keeps the user ahead of child rep
   assert.match(orchestrate, /state the simplest path in one line; if it is a direct edit or propagation, do it instead of dispatching, unless the user asked for that carrier/);
   assert.match(orchestrate, /Use: <the existing tool, command, or path that does this work>/);
   assert.match(orchestrate, /Answer the user's latest message before processing child reports/);
+  assert.match(orchestrate, /Send work to another machine only when that pays for the setup and coordination it costs/);
+  assert.match(orchestrate, /Config, settings, and plugin propagation is never per-host agent work/);
 });
 
 test("deliver verifies settings by reading the effective value back", () => {

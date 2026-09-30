@@ -82,6 +82,14 @@ follow user and repository conventions, defaulting to
   [provider task routing](../../references/provider-task-routing.md); it does
   not authorize a visible task.
 
+Send work to another machine only when that pays for the setup and
+coordination it costs: a platform or hardware the controller and CI can't
+provide, a checkout or data that exists only on that host, well over about 15
+minutes of machine work per unit on an idle, faster host, or a separate
+account's model capacity. Otherwise run it locally with native subagents.
+Config, settings, and plugin propagation is never per-host agent work; one
+operator runs it through Roundhouse's sealed plans or the fleet's config sync.
+
 Check prerequisites only for the assigned scope; only fleet-wide parity needs
 every node. Repair missing readiness within existing authorization, without
 touching unrelated hosts. When the user names a CLI, inspect it first. A
