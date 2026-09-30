@@ -118,7 +118,11 @@ selected authorized endpoint:
 5. When the selected endpoint requires a deployed or installed result, verify
    the newly deployed result at the actual consumer after completing the
    required release, deployment, or installation. For plugins, check the
-   installed files and relevant runtime behavior.
+   installed files and relevant runtime behavior. For configuration and
+   settings, consumer verification is reading the value back where it is
+   consumed (config file, CLI readback, model list). Live-process adoption,
+   restarts, inference canaries, and testing third-party tools' internals are
+   out of scope unless the user asks.
 6. Report the result, PR/merge and release links, relevant checks, and any
    remaining concrete blocker.
 
