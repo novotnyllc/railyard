@@ -60,6 +60,18 @@ never patch its source or plugin cache. If a selected stage is missing, report
 it, complete independent work, and install it through the supported manager
 only within existing authorization.
 
+## Before every push
+
+Complete the [whole-candidate review gate](../../references/whole-candidate-review.md)
+before every push, including the first publication, focused feedback fixes,
+release/version changes, and pushes inside LFG or CE continuations. Pass this
+requirement and its exact-candidate receipt to the CE publishing owner as a
+project publishing requirement before invoking a stage that can push. Keep
+ownership of the gate across handoffs; CE remains the only settlement owner.
+Revalidate the complete cumulative candidate each time, reusing prior proof
+only for unchanged inputs and behaviors. Do not substitute the last few
+changed lines. Keep the gate's delivery ledger through settlement.
+
 ## One review and CI owner
 
 CE alone owns review settlement and CI/PR monitoring. When LFG already runs
@@ -74,8 +86,10 @@ user action.
 
 ## End-of-PR review
 
-Once the PR's change is complete, run these two in parallel against its base
-and hand the combined findings to the CE owner before settlement:
+For each publication candidate, run these two in parallel against its base
+and hand the combined findings and coverage receipt to the CE owner before
+pushing and before settlement. Reuse a pre-push review at settlement only
+when its complete candidate and relevant inputs still match:
 
 - `railyard:thermos`
 - `codex review --base <base>`, with the model and effort that

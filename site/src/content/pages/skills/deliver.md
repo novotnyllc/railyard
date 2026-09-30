@@ -15,7 +15,7 @@ Deliver coordinates useful Compound Engineering (CE) stages and the requested en
 
 ## How it works
 
-Choose the stages that fit the work: planning, diagnosis, structured implementation, review, or shipping. Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR. Optional Thermos findings feed the same CE review owner.
+Choose the stages that fit the work: planning, diagnosis, structured implementation, review, or shipping. Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR. Before every push, review the exact candidate’s complete cumulative change-set and affected lifecycle through the whole-candidate gate. Existing Thermos correctness/security and maintainability passes alongside Codex review fulfill this coverage; their completed findings feed the same CE review owner. Standalone Thermos review remains optional when publication is outside the requested scope. Reuse unchanged proof and keep a compact receipt binding candidate identity, coverage, and findings dispositions. Required pre-push evidence blocks publication; publication-dependent release, install, and consumer checks remain pending with a named delivery-tail owner.
 
 When `TYPESAFE_API_KEY` is present, [Jev](/skills/jev/) is the default for model
 and effort selection, workflow choice, evidence selection, work priority, and

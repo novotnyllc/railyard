@@ -6,6 +6,8 @@ source lives under `plugins/railyard/`; everything else is documentation.
 
 ## Always
 
+- Before every push, satisfy the [whole-candidate review gate](plugins/railyard/references/whole-candidate-review.md), including repair and release pushes. This is a project publishing requirement for CE; a delta review or test pass alone does not satisfy it.
+
 - Choose model and reasoning effort deliberately for each assignment;
   use `railyard:model-routing` when resolving or changing an allocation.
   Routine work runs natively; select CE workflows when they help, and use

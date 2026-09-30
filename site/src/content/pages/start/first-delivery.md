@@ -23,8 +23,8 @@ This request names the outcome. Routine implementation runs natively; `railyard:
 
 1. Use native tools for routine work and automatically select CE stages when they help. Resolve CE only when a selected stage needs it.
 2. For delegated work, choose model and reasoning effort together: Opus 5.5 at `medium` in Claude Code, GPT-6.1 Sol at `medium` in Codex. Sol owns implementation, debugging, planning, and ambiguous or multi-file work even when small or bounded. Escalate to Fable 5.1 for harder Claude Code work. Demanding Codex work can justify Sol 6.1 at `high`, `xhigh`, or `max`; Astra requires an explicit justification after a concrete residual failure or quality gap on Sol 6.1. Omitting the model means the child inherits. Use native children unless the user explicitly requests a visible task.
-3. Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR.
-4. CE owns the review settlement and CI loop. The end-of-PR review, [Thermos](/skills/thermos/) plus `codex review` on GPT-6.1 Sol at `high` effort, feeds findings to that owner before the authorized merge.
+3. Before every push, complete the [whole-candidate review gate](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/references/whole-candidate-review.md). Review the complete cumulative change and affected lifecycle with both [Thermos](/skills/thermos/) lenses and `codex review` on GPT-6.1 Sol at `high`. Resolve findings and bind the completed reviews and checks to the exact candidate.
+4. Use `compound-engineering:ce-commit-push-pr` to publish that reviewed candidate. CE owns review settlement and CI; reuse valid pre-push evidence and recheck changed interactions when feedback requires a repair push.
 5. Check the merged commit for reachability from the base branch, complete required release or deployment steps, and verify the actual consumer. For plugins, this includes required marketplace publication, a supported manager update, and installed-runtime verification.
 
 Illustrative evidence fields for a native Codex run; fill them from actual observations:
@@ -61,5 +61,5 @@ The first delivery is a complete one-machine path. Request fleet placement expli
 ## Terms used here
 
 - [Model routing](/delivery/model-routing/) — choosing the model and reasoning effort for delegated work.
-- [Thermos](/skills/thermos/) — the paired end-of-PR review that contributes findings to the CE owner.
+- [Thermos](/skills/thermos/) — the paired whole-candidate review that contributes findings to the CE owner before publication.
 - [React Doctor](/delivery/gates/) — the project-appropriate browser-visible quality check for React surfaces.

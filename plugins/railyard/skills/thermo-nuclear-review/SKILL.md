@@ -12,9 +12,17 @@ Use this skill for a comprehensive security and correctness audit of a checked-o
 You are a security expert performing a comprehensive review of a checked out branch. Audit this branch and its changes extremely thoroughly for bugs, changes that break existing features/functionality, and security vulnerabilities. Be EXTREMELY thorough, rigorous, careful, ambitious, and attentive. NOTHING can slip through.
 
 # Scope
-ONLY report issues related to code that is being ADDED or MODIFIED in this PR.
-Focus on changes in the diff.
-DO NOT report vulnerabilities in existing code that is not being changed.
+Investigate the complete cumulative change-set at the exact candidate, including
+unchanged dependencies, entrypoints, contracts, host preservation, and failure
+paths through the affected delivery lifecycle. A focused fix does not narrow
+publication review to its latest delta. Read the [whole-candidate review gate](../../references/whole-candidate-review.md)
+when reviewing for publication; return coverage, known unverified boundaries,
+evidence hashes, and findings disposition to the caller.
+
+Diff scope bounds reported defects, not investigation. Report defects introduced
+or exposed by the change, including interactions with unchanged code; exclude
+unrelated pre-existing defects. Honor an explicitly narrower standalone review
+request, but label it insufficient for the publication gate.
 
 # Guidelines
 
@@ -46,6 +54,10 @@ The codebase might carefully gate features behind feature flags or internal-only
 
 ## Intended Breakage Guidelines
 If you identify a high risk finding, but the intent of the branch is to introduce that finding – e.g. break some functionality, remove a feature flag, remove a safeguard – AND the scope of the change is well constrained, you SHOULD NOT waste the author's time by reporting the issue to them. However, if you believe it is likely that they are not aware of the full implications of their change, or you are worried that they are under-weighting the negative impacts (extreme example: a developer pushes a PR titled "Delete the database"), or you are worried that the change is actually malicious, you should still report the finding.
+
+For publication, record intentional breakage and its authorized rationale or
+risk acceptance in the coverage receipt even when it warrants no actionable
+finding. Unstated intent does not count as accepted risk.
 
 ## Over-reporting Guidelines
 If you report issues as High priority when they are not in fact high priority / meaningful issues, devs will lose trust in you and stop listening to you over time.

@@ -7,6 +7,7 @@ const lines = [
   "Railyard routing:",
   "- Ordinary work uses native tools and subagents. Pick Compound Engineering stages when they help:",
   "  ce-debug, ce-plan, ce-code-review, or lfg. Open PRs with compound-engineering:ce-commit-push-pr.",
+  "- Before every push, load Railyard's references/whole-candidate-review.md gate, including direct CE/LFG publishing calls.",
   "- CE owns review settlement and CI watching. An explicit Deliver request (railyard:deliver) runs",
   "  through merge, required release or deployment, and consumer verification unless narrowed; honor",
   "  plan-only, local-only, and PR-only stops. Merges go through deliver's CE snapshot handoff.",
@@ -17,7 +18,7 @@ const lines = [
 ];
 // Presence enables advice, not an inference call or a credential disclosure.
 if (process.env.TYPESAFE_API_KEY?.trim()) {
-  lines.push("- Jev is configured: consult railyard:jev when a model, effort, or workflow choice is genuinely open; skip explicit choices, clear defaults, and small dispatches.");
+  lines.push("- Jev configured: consult railyard:jev for open model, effort, or workflow choices; skip explicit choices, clear defaults, and small dispatches.");
 }
 process.stdout.write(lines.join("\n") + "\n");
 

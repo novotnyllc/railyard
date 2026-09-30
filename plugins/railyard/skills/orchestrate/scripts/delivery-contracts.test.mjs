@@ -133,7 +133,67 @@ test("the end-of-PR review is Thermos plus Codex review on GPT-6.1 Sol at high",
   const routing = flat(read("skills/model-routing/SKILL.md"));
   assert.match(routing, /\*\*Codex review\*\*[\s\S]*?defaults to GPT-6\.1 Sol at `high`/);
   assert.match(routing, /`codex review --base <base> -c model=gpt-6.1-sol -c review_model=gpt-6.1-sol -c model_reasoning_effort=high`/);
-  assert.match(flat(read("skills/thermos/SKILL.md")), /end-of-PR review in `railyard:deliver`/);
+  assert.match(flat(read("skills/thermos/SKILL.md")), /before every push in `railyard:deliver`/);
+});
+
+test("publication review covers the whole candidate before every push across handoffs", () => {
+  const gate = flat(read("references/whole-candidate-review.md"));
+  for (const name of ["deliver", "thermos", "thermo-nuclear-review", "orchestrate"]) {
+    assert.match(read(`skills/${name}/SKILL.md`), /whole-candidate-review\.md/, `${name} loads the shared gate`);
+  }
+  for (const text of [deliver, orchestrate, flat(read("skills/thermos/SKILL.md")), gate]) {
+    assert.match(text, /(?:before|revalidate[^.]*before) every push/i);
+  }
+  assert.match(gate, /complete cumulative change-set/);
+  assert.match(gate, /never only the latest commit or last few changed lines/);
+  assert.match(gate, /unchanged dependencies and real entrypoints/);
+  assert.match(gate, /host-owned state preservation/);
+  assert.match(gate, /failure paths, prerequisite ordering before writers/);
+  assert.match(gate, /Diff scope bounds reported defects, not investigation/);
+  assert.match(gate, /Reuse prior review\/proof only for unchanged inputs and behaviors/);
+  assert.match(gate, /Immediately before the publishing command, the CE publisher verifies/);
+  assert.match(gate, /stops if they do not/);
+  assert.match(deliver, /before invoking a stage that can push/);
+  const adapter = flat(read("skills/deliver/references/ce-call-adapter.md"));
+  assert.match(adapter, /whole-candidate-review\.md/);
+  assert.match(adapter, /LFG internal stages and every CE feedback repair continuation/);
+  const release = flat(readFileSync(path.join(pluginRoot, "../../docs/agents/release-coupling.md"), "utf8"));
+  assert.match(release, /exemption removes release machinery, not publication review/);
+  assert.match(readFileSync(path.join(pluginRoot, "../../AGENTS.md"), "utf8"), /whole-candidate-review\.md/);
+});
+
+test("publication receipts bind identity, coverage, reuse, and dispositions", () => {
+  const gate = flat(read("references/whole-candidate-review.md"));
+  for (const field of ["base SHA", "candidate SHA/tree", "cumulative diff SHA-256",
+    "applicable test references", "completed review report", "Known unverified boundaries",
+    "fixed with proof", "rejected with rationale", "explicitly accepted", "reused proof"]) {
+    assert.ok(gate.includes(field), `receipt includes ${field}`);
+  }
+  assert.match(gate, /Required pre-push behavior missing evidence blocks publication/);
+  assert.match(gate, /Future consumer verification[^.]*delivery tail/);
+  assert.match(gate, /pending with a named owner, never passed/);
+  assert.match(gate, /Stale candidate identity and incomplete required broad reviews also block publication/);
+  assert.match(gate, /deterministic manifest of every external input is not required/);
+  assert.match(gate, /do not duplicate them or rerun passed tests without invalidated proof/);
+  assert.match(gate, /do not add a third review tree or watcher/);
+  assert.match(gate, /outside the candidate payload/);
+  assert.match(gate, /final published tree matches it/);
+  assert.match(gate, /Git itself does not enforce it automatically/);
+});
+
+test("delivery ledger separates unique defects, publication, and external revision rounds", () => {
+  const gate = flat(read("references/whole-candidate-review.md"));
+  for (const field of ["Initial review findings", "Local catches", "Escaped actionable external findings",
+    "Pushes", "External revision rounds", "Settlement elapsed"]) {
+    assert.ok(gate.includes(field), `ledger measures ${field}`);
+  }
+  assert.match(gate, /multiple pushes for one batch remain one round/);
+  assert.match(gate, /unavailable values stay unknown, not zero/);
+  assert.match(gate, /do not promise a percentage or claim improvement before outcome data/);
+  const baseline = flat(readFileSync(path.join(pluginRoot, "../../docs/whole-candidate-review-baseline.md"), "utf8"));
+  assert.match(baseline, /six unique actionable findings escaped local review/);
+  assert.match(baseline, /six comments do not establish six revision rounds/);
+  assert.equal([...baseline.matchAll(/#discussion_r\d+/g)].length, 6);
 });
 
 test("merge goes through the CE snapshot handoff", () => {
