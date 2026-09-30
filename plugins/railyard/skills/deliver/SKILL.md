@@ -120,7 +120,7 @@ selected authorized endpoint:
    required release, deployment, or installation. For plugins, check the
    installed files and relevant runtime behavior. For configuration and
    settings, consumer verification is reading the value back where it is
-   consumed (config file, CLI readback, model list). Live-process adoption,
+   consumed (the config file, or a CLI readback of the effective value). Live-process adoption,
    restarts, inference canaries, and testing third-party tools' internals are
    out of scope unless the user asks.
 6. Report the result, PR/merge and release links, relevant checks, and any

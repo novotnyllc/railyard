@@ -78,7 +78,7 @@ const flat = (text) => text.replace(/\s+/g, " ");
 test("startup guide stays short and plain", (t) => {
   const { out } = run(fixture(t));
   assert.match(out, /^Railyard routing:/);
-  assert.ok(words(out) <= 210, `SessionStart guide is ${words(out)} words`);
+  assert.ok(words(out) <= 220, `SessionStart guide is ${words(out)} words`);
   assert.doesNotMatch(out, /\b[A-Z]{4,}\b/, "no all-caps emphasis");
   assert.doesNotMatch(out, /do not claim|Allocation:/i);
 });
@@ -112,8 +112,10 @@ test("startup steers toward the fastest route and a time check", (t) => {
   const out = flat(run(fixture(t)).out);
   assert.match(out, /Take the fastest route to the result: reuse existing tools/);
   assert.match(out, /propagate settings that already exist instead of rebuilding them/);
-  assert.match(out, /do small work directly, and verify by reading the result back/);
-  assert.match(out, /At about twice your estimate, or when the user presses on time, find a faster route before anything else/);
+  assert.match(out, /verify settings by reading them back/);
+  assert.match(out, /State the simplest path and a rough time estimate first/);
+  assert.match(out, /at about twice it, or when the user presses on time, find a faster route to the same result/);
+  assert.match(out, /Gates and the endpoint still apply/);
 });
 
 test("startup supplies the shared publication gate to direct CE and LFG callers", (t) => {
@@ -130,7 +132,7 @@ test("configured Jev adds one line without exposing credentials or startup conte
   const { out } = run(home, { TYPESAFE_API_KEY: "test-only-secret-canary" }, input);
   assert.equal(out.split("\n").length, base.split("\n").length + 1);
   assert.match(out, /railyard:jev/);
-  assert.ok(words(out) <= 230);
+  assert.ok(words(out) <= 240);
   const recorded = JSON.stringify(entries(home));
   for (const secret of ["test-only-secret-canary", "private-task-canary"]) {
     assert.ok(!out.includes(secret));

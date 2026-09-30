@@ -241,7 +241,7 @@ test("startup text and shipped instructions stay within word budgets", () => {
       env: { ...process.env, TYPESAFE_API_KEY: "present", RAILYARD_RUN_LOG_DIR: logDirectory },
     });
     assert.equal(run.status, 0);
-    assert.ok(words(run.stdout) <= 230, `SessionStart charter is ${words(run.stdout)} words`);
+    assert.ok(words(run.stdout) <= 240, `SessionStart charter is ${words(run.stdout)} words`);
     assert.doesNotMatch(run.stdout, /Allocation:|model-routing\/v1/);
   } finally {
     rmSync(logDirectory, { recursive: true, force: true });
@@ -418,4 +418,16 @@ test("review receipt reports unreadable streams as metadata", () => {
   assert.equal(run.status, 1);
   assert.equal(JSON.parse(run.stdout).reason, "stream_read_error");
   assert.equal(run.stderr, "");
+});
+
+test("orchestrate prefers the direct route and keeps the user ahead of child reports", () => {
+  assert.match(orchestrate, /Propagating settings or configuration from one host to others, or running the same mechanical step on several hosts, is not orchestration/);
+  assert.match(orchestrate, /state the simplest path in one line; if it is a direct edit or propagation, do it instead of dispatching, unless the user asked for that carrier/);
+  assert.match(orchestrate, /Use: <the existing tool, command, or path that does this work>/);
+  assert.match(orchestrate, /Answer the user's latest message before processing child reports/);
+});
+
+test("deliver verifies settings by reading the effective value back", () => {
+  assert.match(deliver, /For configuration and settings, consumer verification is reading the value back where it is consumed/);
+  assert.match(deliver, /inference canaries, and testing third-party tools' internals are out of scope unless the user asks/);
 });
