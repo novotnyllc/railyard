@@ -81,7 +81,11 @@ orchestration work and reclassifies the operation.
 bounded handoff does not complete the caller's delivery. Use `compound-engineering:ce-commit-push-pr`
 to create a PR or push user-requested commits to one, and `gh-stack` for
 dependent PRs. Name an owner for integration and for each affected repository,
-and publish only within the requested boundary.
+and publish only within the requested boundary. Every publishing lane inherits
+the [whole-candidate review gate](../../references/whole-candidate-review.md)
+before every push, including CE/LFG repair continuations. The integration owner
+checks the cumulative candidate receipt and maintains the delivery ledger;
+a child's bounded review does not establish integration coverage.
 
 CE alone owns review settlement and CI/PR monitoring. Reuse the lane's CE
 watcher, including LFG's, and route reviewer findings to it; the orchestrator

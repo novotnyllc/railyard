@@ -17,24 +17,26 @@ Unresolved feedback and stale checks must be handled before an authorized merge.
 
 ## Specialist review
 
-Thermos runs two lenses against the same bounded packet:
+Before every push, satisfy the [whole-candidate review gate](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/references/whole-candidate-review.md). Cover the exact candidate's complete cumulative change and affected lifecycle, including repair and release pushes. Collect completed reports, resolve actionable findings, and bind the reviews, checks, coverage and dispositions in a compact receipt before CE publishes.
+
+Thermos runs two lenses against that same complete candidate:
 
 - `thermo-nuclear-review`: correctness, security, breakage, developer experience, and feature-leak risk.
 - `thermo-nuclear-code-quality-review`: structure, duplication, maintainability, and complexity.
 
-The recommended end-of-PR review runs both lenses in parallel with `codex review` on GPT-6.1 Sol at `high` effort before CE settles the PR. Elsewhere, choose the pair or a single lens when it adds a useful perspective. Findings return to the implementation owner and the existing CE review loop. [Oracle](/skills/oracle/) is another optional advisor for a second-model opinion. None of these is a merge gate or a blanket pre-commit requirement.
+Run both lenses alongside `codex review` on GPT-6.1 Sol at `high` effort before publication. Reuse their completed evidence at settlement only while candidate identity, inputs and coverage still match. Standalone reviews can use a narrower pair or single lens, but they do not satisfy the publication gate. Findings return to the implementation owner and existing CE loop; [Oracle](/skills/oracle/) remains an optional advisor. The whole-candidate gate governs pushing, not every local commit; CE separately owns merge settlement.
 
-The following is an example with Thermos explicitly selected. Its final review step checks existing evidence; it does not automatically dispatch another reviewer.
+The following review sequence supplies findings to the existing CE owner. Publication requires the completed whole-candidate receipt before any push. Its final review step checks existing evidence; it does not automatically dispatch another reviewer.
 
 ![A selected Thermos review feeds findings into one CE settlement loop before an authorized merge and post-merge proof.](/diagrams/m6-review-gates.svg)
 
 ### Sequence
 
-1. **Ready.** Prepare a bounded diff and the evidence the selected review needs.
+1. **Ready.** Freeze the complete cumulative candidate and its relevant lifecycle evidence.
 2. **Gates.** Keep required and relevant checks tied to the current implementation.
-3. **Thermos.** Run the selected correctness/security and quality lenses against the same packet.
+3. **Thermos.** Run both correctness/security and quality lenses alongside Codex review against the same complete candidate.
 4. **Return.** Synthesize actionable findings and send fixes to the implementation owner.
-5. **Settle.** Let CE own feedback resolution, review settlement, and CI.
+5. **Settle.** Bind the review receipt before CE publishes; let CE own feedback resolution, review settlement and CI. Revalidate the complete candidate before each repair push.
 6. **Review.** Confirm the current evidence satisfies the repository's requirements.
 7. **Merge.** Merge only within the user's authorized scope.
 8. **Prove.** Verify the merged state and the applicable post-merge result.

@@ -7,7 +7,7 @@ nav_order: 4
 
 # Thermos
 
-Thermos is Railyard's recommended end-of-PR review, run in parallel with `codex review` on GPT-6.1 Sol at high effort. It gathers the diff without guessing, runs both reviewers, and synthesizes one actionable findings packet for the existing review owner.
+Thermos supplies the paired correctness/security and maintainability review for Railyard's [whole-candidate gate](/delivery/gates/) before every push, alongside `codex review` on GPT-6.1 Sol at high effort. It gathers the complete cumulative change and lifecycle context, runs both reviewers, and synthesizes one actionable findings packet for the existing owner.
 
 ## What it adds
 
@@ -28,11 +28,11 @@ output=deduplicated, weighted findings with evidence
 owner=existing-workflow
 ```
 
-The [review bakeoff](/delivery/review-bakeoff/) explains why Railyard's end-of-PR review pairs Thermos with `codex review`.
+The [review bakeoff](/delivery/review-bakeoff/) explains the choice to pair Thermos with `codex review`.
 
 ## Scope
 
-Thermos reviews and synthesizes. When CE owns delivery, it retains review settlement and CI/PR monitoring, and the delivery owner continues to the authorized endpoint. Selecting Thermos does not add a second watcher or a mandatory pre-commit gate.
+Thermos reviews and synthesizes. CE retains review settlement and CI/PR monitoring, and the delivery owner continues to the authorized endpoint. Publication requires completed whole-candidate evidence before every push; it does not add a second watcher or require a review for every local commit. Standalone reviews honor an explicitly narrower scope and cannot satisfy the publication gate.
 
 ## Use one lens deliberately
 

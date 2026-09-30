@@ -107,6 +107,13 @@ test("startup keeps CE ownership, the deliver endpoint, and explicit-only orches
   assert.match(out, /completion events rather than polling/);
 });
 
+test("startup supplies the shared publication gate to direct CE and LFG callers", (t) => {
+  const out = flat(run(fixture(t)).out);
+  assert.match(out, /Before every push, load Railyard's references\/whole-candidate-review\.md gate/);
+  assert.match(out, /including direct CE\/LFG publishing calls/);
+  assert.ok(readFileSync(path.join(path.dirname(script), "../references/whole-candidate-review.md"), "utf8").includes("complete cumulative change-set"));
+});
+
 test("configured Jev adds one line without exposing credentials or startup content", (t) => {
   const home = fixture(t);
   const base = run(home).out;
