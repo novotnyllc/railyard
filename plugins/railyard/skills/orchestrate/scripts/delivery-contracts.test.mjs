@@ -241,7 +241,7 @@ test("startup text and shipped instructions stay within word budgets", () => {
       env: { ...process.env, TYPESAFE_API_KEY: "present", RAILYARD_RUN_LOG_DIR: logDirectory },
     });
     assert.equal(run.status, 0);
-    assert.ok(words(run.stdout) <= 240, `SessionStart charter is ${words(run.stdout)} words`);
+    assert.ok(words(run.stdout) <= 265, `SessionStart charter is ${words(run.stdout)} words`);
     assert.doesNotMatch(run.stdout, /Allocation:|model-routing\/v1/);
   } finally {
     rmSync(logDirectory, { recursive: true, force: true });
@@ -424,6 +424,7 @@ test("orchestrate prefers the direct route and keeps the user ahead of child rep
   assert.match(orchestrate, /Propagating settings or configuration from one host to others, or running the same mechanical step on several hosts, is not orchestration/);
   assert.match(orchestrate, /state the simplest path in one line; if it is a direct edit or propagation, do it instead of dispatching, unless the user asked for that carrier/);
   assert.match(orchestrate, /Use: <the existing tool, command, or path that does this work>/);
+  assert.match(orchestrate, /Why: <why this needs a child/);
   assert.match(orchestrate, /Answer the user's latest message before processing child reports/);
   assert.match(orchestrate, /Send work to another machine only when that pays for the setup and coordination it costs/);
   assert.match(orchestrate, /Config, settings, and plugin propagation is never per-host agent work/);

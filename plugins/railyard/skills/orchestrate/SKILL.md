@@ -53,6 +53,7 @@ concretely blocked.
 Objective: <one owned result>
 Scope: <files, repository, system, or decision; writer boundary>
 Use: <the existing tool, command, or path that does this work>
+Why: <why this needs a child: reads far more than it returns, independent judgment, a parallel unit, or a different model>
 Constraints: <behavior, authorization, exclusions, and relevant dependencies>
 Verify: <observable result and required checks>
 Endpoint: <caller's final delivery target and this child's owned handoff>
