@@ -77,6 +77,16 @@ from another schema. Give a child without full history a self-contained brief.
 
 ## Judgment
 
+- Dispatch a subagent only when it pays off, and name the reason in its
+  brief. There are four: the work reads far more than it returns and the
+  parent won't need the raw material again; independent judgment is the
+  product (review, verification, ideation, judging); substantial units can
+  run in parallel without shared files or state; or the child needs a
+  different model. Keep work in the parent when its input lives only in the
+  parent's context, when the parent will read the full output back anyway,
+  or when it is a small change to code the parent already read. Give each
+  child every input it needs; a child without full history sees only its
+  brief.
 - Mechanical work runs through tools, not agents. Don't spawn a model to run
   a command or apply an edit you already know.
 - Inheriting the parent's settings is fine when it is a deliberate choice.
