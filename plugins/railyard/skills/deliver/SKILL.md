@@ -133,6 +133,26 @@ ownership through the endpoint, continue independent work around a blocker,
 and stop only when completion or a concrete unmet prerequisite requires user
 or external action.
 
+## Shape and pace
+
+Long write-then-review cycles are the main delivery cost; shape work so
+review confirms rather than discovers:
+
+- One concern per PR, roughly 500 changed lines or fewer; features, fixes,
+  and unrelated hardening ship separately. A requested behavior-preserving
+  refactor may move to an immediate follow-up only as a gate-recorded
+  accepted finding.
+- Review while building: after each commit or fix batch the implementer runs
+  `codex review --commit HEAD` or `--uncommitted`, routed by
+  `railyard:model-routing`, and fixes what it finds.
+- The implementer owns its fix, test, and delta-review loop and reports a
+  review-clean candidate; the delivery owner handles judgment calls and the
+  publication decision, not each round.
+- Later gate rounds revalidate the whole candidate, reusing proof for
+  unchanged inputs so fresh review effort goes to what changed.
+- Land promptly in dependency order; merge the moving base once, before the
+  final gate review, not after it.
+
 ## Delegation
 
 Choose model and reasoning effort for each assignment with
