@@ -95,8 +95,7 @@ when its complete candidate and relevant inputs still match:
 - `codex review --base <base>`, with the model and effort that
   `railyard:model-routing` sets for Codex review
 
-These reviews produce findings only; CE still settles review and CI and hands
-off the merge snapshot.
+These reviews produce findings only; CE still settles review and CI.
 
 ## Delivery tail
 
@@ -106,9 +105,11 @@ selected authorized endpoint:
 1. Confirm the merge is still authorized and no user or repository hold
    remains. CE supplies the review and CI disposition; this checks the
    delivery boundary only.
-2. Hand CE's final snapshot to the [merge guard](references/ce-merge-guard.md)
-   and merge the exact reviewed head with the repository's configured
-   strategy. For a stack, follow `gh-stack` in dependency order.
+2. Merge the exact reviewed head (`--match-head-commit`) with the configured
+   strategy through the [merge guard](references/ce-merge-guard.md): a plain
+   `gh pr merge` passes when the PR is open, not a draft, `CLEAN`, with no
+   unresolved review threads; else hand off CE's snapshot. For a stack,
+   follow `gh-stack` in dependency order.
 3. Observe the merge commit, fetch the base, and verify that the merge is on
    the intended base. Run the smallest applicable post-merge source check.
 4. Complete the release or deployment steps required by the selected endpoint

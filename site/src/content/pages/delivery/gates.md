@@ -51,11 +51,11 @@ A narrow dispatch hook checks native subagent model and effort arguments against
 
 <span id="merge-settlement"></span>
 
-## CE merge guard
+## Merge guard
 
-The merge guard consumes the completed CE owner's final snapshot, checks that it matches CE's latest state, and verifies the current PR head and base before a recognized `gh` merge. Only one hook process runs for each shell call, so the check stays cheap. Missing or stale evidence refuses the merge with a recovery message. CE remains the sole review and CI owner; the guard has no reviewer wait timers or separate watcher.
+Before a recognized `gh` merge, the merge guard checks one of two things. Without a CE snapshot, it requires the merge to be one literal command, reads the PR once from GitHub, and allows the merge when it is open, not a draft, `mergeStateStatus` `CLEAN`, and has no unresolved review threads; otherwise it refuses with the reason. With a snapshot, it consumes the completed CE owner's final snapshot, checks that it matches CE's latest state, and verifies the current PR head and base. Only one hook process runs for each shell call, so the check stays cheap. Stale evidence or an unreadable GitHub answer refuses the merge with a recovery message. CE remains the sole review and CI owner; the guard has no reviewer wait timers or separate watcher.
 
-Deliver supplies the [CE snapshot handoff](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/skills/deliver/references/ce-merge-guard.md). It requires recent evidence and an explicit head match, and covers the documented shell route rather than arbitrary API clients. The [implementation](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.js) and [tests](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.test.mjs) define its checks. Broad prompt nudges and automatic retrospective hooks are retired; cleanup remains manual.
+Deliver's [merge guard reference](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/skills/deliver/references/ce-merge-guard.md) documents both paths; the snapshot path requires recent evidence and an explicit head match. The guard covers the documented shell route rather than arbitrary API clients. The [implementation](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.js) and [tests](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.test.mjs) define its checks. Broad prompt nudges and automatic retrospective hooks are retired; cleanup remains manual.
 
 ## Post-merge proof
 

@@ -65,7 +65,8 @@ config through the specific keys named here, never by printing whole files:
 - Codex hook trust: current hashes for intentionally enabled hooks. Disabled
   optional hooks are healthy; never approve every hook as a generic repair.
   Before activating a selected merge guard, test the installed
-  startup/dispatch path and the CE snapshot handoff.
+  startup/dispatch path, the live no-snapshot merge check, and the CE snapshot
+  handoff.
 
 **Fleet parity** (only when requested)
 

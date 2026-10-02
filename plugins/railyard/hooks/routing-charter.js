@@ -10,7 +10,7 @@ const lines = [
   "- Before every push, load Railyard's references/whole-candidate-review.md gate, including direct CE/LFG publishing calls.",
   "- CE owns review settlement and CI watching. An explicit Deliver request (railyard:deliver) runs",
   "  through merge, required release or deployment, and consumer verification unless narrowed; honor",
-  "  plan-only, local-only, and PR-only stops. Merges go through deliver's CE snapshot handoff.",
+  "  plan-only, local-only, and PR-only stops. Clean, thread-free PRs merge plainly; else CE snapshot handoff.",
   "- Choose model and effort per subagent. Claude Code: Opus 5.5 (`opus`, 2.1.280+) by default, Fable 5.1 for",
   "  frontier-hard work. Codex: Sol 6.1 medium (review high), Luna for routine checked work, Astra only for a proven gap.",
   "- Take the fastest route to the result: reuse existing tools, propagate settings that already exist instead",

@@ -42,7 +42,8 @@ ship.
   dependent PRs.
 - CE alone owns review settlement and CI/PR monitoring. Reuse the active CE
   watcher; Deliver completes an authorized merge and post-merge proof through
-  the CE snapshot handoff without another settlement gate.
+  the merge guard (a live `CLEAN` check with no unresolved review threads, or
+  the CE snapshot handoff) without another settlement gate.
 - An explicit Deliver request authorizes the full lifecycle by default:
   commit, push, PR, CE settlement, merge, required release or deployment, and
   consumer verification. Plan-only, diagnosis-only, review-only, PR-only, and

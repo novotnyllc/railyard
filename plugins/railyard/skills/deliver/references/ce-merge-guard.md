@@ -1,15 +1,21 @@
-# CE result handoff for merge
+# Merge guard: live check or CE result handoff
 
-CE owns review settlement and CI. Railyard's shell guard consumes its completed
-result and checks PR identity; it never starts CE, watches CI, judges reviewer
-signals, or waits for a review timer.
+CE owns review settlement and CI. Railyard's shell guard checks a merge one of
+two ways: with no CE snapshot, one bounded live read of the PR on GitHub; with
+one, CE's completed result and the PR's identity. It never starts CE, watches
+CI, judges reviewer signals, or waits for a review timer.
+
+Either path is valid, including while CE owns the PR. The plain path suffices
+when GitHub already shows the PR clean with no unresolved review threads. Use
+the CE handoff when CE's judgment is what settles the PR, for example threads
+CE has dispositioned that GitHub still shows as unresolved.
 
 The guard fails closed. It reads a merge only as one directly executed
-`gh pr merge` or `gh api -X PUT repos/…/pulls/N/merge` (including through
-`timeout`, `nice`, `nohup`, `sudo`, `env`, `command`, `time`, `xargs`,
-`find -exec`, or a `gh` alias from the user's gh config) with a known working
-directory. If the command text mentions a merge anywhere else — a `-c` string
-for any shell, `eval`, `source`, a heredoc, here-string or pipe that feeds a
+`gh pr merge` or `gh api -X PUT repos/…/pulls/N/merge` with a known working
+directory; on the snapshot path that includes one run through `timeout`,
+`nice`, `nohup`, `sudo`, `env`, `command`, `time`, `xargs`, `find -exec`, or
+a `gh` alias from the user's gh config. If the command text mentions a merge
+anywhere else — a `-c` string for any shell, `eval`, `source`, a heredoc, here-string or pipe that feeds a
 shell or other interpreter, process substitution, `ssh`, `trap`, an unknown
 wrapper, a script file the command runs, or text the guard cannot delimit —
 the merge is refused. Only data that is plainly not executed passes: the
@@ -43,7 +49,41 @@ it). The opt-in is read from the repository the push names with `-C`,
 has not opted in: a repository it cannot resolve counts as not opted in
 unless `RAILYARD_GUARD_DEFAULT_BRANCH_PUSH=1` is set.
 
+## Plain merge: live check
+
+A merge without `RAILYARD_CE_SNAPSHOT` needs no CE run. The guard reads the PR
+once and allows the merge when it is open, not a draft, has
+`mergeStateStatus` `CLEAN` (required checks green, nothing blocking), and has
+no unresolved review threads. Pin the reviewed head, which GitHub enforces:
+
+```sh
+gh pr merge 123 --repo OWNER/REPO --squash --match-head-commit FULL_HEAD_SHA
+```
+
+Because nothing else ties the checked PR to the merged one, this path accepts
+only a merge that is one literal command: an optional literal
+`cd /absolute/dir &&`, then `gh pr merge` with an optional literal PR number,
+branch or URL and plain merge flags, or a literal
+`gh api -X PUT repos/OWNER/REPO/pulls/N/merge` with plain fields. A bare
+`gh pr merge` checks the current branch's PR. An expansion, earlier or later
+command, pipe, redirection, loop, wrapper, alias or variable assignment other
+than `RAILYARD_CE_*` refuses, because it could merge a different PR, or the
+same one later, than the guard checked. The guard sees only the hook's own
+environment, not one a shell profile exports (`GH_REPO`, `GH_HOST`); the head
+pin (`--match-head-commit`) covers that gap when you supply it.
+
+Anything else refuses with its reason, for example `draft`,
+`mergeStateStatus BLOCKED` (or `BEHIND`, `UNSTABLE`, `UNKNOWN` while GitHub
+is still computing it), or `2 unresolved review threads`. Review threads are
+paged within the guard's time budget. An unreadable, incomplete or
+mismatched GitHub answer refuses; it is never a pass. `--auto` still refuses,
+because it could merge after this check.
+
 ## Handoff from the existing CE owner
+
+A supplied `RAILYARD_CE_SNAPSHOT` always takes this path and never falls back
+to the live check; its refusals are resolved through CE, not by dropping the
+snapshot.
 
 1. Complete the selected `ce-babysit-pr` mode. Interactive settlement includes
    CE's judgment about reviews still coming; pipeline mode uses CE's bounded
@@ -100,8 +140,8 @@ operator, redirect, expansion, glob, wrapper, gh global flag, `--auto` or line
 break is accepted, the `cd` target must exist, and an ambient or exported
 override is ignored.
 
-Anything else falls back to the CE gate, whose refusal says why the override
-did not apply; refusals never suggest the override. Each used override
+Anything else falls back to the merge guard, whose refusal says why the
+override did not apply; refusals never suggest the override. Each used override
 appends one `{"event":"merge-override",…}` line (session, PR, repository,
 `--admin`) to the Railyard run log,
 `$XDG_STATE_HOME/railyard/run-log/YYYY-MM-DD.jsonl` (default
@@ -115,7 +155,7 @@ CE invocation, tick, head, and base. It requires CE evidence observed within
 five minutes, then performs one bounded live identity check against the PR's
 current head and base ref. This is a freshness limit, not a reviewer wait.
 
-Missing, malformed, stale, superseded, or mismatched evidence refuses the merge
+Malformed, stale, superseded, or mismatched evidence refuses the merge
 with a recovery message. Continue the same CE owner, resolve its remaining
 work, and hand off its refreshed result. An unavailable GitHub identity check
 also refuses; it is not a settlement pass. Ordinary shell commands and local
