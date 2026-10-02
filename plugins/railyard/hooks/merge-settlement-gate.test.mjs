@@ -388,6 +388,18 @@ gated("the gate's parser and the literal allow-list must agree on the merge", ()
   assert.ok(!sameMerge(shape, [{ kind: "api", endpoint: ["repos/novotnyllc/railyard/pulls/7/merge"] }]));
 });
 
+// gh documents --repo [HOST/]OWNER/REPO; the plain path keeps the host (Codex review).
+gated("without a snapshot, a host-qualified repository selector routes the live read to that host", () => {
+  const enterprise = "https://github.example.com/owner/repo/pull/7";
+  for (const command of ["gh pr merge 7 -R github.example.com/owner/repo --squash", "gh pr merge 7 --repo github.example.com/owner/repo --squash"]) {
+    const result = run(bash(command), { noPath: true, url: enterprise });
+    allowed(result);
+    assert.ok(result.hosts.every((host) => host === "github.example.com"), command);
+  }
+  // A first segment without a dot is not a host.
+  refused(run(bash("gh pr merge 7 -R notahost/owner/repo --squash"), { noPath: true }), LIVE_GATED);
+});
+
 gated("a refused snapshot keeps the CE recovery and never suggests dropping it", () => {
   const result = run(bash(fullMerge), { mutate: ({ snapshot }) => { snapshot.counts.comments = 1; } });
   refused(result, /unresolved work/);

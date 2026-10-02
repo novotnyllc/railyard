@@ -84,6 +84,14 @@ function literalRepo(value) {
   return parts.length === 2 && parts.every((part) => NAME.test(part) && !/^\.+$/.test(part));
 }
 
+// `[HOST/]OWNER/REPO`, as gh documents for --repo; the gate's plain path
+// only. A host needs a dot, so it cannot be mistaken for an owner.
+function literalHostRepo(value) {
+  const parts = String(value).split("/");
+  return literalRepo(parts.slice(-2).join("/")) &&
+    (parts.length === 2 || (parts.length === 3 && /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(parts[0])));
+}
+
 function literalRef(value) {
   if (NUMBER.test(value)) return true;
   const url = value.match(/^https:\/\/([A-Za-z0-9.-]+)\/([^/]+)\/([^/]+)\/pull\/([1-9][0-9]*)$/);
@@ -116,8 +124,9 @@ function valueOk(check, word) {
 }
 
 // `gh pr merge` arguments after `merge`. Without `requireRef`, a bare
-// `gh pr merge` (the current branch's PR) is accepted with a null target.
-function prShape(words, requireRef = true) {
+// `gh pr merge` (the current branch's PR) is accepted with a null target;
+// `hostRepo` also accepts a host-qualified --repo/-R.
+function prShape(words, { requireRef = true, hostRepo = false } = {}) {
   let ref = null;
   const flags = {};
   for (let index = 0; index < words.length; index += 1) {
@@ -132,7 +141,7 @@ function prShape(words, requireRef = true) {
     const eq = text.indexOf("=");
     const name = eq > 0 ? text.slice(0, eq) : text;
     if (!PR_FLAGS.has(name) || Object.hasOwn(flags, name)) return null;
-    const check = PR_FLAGS.get(name);
+    const check = hostRepo && (name === "--repo" || name === "-R") ? literalHostRepo : PR_FLAGS.get(name);
     if (check === null) {
       if (eq > 0) return null;
       flags[name] = true;
@@ -213,7 +222,7 @@ function literalPrefix(script, assignable, assignReason) {
 }
 
 // The one gh merge that follows the prefix, or a refusal reason.
-function literalMerge({ words, index, cwd }, requireRef) {
+function literalMerge({ words, index, cwd }, { requireRef, hostRepo = false }) {
   const [gh, group, verb] = words.slice(index, index + 3).map(unquoted);
   if (!gh || !GH.test(gh)) return { reason: "the merge must call gh directly" };
   const rest = words.slice(index + (group === "pr" ? 3 : 2));
@@ -223,7 +232,7 @@ function literalMerge({ words, index, cwd }, requireRef) {
   if (rest.some((word) => !word.quoted && word.text === "--auto")) {
     return { reason: "--auto could merge a later, unapproved head" };
   }
-  const shape = group === "pr" && verb === "merge" ? prShape(rest, requireRef) : group === "api" ? restShape(rest) : null;
+  const shape = group === "pr" && verb === "merge" ? prShape(rest, { requireRef, hostRepo }) : group === "api" ? restShape(rest) : null;
   if (!shape) {
     return { reason: `only \`gh pr merge ${requireRef ? "<literal PR>" : "[literal PR]"}\` or a literal REST merge with plain flags qualifies` };
   }
@@ -241,7 +250,7 @@ function overrideShape(script) {
         : "it must be an inline assignment on the merge command itself",
     };
   }
-  return literalMerge(prefix, true);
+  return literalMerge(prefix, { requireRef: true });
 }
 
 // The same allow-list without the override, for the gate's no-snapshot live
@@ -250,7 +259,7 @@ function overrideShape(script) {
 const PLAIN_ASSIGNABLE = new Set(["RAILYARD_CE_SNAPSHOT", "RAILYARD_CE_MODE"]);
 function plainMergeShape(script) {
   const prefix = literalPrefix(script, PLAIN_ASSIGNABLE, "no variable but the RAILYARD_CE_* settings may be assigned");
-  return prefix.reason ? prefix : literalMerge(prefix, false);
+  return prefix.reason ? prefix : literalMerge(prefix, { requireRef: false, hostRepo: true });
 }
 
 // Whether the gate's own parser read exactly this one merge, with the same
