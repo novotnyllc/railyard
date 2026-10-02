@@ -113,7 +113,7 @@ test("startup steers toward the fastest route and a time check", (t) => {
   assert.match(out, /Take the fastest route to the result: reuse existing tools/);
   assert.match(out, /propagate settings that already exist instead of rebuilding them/);
   assert.match(out, /verify settings by reading them back/);
-  assert.match(out, /Dispatch a subagent only when it reads far more than it returns, gives independent judgment, runs a parallel unit, or needs another model/);
+  assert.match(out, /Dispatch a subagent only when it reads far more than it returns, gives independent judgment, runs a substantial parallel unit without shared files, or needs another model/);
   assert.match(out, /State the simplest path and a rough time estimate first/);
   assert.match(out, /at about twice it, or when the user presses on time, find a faster route to the same result/);
   assert.match(out, /Gates and the endpoint still apply/);
