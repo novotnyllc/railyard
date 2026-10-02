@@ -139,13 +139,15 @@ Long write-then-review cycles are the main delivery cost. Shape the work so
 review confirms rather than discovers:
 
 - One concern per PR, roughly 500 changed lines or fewer. Split new features
-  from fixes and unrelated hardening into their own PRs; defer pure
-  refactors that review asks for to an immediate follow-up rather than
-  growing the PR under review.
+  from fixes and unrelated hardening into their own PRs. A behavior-preserving
+  refactor that review asks for may move to an immediate follow-up PR only
+  when the owner records it as an accepted finding with that follow-up as its
+  disposition under the gate; it is never silently dropped.
 - Review while building. The implementer runs a quick Codex review after
   each commit (`codex review --commit HEAD`) or on an uncommitted fix batch
-  (`codex review --uncommitted`) and fixes what it finds, so the pre-push
-  whole-candidate gate meets a candidate that is already clean.
+  (`codex review --uncommitted`), with the model and effort that
+  `railyard:model-routing` sets for Codex review, and fixes what it finds, so
+  the pre-push whole-candidate gate meets a candidate that is already clean.
 - The implementer owns its fix, test, and delta-review loop and reports a
   review-clean candidate with its evidence. The delivery owner does not relay
   each review round; it steps in for judgment calls and the publication
