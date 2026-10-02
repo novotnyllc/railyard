@@ -57,8 +57,13 @@ once and allows the merge when it is open, not a draft, has
 no unresolved review threads, on a base branch without a merge queue. On a
 queue base `gh pr merge` only enqueues and the queue merges after this check,
 so every plain merge there refuses, `--admin` included; the user merges
-through the queue. The snapshot path does not check for a queue. Pin the
-reviewed head, which GitHub enforces:
+through the queue. The snapshot path does not check for a queue.
+
+Pin the reviewed head, which GitHub enforces. Without a pin, a head pushed
+after the check merges if the repository's branch protection allows it, for
+example when it requires no status checks. The pin is required for `--admin`
+and for a REST merge, which bypass that protection; any pin must equal the
+head the guard just read:
 
 ```sh
 gh pr merge 123 --repo OWNER/REPO --squash --match-head-commit FULL_HEAD_SHA

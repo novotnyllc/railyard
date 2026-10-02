@@ -211,7 +211,7 @@ gated("without a snapshot, a clean PR with no unresolved threads merges with a p
   assert.match(bare.args, /reviewThreads\(first:100,after:\$after\)\{nodes\{isResolved\}/);
   assert.match(bare.args, /number=7/);
   allowed(run(bash(`gh pr merge ${URL} --merge --delete-branch`), { noPath: true }));
-  allowed(run(bash("gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge -f merge_method=squash"), { noPath: true }));
+  allowed(run(bash(`gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge -f merge_method=squash -f sha=${HEAD}`), { noPath: true }));
   allowed(run(bash(`gh pr merge ${URL} --squash`), { noPath: true, mutate: ({ live }) => { live.reviewThreads = threadPage([]); } }));
 });
 
@@ -235,12 +235,42 @@ for (const [name, change, reason] of [
 
 // gh pr merge only enqueues there; the queue merges after this check (Codex review).
 gated("without a snapshot, a merge-queue base refuses with queue advice, not a PR fix", () => {
-  const queued = run(bash(`gh pr merge ${URL} --squash --admin`), { noPath: true, mutate: ({ live }) => { live.isMergeQueueEnabled = true; } });
+  const queued = run(bash(`gh pr merge ${URL} --squash --admin ${PIN}`), { noPath: true, mutate: ({ live }) => { live.isMergeQueueEnabled = true; } });
   refused(queued, /: the base branch uses a merge queue\. The queue merges after any point-in-time check/);
   assert.doesNotMatch(queued.err, /fix that and retry/);
   assert.deepEqual(queued.calls, ["api graphql"]);
   const unknown = run(bash(`gh pr merge ${URL} --squash`), { noPath: true, mutate: ({ live }) => { delete live.isMergeQueueEnabled; } });
   refused(unknown, /: merge queue status unknown\. A merge without a CE snapshot needs a certain live read/);
+});
+
+// --admin and REST merges bypass GitHub's own checks, so a push after the
+// live check could merge an unchecked head (Codex review). They must pin it.
+gated("without a snapshot, --admin and REST merges must pin the head the check reads", () => {
+  for (const command of [`gh pr merge ${URL} --squash --admin`, "gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge -f merge_method=squash"]) {
+    const unpinned = run(bash(command), { noPath: true });
+    refused(unpinned, /must pin the head this check reads\. Pin the PR's current head/);
+    assert.deepEqual(unpinned.calls, [], command);
+  }
+  allowed(run(bash(`gh pr merge ${URL} --squash --admin ${PIN}`), { noPath: true }));
+  allowed(run(bash(`gh pr merge ${URL} --squash --admin --match-head-commit ${HEAD.toUpperCase()}`), { noPath: true }));
+  // Any supplied pin must be the head the check read.
+  for (const command of [`gh pr merge ${URL} --squash --match-head-commit ${OTHER}`, `gh pr merge ${URL} --admin --match-head-commit ${OTHER}`,
+    `gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge -f sha=${OTHER}`]) {
+    refused(run(bash(command), { noPath: true }), new RegExp(`the pinned head ${OTHER} is not the PR's current head ${HEAD}`));
+  }
+  // A head the read cannot name, or one that moves between thread pages, refuses.
+  refused(run(bash(`gh pr merge ${URL} --squash`), { noPath: true, mutate: ({ live }) => { delete live.headRefOid; } }), /no certain PR head/);
+  const moved = run(bash(`gh pr merge ${URL} --squash`), {
+    noPath: true, mutate: ({ live }) => { live.reviewThreads = threadPage([thread(true)], true); },
+    graphqlNext: JSON.stringify({ data: { repository: { pullRequest: { ...evidence().live, headRefOid: OTHER, reviewThreads: threadPage([thread(true)]) } } } }),
+  });
+  refused(moved, /the PR head moved/);
+  // The queue setting is read again on every page (Codex review).
+  const queuedLater = run(bash(`gh pr merge ${URL} --squash`), {
+    noPath: true, mutate: ({ live }) => { live.reviewThreads = threadPage([thread(true)], true); },
+    graphqlNext: JSON.stringify({ data: { repository: { pullRequest: { ...evidence().live, isMergeQueueEnabled: true, reviewThreads: threadPage([thread(true)]) } } } }),
+  });
+  refused(queuedLater, /the base branch uses a merge queue/);
 });
 
 gated("without a snapshot, review threads are read across pages", () => {
@@ -255,7 +285,7 @@ gated("without a snapshot, review threads are read across pages", () => {
   });
   refused(later, /: 1 unresolved review thread\./);
   // Each page's PR state is checked again: a later page that reports a block refuses.
-  const blockedLater = run(bash(`gh pr merge ${URL} --squash --admin`), {
+  const blockedLater = run(bash(`gh pr merge ${URL} --squash --admin ${PIN}`), {
     noPath: true, mutate: ({ live }) => firstPage(live),
     graphqlNext: JSON.stringify({ data: { repository: { pullRequest: { ...evidence().live, mergeStateStatus: "BLOCKED", reviewThreads: threadPage([thread(true)]) } } } }),
   });
@@ -935,12 +965,12 @@ gated("an override that cannot be recorded does not apply", () => {
 });
 
 gated("an ambient override in the hook's environment does not bypass the gate", () => {
-  const setup = prepare(BLOCKED);
+  const setup = prepare({ noPath: true });
   const result = spawnSync(process.execPath, [script], {
     input: JSON.stringify(bash(adminMerge)), encoding: "utf8", timeout: 6000,
     env: { ...setup.env, RAILYARD_MERGE_OVERRIDE: "user-approved" },
   });
-  refused(setup.finish(result), /mergeStateStatus BLOCKED/);
+  refused(setup.finish(result), /--admin must pin the head/);
 });
 
 gated("any other override value, or an override not on the merge, is ignored", () => {
