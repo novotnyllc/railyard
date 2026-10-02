@@ -39,7 +39,7 @@ const LIVE_QUERY = `
 query($owner:String!,$name:String!,$number:Int!,$after:String){
   repository(owner:$owner,name:$name){
     pullRequest(number:$number){
-      url state isDraft mergeStateStatus
+      url state isDraft mergeStateStatus isMergeQueueEnabled
       reviewThreads(first:100,after:$after){nodes{isResolved} pageInfo{hasNextPage endCursor}}
     }
   }
@@ -947,13 +947,22 @@ function readinessReasons(target, pr) {
 function liveReadiness(target, command) {
   let pr = currentIdentity(target, command, LIVE_QUERY);
   let reasons = readinessReasons(target, pr);
+  // `gh pr merge` only enqueues on a merge-queue base; the queue merges
+  // later, after this point-in-time check, just as --auto would. That is
+  // the base branch's setup, not something to fix on the PR.
+  if (pr.isMergeQueueEnabled === true) throw refusal("the base branch uses a merge queue", QUEUE_RECOVERY);
+  if (pr.isMergeQueueEnabled !== false) throw new Error("merge queue status unknown");
   let threads = pr.reviewThreads;
   let unresolved = unresolvedThreads(threads);
   while (!reasons.length && !unresolved && threads.pageInfo.hasNextPage) {
-    pr = currentIdentity(target, command, LIVE_QUERY, { after: threads.pageInfo.endCursor });
+    const after = threads.pageInfo.endCursor;
+    pr = currentIdentity(target, command, LIVE_QUERY, { after });
     reasons = readinessReasons(target, pr);
     threads = pr.reviewThreads;
     unresolved += unresolvedThreads(threads);
+    if (threads.pageInfo.hasNextPage && threads.pageInfo.endCursor === after) {
+      throw new Error("GitHub returned a review thread page that does not advance");
+    }
   }
   if (unresolved) {
     reasons.push(`${threads.pageInfo.hasNextPage ? "at least " : ""}${unresolved} unresolved review thread${unresolved === 1 ? "" : "s"}`);
@@ -967,6 +976,8 @@ const SHAPE_RECOVERY = "Run the merge alone as one literal gh pr merge, with no 
   " command, or have ce-babysit-pr settle the PR and hand off its snapshot.";
 const READY_RECOVERY = "A merge without a CE snapshot needs an open, non-draft PR with mergeStateStatus CLEAN and no" +
   " unresolved review threads; fix that and retry, or have ce-babysit-pr settle the PR and hand off its snapshot.";
+const QUEUE_RECOVERY = "The queue merges after any point-in-time check, so neither this path nor a ce-babysit-pr" +
+  " snapshot can vouch for it; the user merges it through the queue.";
 const READ_RECOVERY = "A merge without a CE snapshot needs a certain live read of the PR; retry, or have" +
   " ce-babysit-pr settle the PR and hand off its snapshot.";
 const refusal = (message, recovery) => Object.assign(new Error(message), { recovery });

@@ -52,6 +52,7 @@ function evidence(url = URL) {
     url, state: "OPEN", isDraft: false, headRefOid: HEAD,
     baseRefName: "main", baseRef: { target: { oid: BASE } },
     mergeable: "MERGEABLE", mergeStateStatus: "CLEAN",
+    isMergeQueueEnabled: false,
     reviewThreads: { nodes: [{ isResolved: true }], pageInfo: { hasNextPage: false, endCursor: "cursor-1" } },
   };
   return { snapshot, state, live, number: Number(number) };
@@ -232,6 +233,16 @@ for (const [name, change, reason] of [
   assert.deepEqual(result.calls, ["api graphql"]);
 });
 
+// gh pr merge only enqueues there; the queue merges after this check (Codex review).
+gated("without a snapshot, a merge-queue base refuses with queue advice, not a PR fix", () => {
+  const queued = run(bash(`gh pr merge ${URL} --squash --admin`), { noPath: true, mutate: ({ live }) => { live.isMergeQueueEnabled = true; } });
+  refused(queued, /: the base branch uses a merge queue\. The queue merges after any point-in-time check/);
+  assert.doesNotMatch(queued.err, /fix that and retry/);
+  assert.deepEqual(queued.calls, ["api graphql"]);
+  const unknown = run(bash(`gh pr merge ${URL} --squash`), { noPath: true, mutate: ({ live }) => { delete live.isMergeQueueEnabled; } });
+  refused(unknown, /: merge queue status unknown\. A merge without a CE snapshot needs a certain live read/);
+});
+
 gated("without a snapshot, review threads are read across pages", () => {
   const firstPage = (live) => { live.reviewThreads = threadPage([thread(true)], true); };
   const resolved = run(bash(`gh pr merge ${URL} --squash`), {
@@ -250,6 +261,13 @@ gated("without a snapshot, review threads are read across pages", () => {
   });
   refused(blockedLater, /: mergeStateStatus BLOCKED\./);
   assert.deepEqual(blockedLater.calls, ["api graphql", "api graphql"]);
+  // A page that claims more but repeats its cursor refuses instead of looping (CodeRabbit).
+  const stuck = run(bash(`gh pr merge ${URL} --squash`), {
+    noPath: true, mutate: ({ live }) => firstPage(live), graphqlNext: livePage(threadPage([thread(true)], true)),
+  });
+  refused(stuck, /does not advance/);
+  assert.match(stuck.err, /certain live read/);
+  assert.deepEqual(stuck.calls, ["api graphql", "api graphql"]);
   // Once a page already refuses, the remaining pages are not read.
   const early = run(bash(`gh pr merge ${URL} --squash`), {
     noPath: true, mutate: ({ live }) => { live.reviewThreads = threadPage([thread(false), thread(false)], true); },

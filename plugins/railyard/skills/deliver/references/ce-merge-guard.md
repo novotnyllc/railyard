@@ -54,7 +54,11 @@ unless `RAILYARD_GUARD_DEFAULT_BRANCH_PUSH=1` is set.
 A merge without `RAILYARD_CE_SNAPSHOT` needs no CE run. The guard reads the PR
 once and allows the merge when it is open, not a draft, has
 `mergeStateStatus` `CLEAN` (required checks green, nothing blocking), and has
-no unresolved review threads. Pin the reviewed head, which GitHub enforces:
+no unresolved review threads, on a base branch without a merge queue. On a
+queue base `gh pr merge` only enqueues and the queue merges after this check,
+so every plain merge there refuses, `--admin` included; the user merges
+through the queue. The snapshot path does not check for a queue. Pin the
+reviewed head, which GitHub enforces:
 
 ```sh
 gh pr merge 123 --repo OWNER/REPO --squash --match-head-commit FULL_HEAD_SHA
