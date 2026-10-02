@@ -142,8 +142,9 @@ review confirms rather than discovers:
   from fixes and unrelated hardening into their own PRs; defer pure
   refactors that review asks for to an immediate follow-up rather than
   growing the PR under review.
-- Review while building. The implementer runs a quick `codex review` after
-  each commit or fix batch and fixes what it finds, so the pre-push
+- Review while building. The implementer runs a quick Codex review after
+  each commit (`codex review --commit HEAD`) or on an uncommitted fix batch
+  (`codex review --uncommitted`) and fixes what it finds, so the pre-push
   whole-candidate gate meets a candidate that is already clean.
 - The implementer owns its fix, test, and delta-review loop and reports a
   review-clean candidate with its evidence. The delivery owner does not relay
