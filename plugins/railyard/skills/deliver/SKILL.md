@@ -148,7 +148,8 @@ review confirms rather than discovers:
 - The implementer owns its fix, test, and delta-review loop and reports a
   review-clean candidate; the delivery owner handles judgment calls and the
   publication decision, not each round.
-- Later gate rounds review the delta and reuse proof for unchanged inputs.
+- Later gate rounds revalidate the whole candidate, reusing proof for
+  unchanged inputs so fresh review effort goes to what changed.
 - Land promptly in dependency order; merge the moving base once, just before
   the push.
 
