@@ -150,8 +150,8 @@ review confirms rather than discovers:
   publication decision, not each round.
 - Later gate rounds revalidate the whole candidate, reusing proof for
   unchanged inputs so fresh review effort goes to what changed.
-- Land promptly in dependency order; merge the moving base once, just before
-  the push.
+- Land promptly in dependency order; merge the moving base once, before the
+  final gate review, not after it.
 
 ## Delegation
 
