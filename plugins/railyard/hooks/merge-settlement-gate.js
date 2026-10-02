@@ -939,26 +939,29 @@ function readinessReasons(target, pr) {
   return reasons;
 }
 
-// GitHub's own view decides when no CE snapshot is supplied: open, not a
-// draft, mergeStateStatus CLEAN (required checks green, nothing blocking) and
-// no unresolved review threads. Thread pages continue only while nothing has
-// refused yet, and each page's PR state must still pass; the gh() deadline
-// bounds them, and anything unreadable refuses.
 // `gh pr merge` only enqueues on a merge-queue base; the queue merges later,
 // after this point-in-time check, just as --auto would. That is the base
-// branch's setup, not something to fix on the PR. Checked on every page.
-function requireNoQueue(pr) {
-  if (pr.isMergeQueueEnabled === true) throw refusal("the base branch uses a merge queue", QUEUE_RECOVERY);
-  if (pr.isMergeQueueEnabled !== false) throw new Error("merge queue status unknown");
+// branch's setup, not something to fix on the PR. `--admin` bypasses the
+// queue and merges directly (the live path requires it to pin the head), so
+// only it may proceed there. Checked on every page.
+function requireNoQueue(pr, bypassesQueue) {
+  if (pr.isMergeQueueEnabled === true && !bypassesQueue) throw refusal("the base branch uses a merge queue", QUEUE_RECOVERY);
+  if (pr.isMergeQueueEnabled !== true && pr.isMergeQueueEnabled !== false) throw new Error("merge queue status unknown");
 }
 
-// Returns the head the check read; every page must report that same head.
+// GitHub's own view decides when no CE snapshot is supplied: open, not a
+// draft, mergeStateStatus CLEAN (required checks green, nothing blocking), no
+// unresolved review threads, and no merge queue the merge would wait in.
+// Thread pages continue only while nothing has refused yet, and each page's
+// PR state, head and queue setting must still pass; the gh() deadline bounds
+// them, and anything unreadable refuses. Returns the head the check read.
 function liveReadiness(target, command) {
+  const bypassesQueue = command.kind === "pr" && flagEnabled(command.flags.get("--admin"));
   let pr = currentIdentity(target, command, LIVE_QUERY);
   let reasons = readinessReasons(target, pr);
   const head = pr.headRefOid;
   if (!SHA.test(head || "")) throw new Error("GitHub returned no certain PR head");
-  requireNoQueue(pr);
+  requireNoQueue(pr, bypassesQueue);
   let threads = pr.reviewThreads;
   let unresolved = unresolvedThreads(threads);
   while (!reasons.length && !unresolved && threads.pageInfo.hasNextPage) {
@@ -966,7 +969,7 @@ function liveReadiness(target, command) {
     pr = currentIdentity(target, command, LIVE_QUERY, { after });
     reasons = readinessReasons(target, pr);
     if (pr.headRefOid !== head) throw new Error("the PR head moved while its review threads were read");
-    requireNoQueue(pr);
+    requireNoQueue(pr, bypassesQueue);
     threads = pr.reviewThreads;
     unresolved += unresolvedThreads(threads);
     if (threads.pageInfo.hasNextPage && threads.pageInfo.endCursor === after) {

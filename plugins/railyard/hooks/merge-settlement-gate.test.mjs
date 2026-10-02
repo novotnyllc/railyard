@@ -235,10 +235,16 @@ for (const [name, change, reason] of [
 
 // gh pr merge only enqueues there; the queue merges after this check (Codex review).
 gated("without a snapshot, a merge-queue base refuses with queue advice, not a PR fix", () => {
-  const queued = run(bash(`gh pr merge ${URL} --squash --admin ${PIN}`), { noPath: true, mutate: ({ live }) => { live.isMergeQueueEnabled = true; } });
-  refused(queued, /: the base branch uses a merge queue\. The queue merges after any point-in-time check/);
-  assert.doesNotMatch(queued.err, /fix that and retry/);
-  assert.deepEqual(queued.calls, ["api graphql"]);
+  const queue = { noPath: true, mutate: ({ live }) => { live.isMergeQueueEnabled = true; } };
+  for (const command of [`gh pr merge ${URL} --squash`, `gh pr merge ${URL} --squash ${PIN}`,
+    `gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge -f sha=${HEAD}`]) {
+    const queued = run(bash(command), queue);
+    refused(queued, /: the base branch uses a merge queue\. The queue merges after any point-in-time check/);
+    assert.doesNotMatch(queued.err, /fix that and retry/);
+    assert.deepEqual(queued.calls, ["api graphql"], command);
+  }
+  // A pinned --admin bypasses the queue and merges directly (Codex review).
+  allowed(run(bash(`gh pr merge ${URL} --squash --admin ${PIN}`), queue));
   const unknown = run(bash(`gh pr merge ${URL} --squash`), { noPath: true, mutate: ({ live }) => { delete live.isMergeQueueEnabled; } });
   refused(unknown, /: merge queue status unknown\. A merge without a CE snapshot needs a certain live read/);
 });
