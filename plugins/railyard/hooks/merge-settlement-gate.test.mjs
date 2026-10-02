@@ -52,6 +52,8 @@ function evidence(url = URL) {
     url, state: "OPEN", isDraft: false, headRefOid: HEAD,
     baseRefName: "main", baseRef: { target: { oid: BASE } },
     mergeable: "MERGEABLE", mergeStateStatus: "CLEAN",
+    isMergeQueueEnabled: false,
+    reviewThreads: { nodes: [{ isResolved: true }], pageInfo: { hasNextPage: false, endCursor: "cursor-1" } },
   };
   return { snapshot, state, live, number: Number(number) };
 }
@@ -67,7 +69,10 @@ if [ -n "$GH_FIXTURE_SLEEP" ]; then sleep "$GH_FIXTURE_SLEEP"; fi
 if [ -n "$GH_FIXTURE_FAIL" ]; then echo "fixture authentication failed" >&2; exit 1; fi
 case "$1 $2" in
   "pr view") printf '%s' "$GH_FIXTURE_VIEW" ;;
-  "api graphql") printf '%s' "$GH_FIXTURE_GRAPHQL" ;;
+  "api graphql") case "$*" in
+    *after=*) printf '%s' "$GH_FIXTURE_GRAPHQL_NEXT" ;;
+    *) printf '%s' "$GH_FIXTURE_GRAPHQL" ;;
+  esac ;;
   *) echo "unexpected gh invocation" >&2; exit 3 ;;
 esac
 `;
@@ -95,6 +100,7 @@ function prepare(fixtures = {}) {
     GH_HOST: fixtures.ambientHost ?? "", GH_REPO: "", GH_TOKEN: "", XDG_CONFIG_HOME: "",
     GH_FIXTURE_VIEW: fixtures.view ?? JSON.stringify({ number: data.number, url: data.snapshot.url }),
     GH_FIXTURE_GRAPHQL: fixtures.graphql ?? JSON.stringify({ data: { repository: { pullRequest: data.live } } }),
+    GH_FIXTURE_GRAPHQL_NEXT: fixtures.graphqlNext ?? "",
     GH_FIXTURE_FAIL: fixtures.fail ? "1" : "", GH_FIXTURE_SLEEP: fixtures.sleep ?? "",
     // Override records land here, never in the developer's own state dir.
     RAILYARD_RUN_LOG_DIR: fixtures.runLogDir ?? path.join(dir, "run-log"),
@@ -141,6 +147,13 @@ function refused(result, reason) {
   assert.doesNotMatch(result.err, /allowing the merge|waiting is always sufficient|hard cap/i);
 }
 
+// No snapshot: the live check decides. A BLOCKED live PR shows that a merge
+// reached that check and was refused there.
+const BLOCKED = { noPath: true, mutate: ({ live }) => { live.mergeStateStatus = "BLOCKED"; } };
+// Any refusal on the no-snapshot path, including a merge that is not one
+// literal command; parser refusals (a merge it cannot attribute) lack it.
+const LIVE_GATED = /without a CE snapshot/;
+
 function allowed(result, calls = ["api graphql"]) {
   assert.equal(result.code, 0, result.err);
   assert.equal(result.err, "");
@@ -168,7 +181,7 @@ gated("CE pipeline result allows a pinned current PR without any reviewer or tim
   const result = run(bash(fullMerge));
   allowed(result);
   assert.match(result.args, /baseRef\{target\{oid\}\}/);
-  assert.doesNotMatch(result.args, /reviews|reviewThreads|reactions|committedDate/);
+  assert.doesNotMatch(result.args, /reviews|reviewThreads|reactions|committedDate|GraphQL-Features/);
 });
 
 gated("interactive CE settlement accepts no configured checks; pipeline does not", () => {
@@ -181,8 +194,236 @@ gated("inline snapshot selection is honored", () => {
   allowed(run((filename) => bash(`RAILYARD_CE_SNAPSHOT='${filename}' RAILYARD_CE_MODE=pipeline ${fullMerge}`), { noPath: true }));
 });
 
+gated("a supplied snapshot path must still be absolute; it never falls back to the live check", () => {
+  const result = run(bash(`RAILYARD_CE_SNAPSHOT=relative/snapshot.json ${fullMerge}`), { noPath: true });
+  refused(result, /absolute path/);
+  assert.deepEqual(result.calls, []);
+});
+
+// Without RAILYARD_CE_SNAPSHOT, GitHub's live view decides.
+const thread = (isResolved) => ({ isResolved });
+const threadPage = (nodes, hasNextPage = false, endCursor = hasNextPage ? "cursor-1" : null) => ({ nodes, pageInfo: { hasNextPage, endCursor } });
+const livePage = (reviewThreads) => JSON.stringify({ data: { repository: { pullRequest: { ...evidence().live, reviewThreads } } } });
+
+gated("without a snapshot, a clean PR with no unresolved threads merges with a plain gh pr merge", () => {
+  const bare = run(bash("gh pr merge 7 --squash"), { noPath: true });
+  allowed(bare, ["pr view", "api graphql"]);
+  assert.match(bare.args, /reviewThreads\(first:100,after:\$after\)\{nodes\{isResolved\}/);
+  assert.match(bare.args, /number=7/);
+  // isMergeQueueEnabled is feature-gated on some installations (Codex review).
+  assert.match(bare.args, /^-H\nGraphQL-Features: merge_queue$/m);
+  allowed(run(bash(`gh pr merge ${URL} --merge --delete-branch`), { noPath: true }));
+  allowed(run(bash(`gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge -f merge_method=squash -f sha=${HEAD}`), { noPath: true }));
+  allowed(run(bash(`gh pr merge ${URL} --squash`), { noPath: true, mutate: ({ live }) => { live.reviewThreads = threadPage([]); } }));
+});
+
+for (const [name, change, reason] of [
+  ["merged", (live) => { live.state = "MERGED"; }, /the PR is MERGED/],
+  ["closed", (live) => { live.state = "CLOSED"; }, /the PR is CLOSED/],
+  ["draft", (live) => { live.isDraft = true; }, /: draft\./],
+  ["blocked", (live) => { live.mergeStateStatus = "BLOCKED"; }, /mergeStateStatus BLOCKED/],
+  ["behind", (live) => { live.mergeStateStatus = "BEHIND"; }, /mergeStateStatus BEHIND/],
+  ["unstable checks", (live) => { live.mergeStateStatus = "UNSTABLE"; }, /mergeStateStatus UNSTABLE/],
+  ["not yet computed", (live) => { live.mergeStateStatus = "UNKNOWN"; }, /mergeStateStatus UNKNOWN/],
+  ["one unresolved thread", (live) => { live.reviewThreads = threadPage([thread(true), thread(false)]); }, /: 1 unresolved review thread\./],
+  ["two unresolved threads", (live) => { live.reviewThreads = threadPage([thread(false), thread(true), thread(false)]); }, /: 2 unresolved review threads\./],
+  ["several reasons", (live) => { live.isDraft = true; live.mergeStateStatus = "DRAFT"; live.reviewThreads = threadPage([thread(false)]); },
+    /: draft, mergeStateStatus DRAFT, 1 unresolved review thread\./],
+]) gated(`without a snapshot, a live ${name} PR refuses with its reason`, () => {
+  const result = run(bash(`gh pr merge ${URL} --squash`), { noPath: true, mutate: ({ live }) => change(live) });
+  refused(result, reason);
+  assert.deepEqual(result.calls, ["api graphql"]);
+});
+
+// gh pr merge only enqueues there; the queue merges after this check (Codex review).
+gated("without a snapshot, a merge-queue base refuses with queue advice, not a PR fix", () => {
+  const queue = { noPath: true, mutate: ({ live }) => { live.isMergeQueueEnabled = true; } };
+  for (const command of [`gh pr merge ${URL} --squash`, `gh pr merge ${URL} --squash ${PIN}`,
+    `gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge -f sha=${HEAD}`]) {
+    const queued = run(bash(command), queue);
+    refused(queued, /: the base branch uses a merge queue\. The queue merges after any point-in-time check/);
+    assert.doesNotMatch(queued.err, /fix that and retry/);
+    assert.deepEqual(queued.calls, ["api graphql"], command);
+  }
+  // A pinned --admin bypasses the queue and merges directly (Codex review).
+  allowed(run(bash(`gh pr merge ${URL} --squash --admin ${PIN}`), queue));
+  const unknown = run(bash(`gh pr merge ${URL} --squash`), { noPath: true, mutate: ({ live }) => { delete live.isMergeQueueEnabled; } });
+  refused(unknown, /: merge queue status unknown\. A merge without a CE snapshot needs a certain live read/);
+});
+
+// --admin and REST merges bypass GitHub's own checks, so a push after the
+// live check could merge an unchecked head (Codex review). They must pin it.
+gated("without a snapshot, --admin and REST merges must pin the head the check reads", () => {
+  for (const command of [`gh pr merge ${URL} --squash --admin`, "gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge -f merge_method=squash"]) {
+    const unpinned = run(bash(command), { noPath: true });
+    refused(unpinned, /must pin the head this check reads\. Pin the PR's current head/);
+    assert.deepEqual(unpinned.calls, [], command);
+  }
+  allowed(run(bash(`gh pr merge ${URL} --squash --admin ${PIN}`), { noPath: true }));
+  allowed(run(bash(`gh pr merge ${URL} --squash --admin --match-head-commit ${HEAD.toUpperCase()}`), { noPath: true }));
+  // Any supplied pin must be the head the check read.
+  for (const command of [`gh pr merge ${URL} --squash --match-head-commit ${OTHER}`, `gh pr merge ${URL} --admin --match-head-commit ${OTHER}`,
+    `gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge -f sha=${OTHER}`]) {
+    refused(run(bash(command), { noPath: true }), new RegExp(`the pinned head ${OTHER} is not the PR's current head ${HEAD}`));
+  }
+  // A head the read cannot name, or one that moves between thread pages, refuses.
+  refused(run(bash(`gh pr merge ${URL} --squash`), { noPath: true, mutate: ({ live }) => { delete live.headRefOid; } }), /no certain PR head/);
+  const moved = run(bash(`gh pr merge ${URL} --squash`), {
+    noPath: true, mutate: ({ live }) => { live.reviewThreads = threadPage([thread(true)], true); },
+    graphqlNext: JSON.stringify({ data: { repository: { pullRequest: { ...evidence().live, headRefOid: OTHER, reviewThreads: threadPage([thread(true)]) } } } }),
+  });
+  refused(moved, /the PR head moved/);
+  // The queue setting is read again on every page (Codex review).
+  const queuedLater = run(bash(`gh pr merge ${URL} --squash`), {
+    noPath: true, mutate: ({ live }) => { live.reviewThreads = threadPage([thread(true)], true); },
+    graphqlNext: JSON.stringify({ data: { repository: { pullRequest: { ...evidence().live, isMergeQueueEnabled: true, reviewThreads: threadPage([thread(true)]) } } } }),
+  });
+  refused(queuedLater, /the base branch uses a merge queue/);
+});
+
+gated("without a snapshot, review threads are read across pages", () => {
+  const firstPage = (live) => { live.reviewThreads = threadPage([thread(true)], true); };
+  const resolved = run(bash(`gh pr merge ${URL} --squash`), {
+    noPath: true, mutate: ({ live }) => firstPage(live), graphqlNext: livePage(threadPage([thread(true)])),
+  });
+  allowed(resolved, ["api graphql", "api graphql"]);
+  assert.match(resolved.args, /after=cursor-1/);
+  const later = run(bash(`gh pr merge ${URL} --squash`), {
+    noPath: true, mutate: ({ live }) => firstPage(live), graphqlNext: livePage(threadPage([thread(true), thread(false)])),
+  });
+  refused(later, /: 1 unresolved review thread\./);
+  // Each page's PR state is checked again: a later page that reports a block refuses.
+  const blockedLater = run(bash(`gh pr merge ${URL} --squash --admin ${PIN}`), {
+    noPath: true, mutate: ({ live }) => firstPage(live),
+    graphqlNext: JSON.stringify({ data: { repository: { pullRequest: { ...evidence().live, mergeStateStatus: "BLOCKED", reviewThreads: threadPage([thread(true)]) } } } }),
+  });
+  refused(blockedLater, /: mergeStateStatus BLOCKED\./);
+  assert.deepEqual(blockedLater.calls, ["api graphql", "api graphql"]);
+  // A page that claims more but repeats its cursor refuses instead of looping (CodeRabbit).
+  const stuck = run(bash(`gh pr merge ${URL} --squash`), {
+    noPath: true, mutate: ({ live }) => firstPage(live), graphqlNext: livePage(threadPage([thread(true)], true)),
+  });
+  refused(stuck, /does not advance/);
+  assert.match(stuck.err, /certain live read/);
+  assert.deepEqual(stuck.calls, ["api graphql", "api graphql"]);
+  // Once a page already refuses, the remaining pages are not read.
+  const early = run(bash(`gh pr merge ${URL} --squash`), {
+    noPath: true, mutate: ({ live }) => { live.reviewThreads = threadPage([thread(false), thread(false)], true); },
+  });
+  refused(early, /at least 2 unresolved review threads/);
+  assert.deepEqual(early.calls, ["api graphql"]);
+});
+
+gated("without a snapshot, an unreadable or uncertain GitHub answer fails closed", () => {
+  for (const fixtures of [
+    { fail: true },
+    { graphql: "not JSON" },
+    { graphql: JSON.stringify({ errors: [{ message: "unavailable" }], data: null }) },
+    { mutate: ({ live }) => { delete live.reviewThreads; } },
+    { mutate: ({ live }) => { live.reviewThreads = { nodes: [] }; } },
+    { mutate: ({ live }) => { live.reviewThreads = threadPage([thread(true)], true, null); } },
+    { mutate: ({ live }) => { live.reviewThreads = threadPage([thread(true)], true); }, graphqlNext: "not JSON" },
+    { mutate: ({ live }) => { live.url = live.url.replace("/7", "/8"); } },
+  ]) {
+    const result = run(bash(`gh pr merge ${URL} --squash`), { noPath: true, ...fixtures });
+    refused(result);
+    // An uncertain read asks for a retry, not a fix to the PR.
+    assert.doesNotMatch(result.err, /fix that and retry/);
+  }
+  // An unknown field reads as not ready, never as ready.
+  for (const [change, reason] of [
+    [(live) => { live.reviewThreads = threadPage([thread(null)]); }, /: 1 unresolved review thread\./],
+    [(live) => { delete live.isDraft; }, /: draft status unknown\./],
+    [(live) => { delete live.mergeStateStatus; }, /: mergeStateStatus unknown\./],
+  ]) refused(run(bash(`gh pr merge ${URL} --squash`), { noPath: true, mutate: ({ live }) => change(live) }), reason);
+  const started = Date.now();
+  refused(run(bash("gh pr merge 7 --squash"), { noPath: true, sleep: "4" }));
+  assert.ok(Date.now() - started < 5000);
+});
+
+// Nothing pins the head on the no-snapshot path, so the merge the gate checks
+// must be the merge the shell runs (Thermos and Codex review P1).
+gated("without a snapshot, only one literal merge command reaches the live check", () => {
+  for (const command of [
+    "git switch other && gh pr merge --squash --admin",
+    "gh pr checkout 8 && gh pr merge --squash",
+    'gh pr merge 7 --squash --repo "$REPO"',
+    "gh pr merge 7 --squash -R ${OWNER}/railyard",
+    "R=--repo=o/other; gh pr merge 7 --squash $R",
+    "sleep 3600; gh pr merge 7 --squash",
+    "until gh pr merge 7 --squash; do sleep 60; done",
+    "echo ready\ngh pr merge 7 --squash",
+    "timeout 60 gh pr merge 7 --squash",
+    "GH_REPO=novotnyllc/railyard gh pr merge 7 --squash",
+    `eval "$(cat <<'EOF'\ngh pr merge 7 --admin\nEOF\n)"`,
+  ]) {
+    const result = run(bash(command), { noPath: true });
+    refused(result, LIVE_GATED);
+    assert.deepEqual(result.calls, [], command);
+  }
+  // A literal cd, a cleared snapshot and a branch target stay plain merges.
+  const target = mkdtempSync(path.join(tmpdir(), "ce-merge-plain-"));
+  try {
+    const moved = run(bash(`cd ${target} && gh pr merge 7 --squash`), { noPath: true });
+    allowed(moved, ["pr view", "api graphql"]);
+    assert.ok(moved.cwds.every((cwd) => cwd.endsWith(path.basename(target))));
+  } finally {
+    rmSync(target, { recursive: true, force: true });
+  }
+  allowed(run(bash("RAILYARD_CE_SNAPSHOT= gh pr merge 7 --squash"), { noPath: true }), ["pr view", "api graphql"]);
+  const branch = run(bash("gh pr merge feature/x --repo novotnyllc/railyard --squash"), { noPath: true });
+  allowed(branch, ["pr view", "api graphql"]);
+  assert.match(branch.args, /^pr\nview\nfeature\/x\n--repo\nnovotnyllc\/railyard\n/);
+  allowed(run(bash(`gh pr merge 7 --squash --match-head-commit ${HEAD}`), { noPath: true }), ["pr view", "api graphql"]);
+});
+
+gated("a live shape refusal says how to write the merge, not what to fix on the PR", () => {
+  for (const command of ["gh pr merge 7 --squash 2>&1", "gh pr merge 7 --squash | tail -5", "gh pr merge 7 --squash;"]) {
+    const result = run(bash(command), { noPath: true });
+    refused(result, /Run the merge alone as one literal gh pr merge/);
+    assert.doesNotMatch(result.err, /fix that and retry/, command);
+  }
+});
+
+gated("the gate's parser and the literal allow-list must agree on the merge", () => {
+  const { plainMergeShape, sameMerge } = createRequire(import.meta.url)("./merge-override.js");
+  const { shape } = plainMergeShape("gh pr merge 7 --repo novotnyllc/railyard --squash");
+  const parsed = (ref, repo) => [{ kind: "pr", ref, flags: new Map(repo ? [["--repo", repo]] : []) }];
+  assert.ok(sameMerge(shape, parsed("7", "novotnyllc/railyard")));
+  assert.ok(!sameMerge(shape, parsed("8", "novotnyllc/railyard")));
+  assert.ok(!sameMerge(shape, parsed("7", "other/repo")));
+  assert.ok(!sameMerge(shape, [...parsed("7", "novotnyllc/railyard"), ...parsed("7", "novotnyllc/railyard")]));
+  assert.ok(!sameMerge(shape, [{ kind: "api", endpoint: ["repos/novotnyllc/railyard/pulls/7/merge"] }]));
+});
+
+// gh documents --repo [HOST/]OWNER/REPO; the plain path keeps the host (Codex review).
+gated("without a snapshot, a host-qualified repository selector routes the live read to that host", () => {
+  const enterprise = "https://github.example.com/owner/repo/pull/7";
+  for (const command of ["gh pr merge 7 -R github.example.com/owner/repo --squash", "gh pr merge 7 --repo github.example.com/owner/repo --squash"]) {
+    const result = run(bash(command), { noPath: true, url: enterprise });
+    allowed(result);
+    assert.ok(result.hosts.every((host) => host === "github.example.com"), command);
+  }
+  // A first segment without a dot is not a host.
+  refused(run(bash("gh pr merge 7 -R notahost/owner/repo --squash"), { noPath: true }), LIVE_GATED);
+});
+
+gated("a refused snapshot keeps the CE recovery and never suggests dropping it", () => {
+  const result = run(bash(fullMerge), { mutate: ({ snapshot }) => { snapshot.counts.comments = 1; } });
+  refused(result, /unresolved work/);
+  assert.doesNotMatch(result.err, LIVE_GATED);
+  assert.match(result.err, /save its final snapshot stdout beside state.json/);
+});
+
+gated("without a snapshot, the parser and --auto guards still apply first", () => {
+  refused(run(bash("gh pr merge 7 --squash --auto"), { noPath: true }), /--auto can queue/);
+  refused(run(bash("cd ~/elsewhere && gh pr merge 7 --squash"), { noPath: true }), /unresolved or conditional `cd`/);
+  const many = run(bash("gh pr merge 7 --squash && gh pr merge 8 --squash"), { noPath: true });
+  refused(many, /one PR per command/);
+  assert.deepEqual(many.calls, []);
+});
+
 for (const [name, fixtures, reason] of [
-  ["missing snapshot path", { noPath: true }, /RAILYARD_CE_SNAPSHOT/],
   ["missing snapshot file", { noSnapshot: true }, /CE snapshot is missing/],
   ["malformed snapshot", { snapshotText: "not JSON" }, /invalid JSON/],
   ["snapshot array", { snapshotText: "[]" }, /JSON object/],
@@ -472,7 +713,7 @@ gated("single-quoted command substitution is literal data", () => {
 
 gated("quoted heredoc-looking text cannot hide a following merge", () => {
   for (const literal of ["'<<EOF'", '"<<EOF"']) {
-    refused(run(bash(`printf '%s\\n' ${literal}\ngh pr merge 7`), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+    refused(run(bash(`printf '%s\\n' ${literal}\ngh pr merge 7`), { noPath: true }), LIVE_GATED);
   }
 });
 
@@ -480,7 +721,7 @@ gated("a multiline quoted heredoc-looking literal cannot hide a following merge"
   for (const quote of ["'", '"']) {
     const literal = `printf '%s\\n' ${quote}some literal text\n<<EOF\n${quote}`;
     allowed(run(bash(literal), { noPath: true }), []);
-    refused(run(bash(`${literal}\ngh pr merge 7`), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+    refused(run(bash(`${literal}\ngh pr merge 7`), { noPath: true }), LIVE_GATED);
   }
 });
 
@@ -493,7 +734,7 @@ gated("mergePullRequest prose in REST bodies or GraphQL output filters is data",
 
 gated("false boolean help and disable-auto flags do not hide a merge", () => {
   for (const flag of ["--help=false", "--help=0", "-h=false", "--disable-auto=false", "--disable-auto=F"]) {
-    refused(run(bash(`gh pr merge 7 --squash ${flag}`), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+    refused(run(bash(`gh pr merge 7 --squash ${flag}`), { noPath: true }), LIVE_GATED);
     allowed(run(bash(`${fullMerge} ${flag}`)));
   }
 });
@@ -556,8 +797,14 @@ gated("inline credentials and config selection reach identity reads", () => {
 });
 
 gated("env unsets remove the snapshot and mode from the command's environment", () => {
-  refused(run(bash(`env -u RAILYARD_CE_SNAPSHOT ${fullMerge}`)), /RAILYARD_CE_SNAPSHOT/);
-  refused(run(bash(`env -i ${fullMerge}`)), /RAILYARD_CE_SNAPSHOT/);
+  // Without the snapshot the live path decides, and a wrapped merge is not
+  // one literal command: it refuses before any read. With the snapshot still
+  // set, the same pinned merge would have been allowed.
+  for (const wrapper of ["env -u RAILYARD_CE_SNAPSHOT", "env -i"]) {
+    const result = run(bash(`${wrapper} ${fullMerge}`));
+    refused(result, /without a CE snapshot the merge must be one literal command/);
+    assert.deepEqual(result.calls, []);
+  }
   allowed(run(bash(`env -u RAILYARD_CE_MODE ${fullMerge}`), { mode: "unknown" }));
 });
 
@@ -628,7 +875,7 @@ gated("a bad bare-target resolution fails closed before the live identity query"
 });
 
 gated("complete native JSON returns a refusal while stdin remains open", async () => {
-  const setup = prepare({ noPath: true });
+  const setup = prepare(BLOCKED);
   const child = spawn(process.execPath, [script], { env: setup.env, stdio: ["pipe", "pipe", "pipe"] });
   let stderr = "";
   child.stderr.on("data", (data) => { stderr += data; });
@@ -637,7 +884,7 @@ gated("complete native JSON returns a refusal while stdin remains open", async (
   const timer = setTimeout(() => child.kill(), 2000);
   try {
     const status = await completed;
-    refused(setup.finish({ status, stderr }), /RAILYARD_CE_SNAPSHOT/);
+    refused(setup.finish({ status, stderr }), /mergeStateStatus BLOCKED/);
   } finally {
     clearTimeout(timer);
     child.stdin.destroy();
@@ -645,7 +892,7 @@ gated("complete native JSON returns a refusal while stdin remains open", async (
 });
 
 gated("a gap inside partial native JSON does not skip verification", async () => {
-  const setup = prepare({ noPath: true });
+  const setup = prepare(BLOCKED);
   const child = spawn(process.execPath, [script], { env: setup.env, stdio: ["pipe", "pipe", "pipe"] });
   let stderr = "";
   let closed = false;
@@ -658,7 +905,7 @@ gated("a gap inside partial native JSON does not skip verification", async () =>
   child.stdin.write(payload.slice(30));
   const timer = setTimeout(() => child.kill(), 2000);
   try {
-    refused(setup.finish({ status: await completed, stderr }), /RAILYARD_CE_SNAPSHOT/);
+    refused(setup.finish({ status: await completed, stderr }), /mergeStateStatus BLOCKED/);
   } finally {
     clearTimeout(timer);
     child.stdin.destroy();
@@ -691,7 +938,7 @@ function overridden(result) {
   return result.records[0];
 }
 
-// Refused by the CE gate, with the override named as not applying and no record.
+// Refused by the merge guard, with the override named as not applying and no record.
 function notOverridden(result, reason) {
   refused(result);
   assert.match(result.err, /user-directed override did not apply/);
@@ -731,7 +978,7 @@ gated("an override that cannot be recorded does not apply", () => {
   const blocker = path.join(dir, "file");
   writeFileSync(blocker, "");
   try {
-    notOverridden(run(bash(`${OVERRIDE} gh pr merge 7 --squash`), { noPath: true, runLogDir: path.join(blocker, "run-log") }), /could not be written/);
+    notOverridden(run(bash(`${OVERRIDE} gh pr merge 7 --squash`), { ...BLOCKED, runLogDir: path.join(blocker, "run-log") }), /could not be written/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -743,11 +990,11 @@ gated("an ambient override in the hook's environment does not bypass the gate", 
     input: JSON.stringify(bash(adminMerge)), encoding: "utf8", timeout: 6000,
     env: { ...setup.env, RAILYARD_MERGE_OVERRIDE: "user-approved" },
   });
-  refused(setup.finish(result), /RAILYARD_CE_SNAPSHOT/);
+  refused(setup.finish(result), /--admin must pin the head/);
 });
 
 gated("any other override value, or an override not on the merge, is ignored", () => {
-  notOverridden(run(bash(`RAILYARD_MERGE_OVERRIDE=yes ${adminMerge}`), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+  notOverridden(run(bash(`RAILYARD_MERGE_OVERRIDE=yes ${adminMerge}`), { noPath: true }), LIVE_GATED);
   notOverridden(run(bash(`export ${OVERRIDE}; ${adminMerge}`), { noPath: true }), /literal words/);
 });
 
@@ -830,7 +1077,7 @@ gated("the override refuses --auto, which could merge a later head", () => {
 });
 
 gated("refusals do not advertise the override token", () => {
-  const result = run(bash(adminMerge), { noPath: true });
+  const result = run(bash(adminMerge), BLOCKED);
   refused(result);
   assert.doesNotMatch(result.err, /RAILYARD_MERGE_OVERRIDE|user-approved|override/);
 });
@@ -838,7 +1085,7 @@ gated("refusals do not advertise the override token", () => {
 gated("eval and zsh repeat merges are gated, not skipped", () => {
   refused(run(bash(`eval gh pr merge 7 ${PIN}`), { noPath: true }), /interprets/);
   for (const text of [`repeat 2 gh pr merge 7 ${PIN}`, `noglob gh pr merge 7 ${PIN}`]) {
-    refused(run(bash(text), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+    refused(run(bash(text), { noPath: true }), LIVE_GATED);
   }
 });
 
@@ -853,7 +1100,7 @@ gated("a REST merge endpoint must be the whole literal path", () => {
   allowed(run(bash(`gh api -X PUT /repos/novotnyllc/railyard/pulls/7/merge -f sha=${HEAD}`)));
 });
 
-gated("an unresolved cd refuses the CE gate, but a subshell's cd does not leak", () => {
+gated("an unresolved cd refuses the merge guard, but a subshell's cd does not leak", () => {
   refused(run(bash(`cd ~/elsewhere && ${fullMerge}`)), /unresolved or conditional `cd`/);
   allowed(run(bash(`(cd - && echo done); ${fullMerge}`)));
 });
@@ -910,7 +1157,7 @@ gated("the override allow-list accepts only the literal merge shapes", () => {
   assert.equal(overrideShape(`${OVERRIDE} gh pr merge 7`).shape.kind, "pr");
 });
 
-gated("the reported override bypasses all fall back to the CE gate", () => {
+gated("the reported override bypasses all fall back to the merge guard", () => {
   for (const text of [
     `${OVERRIDE} gh api -X PUT repos/example/*/pulls/7/merge`,
     `${OVERRIDE} gh pr merge 7 --admin; timeout 9 gh pr 'merge' 8 --admin`,
@@ -934,8 +1181,8 @@ gated("a heredoc or here-string fed to a shell is gated as commands, on both har
 
 gated("an arithmetic shift is not a heredoc that hides later lines", () => {
   for (const text of ["echo $((x<<y))\ngh pr merge 7 --admin", "(( x = 1 << 2 ))\ngh pr merge 7 --admin"]) {
-    refused(run(bash(text), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
-    refused(run(codexArgv(text), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+    refused(run(bash(text), { noPath: true }), LIVE_GATED);
+    refused(run(codexArgv(text), { noPath: true }), LIVE_GATED);
   }
   // A heredoc to a non-interpreter is still data.
   allowed(run(codexArgv("cat <<EOF > notes.md\ngh pr merge 7\nEOF"), { noPath: true }), []);
@@ -996,8 +1243,8 @@ gated("a quoted substitution stays inside its command, and redirections are not 
   }
   // A redirection between words is dropped, so the merge is seen and gated.
   for (const text of ["gh pr 2>/dev/null merge 7 --admin", "gh pr &>/dev/null merge 7 --admin", "gh >log pr merge 7 --admin"]) {
-    refused(run(bash(text), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
-    refused(run(codexArgv(text), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+    refused(run(bash(text), { noPath: true }), LIVE_GATED);
+    refused(run(codexArgv(text), { noPath: true }), LIVE_GATED);
   }
   // A settled, pinned merge with redirections still verifies.
   allowed(run(bash(`${fullMerge} >merge.log 2>&1`)));
@@ -1032,7 +1279,7 @@ gated("only a command's own argv is credited, and runtime gh aliases refuse (Cod
 gated("find -exec applies the same gh checks as a top-level command (Codex P1)", () => {
   refused(run(bash(`find . -maxdepth 0 -exec xargs gh pr merge ${PIN} ';'`)), /xargs adds merge arguments/);
   refused(run(bash(`find . -maxdepth 0 -exec gh extension exec forward pr merge 7 --admin ';'`), { noPath: true }), /cannot attribute/);
-  refused(run(bash(`find . -maxdepth 0 -exec gh pr merge 7 --admin ';'`), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+  refused(run(bash(`find . -maxdepth 0 -exec gh pr merge 7 --admin ';'`), { noPath: true }), LIVE_GATED);
 });
 
 gated("-R and --repo naming different repositories refuse (Codex P1)", () => {
@@ -1043,7 +1290,7 @@ gated("-R and --repo naming different repositories refuse (Codex P1)", () => {
 
 gated("a merge past the parser's segment or depth cap refuses instead of being skipped", () => {
   refused(run(bash(Array(600).fill("true").join(" && ") + " && gh pr merge 7 --admin"), { noPath: true }), /cannot attribute/);
-  refused(run(bash(Array(40).fill("true").join("; ") + "; gh pr merge 7 --admin"), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+  refused(run(bash(Array(40).fill("true").join("; ") + "; gh pr merge 7 --admin"), { noPath: true }), LIVE_GATED);
   let nested = "gh pr merge 7 --admin";
   for (let level = 0; level < 10; level += 1) nested = `eval ${nested}`;
   refused(run(bash(nested), { noPath: true }), /interprets/);
@@ -1190,20 +1437,20 @@ gated("a gh alias that expands to a merge is gated", () => {
     },
   });
   const config = "version: 1\naliases:\n    pm: pr merge\n    co: pr checkout\n    sm: '!gh pr merge \"$1\" --admin'\ngit_protocol: https\n";
-  refused(run(bash("gh pm 7 --admin"), withAliases(config)), /RAILYARD_CE_SNAPSHOT/);
+  refused(run(bash("gh pm 7 --admin"), withAliases(config)), LIVE_GATED);
   refused(run(bash("gh sm 7"), withAliases(config)), /alias runs a merge/);
   // A multi-word alias under a built-in is matched by its whole name, the
   // longest one winning (Codex P1).
   const multi = config.replace("git_protocol: https\n",
     "    pr land: pr merge\n    'pr land safe': pr view\n    \"issue mine\": issue list --author @me\n");
   for (const text of ["gh pr land 7 --admin", "gh pr land --admin 7"]) {
-    refused(run(bash(text), withAliases(multi)), /RAILYARD_CE_SNAPSHOT/);
+    refused(run(bash(text), withAliases(multi)), LIVE_GATED);
   }
   allowed(run(bash("gh pr land safe 7"), withAliases(multi)), []);
   allowed(run(bash("gh issue mine"), withAliases(multi)), []);
   // The alias is found past gh's options (Codex P1).
   for (const text of ["gh -R owner/repo pm 7 --admin", "gh --repo=owner/repo pm 7 --admin"]) {
-    refused(run(bash(text), withAliases(config)), /RAILYARD_CE_SNAPSHOT/);
+    refused(run(bash(text), withAliases(config)), LIVE_GATED);
   }
   // An extension receives every argument, so a merge phrase passed to it is not data (Codex P1).
   for (const text of ["gh extension exec forward pr merge 7 --admin", "gh forward pr merge 7 --admin"]) {
@@ -1226,7 +1473,7 @@ gated("gh aliases come from the config directory the command itself selects (Cod
     writeFileSync(path.join(other, "config.yml"), "aliases:\n    boom: pr merge\n");
     for (const text of [`GH_CONFIG_DIR=${other} gh boom 7 --admin`, `export GH_CONFIG_DIR=${other}; gh boom 7 --admin`,
       `XDG_CONFIG_HOME=${path.dirname(other)} GH_CONFIG_DIR= gh pr view 1; GH_CONFIG_DIR=${other} gh boom 7`]) {
-      refused(run(bash(text), { noPath: true }), /RAILYARD_CE_SNAPSHOT/);
+      refused(run(bash(text), { noPath: true }), LIVE_GATED);
     }
     refused(run(bash(`GH_CONFIG_DIR="$CFG" gh boom 7`), { noPath: true }), /cannot resolve/);
     // gh's own commands cannot be aliased, so an unknown config does not matter to them.

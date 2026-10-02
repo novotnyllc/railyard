@@ -196,8 +196,12 @@ test("delivery ledger separates unique defects, publication, and external revisi
   assert.equal([...baseline.matchAll(/#discussion_r\d+/g)].length, 6);
 });
 
-test("merge goes through the CE snapshot handoff", () => {
+test("merge goes through the merge guard: a live check or the CE snapshot handoff", () => {
   assert.match(deliver, /\[merge guard\]\(references\/ce-merge-guard\.md\)/);
+  assert.match(deliver, /plain\s+`gh pr merge` passes when the PR is open, not a draft, `CLEAN`/);
+  assert.match(mergeGuard, /without `RAILYARD_CE_SNAPSHOT` needs no CE run/);
+  assert.match(mergeGuard, /no unresolved review threads/);
+  assert.match(mergeGuard, /only a merge that is one literal command/);
   assert.match(mergeGuard, /RAILYARD_CE_SNAPSHOT/);
   assert.match(mergeGuard, /--match-head-commit/);
 });

@@ -1,13 +1,16 @@
 #!/usr/bin/env node
-// PreToolUse: consume CE's final pr-snapshot stdout, selected by the CE owner
-// after its readiness judgment. CE owns review settlement and CI policy.
-// This adapter checks the supplied evidence and current PR identity; it does
-// not watch reviewers, infer settlement from elapsed time, or authorize merges.
-// Missing, stale or unknown evidence refuses a detected merge actionably.
+// PreToolUse: check a detected merge one of two ways. Without
+// RAILYARD_CE_SNAPSHOT, the merge must be one literal command and one bounded
+// live read must find its PR open, not a draft, mergeStateStatus CLEAN, with
+// no unresolved review threads. With it, consume CE's final pr-snapshot
+// stdout, selected by the CE owner after its readiness judgment, and check it
+// against the current PR identity. CE owns review settlement and CI policy;
+// this hook does not watch reviewers, infer settlement from elapsed time, or
+// authorize merges. Anything it cannot read or verify refuses actionably.
 const { execFileSync } = require("child_process");
 const { readFileSync, statSync } = require("fs");
 const path = require("path");
-const { evaluateOverride } = require("./merge-override");
+const { evaluateOverride, plainMergeShape, sameMerge } = require("./merge-override");
 const {
   CONTROL_WORDS, SAFE_FILTERS, basename, commandPrefix, commandScript, mergePhraseCount, parseArgs,
   pushPhraseCount, runsScript, stripHeredocs, tokenizeSegments,
@@ -27,6 +30,17 @@ query($owner:String!,$name:String!,$number:Int!){
     pullRequest(number:$number){
       url state isDraft headRefOid baseRefName mergeable mergeStateStatus
       baseRef{target{oid}}
+    }
+  }
+}`;
+// The no-snapshot path. Every thread page repeats the PR fields, and each
+// page's are checked again.
+const LIVE_QUERY = `
+query($owner:String!,$name:String!,$number:Int!,$after:String){
+  repository(owner:$owner,name:$name){
+    pullRequest(number:$number){
+      url state isDraft headRefOid mergeStateStatus isMergeQueueEnabled
+      reviewThreads(first:100,after:$after){nodes{isResolved} pageInfo{hasNextPage endCursor}}
     }
   }
 }`;
@@ -889,10 +903,14 @@ function restSha(command) {
   return values.length === 1 ? values[0] : null;
 }
 
-function currentIdentity(target, command) {
+// `strings` are extra GraphQL variables, always sent as strings. The live
+// query selects isMergeQueueEnabled, which some GitHub installations still
+// gate behind the merge_queue GraphQL feature, so it opts in to that feature.
+function currentIdentity(target, command, query = IDENTITY_QUERY, strings = {}) {
   const raw = gh([
-    "api", "graphql", "-f", `query=${IDENTITY_QUERY}`,
+    "api", "graphql", ...(query === LIVE_QUERY ? ["-H", "GraphQL-Features: merge_queue"] : []), "-f", `query=${query}`,
     "-F", `owner=${target.owner}`, "-F", `name=${target.name}`, "-F", `number=${target.number}`,
+    ...Object.entries(strings).flatMap(([name, value]) => ["-f", `${name}=${value}`]),
   ], GRAPHQL_TIMEOUT_MS, {
     host: target.host, env: command.env, cwd: command.cwd,
     unset: command.unset, ignoreEnv: command.ignoreEnv,
@@ -903,7 +921,127 @@ function currentIdentity(target, command) {
   return pr;
 }
 
-function verifyMerge(command) {
+// Unresolved threads on one page; a page without certain thread state refuses.
+function unresolvedThreads(threads) {
+  const page = threads?.pageInfo;
+  if (!Array.isArray(threads?.nodes) || typeof page?.hasNextPage !== "boolean" ||
+      (page.hasNextPage && !nonempty(page.endCursor))) {
+    throw new Error("GitHub returned no certain review thread state");
+  }
+  return threads.nodes.filter((thread) => thread?.isResolved !== true).length;
+}
+
+// Why one live read of the selected PR is not ready, empty when it is.
+function readinessReasons(target, pr) {
+  if (!samePr(target, prIdentity(pr.url))) throw new Error(`GitHub did not return the selected PR #${target.number}`);
+  const reasons = [];
+  if (pr.state !== "OPEN") reasons.push(`the PR is ${pr.state ?? "in an unknown state"}`);
+  if (pr.isDraft !== false) reasons.push(pr.isDraft === true ? "draft" : "draft status unknown");
+  if (pr.mergeStateStatus !== "CLEAN") reasons.push(`mergeStateStatus ${pr.mergeStateStatus ?? "unknown"}`);
+  return reasons;
+}
+
+// `gh pr merge` only enqueues on a merge-queue base; the queue merges later,
+// after this point-in-time check, just as --auto would. That is the base
+// branch's setup, not something to fix on the PR. `--admin` bypasses the
+// queue and merges directly (the live path requires it to pin the head), so
+// only it may proceed there. Checked on every page.
+function requireNoQueue(pr, bypassesQueue) {
+  if (pr.isMergeQueueEnabled === true && !bypassesQueue) throw refusal("the base branch uses a merge queue", QUEUE_RECOVERY);
+  if (pr.isMergeQueueEnabled !== true && pr.isMergeQueueEnabled !== false) throw new Error("merge queue status unknown");
+}
+
+// GitHub's own view decides when no CE snapshot is supplied: open, not a
+// draft, mergeStateStatus CLEAN (required checks green, nothing blocking), no
+// unresolved review threads, and no merge queue the merge would wait in.
+// Thread pages continue only while nothing has refused yet, and each page's
+// PR state, head and queue setting must still pass; the gh() deadline bounds
+// them, and anything unreadable refuses. Returns the head the check read.
+function liveReadiness(target, command) {
+  const bypassesQueue = command.kind === "pr" && flagEnabled(command.flags.get("--admin"));
+  let pr = currentIdentity(target, command, LIVE_QUERY);
+  let reasons = readinessReasons(target, pr);
+  const head = pr.headRefOid;
+  if (!SHA.test(head || "")) throw new Error("GitHub returned no certain PR head");
+  requireNoQueue(pr, bypassesQueue);
+  let threads = pr.reviewThreads;
+  let unresolved = unresolvedThreads(threads);
+  while (!reasons.length && !unresolved && threads.pageInfo.hasNextPage) {
+    const after = threads.pageInfo.endCursor;
+    pr = currentIdentity(target, command, LIVE_QUERY, { after });
+    reasons = readinessReasons(target, pr);
+    if (pr.headRefOid !== head) throw new Error("the PR head moved while its review threads were read");
+    requireNoQueue(pr, bypassesQueue);
+    threads = pr.reviewThreads;
+    unresolved += unresolvedThreads(threads);
+    if (threads.pageInfo.hasNextPage && threads.pageInfo.endCursor === after) {
+      throw new Error("GitHub returned a review thread page that does not advance");
+    }
+  }
+  if (unresolved) {
+    reasons.push(`${threads.pageInfo.hasNextPage ? "at least " : ""}${unresolved} unresolved review thread${unresolved === 1 ? "" : "s"}`);
+  }
+  if (reasons.length) throw refusal(reasons.join(", "), READY_RECOVERY);
+  return head;
+}
+
+// Each live refusal carries its own recovery; handlePayload prints it in
+// place of the CE recovery.
+const SHAPE_RECOVERY = "Run the merge alone as one literal gh pr merge, with no wrapper, redirect, pipe or other" +
+  " command, or have ce-babysit-pr settle the PR and hand off its snapshot.";
+const READY_RECOVERY = "A merge without a CE snapshot needs an open, non-draft PR with mergeStateStatus CLEAN and no" +
+  " unresolved review threads; fix that and retry, or have ce-babysit-pr settle the PR and hand off its snapshot.";
+const QUEUE_RECOVERY = "The queue merges after any point-in-time check, so neither this path nor a ce-babysit-pr" +
+  " snapshot can vouch for it; the user merges it through the queue.";
+const READ_RECOVERY = "A merge without a CE snapshot needs a certain live read of the PR; retry, or have" +
+  " ce-babysit-pr settle the PR and hand off its snapshot.";
+const PIN_RECOVERY = "Pin the PR's current head with --match-head-commit (a REST merge: one literal sha field)" +
+  " and retry, or have ce-babysit-pr settle the PR and hand off its snapshot.";
+const refusal = (message, recovery) => Object.assign(new Error(message), { recovery });
+
+// The no-snapshot path. An unpinned merge leaves the head to GitHub's own
+// rules, so the checked PR must be the merged one: the merge has to be a
+// single literal command (no expansion, loop, wrapper or earlier command
+// that could retarget or delay it), and the gate's own parser must agree on
+// its target.
+function verifyLiveMerge(command, script) {
+  const { shape, reason } = plainMergeShape(script);
+  if (!shape) throw refusal(`without a CE snapshot the merge must be one literal command: ${reason}`, SHAPE_RECOVERY);
+  if (!sameMerge(shape, [command])) {
+    throw refusal("without a CE snapshot the merge must be one literal command whose target the guard reads the same way gh does", SHAPE_RECOVERY);
+  }
+  // A push after this check leaves the new head behind GitHub's own required
+  // checks, except where the merge bypasses them: --admin, or a REST merge an
+  // admin token can force. Those must pin the head this check reads. Any
+  // supplied pin must match it, which also catches a merge gh would route
+  // to another PR than the one checked.
+  const pin = command.kind === "api" ? restSha(command) : command.flags.get("--match-head-commit");
+  if (!pin && (command.kind === "api" || flagEnabled(command.flags.get("--admin")))) {
+    throw refusal(`without a CE snapshot ${command.kind === "api" ? "a REST merge" : "--admin"} must pin the head this check reads`, PIN_RECOVERY);
+  }
+  let head;
+  try {
+    head = liveReadiness(mergeTarget(command), command);
+  } catch (error) {
+    // A not-ready PR already carries its recovery; anything else is a read
+    // that did not finish with certainty.
+    throw error?.recovery ? error : refusal(String(error?.message || error), READ_RECOVERY);
+  }
+  if (pin && pin.toLowerCase() !== head.toLowerCase()) {
+    throw refusal(`the pinned head ${pin} is not the PR's current head ${head}`, PIN_RECOVERY);
+  }
+}
+
+// owner/name/number/host of the PR this command merges.
+function mergeTarget(command) {
+  const target = explicitTarget(command) || resolveViaGh(command);
+  // A selector without a host follows GH_HOST, just as gh does. A URL or an
+  // enterprise selector has already pinned the host in explicitTarget.
+  target.host ||= ghEnv(null, command.env, command.unset, command.ignoreEnv).GH_HOST || "github.com";
+  return target;
+}
+
+function verifyMerge(command, script) {
   if (command.kind === "unsupported") throw new Error(command.why);
   if (command.cwdUnknown) {
     throw new Error("an unresolved or conditional `cd` makes the merge's repository unknown; run the merge as its own command in an explicit workdir");
@@ -914,11 +1052,12 @@ function verifyMerge(command) {
     throw new Error("GH_REPO, GH_HOST or GH_CONFIG_DIR is computed or conditionally set, so the merge's repository is unknown; set it literally on the merge");
   }
   if (command.kind === "graphql") {
-    throw new Error("raw GraphQL mergePullRequest is unsupported; use gh pr merge with --match-head-commit and CE's snapshot");
+    throw new Error("raw GraphQL mergePullRequest is unsupported; use gh pr merge");
   }
   if (flagEnabled(command.flags.get("--auto"))) {
-    throw new Error("--auto can queue a future merge beyond this evidence; merge immediately after CE settles with --match-head-commit");
+    throw new Error("--auto can queue a future merge beyond this check; merge immediately once the PR is ready");
   }
+  if (!commandSetting(command, "RAILYARD_CE_SNAPSHOT")) return verifyLiveMerge(command, script);
   const { snapshot, identity } = ceEvidence(command);
   const guardedHead = command.kind === "api" ? restSha(command) : command.flags.get("--match-head-commit");
   if (guardedHead !== snapshot.head_sha) {
@@ -926,10 +1065,7 @@ function verifyMerge(command) {
       ? "the REST merge must supply exactly one literal sha field matching CE's head (no --input); use gh pr merge --match-head-commit " + snapshot.head_sha
       : "gh pr merge must pin CE's head with --match-head-commit " + snapshot.head_sha);
   }
-  const target = explicitTarget(command) || resolveViaGh(command);
-  // A selector without a host follows GH_HOST, just as gh does. A URL or an
-  // enterprise selector has already pinned the host in explicitTarget.
-  target.host ||= ghEnv(null, command.env, command.unset, command.ignoreEnv).GH_HOST || "github.com";
+  const target = mergeTarget(command);
   if (!samePr(identity, target)) {
     throw new Error(`CE snapshot is for ${snapshot.url}, not the selected PR #${target.number}`);
   }
@@ -1120,15 +1256,17 @@ function handlePayload(input) {
     if (override) overrideNote = ` The user-directed override did not apply: ${override.reason}.`;
     const blocked = commands.find((command) => command.kind === "unsupported");
     if (blocked) throw new Error(blocked.why);
-    if (commands.length !== 1) throw new Error("merge one PR per command with that PR's CE snapshot");
-    verifyMerge(commands[0]);
+    if (commands.length !== 1) throw new Error("merge one PR per command");
+    verifyMerge(commands[0], script);
   } catch (error) {
     // A parser failure on text that never mentions a merge is not a merge.
     if (!found && !/merge|push/i.test(script)) return;
     const why = String(error?.message || error).split("\n")[0];
-    process.stderr.write("[railyard] Merge refused: " + why +
-      ". Have ce-babysit-pr complete readiness and save its final snapshot stdout beside state.json; then retry the pinned merge." +
-      overrideNote + "\n");
+    // A live refusal says what to fix; every other refusal keeps the CE
+    // recovery, so a refused snapshot is never answered by dropping it.
+    const recovery = error?.recovery ??
+      "Have ce-babysit-pr complete readiness and save its final snapshot stdout beside state.json; then retry the pinned merge.";
+    process.stderr.write("[railyard] Merge refused: " + why + ". " + recovery + overrideNote + "\n");
     process.exitCode = 2;
   }
 }

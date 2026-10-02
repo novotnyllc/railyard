@@ -1,4 +1,6 @@
-// The user-directed merge override for merge-settlement-gate.js.
+// The user-directed merge override for merge-settlement-gate.js, and the
+// literal-merge allow-list it shares with the gate's no-snapshot live check
+// (plainMergeShape, sameMerge).
 //
 // A user who explicitly directs a merge (including an admin bypass of branch
 // protection) can skip CE settlement for that one merge. The override is an
@@ -8,8 +10,8 @@
 //
 // It is an ALLOW-LIST of one command shape, read from the raw text with its own
 // strict tokenizer. Anything else — any other segment, operator, expansion,
-// wrapper, quote trick or flag — refuses the override and falls back to the CE
-// gate:
+// wrapper, quote trick or flag — refuses the override and falls back to the
+// merge guard:
 //
 //   [cd /ABSOLUTE/LITERAL/DIR &&] NAME=VALUE... gh pr merge REF [FLAGS]
 //   [cd /ABSOLUTE/LITERAL/DIR &&] NAME=VALUE... gh api -X PUT repos/OWNER/REPO/pulls/N/merge [FLAGS]
@@ -82,6 +84,14 @@ function literalRepo(value) {
   return parts.length === 2 && parts.every((part) => NAME.test(part) && !/^\.+$/.test(part));
 }
 
+// `[HOST/]OWNER/REPO`, as gh documents for --repo; the gate's plain path
+// only. A host needs a dot, so it cannot be mistaken for an owner.
+function literalHostRepo(value) {
+  const parts = String(value).split("/");
+  return literalRepo(parts.slice(-2).join("/")) &&
+    (parts.length === 2 || (parts.length === 3 && /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(parts[0])));
+}
+
 function literalRef(value) {
   if (NUMBER.test(value)) return true;
   const url = value.match(/^https:\/\/([A-Za-z0-9.-]+)\/([^/]+)\/([^/]+)\/pull\/([1-9][0-9]*)$/);
@@ -113,8 +123,10 @@ function valueOk(check, word) {
   return !word.quoted && check(word.text);
 }
 
-// `gh pr merge` arguments after `merge`.
-function prShape(words) {
+// `gh pr merge` arguments after `merge`. Without `requireRef`, a bare
+// `gh pr merge` (the current branch's PR) is accepted with a null target;
+// `hostRepo` also accepts a host-qualified --repo/-R.
+function prShape(words, { requireRef = true, hostRepo = false } = {}) {
   let ref = null;
   const flags = {};
   for (let index = 0; index < words.length; index += 1) {
@@ -129,7 +141,7 @@ function prShape(words) {
     const eq = text.indexOf("=");
     const name = eq > 0 ? text.slice(0, eq) : text;
     if (!PR_FLAGS.has(name) || Object.hasOwn(flags, name)) return null;
-    const check = PR_FLAGS.get(name);
+    const check = hostRepo && (name === "--repo" || name === "-R") ? literalHostRepo : PR_FLAGS.get(name);
     if (check === null) {
       if (eq > 0) return null;
       flags[name] = true;
@@ -139,7 +151,7 @@ function prShape(words) {
     if (!valueOk(check, value)) return null;
     flags[name] = value.text;
   }
-  if (ref === null) return null;
+  if (ref === null && requireRef) return null;
   return { kind: "pr", target: ref, repo: flags["--repo"] ?? flags["-R"] ?? null, admin: flags["--admin"] === true };
 }
 
@@ -182,8 +194,9 @@ function isDirectory(dir) {
   try { return statSync(dir).isDirectory(); } catch { return false; }
 }
 
-// The accepted shape of `script`, or a refusal reason.
-function overrideShape(script) {
+// The literal words of `script` up to the gh call: one optional literal
+// `cd /absolute/dir &&`, then inline assignments limited to `assignable`.
+function literalPrefix(script, assignable, assignReason) {
   if (/[\r\n]/.test(script.trim())) return { reason: "the command must be a single line" };
   const words = literalWords(script);
   if (!words) return { reason: "the command uses shell syntax other than literal words" };
@@ -202,18 +215,14 @@ function overrideShape(script) {
   for (; index < words.length; index += 1) {
     const assignment = unquoted(words[index])?.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
     if (!assignment) break;
-    if (!ASSIGNABLE.has(assignment[1]) || Object.hasOwn(env, assignment[1])) {
-      return { reason: `only ${OVERRIDE_NAME} and the RAILYARD_CE_* settings may be assigned` };
-    }
+    if (!assignable.has(assignment[1]) || Object.hasOwn(env, assignment[1])) return { reason: assignReason };
     env[assignment[1]] = assignment[2];
   }
-  if (env[OVERRIDE_NAME] !== OVERRIDE_VALUE) {
-    return {
-      reason: Object.hasOwn(env, OVERRIDE_NAME)
-        ? `its value must be ${OVERRIDE_VALUE}`
-        : "it must be an inline assignment on the merge command itself",
-    };
-  }
+  return { words, index, cwd, env };
+}
+
+// The one gh merge that follows the prefix, or a refusal reason.
+function literalMerge({ words, index, cwd }, { requireRef, hostRepo = false }) {
   const [gh, group, verb] = words.slice(index, index + 3).map(unquoted);
   if (!gh || !GH.test(gh)) return { reason: "the merge must call gh directly" };
   const rest = words.slice(index + (group === "pr" ? 3 : 2));
@@ -223,11 +232,43 @@ function overrideShape(script) {
   if (rest.some((word) => !word.quoted && word.text === "--auto")) {
     return { reason: "--auto could merge a later, unapproved head" };
   }
-  const shape = group === "pr" && verb === "merge" ? prShape(rest) : group === "api" ? restShape(rest) : null;
+  const shape = group === "pr" && verb === "merge" ? prShape(rest, { requireRef, hostRepo }) : group === "api" ? restShape(rest) : null;
   if (!shape) {
-    return { reason: "only `gh pr merge <literal PR>` or a literal REST merge with plain flags qualifies" };
+    return { reason: `only \`gh pr merge ${requireRef ? "<literal PR>" : "[literal PR]"}\` or a literal REST merge with plain flags qualifies` };
   }
   return { shape: { ...shape, cwd } };
+}
+
+// The accepted shape of `script`, or a refusal reason.
+function overrideShape(script) {
+  const prefix = literalPrefix(script, ASSIGNABLE, `only ${OVERRIDE_NAME} and the RAILYARD_CE_* settings may be assigned`);
+  if (prefix.reason) return prefix;
+  if (prefix.env[OVERRIDE_NAME] !== OVERRIDE_VALUE) {
+    return {
+      reason: Object.hasOwn(prefix.env, OVERRIDE_NAME)
+        ? `its value must be ${OVERRIDE_VALUE}`
+        : "it must be an inline assignment on the merge command itself",
+    };
+  }
+  return literalMerge(prefix, { requireRef: true });
+}
+
+// The same allow-list without the override, for the gate's no-snapshot live
+// check: a bare `gh pr merge` is fine there, because the gate resolves the
+// current branch's PR in the same directory gh will.
+const PLAIN_ASSIGNABLE = new Set(["RAILYARD_CE_SNAPSHOT", "RAILYARD_CE_MODE"]);
+function plainMergeShape(script) {
+  const prefix = literalPrefix(script, PLAIN_ASSIGNABLE, "no variable but the RAILYARD_CE_* settings may be assigned");
+  return prefix.reason ? prefix : literalMerge(prefix, { requireRef: false, hostRepo: true });
+}
+
+// Whether the gate's own parser read exactly this one merge, with the same
+// target and repository, so the two parsers cannot drift apart.
+function sameMerge(shape, commands) {
+  const [merge] = commands;
+  const parsedTarget = merge?.kind === "api" ? merge.endpoint?.[0] : merge?.ref;
+  const parsedRepo = merge?.kind === "api" ? shape.repo : merge?.flags?.get("--repo") ?? merge?.flags?.get("-R") ?? null;
+  return commands.length === 1 && merge.kind === shape.kind && parsedTarget === shape.target && parsedRepo === shape.repo;
 }
 
 // Decide the override for `script`, whose merges the gate parsed as
@@ -237,12 +278,7 @@ function evaluateOverride({ script, commands, input, defaultCwd, record }) {
   if (!script.includes(OVERRIDE_NAME)) return null;
   const { shape, reason } = overrideShape(script);
   if (!shape) return { reason };
-  // The gate's own parser must agree there is exactly this one merge, with
-  // the same target and repository, so the two parsers cannot drift apart.
-  const [merge] = commands;
-  const parsedTarget = merge?.kind === "api" ? merge.endpoint?.[0] : merge?.ref;
-  const parsedRepo = merge?.kind === "api" ? shape.repo : merge?.flags?.get("--repo") ?? merge?.flags?.get("-R") ?? null;
-  if (commands.length !== 1 || merge.kind !== shape.kind || parsedTarget !== shape.target || parsedRepo !== shape.repo) {
+  if (!sameMerge(shape, commands)) {
     return { reason: "the command holds more than one merge, or one the guard cannot read" };
   }
   try {
@@ -262,4 +298,4 @@ function evaluateOverride({ script, commands, input, defaultCwd, record }) {
   }
 }
 
-module.exports = { evaluateOverride, overrideShape };
+module.exports = { evaluateOverride, overrideShape, plainMergeShape, sameMerge };
