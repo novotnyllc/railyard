@@ -903,10 +903,12 @@ function restSha(command) {
   return values.length === 1 ? values[0] : null;
 }
 
-// `strings` are extra GraphQL variables, always sent as strings.
+// `strings` are extra GraphQL variables, always sent as strings. The live
+// query selects isMergeQueueEnabled, which some GitHub installations still
+// gate behind the merge_queue GraphQL feature, so it opts in to that feature.
 function currentIdentity(target, command, query = IDENTITY_QUERY, strings = {}) {
   const raw = gh([
-    "api", "graphql", "-f", `query=${query}`,
+    "api", "graphql", ...(query === LIVE_QUERY ? ["-H", "GraphQL-Features: merge_queue"] : []), "-f", `query=${query}`,
     "-F", `owner=${target.owner}`, "-F", `name=${target.name}`, "-F", `number=${target.number}`,
     ...Object.entries(strings).flatMap(([name, value]) => ["-f", `${name}=${value}`]),
   ], GRAPHQL_TIMEOUT_MS, {

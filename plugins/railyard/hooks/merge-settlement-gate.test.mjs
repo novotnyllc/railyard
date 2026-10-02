@@ -181,7 +181,7 @@ gated("CE pipeline result allows a pinned current PR without any reviewer or tim
   const result = run(bash(fullMerge));
   allowed(result);
   assert.match(result.args, /baseRef\{target\{oid\}\}/);
-  assert.doesNotMatch(result.args, /reviews|reviewThreads|reactions|committedDate/);
+  assert.doesNotMatch(result.args, /reviews|reviewThreads|reactions|committedDate|GraphQL-Features/);
 });
 
 gated("interactive CE settlement accepts no configured checks; pipeline does not", () => {
@@ -210,6 +210,8 @@ gated("without a snapshot, a clean PR with no unresolved threads merges with a p
   allowed(bare, ["pr view", "api graphql"]);
   assert.match(bare.args, /reviewThreads\(first:100,after:\$after\)\{nodes\{isResolved\}/);
   assert.match(bare.args, /number=7/);
+  // isMergeQueueEnabled is feature-gated on some installations (Codex review).
+  assert.match(bare.args, /^-H\nGraphQL-Features: merge_queue$/m);
   allowed(run(bash(`gh pr merge ${URL} --merge --delete-branch`), { noPath: true }));
   allowed(run(bash(`gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge -f merge_method=squash -f sha=${HEAD}`), { noPath: true }));
   allowed(run(bash(`gh pr merge ${URL} --squash`), { noPath: true, mutate: ({ live }) => { live.reviewThreads = threadPage([]); } }));
