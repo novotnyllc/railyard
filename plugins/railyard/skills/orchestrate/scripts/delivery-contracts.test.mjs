@@ -434,3 +434,7 @@ test("deliver verifies settings by reading the effective value back", () => {
   assert.match(deliver, /For configuration and settings, consumer verification is reading the value back where it is consumed/);
   assert.match(deliver, /inference canaries, and testing third-party tools' internals are out of scope unless the user asks/);
 });
+
+test("deliver caps test suites at ten minutes", () => {
+  assert.match(deliver, /Tests never take more than 10 minutes: the full local suite and every CI test job/);
+});

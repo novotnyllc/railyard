@@ -152,6 +152,9 @@ review confirms rather than discovers:
   unchanged inputs so fresh review effort goes to what changed.
 - Land promptly in dependency order; merge the moving base once, before the
   final gate review, not after it.
+- Tests never take more than 10 minutes: the full local suite and every CI
+  test job. Shorter is better. A slower suite is a defect to fix (parallelize,
+  shard, cut slow fixtures), never a limit to raise or a reason to skip it.
 
 ## Delegation
 
