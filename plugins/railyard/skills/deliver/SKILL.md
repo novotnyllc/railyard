@@ -133,6 +133,28 @@ ownership through the endpoint, continue independent work around a blocker,
 and stop only when completion or a concrete unmet prerequisite requires user
 or external action.
 
+## Shape and pace
+
+Long write-then-review cycles are the main delivery cost. Shape the work so
+review confirms rather than discovers:
+
+- One concern per PR, roughly 500 changed lines or fewer. Split new features
+  from fixes and unrelated hardening into their own PRs; defer pure
+  refactors that review asks for to an immediate follow-up rather than
+  growing the PR under review.
+- Review while building. The implementer runs a quick `codex review` after
+  each commit or fix batch and fixes what it finds, so the pre-push
+  whole-candidate gate meets a candidate that is already clean.
+- The implementer owns its fix, test, and delta-review loop and reports a
+  review-clean candidate with its evidence. The delivery owner does not relay
+  each review round; it steps in for judgment calls and the publication
+  decision.
+- Later gate rounds reuse proof for unchanged inputs and review the delta,
+  as the gate allows; rerun broad reviews only where the change invalidates
+  them.
+- Land promptly in dependency order and merge the moving base once, just
+  before the push, rather than repeatedly.
+
 ## Delegation
 
 Choose model and reasoning effort for each assignment with
