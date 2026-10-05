@@ -89,7 +89,7 @@ function mergePhraseCount(text, aliasNames = []) {
   const patterns = [
     /\bpr\b(?:\s+-\S+(?:\s+[^\s-]\S*)?)*\s+merge\b/g,
     /pulls\/[^\s/]*\/merge\b/g,
-    /mergePullRequest/g,
+    /mergePullRequest|enqueuePullRequest|enablePullRequestAutoMerge/g,
   ];
   if (aliasNames.length) {
     const names = aliasNames.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
