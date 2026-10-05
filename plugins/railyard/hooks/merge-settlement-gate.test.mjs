@@ -238,11 +238,12 @@ for (const [name, change, reason] of [
   assert.deepEqual(result.calls, ["api graphql"]);
 });
 
-// On a queue base gh pr merge enqueues; the queue re-runs the required checks
-// on the PR combined with the latest base before merging, so a pinned enqueue
-// of a ready PR is allowed. Anything that skips the queue's checks refuses.
-const QUEUE = { noPath: true, mutate: ({ live }) => { live.isMergeQueueEnabled = true; } };
+// Merge-queue base: a pinned enqueue of a ready PR passes; nothing that skips the queue's checks does.
 const queued = (change) => ({ noPath: true, mutate: ({ live }) => { live.isMergeQueueEnabled = true; change(live); } });
+const QUEUE = queued(() => {});
+// A later review-thread page whose PR fields carry `overrides`.
+const laterPage = (overrides, reviewThreads = threadPage([thread(true)])) =>
+  JSON.stringify({ data: { repository: { pullRequest: { ...evidence().live, ...overrides, reviewThreads } } } });
 const ENQUEUE = `gh pr merge 7 --repo novotnyllc/railyard --squash ${PIN}`;
 
 gated("without a snapshot, a ready PR on a merge-queue base enqueues with one pinned literal gh pr merge", () => {
@@ -267,9 +268,15 @@ gated("without a snapshot, a merge-queue enqueue still needs a ready PR", () => 
   // A thread on a later page refuses too, and the queue setting is read on every page.
   const later = run(bash(ENQUEUE), {
     ...queued((live) => { live.reviewThreads = threadPage([thread(true)], true); }),
-    graphqlNext: JSON.stringify({ data: { repository: { pullRequest: { ...evidence().live, isMergeQueueEnabled: true, reviewThreads: threadPage([thread(false)]) } } } }),
+    graphqlNext: laterPage({ isMergeQueueEnabled: true }, threadPage([thread(false)])),
   });
   refused(later, /: 1 unresolved review thread\./);
+  // A queue that appears on a later page applies there too.
+  const queuedLater = run(bash(`gh pr merge ${URL} --squash --admin ${PIN}`), {
+    noPath: true, mutate: ({ live }) => { live.reviewThreads = threadPage([thread(true)], true); },
+    graphqlNext: laterPage({ isMergeQueueEnabled: true }),
+  });
+  refused(queuedLater, /which --admin bypasses along with the queue's checks/);
 });
 
 gated("without a snapshot, a merge-queue enqueue must pin the live head", () => {
@@ -282,8 +289,8 @@ gated("without a snapshot, a merge-queue enqueue must pin the live head", () => 
 
 gated("without a snapshot, a merge-queue base refuses whatever skips the queue's checks", () => {
   for (const [command, reason] of [
-    [`gh pr merge ${URL} --squash --admin ${PIN}`, /which --admin bypasses with its checks/],
-    [`gh pr merge ${URL} --admin ${PIN}`, /which --admin bypasses with its checks/],
+    [`gh pr merge ${URL} --squash --admin ${PIN}`, /which --admin bypasses along with the queue's checks/],
+    [`gh pr merge ${URL} --admin ${PIN}`, /which --admin bypasses along with the queue's checks/],
     [`gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge -f sha=${HEAD}`, /which a REST merge bypasses/],
   ]) {
     const result = run(bash(command), QUEUE);
@@ -291,7 +298,9 @@ gated("without a snapshot, a merge-queue base refuses whatever skips the queue's
     assert.doesNotMatch(result.err, /fix that and retry/);
     assert.deepEqual(result.calls, ["api graphql"], command);
   }
-  // --auto refuses before any read, queue or not.
+});
+
+gated("without a snapshot, --auto and an unknown queue setting refuse on a queue base", () => {
   const auto = run(bash(`${ENQUEUE} --auto`), QUEUE);
   refused(auto, /--auto can queue/);
   assert.deepEqual(auto.calls, []);
@@ -302,7 +311,8 @@ gated("without a snapshot, a merge-queue base refuses whatever skips the queue's
 gated("a CE snapshot merge on a merge-queue base enqueues pinned, never with --admin", () => {
   const queue = { mutate: ({ live }) => { live.isMergeQueueEnabled = true; } };
   allowed(run(bash(fullMerge), queue));
-  refused(run(bash(`${fullMerge} --admin`), queue), /which --admin bypasses with its checks/);
+  refused(run(bash(`${fullMerge} --admin`), queue), /which --admin bypasses along with the queue's checks/);
+  refused(run(bash(`gh api -X PUT repos/novotnyllc/railyard/pulls/7/merge -f sha=${HEAD}`), queue), /which a REST merge bypasses/);
   refused(run(bash(fullMerge), { mutate: ({ live }) => { delete live.isMergeQueueEnabled; } }), /merge queue status unknown/);
 });
 
@@ -328,12 +338,6 @@ gated("without a snapshot, --admin and REST merges must pin the head the check r
     graphqlNext: JSON.stringify({ data: { repository: { pullRequest: { ...evidence().live, headRefOid: OTHER, reviewThreads: threadPage([thread(true)]) } } } }),
   });
   refused(moved, /the PR head moved/);
-  // The queue setting is read again on every page (Codex review).
-  const queuedLater = run(bash(`gh pr merge ${URL} --squash`), {
-    noPath: true, mutate: ({ live }) => { live.reviewThreads = threadPage([thread(true)], true); },
-    graphqlNext: JSON.stringify({ data: { repository: { pullRequest: { ...evidence().live, isMergeQueueEnabled: true, reviewThreads: threadPage([thread(true)]) } } } }),
-  });
-  refused(queuedLater, /the base branch uses a merge queue, and an enqueue must pin/);
 });
 
 gated("without a snapshot, review threads are read across pages", () => {
@@ -620,7 +624,7 @@ gated("GraphQL request files expose merges in JSON input and typed query fields"
       writeFileSync(path.join(directory, "request.json"), JSON.stringify({ query: mutation }));
       writeFileSync(path.join(directory, "request.graphql"), mutation);
     } });
-    refused(result, /mergePullRequest is unsupported/);
+    refused(result, /raw GraphQL mergePullRequest \/ .* is unsupported/);
     assert.deepEqual(result.calls, []);
   }
 });
@@ -647,7 +651,7 @@ gated("GraphQL request files preserve known read-only and non-merge mutations", 
 gated("literal GraphQL fragments may precede read-only or merge operations", () => {
   allowed(run(bash("gh api graphql -f 'query=fragment ViewerFields on User { login } query { viewer { ...ViewerFields } }'"), { noPath: true }), []);
   const result = run(bash('gh api graphql -f \'query=fragment MergeFields on Mutation { mergePullRequest(input:{pullRequestId:"PR_fixture"}) { clientMutationId } } mutation { ...MergeFields }\''), { noPath: true });
-  refused(result, /mergePullRequest is unsupported/);
+  refused(result, /raw GraphQL mergePullRequest \/ .* is unsupported/);
   assert.deepEqual(result.calls, []);
 });
 
@@ -750,7 +754,7 @@ gated("one CE snapshot cannot authorize several merge commands", () => {
 });
 
 gated("unknown raw GraphQL merge and conditional cwd refuse actionably", () => {
-  refused(run(bash('gh api graphql -f query=\'mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}\'')), /mergePullRequest is unsupported/);
+  refused(run(bash('gh api graphql -f query=\'mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}\'')), /raw GraphQL mergePullRequest \/ .* is unsupported/);
   for (const prefix of [
     "false && cd /tmp", "if true; then cd /tmp; fi",
     // A newline-separated block body has no control word in front of its cd.
@@ -886,7 +890,7 @@ gated("a relative GraphQL query file resolves in the wrapper's working directory
     prepareFiles: ({ snapshotPath }) => writeFileSync(path.join(path.dirname(snapshotPath), "request.graphql"),
       'mutation { mergePullRequest(input:{pullRequestId:"PR_fixture"}) { clientMutationId } }'),
   });
-  refused(queryResult, /mergePullRequest is unsupported/);
+  refused(queryResult, /raw GraphQL mergePullRequest \/ .* is unsupported/);
   assert.deepEqual(queryResult.calls, []);
 });
 
@@ -1074,7 +1078,7 @@ gated("the override never covers a merge inside an interpreted string", () => {
 });
 
 gated("the override does not admit a raw GraphQL merge", () => {
-  notOverridden(run(bash(`${OVERRIDE} gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}'`), { noPath: true }), /mergePullRequest is unsupported/);
+  notOverridden(run(bash(`${OVERRIDE} gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}'`), { noPath: true }), /raw GraphQL mergePullRequest \/ .* is unsupported/);
 });
 
 gated("the override does not cover a merge site that a loop can re-run", () => {
@@ -1717,8 +1721,8 @@ gated("push-guard: --signed is a boolean and matching refspecs refuse", () => {
 });
 
 gated("GraphQL mergePullRequest refuses, even in a query file", () => {
-  refused(run(bash(`gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}'`), { noPath: true }), /mergePullRequest is unsupported/);
-  refused(run(codexArgv(`gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}'`), { noPath: true }), /mergePullRequest is unsupported/);
+  refused(run(bash(`gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}'`), { noPath: true }), /raw GraphQL mergePullRequest \/ .* is unsupported/);
+  refused(run(codexArgv(`gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}'`), { noPath: true }), /raw GraphQL mergePullRequest \/ .* is unsupported/);
 });
 
 // Enqueueing or enabling auto-merge merges later, past the queue rule this gate applies.
@@ -1726,11 +1730,12 @@ gated("raw GraphQL enqueuePullRequest and enablePullRequestAutoMerge refuse, eve
   for (const field of ["enqueuePullRequest", "enablePullRequestAutoMerge"]) {
     const mutation = `mutation { ${field}(input:{pullRequestId:"PR_x",expectedHeadOid:"${HEAD}"}){clientMutationId}}`;
     const direct = run(bash(`gh api graphql -f query='${mutation}'`), QUEUE);
-    refused(direct, /enablePullRequestAutoMerge or mergePullRequest is unsupported/);
+    refused(direct, /raw GraphQL mergePullRequest \/ enqueuePullRequest \/ enablePullRequestAutoMerge is unsupported/);
     assert.deepEqual(direct.calls, []);
     refused(run(bash(`bash -c "gh api graphql -f query='${mutation}'"`), QUEUE), /cannot be checked/);
   }
   // A read-only query or a grep that only mentions the field is not a merge.
   allowed(run(bash("grep -rn enqueuePullRequest docs"), QUEUE), []);
+  allowed(run(bash("git commit -m 'refuse raw enablePullRequestAutoMerge'"), QUEUE), []);
   allowed(run(bash(`gh api graphql -f query='query { viewer { login } }'`), QUEUE), []);
 });

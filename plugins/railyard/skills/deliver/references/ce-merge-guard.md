@@ -70,10 +70,9 @@ enqueue's expected head:
 gh pr merge 123 --repo OWNER/REPO --squash --match-head-commit FULL_HEAD_SHA
 ```
 
-On a queue base it refuses whatever skips the queue's checks: `--admin`, a
-REST merge, an unpinned enqueue, and raw GraphQL `enqueuePullRequest` or
-`enablePullRequestAutoMerge`. `--auto` refuses on every base. The snapshot
-path applies the same queue rule.
+On a queue base `--admin` (it skips the queue's checks), a REST merge and an
+unpinned enqueue refuse. On every base `--auto` and raw GraphQL merge, enqueue
+or auto-merge mutations refuse. The snapshot path applies the same queue rule.
 
 Pin the reviewed head, which GitHub enforces. Without a pin, a head pushed
 after the check merges if the repository's branch protection allows it, for

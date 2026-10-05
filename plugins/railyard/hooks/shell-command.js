@@ -84,12 +84,16 @@ function normalizeForPhrases(text) {
   return String(text).replace(/\\\r?\n/g, "").replace(/['"\\]/g, "").replace(/\$\{?IFS\}?/g, " ")
     .replace(REDIRECTION, "$1 ");
 }
+// GraphQL mutations that merge a PR now or later (enqueue, auto-merge). The
+// gate refuses all of them raw; one list keeps its detector and this count agreeing.
+const MERGE_MUTATIONS = ["mergePullRequest", "enqueuePullRequest", "enablePullRequestAutoMerge"];
+
 function mergePhraseCount(text, aliasNames = []) {
   const source = normalizeForPhrases(text);
   const patterns = [
     /\bpr\b(?:\s+-\S+(?:\s+[^\s-]\S*)?)*\s+merge\b/g,
     /pulls\/[^\s/]*\/merge\b/g,
-    /mergePullRequest|enqueuePullRequest|enablePullRequestAutoMerge/g,
+    new RegExp(MERGE_MUTATIONS.join("|"), "g"),
   ];
   if (aliasNames.length) {
     const names = aliasNames.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
@@ -593,6 +597,7 @@ function commandScript(args) {
 }
 
 module.exports = {
+  MERGE_MUTATIONS,
   CONTROL_WORDS, SAFE_FILTERS, SHELLS, basename, commandPrefix, commandScript, mergePhraseCount,
   parseArgs, pushPhraseCount, runsScript, stripHeredocs, tokenizeSegments,
 };

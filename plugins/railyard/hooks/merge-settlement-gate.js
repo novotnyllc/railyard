@@ -4,7 +4,8 @@
 // live read must find its PR open, not a draft, mergeStateStatus CLEAN, with
 // no unresolved review threads. With it, consume CE's final pr-snapshot
 // stdout, selected by the CE owner after its readiness judgment, and check it
-// against the current PR identity. CE owns review settlement and CI policy;
+// against the current PR identity. On a merge-queue base either path allows
+// only a pinned enqueue (no --admin, no REST). CE owns review settlement and CI policy;
 // this hook does not watch reviewers, infer settlement from elapsed time, or
 // authorize merges. Anything it cannot read or verify refuses actionably.
 const { execFileSync } = require("child_process");
@@ -12,7 +13,7 @@ const { readFileSync, statSync } = require("fs");
 const path = require("path");
 const { evaluateOverride, plainMergeShape, sameMerge } = require("./merge-override");
 const {
-  CONTROL_WORDS, SAFE_FILTERS, basename, commandPrefix, commandScript, mergePhraseCount, parseArgs,
+  CONTROL_WORDS, MERGE_MUTATIONS, SAFE_FILTERS, basename, commandPrefix, commandScript, mergePhraseCount, parseArgs,
   pushPhraseCount, runsScript, stripHeredocs, tokenizeSegments,
 } = require("./shell-command");
 
@@ -868,7 +869,8 @@ function requestFile(value, cwd) {
   return path.resolve(cwd || process.cwd(), value);
 }
 
-const GRAPHQL_MERGE_FIELD = /\b(?:mergePullRequest|enqueuePullRequest|enablePullRequestAutoMerge)\s*\(/;
+// Any merge mutation used as a field: `mergePullRequest(`, `a: enqueuePullRequest(`.
+const GRAPHQL_MERGE_FIELD = new RegExp(`\\b(?:${MERGE_MUTATIONS.join("|")})\\s*\\(`);
 function graphqlMerges(command) {
   if (command.cwdUnknown) throw new Error("the GraphQL request's working directory is unresolved; use an explicit workdir and literal query or input file");
   const queries = requestFieldEntries(command.tokens, "query");
@@ -955,7 +957,7 @@ function requireQueueSafe(pr, command) {
   if (pr.isMergeQueueEnabled !== true) throw new Error("merge queue status unknown");
   if (command.kind !== "pr") throw refusal("the base branch uses a merge queue, which a REST merge bypasses", QUEUE_RECOVERY);
   if (flagEnabled(command.flags.get("--admin"))) {
-    throw refusal("the base branch uses a merge queue, which --admin bypasses with its checks", QUEUE_RECOVERY);
+    throw refusal("the base branch uses a merge queue, which --admin bypasses along with the queue's checks", QUEUE_RECOVERY);
   }
   if (typeof command.flags.get("--match-head-commit") !== "string") {
     throw refusal("the base branch uses a merge queue, and an enqueue must pin the head this check reads", QUEUE_RECOVERY);
@@ -964,7 +966,7 @@ function requireQueueSafe(pr, command) {
 
 // GitHub's own view decides when no CE snapshot is supplied: open, not a
 // draft, mergeStateStatus CLEAN (required checks green, nothing blocking), no
-// unresolved review threads; on a merge-queue base, a pinned enqueue only.
+// unresolved review threads. On a merge-queue base only a pinned enqueue passes.
 // Thread pages continue only while nothing has refused yet, and each page's
 // PR state, head and queue setting must still pass; the gh() deadline bounds
 // them, and anything unreadable refuses. Returns the head the check read.
@@ -1027,6 +1029,8 @@ function verifyLiveMerge(command, script) {
   // supplied pin must match it, which also catches a merge gh would route
   // to another PR than the one checked.
   const pin = command.kind === "api" ? restSha(command) : command.flags.get("--match-head-commit");
+  // On a merge-queue base an enqueue must pin too; requireQueueSafe enforces
+  // that once the read says whether the base has a queue.
   if (!pin && (command.kind === "api" || flagEnabled(command.flags.get("--admin")))) {
     throw refusal(`without a CE snapshot ${command.kind === "api" ? "a REST merge" : "--admin"} must pin the head this check reads`, PIN_RECOVERY);
   }
@@ -1063,7 +1067,7 @@ function verifyMerge(command, script) {
     throw new Error("GH_REPO, GH_HOST or GH_CONFIG_DIR is computed or conditionally set, so the merge's repository is unknown; set it literally on the merge");
   }
   if (command.kind === "graphql") {
-    throw new Error("raw GraphQL enqueuePullRequest, enablePullRequestAutoMerge or mergePullRequest is unsupported; use gh pr merge");
+    throw new Error(`raw GraphQL ${MERGE_MUTATIONS.join(" / ")} is unsupported; use gh pr merge`);
   }
   if (flagEnabled(command.flags.get("--auto"))) {
     throw new Error("--auto can queue a future merge beyond this check; merge immediately once the PR is ready");
@@ -1272,7 +1276,7 @@ function handlePayload(input) {
     verifyMerge(commands[0], script);
   } catch (error) {
     // A parser failure on text that never mentions a merge is not a merge.
-    if (!found && !/merge|push/i.test(script)) return;
+    if (!found && !/merge|push|enqueue/i.test(script)) return;
     const why = String(error?.message || error).split("\n")[0];
     // A live refusal says what to fix; every other refusal keeps the CE
     // recovery, so a refused snapshot is never answered by dropping it.
