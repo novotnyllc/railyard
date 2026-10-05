@@ -21,7 +21,8 @@ wrapper, a script file the command runs, or text the guard cannot delimit —
 the merge is refused. Only data that is plainly not executed passes: the
 arguments of commands like `grep`, `echo` or `git commit -m`, and heredocs
 written by `cat`, `tee`, `git commit -F -` or `gh … --body-file -`. Raw
-GraphQL `mergePullRequest` always refuses. Run a merge as its own command.
+GraphQL `mergePullRequest`, `enqueuePullRequest` and
+`enablePullRequestAutoMerge` always refuse. Run a merge as its own command.
 Codex's own outer `bash -lc` (or `-c`, `-euc`, `-eu -o pipefail -c`) argv is
 the command text.
 
@@ -54,11 +55,24 @@ unless `RAILYARD_GUARD_DEFAULT_BRANCH_PUSH=1` is set.
 A merge without `RAILYARD_CE_SNAPSHOT` needs no CE run. The guard reads the PR
 once and allows the merge when it is open, not a draft, has
 `mergeStateStatus` `CLEAN` (required checks green, nothing blocking), and has
-no unresolved review threads, on a base branch without a merge queue. On a
-queue base `gh pr merge` only enqueues and the queue merges after this check,
-so a merge there refuses and the user merges through the queue. The exception
-is a pinned `--admin`, which bypasses the queue and merges directly. The
-snapshot path does not check for a queue.
+no unresolved review threads.
+
+### Merge-queue base: enqueue
+
+On a merge-queue base, `gh pr merge` without `--admin` enqueues the PR. GitHub
+re-runs the required checks on the PR combined with the latest base and merges
+only if they pass, so agents may enqueue a ready PR themselves. The guard
+allows it under the plain-merge conditions (a queue-ready PR reports `CLEAN`)
+plus a required head pin equal to the head it just read, which gh sends as the
+enqueue's expected head:
+
+```sh
+gh pr merge 123 --repo OWNER/REPO --squash --match-head-commit FULL_HEAD_SHA
+```
+
+On a queue base `--admin` (it skips the queue's checks), a REST merge and an
+unpinned enqueue refuse. On every base `--auto` and raw GraphQL merge, enqueue
+or auto-merge mutations refuse. The snapshot path applies the same queue rule.
 
 Pin the reviewed head, which GitHub enforces. Without a pin, a head pushed
 after the check merges if the repository's branch protection allows it, for
