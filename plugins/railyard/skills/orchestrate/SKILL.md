@@ -110,7 +110,8 @@ checks the cumulative candidate receipt and maintains the delivery ledger;
 a child's bounded review does not establish integration coverage.
 
 CE alone owns review settlement and CI/PR monitoring. Reuse the lane's CE
-watcher, including LFG's, and route reviewer findings to it; the orchestrator
+watcher, including LFG's, and route reviewer findings to it with the
+[review feedback settlement policy](../../references/review-feedback-settlement.md); the orchestrator
 monitors children and dependencies only.
 
 Verify the changed behavior plus the repository's required gates, and inspect

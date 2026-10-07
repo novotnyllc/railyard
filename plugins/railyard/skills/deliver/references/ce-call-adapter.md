@@ -15,6 +15,11 @@ a stage's completed result cannot retroactively satisfy the gate. If a selected
 workflow cannot honor this requirement, stop before its external write and
 report the integration limitation.
 
+Before calling a stage that settles review feedback, including LFG and
+`ce-babysit-pr`, supply the
+[review feedback settlement policy](../../../references/review-feedback-settlement.md)
+as a project settlement requirement; CE still owns the settlement loop.
+
 LFG owns its internal stages, including its CE review and babysitting loop;
 do not duplicate them around it. Deliver consumes its result and continues the
 authorized merge, release/deployment, and consumer-verification tail. For an

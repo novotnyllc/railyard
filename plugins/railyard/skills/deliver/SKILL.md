@@ -76,9 +76,10 @@ changed lines. Keep the gate's delivery ledger through settlement.
 
 CE alone owns review settlement and CI/PR monitoring. When LFG already runs
 `ce-babysit-pr`, consume its result and continuations; for an existing PR
-outside LFG, `ce-babysit-pr` owns that loop. Railyard adds no watcher or
-settlement checklist. Feed the end-of-PR review's findings, and any extra
-reviewer's, to the same CE owner.
+outside LFG, `ce-babysit-pr` owns that loop; Railyard adds no watcher. Feed
+every reviewer's findings to that owner with the
+[review feedback settlement policy](../../references/review-feedback-settlement.md)
+as a project settlement requirement.
 
 A CE checkpoint that still needs a watch continuation is not completion.
 Continue that owner until review and CI settle or a concrete blocker requires
