@@ -17,7 +17,7 @@ Unresolved feedback and stale checks must be handled before an authorized merge.
 
 ### Settling review feedback
 
-Deliver passes CE the [review feedback settlement policy](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/references/review-feedback-settlement.md) as a project settlement requirement. Every review thread is still resolved, but resolved means dispositioned: each gets one recorded fix, decline or follow-up issue, with severity defaults and a cap on automated review rounds so fix pushes don't cycle indefinitely.
+Deliver passes CE the [review feedback settlement policy](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/references/review-feedback-settlement.md) as a project settlement requirement. Each review thread gets one recorded fix, decline or follow-up issue and is then resolved; resolved means dispositioned, not necessarily fixed. Severity defaults and a cap on automated review rounds keep fix pushes from cycling indefinitely. A finding that needs a decision beyond the agent's authority stays open until the user answers.
 
 ## Specialist review
 
