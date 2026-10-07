@@ -17,7 +17,7 @@ Unresolved feedback and stale checks must be handled before an authorized merge.
 
 ### Settling review feedback
 
-Deliver passes CE the [review feedback settlement policy](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/references/review-feedback-settlement.md) as a project settlement requirement. Every review thread still gets resolved, but resolved means dispositioned, not necessarily fixed. Each thread gets one reply that records a fix (naming the commit), a decline with a one-line reason, or a follow-up issue, and then the thread is resolved. P1 findings get fixed unless they are demonstrably wrong or contradict an owner decision. P2s get fixed when small and in scope, otherwise they become follow-ups. Nits get fixed when trivial and otherwise declined. After the second automated review round on a PR, new P2s and nits default to follow-ups and only a new P1 blocks, so each fix push doesn't start another cycle of review.
+Deliver passes CE the [review feedback settlement policy](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/references/review-feedback-settlement.md) as a project settlement requirement. Every review thread is still resolved, but resolved means dispositioned: each gets one recorded fix, decline or follow-up issue, with severity defaults and a cap on automated review rounds so fix pushes don't cycle indefinitely.
 
 ## Specialist review
 

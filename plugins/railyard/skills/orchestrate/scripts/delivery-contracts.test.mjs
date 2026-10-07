@@ -202,22 +202,28 @@ test("review feedback settles by one disposition per thread with a round cap", (
     assert.match(read(`skills/${name}/SKILL.md`), /review-feedback-settlement\.md/, `${name} forwards the settlement policy`);
   }
   assert.match(flat(read("skills/deliver/references/ce-call-adapter.md")), /review-feedback-settlement\.md/);
-  assert.match(deliver, /as a project settlement requirement/);
-  assert.match(policy, /resolved means dispositioned, not necessarily fixed/);
-  assert.match(policy, /exactly one disposition, record it in a reply, then resolve the thread/);
+  assert.match(deliver, /project settlement requirement/);
+  assert.match(policy, /dispositioned, not necessarily fixed/);
+  assert.match(policy, /exactly one disposition, record it in a reply, then resolve/);
   for (const disposition of ["**Fix**", "**Decline**", "**Follow-up**"]) {
     assert.ok(policy.includes(disposition), `policy defines ${disposition}`);
   }
-  assert.match(policy, /The reply names the commit/);
-  assert.match(policy, /never resolve a thread without a reply/);
-  assert.match(policy, /\| P1 \|[^|]*\| Fix\. Decline only when it is demonstrably wrong or contradicts an explicit owner decision/);
-  assert.match(policy, /\| P2 \|[^|]*\| Fix when small and within the PR's scope; otherwise follow-up/);
-  assert.match(policy, /\| P3 or nit \|[^|]*\| Fix if trivial; otherwise decline/);
-  assert.match(policy, /A round is an automated review of a new head/);
-  assert.match(policy, /After the second automated round on the same PR, newly raised P2s and nits default to follow-ups; only a new P1 still blocks/);
+  assert.match(policy, /names the commit/);
+  assert.match(policy, /owner decisions outrank reviewer suggestions/i);
+  assert.match(policy, /only then/);
+  assert.match(policy, /`needs-human`[^.]*stays open and goes to the user/);
+  // Severity rows: P1 fixes, P2 falls back to follow-up, nits to decline.
+  const row = (label) => policy.match(new RegExp(`\\| ${label} \\|[^|]*\\|([^|]*)\\|`))?.[1] ?? "";
+  assert.match(row("P1"), /^ Fix\..*demonstrably wrong.*owner decision/);
+  assert.match(row("P2"), /small.*scope.*follow-up/);
+  assert.match(row("P3 or nit"), /trivial.*decline/);
+  assert.match(policy, /Treat P0 as P1/);
+  assert.match(policy, /Downgrading a reviewer's P0 or P1 is a P1 decline/);
+  assert.match(policy, /however many automated reviewers/);
+  assert.match(policy, /second round[^.]*P2s and nits default to follow-ups; only a new P1 still blocks/);
   assert.match(policy, /Cluster repeats of the same root concern/);
-  assert.match(policy, /Explicit owner decisions outrank reviewer suggestions/);
-  assert.match(policy, /CE still owns settlement/);
+  const gate = flat(read("references/whole-candidate-review.md"));
+  assert.match(gate, /P2-or-lower follow-up under the \[review feedback settlement policy\]\(review-feedback-settlement\.md\) is accepted/);
 });
 
 test("merge goes through the merge guard: a live check or the CE snapshot handoff", () => {

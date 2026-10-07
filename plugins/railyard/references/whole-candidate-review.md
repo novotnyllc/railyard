@@ -68,7 +68,9 @@ do not duplicate them or rerun passed tests without invalidated proof. Record:
   not force premature deployment to satisfy this gate. Use disposable fixtures
   for relevant failure cases; do not perform unauthorized live mutations.
 - Deduplicated findings, severity, evidence, and disposition: fixed with proof,
-  rejected with rationale, or explicitly accepted by the authorized owner.
+  rejected with rationale, or explicitly accepted by the authorized owner. A
+  P2-or-lower follow-up under the [review feedback settlement policy](review-feedback-settlement.md)
+  is accepted by that owner-set policy.
   Unresolved actionable findings and missing required pre-push behavior evidence
   block publication unless the user explicitly accepts the stated risk. Stale
   candidate identity and incomplete required broad reviews also block publication.

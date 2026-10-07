@@ -40,8 +40,9 @@ ship.
 - Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or
   pushing user-requested commits to an existing PR, and `gh-stack` for related
   dependent PRs.
-- CE alone owns review settlement and CI/PR monitoring. Reuse the active CE
-  watcher; Deliver completes an authorized merge and post-merge proof through
+- CE alone owns review settlement and CI/PR monitoring, settling each thread
+  by the [review feedback settlement policy](../../plugins/railyard/references/review-feedback-settlement.md).
+  Reuse the active CE watcher; Deliver completes an authorized merge and post-merge proof through
   the merge guard (a live `CLEAN` check with no unresolved review threads, or
   the CE snapshot handoff) without another settlement gate.
 - An explicit Deliver request authorizes the full lifecycle by default:

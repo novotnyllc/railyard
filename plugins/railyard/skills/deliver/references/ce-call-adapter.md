@@ -18,9 +18,7 @@ report the integration limitation.
 Before calling a stage that settles review feedback, including LFG and
 `ce-babysit-pr`, supply the
 [review feedback settlement policy](../../../references/review-feedback-settlement.md)
-as a project settlement requirement. It decides how each thread is
-dispositioned and when new P2s and nits become follow-ups; CE still owns the
-settlement loop.
+as a project settlement requirement; CE still owns the settlement loop.
 
 LFG owns its internal stages, including its CE review and babysitting loop;
 do not duplicate them around it. Deliver consumes its result and continues the
