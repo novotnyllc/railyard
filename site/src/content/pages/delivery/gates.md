@@ -15,6 +15,10 @@ When a CE workflow is selected, it owns review settlement, feedback resolution, 
 
 Unresolved feedback and stale checks must be handled before an authorized merge. A local check passing does not settle a PR, and a green PR does not establish post-merge or deployment success.
 
+### Settling review feedback
+
+Deliver passes CE the [review feedback settlement policy](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/references/review-feedback-settlement.md) as a project settlement requirement. Every review thread still gets resolved, but resolved means dispositioned, not necessarily fixed. Each thread gets one reply that records a fix (naming the commit), a decline with a one-line reason, or a follow-up issue, and then the thread is resolved. P1 findings get fixed unless they are demonstrably wrong or contradict an owner decision. P2s get fixed when small and in scope, otherwise they become follow-ups. Nits get fixed when trivial and otherwise declined. After the second automated review round on a PR, new P2s and nits default to follow-ups and only a new P1 blocks, so each fix push doesn't start another cycle of review.
+
 ## Specialist review
 
 Before every push, satisfy the [whole-candidate review gate](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/references/whole-candidate-review.md). Cover the exact candidate's complete cumulative change and affected lifecycle, including repair and release pushes. Collect completed reports, resolve actionable findings, and bind the reviews, checks, coverage and dispositions in a compact receipt before CE publishes.

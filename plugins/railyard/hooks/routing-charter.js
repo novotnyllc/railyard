@@ -5,10 +5,11 @@ const { readHookInput } = require("./hook-input.js");
 
 const lines = [
   "Railyard routing:",
-  "- Ordinary work uses native tools and subagents. Pick Compound Engineering stages when they help:",
+  "- Ordinary work uses native tools and subagents. Pick Compound Engineering stages that help:",
   "  ce-debug, ce-plan, ce-code-review, or lfg. Open PRs with compound-engineering:ce-commit-push-pr.",
   "- Before every push, load Railyard's references/whole-candidate-review.md gate, including direct CE/LFG publishing calls.",
-  "- CE owns review settlement and CI watching. An explicit Deliver request (railyard:deliver) runs",
+  "- CE owns review settlement and CI watching (threads: references/review-feedback-settlement.md).",
+  "  An explicit railyard:deliver request runs",
   "  through merge, required release or deployment, and consumer verification unless narrowed; honor",
   "  plan-only, local-only, and PR-only stops. Clean, thread-free PRs merge plainly; else CE snapshot handoff.",
   "- Choose model and effort per subagent. Claude Code: Opus 5.5 (`opus`, 2.1.280+) by default, Fable 5.1 for",

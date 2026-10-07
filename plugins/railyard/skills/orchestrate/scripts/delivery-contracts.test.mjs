@@ -196,6 +196,30 @@ test("delivery ledger separates unique defects, publication, and external revisi
   assert.equal([...baseline.matchAll(/#discussion_r\d+/g)].length, 6);
 });
 
+test("review feedback settles by one disposition per thread with a round cap", () => {
+  const policy = flat(read("references/review-feedback-settlement.md"));
+  for (const name of ["deliver", "thermos", "orchestrate"]) {
+    assert.match(read(`skills/${name}/SKILL.md`), /review-feedback-settlement\.md/, `${name} forwards the settlement policy`);
+  }
+  assert.match(flat(read("skills/deliver/references/ce-call-adapter.md")), /review-feedback-settlement\.md/);
+  assert.match(deliver, /as a project settlement requirement/);
+  assert.match(policy, /resolved means dispositioned, not necessarily fixed/);
+  assert.match(policy, /exactly one disposition, record it in a reply, then resolve the thread/);
+  for (const disposition of ["**Fix**", "**Decline**", "**Follow-up**"]) {
+    assert.ok(policy.includes(disposition), `policy defines ${disposition}`);
+  }
+  assert.match(policy, /The reply names the commit/);
+  assert.match(policy, /never resolve a thread without a reply/);
+  assert.match(policy, /\| P1 \|[^|]*\| Fix\. Decline only when it is demonstrably wrong or contradicts an explicit owner decision/);
+  assert.match(policy, /\| P2 \|[^|]*\| Fix when small and within the PR's scope; otherwise follow-up/);
+  assert.match(policy, /\| P3 or nit \|[^|]*\| Fix if trivial; otherwise decline/);
+  assert.match(policy, /A round is an automated review of a new head/);
+  assert.match(policy, /After the second automated round on the same PR, newly raised P2s and nits default to follow-ups; only a new P1 still blocks/);
+  assert.match(policy, /Cluster repeats of the same root concern/);
+  assert.match(policy, /Explicit owner decisions outrank reviewer suggestions/);
+  assert.match(policy, /CE still owns settlement/);
+});
+
 test("merge goes through the merge guard: a live check or the CE snapshot handoff", () => {
   assert.match(deliver, /\[merge guard\]\(references\/ce-merge-guard\.md\)/);
   assert.match(deliver, /plain\s+`gh pr merge` passes when the PR is open, not a draft, `CLEAN`/);

@@ -98,6 +98,7 @@ test("startup keeps CE ownership, the deliver endpoint, and explicit-only orches
   const out = flat(run(fixture(t)).out);
   assert.match(out, /native tools and subagents/);
   assert.match(out, /CE owns review settlement and CI watching/);
+  assert.match(out, /CI watching \(threads: references\/review-feedback-settlement\.md\)/);
   assert.match(out, /compound-engineering:ce-commit-push-pr/);
   assert.match(out, /through merge, required release or deployment, and consumer verification unless narrowed/);
   assert.match(out, /plan-only, local-only, and PR-only stops/);
