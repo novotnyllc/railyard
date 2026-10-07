@@ -26,9 +26,9 @@ Resolve a declined or followed-up thread once its reply is posted, and only
 then. Answer an actionable finding in a review summary or top-level comment
 the same way.
 
-A finding that CE marks `needs-human`, because it needs a decision beyond the
-inherited authority (security posture, auth, billing, data retention,
-migrations, or a product call), stays open and goes to the user; it becomes a
+A finding that needs a decision beyond the inherited authority (security
+posture, auth, billing, data retention, migrations, or a product call; CE's
+`needs-human`) stays open and goes to the user; it becomes a
 decline or follow-up only after the user's answer.
 
 ## Severity defaults
