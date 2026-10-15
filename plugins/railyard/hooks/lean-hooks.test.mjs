@@ -247,3 +247,17 @@ test("personal global defaults apply outside a repository", (t) => {
   t.after(() => rmSync(outside, { recursive: true, force: true }));
   assert.match(charter(outside, home), /Don't pick Compound Engineering stages/);
 });
+
+test("merge settings follow the repository a merge runs in", (t) => {
+  const { root, main, home } = realRepo(t);
+  git(root, "init", "-q", "other");
+  const run = (cwd, command) => runHook("merge-settlement-gate.js", cwd, home, {
+    hook_event_name: "PreToolUse", cwd, tool_name: "Bash", tool_input: { command },
+  });
+  configure(main, home, "merge-gate", "off");
+  assert.equal(run(main, `${mergeCommand} --admin`).status, 0);
+  assert.equal(run(main, `cd ${path.join(root, "other")} && ${mergeCommand} --admin`).status, 2);
+  configure(main, home, "merge-gate", "on");
+  configure(path.join(root, "other"), home, "merge-gate", "off");
+  assert.equal(run(main, `cd ${path.join(root, "other")} && ${mergeCommand} --admin`).status, 0);
+});

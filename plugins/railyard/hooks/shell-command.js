@@ -124,6 +124,12 @@ const SAFE_FILTERS = new Set(["cat", "tee", "grep", "egrep", "fgrep", "rg", "hea
 // program handles (usually writing a file or printing), not a shell command,
 // so it counts as data unless the output is piped into something that runs it.
 const INTERPRETERS = new Set(["python", "python3", "node", "ruby", "perl", "bun", "deno"]);
+// A program that can start a process is not data, whatever else it does.
+const SPAWNS = /child_process|\bexec(?:Sync|File|FileSync)?\s*\(|\bspawn(?:Sync)?\s*\(|subprocess|\bos\.(?:system|popen|exec|spawn)|\bsystem\s*\(|\bPopen\b|\bDeno\.(?:run|Command)|\bBun\.(?:spawn|\$)|\bIO\.popen|\bOpen3\b|%x[({[]|\bqx\s*[({[\/]/;
+function spawnsProcesses(text, interpreter) {
+  // Ruby and Perl run backticks as shell commands; JavaScript and Python do not.
+  return SPAWNS.test(text) || ((interpreter === "ruby" || interpreter === "perl") && text.includes("`"));
+}
 
 function dataSinkCommand(words) {
   const [head, ...rest] = words;
@@ -173,12 +179,26 @@ function skipArithmetic(line, index) {
 // Closed ones earlier on the line (`B=$(mktemp) && cat > "$B" <<EOF`) don't
 // put a later heredoc inside a substitution. Nested parentheses stay open.
 function openSubstitution(text) {
-  let rest = text;
-  for (let previous; previous !== rest;) {
-    previous = rest;
-    rest = rest.replace(/[$<>]\([^()]*\)/g, "");
+  const stack = []; // "sub", "paren", "`", "'", '"'
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const top = stack[stack.length - 1];
+    if (top === "'") { if (char === "'") stack.pop(); continue; }
+    if (char === "\\") { index += 1; continue; }
+    const opens = (char === "$" || char === "<" || char === ">") && text[index + 1] === "(";
+    if (top === '"') {
+      if (char === '"') stack.pop();
+      else if (char === "`") stack.push("`");
+      else if (char === "$" && text[index + 1] === "(") { stack.push("sub"); index += 1; }
+      continue;
+    }
+    if (top === "`") { if (char === "`") stack.pop(); continue; }
+    if (char === "'" || char === '"' || char === "`") stack.push(char);
+    else if (opens) { stack.push("sub"); index += 1; }
+    else if (char === "(") stack.push("paren");
+    else if (char === ")" && (top === "sub" || top === "paren")) stack.pop();
   }
-  return /\$\(|<\(|>\(|`/.test(rest.replace(/`[^`]*`/g, ""));
+  return stack.includes("sub") || stack.includes("`");
 }
 
 // Scan one line: { opener, unsure }. `opener` is { delimiter, inert }.
@@ -205,9 +225,11 @@ function heredocOpener(line, lexical) {
     const after = line.slice(index + word.length);
     const substituted = openSubstitution(before);
     const pipes = [...after.matchAll(/(?<!\|)\|(?!\|)\s*([^\s|;&)]+)/g)].map((match) => basename(match[1]));
-    const inert = !substituted && dataSinkCommand(heredocCommandWords(before, after)) &&
+    const words = heredocCommandWords(before, after);
+    const inert = !substituted && dataSinkCommand(words) &&
       pipes.every((consumer) => SAFE_FILTERS.has(consumer));
-    opener = { delimiter: word.delimiter, inert };
+    const interpreter = INTERPRETERS.has(basename(words[0] || "")) ? basename(words[0]) : null;
+    opener = { delimiter: word.delimiter, inert, interpreter };
     index += word.length - 1;
   }
   return { opener, unsure: false };
@@ -225,7 +247,8 @@ function stripHeredocs(text) {
     const line = lines[index];
     if (open) {
       if (line.trim() === open.delimiter) {
-        bodies.push({ text: body.join("\n"), inert: open.inert });
+        const text = body.join("\n");
+        bodies.push({ text, inert: open.inert && !(open.interpreter && spawnsProcesses(text, open.interpreter)) });
         open = null;
         body = [];
       } else body.push(line);
@@ -614,6 +637,6 @@ function commandScript(args) {
 
 module.exports = {
   MERGE_MUTATIONS,
-  CONTROL_WORDS, INTERPRETERS, SAFE_FILTERS, SHELLS, basename, commandPrefix, commandScript, mergePhraseCount,
+  CONTROL_WORDS, INTERPRETERS, SAFE_FILTERS, SHELLS, spawnsProcesses, basename, commandPrefix, commandScript, mergePhraseCount,
   parseArgs, pushPhraseCount, runsScript, stripHeredocs, tokenizeSegments,
 };
