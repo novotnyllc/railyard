@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -110,4 +110,111 @@ test("local and CI required suites agree and cover hook retirement", () => {
     return paths.sort();
   });
   assert.deepEqual(suites[0], suites[1]);
+});
+
+// A `railyard-off` file in the shared git directory, naming that directory,
+// stands every hook down in the repository and all of its worktrees.
+function offRepo(t, { worktree = false } = {}) {
+  const root = mkdtempSync(path.join(tmpdir(), "railyard-off-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const main = path.join(root, "main");
+  const common = path.join(main, ".git");
+  mkdirSync(common, { recursive: true });
+  writeFileSync(path.join(common, "railyard-off"), common + "\n");
+  let repo = main;
+  if (worktree) {
+    repo = path.join(root, "feature");
+    const gitDir = path.join(common, "worktrees", "feature");
+    mkdirSync(gitDir, { recursive: true });
+    writeFileSync(path.join(gitDir, "commondir"), "../..\n");
+    mkdirSync(repo);
+    writeFileSync(path.join(repo, ".git"), `gitdir: ${gitDir}\n`);
+  }
+  const nested = path.join(repo, "src");
+  mkdirSync(nested);
+  return { repo, common, nested, home: root };
+}
+
+function runHook(name, cwd, home, input) {
+  return spawnSync(process.execPath, [path.join(hookDirectory, name)], {
+    cwd,
+    encoding: "utf8",
+    timeout: 5000,
+    input: input === undefined ? "" : JSON.stringify(input),
+    env: { ...process.env, HOME: home, RAILYARD_RUN_LOG_DIR: path.join(home, "run-log"), TYPESAFE_API_KEY: "" },
+  });
+}
+
+for (const worktree of [false, true]) {
+  test(`railyard-off stands every hook down${worktree ? " in a worktree" : ""}`, (t) => {
+    const { nested, home } = offRepo(t, { worktree });
+
+    const charter = runHook("routing-charter.js", nested, home);
+    assert.equal(charter.status, 0, charter.stderr);
+    assert.match(charter.stdout, /^Railyard is off in this repository/);
+    assert.doesNotMatch(charter.stdout, /Railyard routing:/);
+
+    const fork = runHook("dispatch-gate.js", nested, home, {
+      hook_event_name: "PreToolUse", cwd: nested, tool_name: "spawn_agent",
+      tool_input: { task_name: "x", fork_turns: "all", model: "m" },
+    });
+    assert.equal(fork.status, 0, fork.stderr);
+    assert.equal(fork.stderr, "");
+
+    const merge = runHook("merge-settlement-gate.js", nested, home, {
+      hook_event_name: "PreToolUse", cwd: nested, tool_name: "Bash",
+      tool_input: { command: "gh pr merge 1 --squash" },
+    });
+    assert.equal(merge.status, 0, merge.stderr);
+    assert.equal(merge.stderr, "");
+  });
+}
+
+test("hooks stay on without the marker", (t) => {
+  const { common, nested, home } = offRepo(t);
+  rmSync(path.join(common, "railyard-off"));
+  const charter = runHook("routing-charter.js", nested, home);
+  assert.match(charter.stdout, /^Railyard routing:/);
+  const fork = runHook("dispatch-gate.js", nested, home, {
+    hook_event_name: "PreToolUse", cwd: nested, tool_name: "spawn_agent",
+    tool_input: { task_name: "x", fork_turns: "all", model: "m" },
+  });
+  assert.equal(fork.status, 2);
+});
+
+test("a copied repository comes back on", (t) => {
+  const { repo, home } = offRepo(t);
+  const copy = path.join(path.dirname(repo), "copy");
+  cpSync(repo, copy, { recursive: true });
+  const charter = runHook("routing-charter.js", copy, home);
+  assert.match(charter.stdout, /^Railyard routing:/);
+  assert.match(runHook("routing-charter.js", repo, home).stdout, /^Railyard is off/);
+});
+
+test("tool hooks follow the session folder in the payload, not the process folder", (t) => {
+  const { nested, home } = offRepo(t);
+  const elsewhere = mkdtempSync(path.join(tmpdir(), "railyard-elsewhere-"));
+  t.after(() => rmSync(elsewhere, { recursive: true, force: true }));
+  const fork = runHook("dispatch-gate.js", elsewhere, home, {
+    hook_event_name: "PreToolUse", cwd: nested, tool_name: "spawn_agent",
+    tool_input: { task_name: "x", fork_turns: "all", model: "m" },
+  });
+  assert.equal(fork.status, 0, fork.stderr);
+});
+
+test("the README command switches off a real repository and its worktrees", (t) => {
+  const root = mkdtempSync(path.join(tmpdir(), "railyard-real-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const main = path.join(root, "main");
+  const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8" });
+  git(root, "init", "-q", "main");
+  git(main, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init");
+  const common = git(main, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.trim();
+  writeFileSync(path.join(common, "railyard-off"), common + "\n");
+  git(main, "worktree", "add", "-q", path.join(root, "feature"), "-b", "feature");
+  git(root, "clone", "-q", "main", "cloned");
+  const on = (dir) => /^Railyard routing:/.test(runHook("routing-charter.js", dir, root).stdout);
+  assert.equal(on(main), false);
+  assert.equal(on(path.join(root, "feature")), false);
+  assert.equal(on(path.join(root, "cloned")), true);
 });

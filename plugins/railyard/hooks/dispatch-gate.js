@@ -8,6 +8,7 @@
 // reasoning_effort overrides, so the native tool would silently drop them.
 const { record, clip } = require("./run-log.js");
 const { readHookInput } = require("./hook-input.js");
+const { railyardOff } = require("./railyard-off.js");
 
 // Codex 0.154+ emits agentsspawn_agent (V2); the V1 CLI emits spawn_agent.
 // See docs/agents/native-dispatch.md in the source repository.
@@ -31,6 +32,7 @@ function codexForkRefusal(tool, args) {
 function handlePayload(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return;
   if (input.hook_event_name && input.hook_event_name !== "PreToolUse") return;
+  if (railyardOff(input.cwd)) return;
   const tool = typeof input.tool_name === "string" ? input.tool_name : "";
   const codex = CODEX_TOOLS.has(tool);
   if (!codex && !CLAUDE_TOOLS.has(tool)) return;

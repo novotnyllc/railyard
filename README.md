@@ -76,6 +76,26 @@ claude plugin marketplace add EveryInc/compound-engineering-plugin
 claude plugin install compound-engineering@compound-engineering-plugin
 ```
 
+## Turning Railyard off for a repository
+
+Some repositories should run as plain agent sessions, without Railyard's
+routing guide or gates and without nudges toward CE workflows. Switch one off
+from inside it, in a POSIX shell (Git Bash on Windows):
+
+```sh
+git rev-parse --path-format=absolute --git-common-dir > "$(git rev-parse --git-common-dir)/railyard-off"
+```
+
+The startup hook then says Railyard is off and the tool hooks stand down,
+including the opt-in default-branch push guard. The marker lives in the shared
+git directory, so it is never committed and covers every worktree of that
+repository. A clone, copy or move of the repository comes back on. Submodules
+have their own git directory; switch them off separately. Delete the file to turn Railyard back on:
+
+```sh
+rm "$(git rev-parse --git-common-dir)/railyard-off"
+```
+
 Ponytail and Superpowers are not Railyard prerequisites. Native subagents are
 the default for bounded parallel work; user-visible tasks are created only
 when the user explicitly asks for them.
