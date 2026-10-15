@@ -7,6 +7,7 @@
 //   config.mjs merge-gate on|off            check PR merges here or not
 // Run it from inside the repository, or pass --repo <dir>.
 import { execFileSync } from "node:child_process";
+import { rmSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -26,7 +27,11 @@ const fail = (message) => { console.error(message); process.exit(2); };
 try { git("rev-parse", "--git-dir"); } catch { fail(`not a git repository: ${cwd}`); }
 
 if (action === "off") git("config", "railyard.off", git("rev-parse", "--path-format=absolute", "--git-common-dir"));
-else if (action === "on") unset("railyard.off");
+else if (action === "on") {
+  unset("railyard.off");
+  // Railyard 0.13 used a marker file instead.
+  rmSync(`${git("rev-parse", "--path-format=absolute", "--git-common-dir")}/railyard-off`, { force: true });
+}
 else if (action === "review") {
   if (!REVIEW_LEVELS.includes(value)) fail(`review must be one of: ${REVIEW_LEVELS.join(", ")}`);
   git("config", "railyard.review", value);

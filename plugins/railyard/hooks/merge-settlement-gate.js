@@ -1246,11 +1246,9 @@ function handlePayload(input) {
   // Settings are read only for commands that merge or push, from the
   // directory each one runs in (a `cd` elsewhere reads that repository's).
   const settings = new Map();
-  // An entry without its own directory (a refusal the parser could not place)
-  // belongs to the session folder only when the script never changes directory.
-  const changesDirectory = /(?:^|[\s;&|(])(?:cd|pushd)\s|\s-C\s|--git-dir|--work-tree|\s(?:-R|--repo)[\s=]/.test(script);
+  // An entry the parser could not place in a directory keeps the gate.
   const settingsOf = (command) => {
-    if (command.cwdUnknown || (!command.cwd && changesDirectory)) return { off: false, mergeGate: true };
+    if (command.cwdUnknown || command.kind === "unsupported") return { off: false, mergeGate: true };
     const cwd = command.cwd || requestedCwd || "";
     if (!settings.has(cwd)) settings.set(cwd, repoConfig(cwd || undefined));
     return settings.get(cwd);
@@ -1292,7 +1290,7 @@ function handlePayload(input) {
   } catch (error) {
     // A parser failure on text that never mentions a merge is not a merge.
     if (!found && !/merge|push|enqueue/i.test(script)) return;
-    if (!found && settingsOf({}).off) return;
+    if (!found && repoConfig(requestedCwd).off) return;
     const why = String(error?.message || error).split("\n")[0];
     // A live refusal says what to fix; every other refusal keeps the CE
     // recovery, so a refused snapshot is never answered by dropping it.

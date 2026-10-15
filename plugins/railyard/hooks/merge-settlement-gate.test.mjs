@@ -1415,6 +1415,8 @@ const unattributable = {
   "perl system": "perl -e 'system(\"gh pr merge 7 --admin\")'",
   "unquoted node heredoc expands a substitution": `node <<EOF\nconsole.log('$(gh pr merge 7 --admin)')\nEOF`,
   "case pattern inside a substitution": `X=$(case x in x) cat <<'EOF'\ngh pr merge 7 --admin\nEOF\n;; esac); eval "$X"`,
+  "python heredoc writing a file": `python3 - <<'EOF'\nopen('t.mjs', 'w').write('gh pr merge 7')\nEOF`,
+  "unquoted cat heredoc runs a substitution": `B=$(mktemp) && cat > "$B" <<EOF\n$(gh pr merge 7 --admin)\nEOF`,
   "python heredoc piped into a shell": `python3 - <<'EOF' | sh\nprint('gh pr merge 7')\nEOF`,
   "long chain": Array(600).fill("true").join(" && ") + ` && ${ADMIN}`,
 };
@@ -1439,8 +1441,6 @@ gated("data that only mentions merging passes on both harnesses", () => {
     "gh pr merge 7 --disable-auto",
     "cat > notes.md <<'EOF'\nrun gh pr merge 7 --admin later\nEOF",
     "B=$(mktemp) && cat >> \"$B\" <<'EOF'\ngh pr merge 7\nEOF\ngh pr create --title t --body-file \"$B\"",
-    "python3 - <<'EOF'\nopen('t.mjs', 'w').write('gh pr merge 7')\nEOF",
-    "node - <<'EOF'\nconst body = `run ${'gh pr merge 7'}`;\nrequire('fs').writeFileSync('t.txt', body)\nEOF",
     "B=\"$(mktemp \"${TMPDIR:-/tmp}/x.XXXX\")\" && cat > \"$B\" <<'EOF'\ngh pr merge 7\nEOF",
     "cat > notes.md <<\\EOF\ngh pr merge 7\nEOF",
     "grep -e . <<'EOF'\ngh pr merge 7\nEOF",

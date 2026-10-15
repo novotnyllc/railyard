@@ -123,19 +123,10 @@ const SAFE_FILTERS = new Set(["cat", "tee", "grep", "egrep", "fgrep", "rg", "hea
 // Non-shell interpreters. A merge phrase in a program they run is text the
 // program handles (usually writing a file or printing), not a shell command,
 // so it counts as data unless the output is piped into something that runs it.
-// Only Python and Node heredocs qualify: their programs are commonly used to
-// write files, and their process APIs are few enough to recognise.
-const INTERPRETERS = new Set(["python", "python3", "node"]);
-// A program that can start a process is not data, whatever else it does.
-const SPAWNS = /child_process|\bexec(?:Sync|File|FileSync)?\s*\(|\bspawn(?:Sync)?\s*\(|subprocess|\bos\.(?:system|popen|exec|spawn)|\bsystem\s*\(|\bPopen\b|\bDeno\.(?:run|Command)|\bBun\.(?:spawn|\$)|\bIO\.popen|\bOpen3\b|%x[({[]|\bqx\s*[({[\/]/;
-function spawnsProcesses(text) {
-  return SPAWNS.test(text);
-}
-
 function dataSinkCommand(words) {
   const [head, ...rest] = words;
   const name = basename(head || "");
-  if (DATA_SINKS.has(name) || INTERPRETERS.has(name)) return true;
+  if (DATA_SINKS.has(name)) return true;
   if (name === "git") return ["commit", "tag", "notes"].includes(rest.find((word) => !word.startsWith("-"))) && !rest.includes("-c");
   if (name === "gh") return !rest.some((word) => /merge|^api$/.test(word)) && rest.some((word) => /^(?:--body-file|-F)(?:=-)?$/.test(word));
   return false;
@@ -235,8 +226,7 @@ function heredocOpener(line, lexical) {
     const words = heredocCommandWords(before, after);
     const inert = !substituted && dataSinkCommand(words) &&
       pipes.every((consumer) => SAFE_FILTERS.has(consumer));
-    const interpreter = INTERPRETERS.has(basename(words[0] || ""));
-    opener = { delimiter: word.delimiter, inert: inert && !(interpreter && word.expands), interpreter };
+    opener = { delimiter: word.delimiter, inert, expands: word.expands };
     index += word.length - 1;
   }
   return { opener, unsure: false };
@@ -255,7 +245,7 @@ function stripHeredocs(text) {
     if (open) {
       if (line.trim() === open.delimiter) {
         const text = body.join("\n");
-        bodies.push({ text, inert: open.inert && !(open.interpreter && spawnsProcesses(text)) });
+        bodies.push({ text, inert: open.inert && !(open.expands && /\$\(|`/.test(text)) });
         open = null;
         body = [];
       } else body.push(line);
@@ -644,6 +634,6 @@ function commandScript(args) {
 
 module.exports = {
   MERGE_MUTATIONS,
-  CONTROL_WORDS, INTERPRETERS, SAFE_FILTERS, SHELLS, spawnsProcesses, basename, commandPrefix, commandScript, mergePhraseCount,
+  CONTROL_WORDS, SAFE_FILTERS, SHELLS, basename, commandPrefix, commandScript, mergePhraseCount,
   parseArgs, pushPhraseCount, runsScript, stripHeredocs, tokenizeSegments,
 };

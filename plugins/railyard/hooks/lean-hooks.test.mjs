@@ -270,7 +270,17 @@ test("a refusal in another repository survives the session repository's settings
   });
   configure(main, home, "merge-gate", "off");
   assert.equal(run(`cd ${path.join(root, "other")} && sh -c '${mergeCommand} --admin'`).status, 2);
+  assert.equal(run(`env --chdir=${path.join(root, "other")} sh -c '${mergeCommand} --admin'`).status, 2);
   configure(main, home, "merge-gate", "on");
   configure(main, home, "off");
   assert.equal(run(`cd ${path.join(root, "other")} && ${mergeCommand} --admin`).status, 2);
+});
+
+test("a repository switched off with the 0.13 marker file stays off until switched on", (t) => {
+  const { main, home } = realRepo(t);
+  const common = git(main, "rev-parse", "--path-format=absolute", "--git-common-dir");
+  writeFileSync(path.join(common, "railyard-off"), common + "\n");
+  assert.match(charter(main, home), /^Railyard is off in this repository/);
+  assert.match(configure(main, home, "on").stdout, /railyard: on/);
+  assert.match(charter(main, home), /^Railyard routing:/);
 });
