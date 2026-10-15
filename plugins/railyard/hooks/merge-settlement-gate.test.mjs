@@ -1411,6 +1411,10 @@ const unattributable = {
   "python heredoc with subprocess": `python3 - <<'EOF'\nimport subprocess\nsubprocess.run('gh pr merge 7', shell=True)\nEOF`,
   "ruby backticks": "ruby -e '`gh pr merge 7`'",
   "quoted paren inside an open substitution": `X=$(printf ')' >/dev/null; cat <<'EOF'\ngh pr merge 7 --admin\nEOF\n); eval "$X"`,
+  "ruby system": "ruby -e 'system \"gh pr merge 7 --admin\"'",
+  "perl system": "perl -e 'system(\"gh pr merge 7 --admin\")'",
+  "unquoted node heredoc expands a substitution": `node <<EOF\nconsole.log('$(gh pr merge 7 --admin)')\nEOF`,
+  "case pattern inside a substitution": `X=$(case x in x) cat <<'EOF'\ngh pr merge 7 --admin\nEOF\n;; esac); eval "$X"`,
   "python heredoc piped into a shell": `python3 - <<'EOF' | sh\nprint('gh pr merge 7')\nEOF`,
   "long chain": Array(600).fill("true").join(" && ") + ` && ${ADMIN}`,
 };
@@ -1438,7 +1442,6 @@ gated("data that only mentions merging passes on both harnesses", () => {
     "python3 - <<'EOF'\nopen('t.mjs', 'w').write('gh pr merge 7')\nEOF",
     "node - <<'EOF'\nconst body = `run ${'gh pr merge 7'}`;\nrequire('fs').writeFileSync('t.txt', body)\nEOF",
     "B=\"$(mktemp \"${TMPDIR:-/tmp}/x.XXXX\")\" && cat > \"$B\" <<'EOF'\ngh pr merge 7\nEOF",
-    "node -e \"require('fs').writeFileSync('t.txt', 'gh pr merge 7')\"",
     "cat > notes.md <<\\EOF\ngh pr merge 7\nEOF",
     "grep -e . <<'EOF'\ngh pr merge 7\nEOF",
     "git commit -F - <<'EOF'\nfix: gate gh pr merge shapes\nEOF",

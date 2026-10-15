@@ -14,7 +14,7 @@ const path = require("path");
 const { evaluateOverride, plainMergeShape, sameMerge } = require("./merge-override");
 const { repoConfig } = require("./repo-config.js");
 const {
-  CONTROL_WORDS, INTERPRETERS, MERGE_MUTATIONS, SAFE_FILTERS, spawnsProcesses, basename, commandPrefix, commandScript, mergePhraseCount, parseArgs,
+  CONTROL_WORDS, MERGE_MUTATIONS, SAFE_FILTERS, basename, commandPrefix, commandScript, mergePhraseCount, parseArgs,
   pushPhraseCount, runsScript, stripHeredocs, tokenizeSegments,
 } = require("./shell-command");
 
@@ -214,13 +214,11 @@ function mergeFromPrefix(prefix) {
   }
 }
 
-// Commands whose arguments are only ever data (`grep 'gh pr merge' docs`), and
-// non-shell interpreters, whose inline programs are text they handle.
+// Commands whose arguments are only ever data (`grep 'gh pr merge' docs`).
 const DATA_COMMANDS = new Set(["echo", "printf", "grep", "egrep", "fgrep", "rg", "ag", "cat", "head", "tail", "less", "wc", "sort", "uniq", "jq", "true", ":"]);
 function dataCommand(tokens) {
   const name = basename(tokens[0] || "");
   if (DATA_COMMANDS.has(name)) return true;
-  if (INTERPRETERS.has(name)) return !spawnsProcesses(tokens.slice(1).join(" "), name);
   if (name !== "git") return false;
   const sub = tokens.slice(1).find((token) => !token.startsWith("-"));
   return ["commit", "log", "grep", "show", "tag", "notes", "diff", "status"].includes(sub) &&
@@ -1248,8 +1246,11 @@ function handlePayload(input) {
   // Settings are read only for commands that merge or push, from the
   // directory each one runs in (a `cd` elsewhere reads that repository's).
   const settings = new Map();
+  // An entry without its own directory (a refusal the parser could not place)
+  // belongs to the session folder only when the script never changes directory.
+  const changesDirectory = /(?:^|[\s;&|(])(?:cd|pushd)\s|\s-C\s|--git-dir|--work-tree|\s(?:-R|--repo)[\s=]/.test(script);
   const settingsOf = (command) => {
-    if (command.cwdUnknown) return { off: false, mergeGate: true };
+    if (command.cwdUnknown || (!command.cwd && changesDirectory)) return { off: false, mergeGate: true };
     const cwd = command.cwd || requestedCwd || "";
     if (!settings.has(cwd)) settings.set(cwd, repoConfig(cwd || undefined));
     return settings.get(cwd);
@@ -1291,7 +1292,7 @@ function handlePayload(input) {
   } catch (error) {
     // A parser failure on text that never mentions a merge is not a merge.
     if (!found && !/merge|push|enqueue/i.test(script)) return;
-    if (settingsOf({}).off) return;
+    if (!found && settingsOf({}).off) return;
     const why = String(error?.message || error).split("\n")[0];
     // A live refusal says what to fix; every other refusal keeps the CE
     // recovery, so a refused snapshot is never answered by dropping it.

@@ -261,3 +261,16 @@ test("merge settings follow the repository a merge runs in", (t) => {
   configure(path.join(root, "other"), home, "merge-gate", "off");
   assert.equal(run(main, `cd ${path.join(root, "other")} && ${mergeCommand} --admin`).status, 0);
 });
+
+test("a refusal in another repository survives the session repository's settings", (t) => {
+  const { root, main, home } = realRepo(t);
+  git(root, "init", "-q", "other");
+  const run = (command) => runHook("merge-settlement-gate.js", main, home, {
+    hook_event_name: "PreToolUse", cwd: main, tool_name: "Bash", tool_input: { command },
+  });
+  configure(main, home, "merge-gate", "off");
+  assert.equal(run(`cd ${path.join(root, "other")} && sh -c '${mergeCommand} --admin'`).status, 2);
+  configure(main, home, "merge-gate", "on");
+  configure(main, home, "off");
+  assert.equal(run(`cd ${path.join(root, "other")} && ${mergeCommand} --admin`).status, 2);
+});

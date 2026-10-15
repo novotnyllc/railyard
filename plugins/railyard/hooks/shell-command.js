@@ -123,12 +123,13 @@ const SAFE_FILTERS = new Set(["cat", "tee", "grep", "egrep", "fgrep", "rg", "hea
 // Non-shell interpreters. A merge phrase in a program they run is text the
 // program handles (usually writing a file or printing), not a shell command,
 // so it counts as data unless the output is piped into something that runs it.
-const INTERPRETERS = new Set(["python", "python3", "node", "ruby", "perl", "bun", "deno"]);
+// Only Python and Node heredocs qualify: their programs are commonly used to
+// write files, and their process APIs are few enough to recognise.
+const INTERPRETERS = new Set(["python", "python3", "node"]);
 // A program that can start a process is not data, whatever else it does.
 const SPAWNS = /child_process|\bexec(?:Sync|File|FileSync)?\s*\(|\bspawn(?:Sync)?\s*\(|subprocess|\bos\.(?:system|popen|exec|spawn)|\bsystem\s*\(|\bPopen\b|\bDeno\.(?:run|Command)|\bBun\.(?:spawn|\$)|\bIO\.popen|\bOpen3\b|%x[({[]|\bqx\s*[({[\/]/;
-function spawnsProcesses(text, interpreter) {
-  // Ruby and Perl run backticks as shell commands; JavaScript and Python do not.
-  return SPAWNS.test(text) || ((interpreter === "ruby" || interpreter === "perl") && text.includes("`"));
+function spawnsProcesses(text) {
+  return SPAWNS.test(text);
 }
 
 function dataSinkCommand(words) {
@@ -161,7 +162,11 @@ function heredocDelimiterWord(rest) {
   const word = rest.match(/^<<-?[ \t]*([^\s;|&<>()]+)/)?.[1];
   if (!word) return null;
   const quoted = word.match(/^(?:'([A-Za-z_][A-Za-z0-9_]*)'|"([A-Za-z_][A-Za-z0-9_]*)"|\\([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*))$/);
-  return quoted ? { delimiter: quoted[1] ?? quoted[2] ?? quoted[3] ?? quoted[4], length: rest.indexOf(word) + word.length } : null;
+  return quoted ? {
+    delimiter: quoted[1] ?? quoted[2] ?? quoted[3] ?? quoted[4],
+    expands: quoted[4] !== undefined, // an unquoted delimiter lets the shell expand the body
+    length: rest.indexOf(word) + word.length,
+  } : null;
 }
 
 function skipArithmetic(line, index) {
@@ -177,8 +182,10 @@ function skipArithmetic(line, index) {
 
 // Whether a `$(`, `<(`, `>(` or backtick is still open at the end of `text`.
 // Closed ones earlier on the line (`B=$(mktemp) && cat > "$B" <<EOF`) don't
-// put a later heredoc inside a substitution. Nested parentheses stay open.
+// put a later heredoc inside a substitution. Anything this can't track (a
+// `case` pattern) counts as open.
 function openSubstitution(text) {
+  if (/\bcase\b/.test(text)) return true; // pattern `)` would confuse the count
   const stack = []; // "sub", "paren", "`", "'", '"'
   for (let index = 0; index < text.length; index += 1) {
     const char = text[index];
@@ -228,8 +235,8 @@ function heredocOpener(line, lexical) {
     const words = heredocCommandWords(before, after);
     const inert = !substituted && dataSinkCommand(words) &&
       pipes.every((consumer) => SAFE_FILTERS.has(consumer));
-    const interpreter = INTERPRETERS.has(basename(words[0] || "")) ? basename(words[0]) : null;
-    opener = { delimiter: word.delimiter, inert, interpreter };
+    const interpreter = INTERPRETERS.has(basename(words[0] || ""));
+    opener = { delimiter: word.delimiter, inert: inert && !(interpreter && word.expands), interpreter };
     index += word.length - 1;
   }
   return { opener, unsure: false };
@@ -248,7 +255,7 @@ function stripHeredocs(text) {
     if (open) {
       if (line.trim() === open.delimiter) {
         const text = body.join("\n");
-        bodies.push({ text, inert: open.inert && !(open.interpreter && spawnsProcesses(text, open.interpreter)) });
+        bodies.push({ text, inert: open.inert && !(open.interpreter && spawnsProcesses(text)) });
         open = null;
         body = [];
       } else body.push(line);
