@@ -1406,7 +1406,7 @@ const unattributable = {
   "alias then use": `alias g=gh\ng pr merge 7`,
   "gh pr with IFS": "gh pr${IFS}merge 7",
   "quoted merge word through timeout": `timeout 9 gh pr 'merge' 8 --admin`,
-  "python heredoc": `python3 - <<'EOF'\nprint('gh pr merge 7')\nEOF`,
+  "python heredoc piped into a shell": `python3 - <<'EOF' | sh\nprint('gh pr merge 7')\nEOF`,
   "long chain": Array(600).fill("true").join(" && ") + ` && ${ADMIN}`,
 };
 gated("merges the parser cannot attribute refuse on both harnesses", () => {
@@ -1429,6 +1429,8 @@ gated("data that only mentions merging passes on both harnesses", () => {
     "gh pr merge --help",
     "gh pr merge 7 --disable-auto",
     "cat > notes.md <<'EOF'\nrun gh pr merge 7 --admin later\nEOF",
+    "python3 - <<'EOF'\nopen('t.mjs', 'w').write('gh pr merge 7')\nEOF",
+    "node -e \"require('fs').writeFileSync('t.txt', 'gh pr merge 7')\"",
     "cat > notes.md <<\\EOF\ngh pr merge 7\nEOF",
     "grep -e . <<'EOF'\ngh pr merge 7\nEOF",
     "git commit -F - <<'EOF'\nfix: gate gh pr merge shapes\nEOF",

@@ -120,11 +120,15 @@ function pushPhraseCount(text) {
 // `((…))` or `$[…]` arithmetic is a shift, not a heredoc.
 const DATA_SINKS = new Set(["cat", "tee", "grep", "egrep", "fgrep", "rg", "head", "tail", "sort", "uniq", "wc", "less", "more", "column", "jq"]);
 const SAFE_FILTERS = new Set(["cat", "tee", "grep", "egrep", "fgrep", "rg", "head", "tail", "sort", "uniq", "wc", "cut", "tr", "less", "more", "column", "jq"]);
+// Non-shell interpreters. A merge phrase in a program they run is text the
+// program handles (usually writing a file or printing), not a shell command,
+// so it counts as data unless the output is piped into something that runs it.
+const INTERPRETERS = new Set(["python", "python3", "node", "ruby", "perl", "bun", "deno"]);
 
 function dataSinkCommand(words) {
   const [head, ...rest] = words;
   const name = basename(head || "");
-  if (DATA_SINKS.has(name)) return true;
+  if (DATA_SINKS.has(name) || INTERPRETERS.has(name)) return true;
   if (name === "git") return ["commit", "tag", "notes"].includes(rest.find((word) => !word.startsWith("-"))) && !rest.includes("-c");
   if (name === "gh") return !rest.some((word) => /merge|^api$/.test(word)) && rest.some((word) => /^(?:--body-file|-F)(?:=-)?$/.test(word));
   return false;
@@ -598,6 +602,6 @@ function commandScript(args) {
 
 module.exports = {
   MERGE_MUTATIONS,
-  CONTROL_WORDS, SAFE_FILTERS, SHELLS, basename, commandPrefix, commandScript, mergePhraseCount,
+  CONTROL_WORDS, INTERPRETERS, SAFE_FILTERS, SHELLS, basename, commandPrefix, commandScript, mergePhraseCount,
   parseArgs, pushPhraseCount, runsScript, stripHeredocs, tokenizeSegments,
 };

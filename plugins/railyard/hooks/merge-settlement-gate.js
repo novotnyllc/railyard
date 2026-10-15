@@ -14,7 +14,7 @@ const path = require("path");
 const { evaluateOverride, plainMergeShape, sameMerge } = require("./merge-override");
 const { repoConfig } = require("./repo-config.js");
 const {
-  CONTROL_WORDS, MERGE_MUTATIONS, SAFE_FILTERS, basename, commandPrefix, commandScript, mergePhraseCount, parseArgs,
+  CONTROL_WORDS, INTERPRETERS, MERGE_MUTATIONS, SAFE_FILTERS, basename, commandPrefix, commandScript, mergePhraseCount, parseArgs,
   pushPhraseCount, runsScript, stripHeredocs, tokenizeSegments,
 } = require("./shell-command");
 
@@ -214,11 +214,12 @@ function mergeFromPrefix(prefix) {
   }
 }
 
-// Commands whose arguments are only ever data (`grep 'gh pr merge' docs`).
+// Commands whose arguments are only ever data (`grep 'gh pr merge' docs`), and
+// non-shell interpreters, whose inline programs are text they handle.
 const DATA_COMMANDS = new Set(["echo", "printf", "grep", "egrep", "fgrep", "rg", "ag", "cat", "head", "tail", "less", "wc", "sort", "uniq", "jq", "true", ":"]);
 function dataCommand(tokens) {
   const name = basename(tokens[0] || "");
-  if (DATA_COMMANDS.has(name)) return true;
+  if (DATA_COMMANDS.has(name) || INTERPRETERS.has(name)) return true;
   if (name !== "git") return false;
   const sub = tokens.slice(1).find((token) => !token.startsWith("-"));
   return ["commit", "log", "grep", "show", "tag", "notes", "diff", "status"].includes(sub) &&
@@ -1243,13 +1244,16 @@ function handlePayload(input) {
   if (!script) return;
   const requestedCwd = [args.working_directory, args.workdir, args.cwd, input.cwd]
     .find((value) => typeof value === "string" && value);
-  if (repoConfig(requestedCwd).off) return;
+  let config = null; // read only for commands that merge or push
   let found = null;
   let overrideNote = "";
   // Everything, parsing and the override included, runs inside this try: an
   // exception refuses the merge instead of crashing the hook open.
   try {
     found = mergeCommands(script, requestedCwd);
+    if (!found.length) return;
+    config = repoConfig(requestedCwd);
+    if (config.off) return;
     for (const push of found.filter((command) => command.kind === "push" || command.kind === "push-unresolved")) {
       const repo = pushRepository(push);
       if (!pushGuardEnabled(push, repo)) continue;
@@ -1263,7 +1267,7 @@ function handlePayload(input) {
       }
     }
     const commands = found.filter((command) => command.kind !== "push" && command.kind !== "push-unresolved");
-    if (!commands.length) return;
+    if (!commands.length || !config.mergeGate) return;
     const override = evaluateOverride({
       script, commands, input, defaultCwd: requestedCwd, record: recordOverride,
     });
@@ -1279,6 +1283,7 @@ function handlePayload(input) {
   } catch (error) {
     // A parser failure on text that never mentions a merge is not a merge.
     if (!found && !/merge|push|enqueue/i.test(script)) return;
+    if ((config ?? repoConfig(requestedCwd)).off) return;
     const why = String(error?.message || error).split("\n")[0];
     // A live refusal says what to fix; every other refusal keeps the CE
     // recovery, so a refused snapshot is never answered by dropping it.

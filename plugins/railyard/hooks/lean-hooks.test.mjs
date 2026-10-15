@@ -115,7 +115,9 @@ test("local and CI required suites agree and cover hook retirement", () => {
 // Per-repository settings in git config (repo-config.js, railyard:config).
 const configScript = path.join(pluginDirectory, "skills", "config", "scripts", "config.mjs");
 const git = (cwd, ...args) => {
-  const r = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd, encoding: "utf8" });
+  const r = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], {
+    cwd, encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" },
+  });
   assert.equal(r.status, 0, r.stderr);
   return r.stdout.trim();
 };
@@ -211,4 +213,37 @@ test("the config script rejects unknown values and non-repositories", (t) => {
   t.after(() => rmSync(outside, { recursive: true, force: true }));
   assert.equal(configure(outside, home, "off").status, 2);
   assert.match(configure(root, home, "--repo", main).stdout, /railyard: on/);
+});
+
+test("merge-gate off stops merge checks in that repository only", (t) => {
+  const { root, main, home } = realRepo(t);
+  const merge = (dir) => runHook("merge-settlement-gate.js", dir, home, {
+    hook_event_name: "PreToolUse", cwd: dir, tool_name: "Bash", tool_input: { command: `${mergeCommand} --admin` },
+  });
+  assert.equal(merge(main).status, 2);
+  assert.match(configure(main, home, "merge-gate", "off").stdout, /merge-gate: off/);
+  assert.equal(merge(main).status, 0);
+  git(root, "clone", "-q", "main", "cloned");
+  assert.equal(merge(path.join(root, "cloned")).status, 2);
+  assert.match(configure(main, home, "merge-gate", "on").stdout, /merge-gate: on/);
+  assert.equal(merge(main).status, 2);
+  assert.equal(configure(main, home, "merge-gate", "maybe").status, 2);
+});
+
+test("explicit repository values beat personal global defaults", (t) => {
+  const { main, home } = realRepo(t);
+  mkdirSync(path.join(home, ".config", "git"), { recursive: true });
+  writeFileSync(path.join(home, ".config", "git", "config"), "[railyard]\n\treview = checks\n\tce = off\n");
+  assert.match(configure(main, home).stdout, /review: checks {2}ce: off/);
+  assert.match(configure(main, home, "review", "full").stdout, /review: full/);
+  assert.match(configure(main, home, "ce", "on").stdout, /ce: on/);
+});
+
+test("personal global defaults apply outside a repository", (t) => {
+  const { home } = realRepo(t);
+  mkdirSync(path.join(home, ".config", "git"), { recursive: true });
+  writeFileSync(path.join(home, ".config", "git", "config"), "[railyard]\n\tce = off\n");
+  const outside = mkdtempSync(path.join(tmpdir(), "railyard-outside-"));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  assert.match(charter(outside, home), /Don't pick Compound Engineering stages/);
 });

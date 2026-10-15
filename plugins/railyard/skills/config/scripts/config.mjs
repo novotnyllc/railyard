@@ -4,6 +4,7 @@
 //   config.mjs off | on                     stand Railyard down here (and in every worktree) or back up
 //   config.mjs review full|light|checks     pre-push review level
 //   config.mjs ce on|off                    steer toward Compound Engineering stages or not
+//   config.mjs merge-gate on|off            check PR merges here or not
 // Run it from inside the repository, or pass --repo <dir>.
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
@@ -14,10 +15,12 @@ const { repoConfig, REVIEW_LEVELS } = require("../../../hooks/repo-config.js");
 const args = process.argv.slice(2);
 const at = args.indexOf("--repo");
 const cwd = at >= 0 ? args.splice(at, 2)[1] : process.cwd();
+if (!cwd) { console.error("--repo needs a directory"); process.exit(2); }
 const [action = "show", value] = args;
 
 const git = (...gitArgs) => execFileSync("git", gitArgs, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-const unset = (key) => { try { git("config", "--unset", key); } catch {} };
+// `git config --unset` exits 5 when the key is absent; anything else is a real failure.
+const unset = (key) => { try { git("config", "--unset-all", key); } catch (error) { if (error.status !== 5) throw error; } };
 const fail = (message) => { console.error(message); process.exit(2); };
 
 try { git("rev-parse", "--git-dir"); } catch { fail(`not a git repository: ${cwd}`); }
@@ -26,11 +29,14 @@ if (action === "off") git("config", "railyard.off", git("rev-parse", "--path-for
 else if (action === "on") unset("railyard.off");
 else if (action === "review") {
   if (!REVIEW_LEVELS.includes(value)) fail(`review must be one of: ${REVIEW_LEVELS.join(", ")}`);
-  if (value === "full") unset("railyard.review"); else git("config", "railyard.review", value);
+  git("config", "railyard.review", value);
 } else if (action === "ce") {
   if (value !== "on" && value !== "off") fail("ce must be on or off");
-  if (value === "on") unset("railyard.ce"); else git("config", "railyard.ce", "off");
-} else if (action !== "show") fail("usage: config.mjs [show | off | on | review full|light|checks | ce on|off] [--repo <dir>]");
+  git("config", "railyard.ce", value);
+} else if (action === "merge-gate") {
+  if (value !== "on" && value !== "off") fail("merge-gate must be on or off");
+  git("config", "railyard.mergeGate", value);
+} else if (action !== "show") fail("usage: config.mjs [show | off | on | review full|light|checks | ce on|off | merge-gate on|off] [--repo <dir>]");
 
-const { off, review, ce } = repoConfig(cwd);
-console.log(`railyard: ${off ? "off" : "on"}  review: ${review}  ce: ${ce ? "on" : "off"}`);
+const { off, review, ce, mergeGate } = repoConfig(cwd);
+console.log(`railyard: ${off ? "off" : "on"}  review: ${review}  ce: ${ce ? "on" : "off"}  merge-gate: ${mergeGate ? "on" : "off"}`);

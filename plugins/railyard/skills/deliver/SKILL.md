@@ -87,7 +87,7 @@ user action.
 
 ## End-of-PR review
 
-For each publication candidate, run these two in parallel against its base
+For each `full`-level publication candidate, run these two in parallel against its base
 and hand the combined findings and coverage receipt to the CE owner before
 pushing and before settlement. Reuse a pre-push review at settlement only
 when its complete candidate and relevant inputs still match:
