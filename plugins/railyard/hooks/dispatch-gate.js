@@ -32,7 +32,7 @@ function codexForkRefusal(tool, args) {
 function handlePayload(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return;
   if (input.hook_event_name && input.hook_event_name !== "PreToolUse") return;
-  if (railyardOff(typeof input.cwd === "string" && input.cwd ? input.cwd : undefined)) return;
+  if (railyardOff(input.cwd)) return;
   const tool = typeof input.tool_name === "string" ? input.tool_name : "";
   const codex = CODEX_TOOLS.has(tool);
   if (!codex && !CLAUDE_TOOLS.has(tool)) return;

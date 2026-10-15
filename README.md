@@ -80,16 +80,17 @@ claude plugin install compound-engineering@compound-engineering-plugin
 
 Some repositories should run as plain agent sessions, without Railyard's
 routing guide or gates and without nudges toward CE workflows. Switch one off
-from inside it:
+from inside it, in a POSIX shell (Git Bash on Windows):
 
 ```sh
 git rev-parse --path-format=absolute --git-common-dir > "$(git rev-parse --git-common-dir)/railyard-off"
 ```
 
-The startup hook then says Railyard is off and the tool hooks stand down. The
-marker lives in the shared git directory, so it is never committed and covers
-every worktree of that repository. A clone, copy or move of the repository
-comes back on. Delete the file to turn Railyard back on:
+The startup hook then says Railyard is off and the tool hooks stand down,
+including the opt-in default-branch push guard. The marker lives in the shared
+git directory, so it is never committed and covers every worktree of that
+repository. A clone, copy or move of the repository comes back on. Submodules
+have their own git directory; switch them off separately. Delete the file to turn Railyard back on:
 
 ```sh
 rm "$(git rev-parse --git-common-dir)/railyard-off"

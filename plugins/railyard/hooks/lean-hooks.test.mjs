@@ -190,3 +190,31 @@ test("a copied repository comes back on", (t) => {
   assert.match(charter.stdout, /^Railyard routing:/);
   assert.match(runHook("routing-charter.js", repo, home).stdout, /^Railyard is off/);
 });
+
+test("tool hooks follow the session folder in the payload, not the process folder", (t) => {
+  const { nested, home } = offRepo(t);
+  const elsewhere = mkdtempSync(path.join(tmpdir(), "railyard-elsewhere-"));
+  t.after(() => rmSync(elsewhere, { recursive: true, force: true }));
+  const fork = runHook("dispatch-gate.js", elsewhere, home, {
+    hook_event_name: "PreToolUse", cwd: nested, tool_name: "spawn_agent",
+    tool_input: { task_name: "x", fork_turns: "all", model: "m" },
+  });
+  assert.equal(fork.status, 0, fork.stderr);
+});
+
+test("the README command switches off a real repository and its worktrees", (t) => {
+  const root = mkdtempSync(path.join(tmpdir(), "railyard-real-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const main = path.join(root, "main");
+  const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8" });
+  git(root, "init", "-q", "main");
+  git(main, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init");
+  const common = git(main, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.trim();
+  writeFileSync(path.join(common, "railyard-off"), common + "\n");
+  git(main, "worktree", "add", "-q", path.join(root, "feature"), "-b", "feature");
+  git(root, "clone", "-q", "main", "cloned");
+  const on = (dir) => /^Railyard routing:/.test(runHook("routing-charter.js", dir, root).stdout);
+  assert.equal(on(main), false);
+  assert.equal(on(path.join(root, "feature")), false);
+  assert.equal(on(path.join(root, "cloned")), true);
+});

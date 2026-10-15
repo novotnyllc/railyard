@@ -24,12 +24,12 @@ function commonDirFor(gitDir) {
 function markerMatches(commonDir) {
   try {
     const named = fs.readFileSync(path.join(commonDir, "railyard-off"), "utf8").trim();
-    return named !== "" && fs.realpathSync(named) === fs.realpathSync(commonDir);
+    return named !== "" && fs.realpathSync.native(named) === fs.realpathSync.native(commonDir);
   } catch { return false; }
 }
 
-function railyardOff(start = process.cwd()) {
-  let dir = path.resolve(start);
+function railyardOff(start) {
+  let dir = path.resolve(typeof start === "string" && start ? start : process.cwd());
   for (;;) {
     const gitDir = gitDirFor(dir);
     if (gitDir) return markerMatches(commonDirFor(gitDir));

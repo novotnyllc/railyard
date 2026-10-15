@@ -1238,12 +1238,12 @@ function defaultBranchPush(command, repo) {
 function handlePayload(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return;
   if (input.hook_event_name && input.hook_event_name !== "PreToolUse") return;
-  if (railyardOff(typeof input.cwd === "string" && input.cwd ? input.cwd : undefined)) return;
   const args = input.tool_input && typeof input.tool_input === "object" ? input.tool_input : {};
   const script = commandScript(args);
   if (!script) return;
   const requestedCwd = [args.working_directory, args.workdir, args.cwd, input.cwd]
     .find((value) => typeof value === "string" && value);
+  if (railyardOff(requestedCwd)) return;
   let found = null;
   let overrideNote = "";
   // Everything, parsing and the override included, runs inside this try: an

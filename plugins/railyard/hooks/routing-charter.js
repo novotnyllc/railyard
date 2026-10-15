@@ -4,10 +4,6 @@
 const { readHookInput } = require("./hook-input.js");
 const { railyardOff } = require("./railyard-off.js");
 
-if (railyardOff()) {
-  process.stdout.write("Railyard is off in this repository (.git/railyard-off): skip its routing and gates, and don't pick Compound Engineering stages unless the user asks.\n");
-  process.exit(0);
-}
 
 const lines = [
   "Railyard routing:",
@@ -29,11 +25,18 @@ const lines = [
   "  remote work that needs separate agents; propagating config across hosts is direct work. Wait on",
   "  completion events rather than polling.",
 ];
+// Startup prints before reading input, so it checks the hook's own folder:
+// both harnesses start this hook in the session folder.
+const off = railyardOff();
 // Presence enables advice, not an inference call or a credential disclosure.
 if (process.env.TYPESAFE_API_KEY?.trim()) {
   lines.push("- Jev configured: consult railyard:jev for open model, effort, or workflow choices; skip explicit choices, clear defaults, and small dispatches.");
 }
-process.stdout.write(lines.join("\n") + "\n");
+
+process.stdout.write(off
+  ? "Railyard is off in this repository (railyard-off in its git directory): skip its routing and gates, and don't pick Compound Engineering stages unless the user asks.\n"
+  : lines.join("\n") + "\n");
+if (off) process.exit(0);
 
 // The payload carries session_id and cwd. The process environment may belong
 // to an ancestor, so an absent or malformed payload leaves the line unidentified.
