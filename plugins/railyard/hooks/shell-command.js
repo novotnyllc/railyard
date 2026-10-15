@@ -176,8 +176,9 @@ function skipArithmetic(line, index) {
 // put a later heredoc inside a substitution. Anything this can't track (a
 // `case` pattern) counts as open.
 function openSubstitution(text) {
-  if (/\bcase\b/.test(text)) return true; // pattern `)` would confuse the count
-  const stack = []; // "sub", "paren", "`", "'", '"'
+  // A case pattern's `)` would confuse the count.
+  if (/(?:^|[\s;&|(])case\s+\S+\s+in(?:\s|$)/.test(text)) return true;
+  const stack = []; // "sub", "paren", "param", "`", "'", '"'
   for (let index = 0; index < text.length; index += 1) {
     const char = text[index];
     const top = stack[stack.length - 1];
@@ -188,15 +189,19 @@ function openSubstitution(text) {
       if (char === '"') stack.pop();
       else if (char === "`") stack.push("`");
       else if (char === "$" && text[index + 1] === "(") { stack.push("sub"); index += 1; }
+      else if (char === "$" && text[index + 1] === "{") { stack.push("param"); index += 1; }
       continue;
     }
     if (top === "`") { if (char === "`") stack.pop(); continue; }
+    if (char === "$" && text[index + 1] === "{") { stack.push("param"); index += 1; continue; }
+    if (char === "}" && top === "param") { stack.pop(); continue; }
+    if (top === "param" && char === ")") continue; // `${V:-)}` does not close anything
     if (char === "'" || char === '"' || char === "`") stack.push(char);
     else if (opens) { stack.push("sub"); index += 1; }
     else if (char === "(") stack.push("paren");
     else if (char === ")" && (top === "sub" || top === "paren")) stack.pop();
   }
-  return stack.includes("sub") || stack.includes("`");
+  return stack.includes("sub") || stack.includes("`") || stack.includes("param");
 }
 
 // Scan one line: { opener, unsure }. `opener` is { delimiter, inert }.
@@ -245,7 +250,7 @@ function stripHeredocs(text) {
     if (open) {
       if (line.trim() === open.delimiter) {
         const text = body.join("\n");
-        bodies.push({ text, inert: open.inert && !(open.expands && /\$\(|`/.test(text)) });
+        bodies.push({ text, inert: open.inert && !(open.expands && /(?<!\\)(?:\$\(|`)/.test(text)) });
         open = null;
         body = [];
       } else body.push(line);

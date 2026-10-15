@@ -284,3 +284,14 @@ test("a repository switched off with the 0.13 marker file stays off until switch
   assert.match(configure(main, home, "on").stdout, /railyard: on/);
   assert.match(charter(main, home), /^Railyard routing:/);
 });
+
+test("unplaced merges follow local opt-outs unless the script changes directory", (t) => {
+  const { root, main, home } = realRepo(t);
+  git(root, "init", "-q", "other");
+  const run = (command) => runHook("merge-settlement-gate.js", main, home, {
+    hook_event_name: "PreToolUse", cwd: main, tool_name: "Bash", tool_input: { command },
+  });
+  configure(main, home, "merge-gate", "off");
+  assert.equal(run(`sh -c '${mergeCommand} --admin'`).status, 0);
+  assert.equal(run(`cd ${path.join(root, "other")} && sh -c '${mergeCommand} --admin'`).status, 2);
+});
