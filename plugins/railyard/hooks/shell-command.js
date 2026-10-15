@@ -169,6 +169,18 @@ function skipArithmetic(line, index) {
   return index;
 }
 
+// Whether a `$(`, `<(`, `>(` or backtick is still open at the end of `text`.
+// Closed ones earlier on the line (`B=$(mktemp) && cat > "$B" <<EOF`) don't
+// put a later heredoc inside a substitution. Nested parentheses stay open.
+function openSubstitution(text) {
+  let rest = text;
+  for (let previous; previous !== rest;) {
+    previous = rest;
+    rest = rest.replace(/[$<>]\([^()]*\)/g, "");
+  }
+  return /\$\(|<\(|>\(|`/.test(rest.replace(/`[^`]*`/g, ""));
+}
+
 // Scan one line: { opener, unsure }. `opener` is { delimiter, inert }.
 function heredocOpener(line, lexical) {
   let opener = null;
@@ -191,7 +203,7 @@ function heredocOpener(line, lexical) {
     if (!word || opener) return { opener: null, unsure: true };
     const before = line.slice(0, index);
     const after = line.slice(index + word.length);
-    const substituted = /\$\(|<\(|>\(|`/.test(before);
+    const substituted = openSubstitution(before);
     const pipes = [...after.matchAll(/(?<!\|)\|(?!\|)\s*([^\s|;&)]+)/g)].map((match) => basename(match[1]));
     const inert = !substituted && dataSinkCommand(heredocCommandWords(before, after)) &&
       pipes.every((consumer) => SAFE_FILTERS.has(consumer));

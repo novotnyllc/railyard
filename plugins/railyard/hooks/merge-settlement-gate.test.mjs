@@ -1406,6 +1406,7 @@ const unattributable = {
   "alias then use": `alias g=gh\ng pr merge 7`,
   "gh pr with IFS": "gh pr${IFS}merge 7",
   "quoted merge word through timeout": `timeout 9 gh pr 'merge' 8 --admin`,
+  "heredoc inside an open substitution": `X=$(cat <<'EOF'\ngh pr merge 7\nEOF\n); sh -c "$X"`,
   "python heredoc piped into a shell": `python3 - <<'EOF' | sh\nprint('gh pr merge 7')\nEOF`,
   "long chain": Array(600).fill("true").join(" && ") + ` && ${ADMIN}`,
 };
@@ -1429,6 +1430,7 @@ gated("data that only mentions merging passes on both harnesses", () => {
     "gh pr merge --help",
     "gh pr merge 7 --disable-auto",
     "cat > notes.md <<'EOF'\nrun gh pr merge 7 --admin later\nEOF",
+    "B=$(mktemp) && cat >> \"$B\" <<'EOF'\ngh pr merge 7\nEOF\ngh pr create --title t --body-file \"$B\"",
     "python3 - <<'EOF'\nopen('t.mjs', 'w').write('gh pr merge 7')\nEOF",
     "node -e \"require('fs').writeFileSync('t.txt', 'gh pr merge 7')\"",
     "cat > notes.md <<\\EOF\ngh pr merge 7\nEOF",
