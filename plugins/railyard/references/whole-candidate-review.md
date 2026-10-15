@@ -7,6 +7,15 @@ publisher, not a second settlement watcher. Review does not authorize a push
 outside the user's endpoint. A focused implementation assignment or a narrow
 child handoff does not narrow the integration owner's review scope.
 
+## Review level
+
+The repository's `railyard.review` setting (`railyard:config`) sets how much of
+this gate applies. `full`, the default, is everything below. `light` is the
+repository's checks plus one combined correctness and maintainability review of
+the complete cumulative change, with no receipt or ledger. `checks` is the
+repository's checks only. An explicit user request overrides the setting for
+that push.
+
 ## Candidate and investigation
 
 Resolve the intended target repository, branch, base commit, and exact candidate

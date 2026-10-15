@@ -12,7 +12,7 @@ const { execFileSync } = require("child_process");
 const { readFileSync, statSync } = require("fs");
 const path = require("path");
 const { evaluateOverride, plainMergeShape, sameMerge } = require("./merge-override");
-const { railyardOff } = require("./railyard-off.js");
+const { repoConfig } = require("./repo-config.js");
 const {
   CONTROL_WORDS, MERGE_MUTATIONS, SAFE_FILTERS, basename, commandPrefix, commandScript, mergePhraseCount, parseArgs,
   pushPhraseCount, runsScript, stripHeredocs, tokenizeSegments,
@@ -1243,7 +1243,7 @@ function handlePayload(input) {
   if (!script) return;
   const requestedCwd = [args.working_directory, args.workdir, args.cwd, input.cwd]
     .find((value) => typeof value === "string" && value);
-  if (railyardOff(requestedCwd)) return;
+  if (repoConfig(requestedCwd).off) return;
   let found = null;
   let overrideNote = "";
   // Everything, parsing and the override included, runs inside this try: an
