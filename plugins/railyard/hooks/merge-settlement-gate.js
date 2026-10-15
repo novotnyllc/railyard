@@ -12,6 +12,7 @@ const { execFileSync } = require("child_process");
 const { readFileSync, statSync } = require("fs");
 const path = require("path");
 const { evaluateOverride, plainMergeShape, sameMerge } = require("./merge-override");
+const { railyardOff } = require("./railyard-off.js");
 const {
   CONTROL_WORDS, MERGE_MUTATIONS, SAFE_FILTERS, basename, commandPrefix, commandScript, mergePhraseCount, parseArgs,
   pushPhraseCount, runsScript, stripHeredocs, tokenizeSegments,
@@ -1237,6 +1238,7 @@ function defaultBranchPush(command, repo) {
 function handlePayload(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return;
   if (input.hook_event_name && input.hook_event_name !== "PreToolUse") return;
+  if (railyardOff(typeof input.cwd === "string" && input.cwd ? input.cwd : undefined)) return;
   const args = input.tool_input && typeof input.tool_input === "object" ? input.tool_input : {};
   const script = commandScript(args);
   if (!script) return;

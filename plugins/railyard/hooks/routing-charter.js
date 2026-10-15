@@ -2,6 +2,12 @@
 // SessionStart: print a short route guide, then record a session anchor in
 // the run log from the bounded hook payload.
 const { readHookInput } = require("./hook-input.js");
+const { railyardOff } = require("./railyard-off.js");
+
+if (railyardOff()) {
+  process.stdout.write("Railyard is off in this repository (.git/railyard-off): skip its routing and gates, and don't pick Compound Engineering stages unless the user asks.\n");
+  process.exit(0);
+}
 
 const lines = [
   "Railyard routing:",
