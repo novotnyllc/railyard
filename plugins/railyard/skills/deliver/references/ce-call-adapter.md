@@ -13,7 +13,9 @@ repair continuation. The publisher must stop before every push until the full
 cumulative candidate is covered and the receipt matches; an earlier review or
 a stage's completed result cannot retroactively satisfy the gate. If a selected
 workflow cannot honor this requirement, stop before its external write and
-report the integration limitation.
+report the integration limitation. A repository review level of `light`
+(the repository's checks plus one combined review) or `checks` (the checks
+only) replaces the receipt; see the gate's Review level section.
 
 Before calling a stage that settles review feedback, including LFG and
 `ce-babysit-pr`, supply the

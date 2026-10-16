@@ -48,7 +48,7 @@ train, clears the departure, and confirms arrival:
 
 | Track | Skills |
 | --- | --- |
-| Setup & health | `setup` — inspect and configure relevant prerequisites; `doctor` — diagnose and fix drift |
+| Setup & health | `setup` — inspect and configure relevant prerequisites; `doctor` — diagnose and fix drift; `config` — per-repository settings |
 | Allocation | `model-routing` — native model and reasoning-effort guidance for Claude Code and Codex |
 | Semantic decisions | `jev` — model/effort selection, workflow choice, evidence selection, work priority, and review triage, consulted only when a choice is genuinely open and matters; requires `TYPESAFE_API_KEY` |
 | Delivery | `deliver` — select native execution or one useful CE workflow and complete the authorized scope |
@@ -76,25 +76,29 @@ claude plugin marketplace add EveryInc/compound-engineering-plugin
 claude plugin install compound-engineering@compound-engineering-plugin
 ```
 
-## Turning Railyard off for a repository
+## Per-repository settings
 
-Some repositories should run as plain agent sessions, without Railyard's
-routing guide or gates and without nudges toward CE workflows. Switch one off
-from inside it, in a POSIX shell (Git Bash on Windows):
-
-```sh
-git rev-parse --path-format=absolute --git-common-dir > "$(git rev-parse --git-common-dir)/railyard-off"
-```
-
-The startup hook then says Railyard is off and the tool hooks stand down,
-including the opt-in default-branch push guard. The marker lives in the shared
-git directory, so it is never committed and covers every worktree of that
-repository. A clone, copy or move of the repository comes back on. Submodules
-have their own git directory; switch them off separately. Delete the file to turn Railyard back on:
+Each repository can tune Railyard in its own git config, so the settings cover
+every worktree, are never committed, and don't follow a clone. Ask an agent
+("turn Railyard off here", "use light reviews in this repo"); the
+`railyard:config` skill applies it. By hand, from inside the repository:
 
 ```sh
-rm "$(git rev-parse --git-common-dir)/railyard-off"
+git config railyard.off "$(git rev-parse --path-format=absolute --git-common-dir)"   # off; --unset railyard.off for on
+git config railyard.review light     # full | light | checks
+git config railyard.ce off           # on | off
+git config railyard.mergeGate off    # on | off
 ```
+
+| Setting | Effect |
+| --- | --- |
+| `off` | The startup guide becomes a one-line notice and every hook stands down, including the opt-in default-branch push guard, in the repository and all its worktrees. A copy or move comes back on; submodules are configured separately. |
+| `review` | Pre-push review: `full` (default) is the whole-candidate gate with Thermos and Codex review; `light` is the repository's checks plus one combined review; `checks` is the repository's checks only. |
+| `ce off` | Keeps Railyard's gates and routing but stops suggesting Compound Engineering stages. |
+| `merge-gate off` | Stops checking PR merges, for repositories whose host already enforces readiness (a merge queue or branch protection). The opt-in push guard is unaffected. |
+
+`review`, `ce` and `merge-gate` also work as personal defaults through `git config --global`;
+a repository's own value wins.
 
 Ponytail and Superpowers are not Railyard prerequisites. Native subagents are
 the default for bounded parallel work; user-visible tasks are created only

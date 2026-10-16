@@ -120,7 +120,9 @@ function pushPhraseCount(text) {
 // `((…))` or `$[…]` arithmetic is a shift, not a heredoc.
 const DATA_SINKS = new Set(["cat", "tee", "grep", "egrep", "fgrep", "rg", "head", "tail", "sort", "uniq", "wc", "less", "more", "column", "jq"]);
 const SAFE_FILTERS = new Set(["cat", "tee", "grep", "egrep", "fgrep", "rg", "head", "tail", "sort", "uniq", "wc", "cut", "tr", "less", "more", "column", "jq"]);
-
+// Non-shell interpreters. A merge phrase in a program they run is text the
+// program handles (usually writing a file or printing), not a shell command,
+// so it counts as data unless the output is piped into something that runs it.
 function dataSinkCommand(words) {
   const [head, ...rest] = words;
   const name = basename(head || "");
@@ -151,7 +153,11 @@ function heredocDelimiterWord(rest) {
   const word = rest.match(/^<<-?[ \t]*([^\s;|&<>()]+)/)?.[1];
   if (!word) return null;
   const quoted = word.match(/^(?:'([A-Za-z_][A-Za-z0-9_]*)'|"([A-Za-z_][A-Za-z0-9_]*)"|\\([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*))$/);
-  return quoted ? { delimiter: quoted[1] ?? quoted[2] ?? quoted[3] ?? quoted[4], length: rest.indexOf(word) + word.length } : null;
+  return quoted ? {
+    delimiter: quoted[1] ?? quoted[2] ?? quoted[3] ?? quoted[4],
+    expands: quoted[4] !== undefined, // an unquoted delimiter lets the shell expand the body
+    length: rest.indexOf(word) + word.length,
+  } : null;
 }
 
 function skipArithmetic(line, index) {
@@ -163,6 +169,39 @@ function skipArithmetic(line, index) {
     else if (line[index] === close && --depth === 0) break;
   }
   return index;
+}
+
+// Whether a `$(`, `<(`, `>(` or backtick is still open at the end of `text`.
+// Closed ones earlier on the line (`B=$(mktemp) && cat > "$B" <<EOF`) don't
+// put a later heredoc inside a substitution. Anything this can't track (a
+// `case` pattern) counts as open.
+function openSubstitution(text) {
+  // A case pattern's `)` would confuse the count.
+  if (/(?:^|[\s;&|(])case\s+\S+\s+in(?:\s|$)/.test(text)) return true;
+  const stack = []; // "sub", "paren", "param", "`", "'", '"'
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const top = stack[stack.length - 1];
+    if (top === "'") { if (char === "'") stack.pop(); continue; }
+    if (char === "\\") { index += 1; continue; }
+    const opens = (char === "$" || char === "<" || char === ">") && text[index + 1] === "(";
+    if (top === '"') {
+      if (char === '"') stack.pop();
+      else if (char === "`") stack.push("`");
+      else if (char === "$" && text[index + 1] === "(") { stack.push("sub"); index += 1; }
+      else if (char === "$" && text[index + 1] === "{") { stack.push("param"); index += 1; }
+      continue;
+    }
+    if (top === "`") { if (char === "`") stack.pop(); continue; }
+    if (char === "$" && text[index + 1] === "{") { stack.push("param"); index += 1; continue; }
+    if (char === "}" && top === "param") { stack.pop(); continue; }
+    if (top === "param" && char === ")") continue; // `${V:-)}` does not close anything
+    if (char === "'" || char === '"' || char === "`") stack.push(char);
+    else if (opens) { stack.push("sub"); index += 1; }
+    else if (char === "(") stack.push("paren");
+    else if (char === ")" && (top === "sub" || top === "paren")) stack.pop();
+  }
+  return stack.includes("sub") || stack.includes("`") || stack.includes("param");
 }
 
 // Scan one line: { opener, unsure }. `opener` is { delimiter, inert }.
@@ -187,14 +226,24 @@ function heredocOpener(line, lexical) {
     if (!word || opener) return { opener: null, unsure: true };
     const before = line.slice(0, index);
     const after = line.slice(index + word.length);
-    const substituted = /\$\(|<\(|>\(|`/.test(before);
+    const substituted = openSubstitution(before);
     const pipes = [...after.matchAll(/(?<!\|)\|(?!\|)\s*([^\s|;&)]+)/g)].map((match) => basename(match[1]));
-    const inert = !substituted && dataSinkCommand(heredocCommandWords(before, after)) &&
+    const words = heredocCommandWords(before, after);
+    const inert = !substituted && dataSinkCommand(words) &&
       pipes.every((consumer) => SAFE_FILTERS.has(consumer));
-    opener = { delimiter: word.delimiter, inert };
+    opener = { delimiter: word.delimiter, inert, expands: word.expands };
     index += word.length - 1;
   }
   return { opener, unsure: false };
+}
+
+// Whether an unquoted heredoc body has a `$(` or backtick the shell runs: one
+// preceded by an even number of backslashes (zero included).
+function runsSubstitution(text) {
+  for (const match of text.matchAll(/(\\*)(?:\$\(|`)/g)) {
+    if (match[1].length % 2 === 0) return true;
+  }
+  return false;
 }
 
 function stripHeredocs(text) {
@@ -209,7 +258,8 @@ function stripHeredocs(text) {
     const line = lines[index];
     if (open) {
       if (line.trim() === open.delimiter) {
-        bodies.push({ text: body.join("\n"), inert: open.inert });
+        const text = body.join("\n");
+        bodies.push({ text, inert: open.inert && !(open.expands && runsSubstitution(text)) });
         open = null;
         body = [];
       } else body.push(line);

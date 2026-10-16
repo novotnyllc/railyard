@@ -12,7 +12,7 @@ const { execFileSync } = require("child_process");
 const { readFileSync, statSync } = require("fs");
 const path = require("path");
 const { evaluateOverride, plainMergeShape, sameMerge } = require("./merge-override");
-const { railyardOff } = require("./railyard-off.js");
+const { repoConfig } = require("./repo-config.js");
 const {
   CONTROL_WORDS, MERGE_MUTATIONS, SAFE_FILTERS, basename, commandPrefix, commandScript, mergePhraseCount, parseArgs,
   pushPhraseCount, runsScript, stripHeredocs, tokenizeSegments,
@@ -1243,13 +1243,29 @@ function handlePayload(input) {
   if (!script) return;
   const requestedCwd = [args.working_directory, args.workdir, args.cwd, input.cwd]
     .find((value) => typeof value === "string" && value);
-  if (railyardOff(requestedCwd)) return;
+  // Settings are read only for commands that merge or push, from the
+  // directory each one runs in (a `cd` elsewhere reads that repository's).
+  const settings = new Map();
+  // A merge the parser could not place, a merge that names its repository
+  // (-R/--repo, GH_REPO, a gh api route), or a push that selects one
+  // (--git-dir, GIT_DIR…) keeps the gate: its repository is not the folder
+  // whose settings would otherwise apply.
+  const namesRepository = (command) => command.kind === "api" || command.kind === "graphql" ||
+    typeof command.flags?.get?.("-R") === "string" || typeof command.flags?.get?.("--repo") === "string" ||
+    Boolean(command.env?.GH_REPO) || Boolean(command.repo?.explicit);
+  const settingsOf = (command) => {
+    if (command.cwdUnknown || command.kind === "unsupported" || namesRepository(command)) return { off: false, mergeGate: true };
+    const cwd = command.cwd || requestedCwd || "";
+    if (!settings.has(cwd)) settings.set(cwd, repoConfig(cwd || undefined));
+    return settings.get(cwd);
+  };
   let found = null;
   let overrideNote = "";
   // Everything, parsing and the override included, runs inside this try: an
   // exception refuses the merge instead of crashing the hook open.
   try {
-    found = mergeCommands(script, requestedCwd);
+    found = mergeCommands(script, requestedCwd).filter((command) => !settingsOf(command).off);
+    if (!found.length) return;
     for (const push of found.filter((command) => command.kind === "push" || command.kind === "push-unresolved")) {
       const repo = pushRepository(push);
       if (!pushGuardEnabled(push, repo)) continue;
@@ -1262,7 +1278,8 @@ function handlePayload(input) {
         return;
       }
     }
-    const commands = found.filter((command) => command.kind !== "push" && command.kind !== "push-unresolved");
+    const commands = found.filter((command) => command.kind !== "push" && command.kind !== "push-unresolved" &&
+      settingsOf(command).mergeGate);
     if (!commands.length) return;
     const override = evaluateOverride({
       script, commands, input, defaultCwd: requestedCwd, record: recordOverride,
@@ -1279,6 +1296,7 @@ function handlePayload(input) {
   } catch (error) {
     // A parser failure on text that never mentions a merge is not a merge.
     if (!found && !/merge|push|enqueue/i.test(script)) return;
+    if (!found && repoConfig(requestedCwd).off) return;
     const why = String(error?.message || error).split("\n")[0];
     // A live refusal says what to fix; every other refusal keeps the CE
     // recovery, so a refused snapshot is never answered by dropping it.

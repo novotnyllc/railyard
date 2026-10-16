@@ -2,17 +2,39 @@
 // SessionStart: print a short route guide, then record a session anchor in
 // the run log from the bounded hook payload.
 const { readHookInput } = require("./hook-input.js");
-const { railyardOff } = require("./railyard-off.js");
+const { repoConfig } = require("./repo-config.js");
 
+// Startup prints before reading input, so it reads settings for the hook's own
+// folder: both harnesses start this hook in the session folder.
+const config = repoConfig();
+
+const routing = config.ce
+  ? [
+    "- Ordinary work uses native tools and subagents. Pick Compound Engineering stages that help:",
+    "  ce-debug, ce-plan, ce-code-review, or lfg. Open PRs with compound-engineering:ce-commit-push-pr.",
+  ]
+  : ["- Ordinary work uses native tools and subagents. Don't pick Compound Engineering stages unless the user asks (railyard.ce off)."];
+const review = {
+  full: "- Before every push, load Railyard's references/whole-candidate-review.md gate, including direct CE/LFG publishing calls.",
+  light: "- Before every push, run the repository's checks and one combined correctness and maintainability review of the whole change (railyard.review light).",
+  checks: "- Before every push, run the repository's checks; no review passes (railyard.review checks).",
+}[config.review];
+const settlement = config.ce
+  ? [
+    "- CE owns review settlement and CI watching; give it references/review-feedback-settlement.md. An explicit",
+    "  railyard:deliver request runs through merge, required release or deployment, and consumer verification",
+    "  unless narrowed; honor plan-only, local-only, and PR-only stops. Clean, thread-free PRs merge plainly; else CE snapshot handoff.",
+  ]
+  : [
+    "- An explicit railyard:deliver request runs through merge, required release or deployment, and consumer verification",
+    "  unless narrowed; honor plan-only, local-only, and PR-only stops.",
+  ];
 
 const lines = [
   "Railyard routing:",
-  "- Ordinary work uses native tools and subagents. Pick Compound Engineering stages that help:",
-  "  ce-debug, ce-plan, ce-code-review, or lfg. Open PRs with compound-engineering:ce-commit-push-pr.",
-  "- Before every push, load Railyard's references/whole-candidate-review.md gate, including direct CE/LFG publishing calls.",
-  "- CE owns review settlement and CI watching; give it references/review-feedback-settlement.md. An explicit",
-  "  railyard:deliver request runs through merge, required release or deployment, and consumer verification",
-  "  unless narrowed; honor plan-only, local-only, and PR-only stops. Clean, thread-free PRs merge plainly; else CE snapshot handoff.",
+  ...routing,
+  review,
+  ...settlement,
   "- Choose model and effort per subagent. Claude Code: Opus 5.5 (`opus`, 2.1.280+) by default, Fable 5.1 for",
   "  frontier-hard work. Codex: Sol 6.1 medium (review high), Luna for routine checked work, Astra only for a proven gap.",
   "- Take the fastest route to the result: reuse existing tools, propagate settings that already exist instead",
@@ -25,18 +47,15 @@ const lines = [
   "  remote work that needs separate agents; propagating config across hosts is direct work. Wait on",
   "  completion events rather than polling.",
 ];
-// Startup prints before reading input, so it checks the hook's own folder:
-// both harnesses start this hook in the session folder.
-const off = railyardOff();
 // Presence enables advice, not an inference call or a credential disclosure.
 if (process.env.TYPESAFE_API_KEY?.trim()) {
   lines.push("- Jev configured: consult railyard:jev for open model, effort, or workflow choices; skip explicit choices, clear defaults, and small dispatches.");
 }
 
-process.stdout.write(off
-  ? "Railyard is off in this repository (railyard-off in its git directory): skip its routing and gates, and don't pick Compound Engineering stages unless the user asks.\n"
+process.stdout.write(config.off
+  ? "Railyard is off in this repository (railyard.off): skip its routing and gates, and don't pick Compound Engineering stages unless the user asks.\n"
   : lines.join("\n") + "\n");
-if (off) process.exit(0);
+if (config.off) process.exit(0);
 
 // The payload carries session_id and cwd. The process environment may belong
 // to an ancestor, so an absent or malformed payload leaves the line unidentified.
