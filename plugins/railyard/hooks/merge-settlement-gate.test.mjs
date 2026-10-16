@@ -1418,6 +1418,7 @@ const unattributable = {
   "python heredoc writing a file": `python3 - <<'EOF'\nopen('t.mjs', 'w').write('gh pr merge 7')\nEOF`,
   "unquoted cat heredoc runs a substitution": `B=$(mktemp) && cat > "$B" <<EOF\n$(gh pr merge 7 --admin)\nEOF`,
   "parameter expansion with a paren inside a substitution": `X=$(: \${V:-)}; cat <<'EOF'\ngh pr merge 7 --admin\nEOF\n); eval "$X"`,
+  "even backslashes before a heredoc substitution": `B=$(mktemp) && cat > "$B" <<EOF\n\\\\$(gh pr merge 7 --admin)\nEOF`,
   "python heredoc piped into a shell": `python3 - <<'EOF' | sh\nprint('gh pr merge 7')\nEOF`,
   "long chain": Array(600).fill("true").join(" && ") + ` && ${ADMIN}`,
 };

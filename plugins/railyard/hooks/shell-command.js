@@ -237,6 +237,15 @@ function heredocOpener(line, lexical) {
   return { opener, unsure: false };
 }
 
+// Whether an unquoted heredoc body has a `$(` or backtick the shell runs: one
+// preceded by an even number of backslashes (zero included).
+function runsSubstitution(text) {
+  for (const match of text.matchAll(/(\\*)(?:\$\(|`)/g)) {
+    if (match[1].length % 2 === 0) return true;
+  }
+  return false;
+}
+
 function stripHeredocs(text) {
   if (!text.includes("<<")) return { text, bodies: [], unsure: false };
   const out = [];
@@ -250,7 +259,7 @@ function stripHeredocs(text) {
     if (open) {
       if (line.trim() === open.delimiter) {
         const text = body.join("\n");
-        bodies.push({ text, inert: open.inert && !(open.expands && /(?<!\\)(?:\$\(|`)/.test(text)) });
+        bodies.push({ text, inert: open.inert && !(open.expands && runsSubstitution(text)) });
         open = null;
         body = [];
       } else body.push(line);

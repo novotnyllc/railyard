@@ -1246,11 +1246,11 @@ function handlePayload(input) {
   // Settings are read only for commands that merge or push, from the
   // directory each one runs in (a `cd` elsewhere reads that repository's).
   const settings = new Map();
-  // A merge the parser could not place runs in the session folder unless the
-  // script changes directory; then it keeps the gate.
-  const changesDirectory = /(?:^|[\s;&|(])(?:cd|pushd)(?:\s|$)|\s(?:-C|--chdir|--git-dir|--work-tree|-R|--repo)(?:[\s=]|$)/.test(script);
+  // A merge the parser could not place, or a push that selects its repository
+  // explicitly (--git-dir, GIT_DIR…), keeps the gate: its repository is not
+  // the folder whose settings would otherwise apply.
   const settingsOf = (command) => {
-    if (command.cwdUnknown || (command.kind === "unsupported" && changesDirectory)) return { off: false, mergeGate: true };
+    if (command.cwdUnknown || command.kind === "unsupported" || command.repo?.explicit) return { off: false, mergeGate: true };
     const cwd = command.cwd || requestedCwd || "";
     if (!settings.has(cwd)) settings.set(cwd, repoConfig(cwd || undefined));
     return settings.get(cwd);

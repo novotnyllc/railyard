@@ -285,13 +285,26 @@ test("a repository switched off with the 0.13 marker file stays off until switch
   assert.match(charter(main, home), /^Railyard routing:/);
 });
 
-test("unplaced merges follow local opt-outs unless the script changes directory", (t) => {
-  const { root, main, home } = realRepo(t);
-  git(root, "init", "-q", "other");
+test("unplaced merges keep the gate whatever the session repository says", (t) => {
+  const { main, home } = realRepo(t);
   const run = (command) => runHook("merge-settlement-gate.js", main, home, {
     hook_event_name: "PreToolUse", cwd: main, tool_name: "Bash", tool_input: { command },
   });
   configure(main, home, "merge-gate", "off");
-  assert.equal(run(`sh -c '${mergeCommand} --admin'`).status, 0);
-  assert.equal(run(`cd ${path.join(root, "other")} && sh -c '${mergeCommand} --admin'`).status, 2);
+  assert.equal(run(`sh -c '${mergeCommand} --admin'`).status, 2);
+  assert.equal(run(`${mergeCommand} --admin`).status, 0);
+});
+
+test("a push that names another repository keeps that repository's guard", (t) => {
+  const { root, main, home } = realRepo(t);
+  git(root, "clone", "-q", "main", "guarded");
+  const guarded = path.join(root, "guarded");
+  git(guarded, "config", "railyard.guardDefaultBranchPush", "true");
+  configure(main, home, "off");
+  const branch = git(main, "rev-parse", "--abbrev-ref", "HEAD");
+  const push = `git --git-dir=${path.join(guarded, ".git")} --work-tree=${guarded} push origin HEAD:${branch}`;
+  const r = runHook("merge-settlement-gate.js", main, home, {
+    hook_event_name: "PreToolUse", cwd: main, tool_name: "Bash", tool_input: { command: push },
+  });
+  assert.equal(r.status, 2, r.stderr);
 });
