@@ -308,3 +308,13 @@ test("a push that names another repository keeps that repository's guard", (t) =
   });
   assert.equal(r.status, 2, r.stderr);
 });
+
+test("a merge that names its repository keeps the gate", (t) => {
+  const { main, home } = realRepo(t);
+  configure(main, home, "merge-gate", "off");
+  const run = (command) => runHook("merge-settlement-gate.js", main, home, {
+    hook_event_name: "PreToolUse", cwd: main, tool_name: "Bash", tool_input: { command },
+  });
+  assert.equal(run(`${mergeCommand} --repo owner/other --admin`).status, 2);
+  assert.equal(run(`GH_REPO=owner/other ${mergeCommand} --admin`).status, 2);
+});

@@ -1246,11 +1246,15 @@ function handlePayload(input) {
   // Settings are read only for commands that merge or push, from the
   // directory each one runs in (a `cd` elsewhere reads that repository's).
   const settings = new Map();
-  // A merge the parser could not place, or a push that selects its repository
-  // explicitly (--git-dir, GIT_DIR…), keeps the gate: its repository is not
-  // the folder whose settings would otherwise apply.
+  // A merge the parser could not place, a merge that names its repository
+  // (-R/--repo, GH_REPO, a gh api route), or a push that selects one
+  // (--git-dir, GIT_DIR…) keeps the gate: its repository is not the folder
+  // whose settings would otherwise apply.
+  const namesRepository = (command) => command.kind === "api" || command.kind === "graphql" ||
+    typeof command.flags?.get?.("-R") === "string" || typeof command.flags?.get?.("--repo") === "string" ||
+    Boolean(command.env?.GH_REPO) || Boolean(command.repo?.explicit);
   const settingsOf = (command) => {
-    if (command.cwdUnknown || command.kind === "unsupported" || command.repo?.explicit) return { off: false, mergeGate: true };
+    if (command.cwdUnknown || command.kind === "unsupported" || namesRepository(command)) return { off: false, mergeGate: true };
     const cwd = command.cwd || requestedCwd || "";
     if (!settings.has(cwd)) settings.set(cwd, repoConfig(cwd || undefined));
     return settings.get(cwd);
