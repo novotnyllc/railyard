@@ -106,7 +106,7 @@ dependent PRs. Name an owner for integration and for each affected repository,
 and publish only within the requested boundary. Every publishing lane inherits
 the [local review policy](../../references/whole-candidate-review.md)
 before every push, including CE/LFG repair continuations. Under default
-`light` review, one independent reviewer covers the integrated change before
+`light` review, one coordinated independent review covers the integrated change before
 its first push. For routine repairs, cover the batch and its affected behavior.
 Only `full` review requires a candidate receipt and delivery ledger.
 

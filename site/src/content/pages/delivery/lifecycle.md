@@ -48,7 +48,7 @@ This diagram shows a shipping workflow with selected review and CE settlement. P
 4. **Review.** Complete one independent local review of the whole change before the first push. Review later repair batches and their affected behavior. Repeat broad review when design or risk changes materially or prior coverage is uncertain.
 5. **Quality.** Run required repository checks and focused checks for the changed surface.
 6. **Publish.** Use CE commit/push/PR for PR creation and user-requested PR pushes.
-7. **Settle.** Let CE own feedback and CI. Batch repairs, resolve each thread, and link follow-up issues for separable work. After two distinct heads receive automated review, newly raised minor findings default to follow-up.
+7. **Settle.** Let CE own feedback and CI. Batch repairs, resolve each thread, and link follow-up issues for separable work. After one shared automated repair batch, newly raised minor findings default to follow-up.
 8. **Merge.** Follow the repository's merge process and wait for the queue to land the PR where configured.
 9. **Prove.** Verify merge ancestry, complete required release or deployment, and check the actual consumer.
 10. **Learn.** Capture a reusable lesson when useful or requested; no routine retrospective artifact is required.

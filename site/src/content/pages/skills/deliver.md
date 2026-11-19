@@ -19,7 +19,7 @@ Choose the stages that fit the work. Use `compound-engineering:ce-commit-push-pr
 
 The default `light` review runs repository checks and one independent local review of the complete change before the first push. Review later repairs and their affected behavior, repeating broad review when design or risk changes materially or prior coverage is uncertain. Full review with Thermos and a formal receipt is opt-in. [Local review policy](/delivery/gates/)
 
-Let CE batch feedback and own the watch loop. Fix blockers, explain declines, and link issues for actionable work that can ship separately. Once automated reviewers have reviewed two distinct heads, newly raised minor findings default to follow-up. Use the configured queue where applicable and verify the PR has merged.
+Let CE batch feedback and own the watch loop. Fix blockers, explain declines, and link issues for actionable work that can ship separately. After one shared automated repair batch, newly raised minor findings default to follow-up. Use the configured queue where applicable and verify the PR has merged.
 
 Use native children for ordinary subtasks and CE for explicit cross-engine implementation. Create a visible task when the user explicitly requests one.
 

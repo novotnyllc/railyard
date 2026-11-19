@@ -73,7 +73,7 @@ Before first publication, run repository checks and one independent local
 review of the cumulative change. When feedback requires a repair push, review
 the repair and its affected behavior. Repeat the broad review when the design
 or risk changes materially or the original coverage is uncertain. Batch fixes
-and push once per batch. After two distinct heads receive automated review,
+and push once per batch. After one shared automated repair batch,
 newly raised minor findings default to follow-up issues. Resolve real blockers
 in the PR. Thermos and deeper review remain available for higher-risk work.
 

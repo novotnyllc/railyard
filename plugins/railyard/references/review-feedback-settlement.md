@@ -38,7 +38,7 @@ with the same dispositions.
 A finding beyond inherited authority (CE's `needs-human`) stays open and goes
 to the user. Act on the decision once the user answers.
 
-## Severity and automated review rounds
+## Severity and automated feedback
 
 Classify the finding by its impact and evidence. Treat P0 as P1. Downgrading a
 reviewer's P0 or P1 requires the same evidence as declining a P1.
@@ -49,14 +49,23 @@ reviewer's P0 or P1 requires the same evidence as declining a P1.
 | P2 | Bounded defect or gap that can ship independently | Fix when small and in scope. Otherwise open or link a follow-up. |
 | P3 or nit | Style, wording, or preference | Fix if trivial. Follow up if independently useful. Decline the rest. |
 
-Count distinct PR head SHAs with a submitted automated review or attributable
-automated review feedback. Several bots or comments on the same head count
-once. Use review or comment metadata to associate the feedback with its head.
-A push, requested review, or in-progress signal alone supplies no round.
+Use one routine automated repair batch per PR, shared across all reviewers.
+Collect actionable findings from any provider, deduplicate, and publish the
+verified fixes together. Count a push only when it repairs a substantive bot
+finding. On resume, match the published commit to that finding using the
+thread reply or watcher result. CI-only and human-only repairs leave the batch
+available. After the batch, defer safe P2 findings with independent value even
+when small. Fix actual blockers on every head. Apply the ordinary disposition
+to human feedback.
 
-After two bot-reviewed heads, newly raised automated P2 findings and nits
-default to follow-up when actionable. Decline suggestions without independent
-value. Apply the ordinary disposition to human feedback. Actual blockers,
+An optional reviewer that is silent, skipped, cancelled, or out of quota
+requires no wait or retry. Handle any substantive findings it already posted.
+For a visibly queued or running review, allow CE’s existing bounded wait once.
+After that budget expires, or when the optional review is absent or terminal,
+refresh the current head, required checks, approvals, threads, and queue rules.
+Continue only when those confirm eligibility. Preserve the actual conclusion.
+A required check or approval still blocks when unavailable. If GitHub cannot
+be read or requiredness is unclear, report readiness as unknown. Actual blockers,
 decisions requiring the user, and repository-required reviews and checks
 still govern readiness.
 

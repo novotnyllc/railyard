@@ -19,8 +19,7 @@ requests.
   dependent PRs.
 - CE alone owns review settlement and CI/PR monitoring, settling each thread
   by the [review feedback settlement policy](../../plugins/railyard/references/review-feedback-settlement.md).
-  Batch feedback and keep the active CE watcher. After two distinct heads
-  receive automated review, newly raised minor findings default to follow-up
+  Batch feedback and keep the active CE watcher. After one shared automated repair batch, newly raised minor findings default to follow-up
   issues. Real blockers still need resolution.
 - With standing delivery authority, plain implementation and fix requests run
   through confirmed merge via the
