@@ -1,6 +1,6 @@
 {
   "name": "railyard",
-  "version": "0.15.1",
+  "version": "0.15.2",
   "description": "Publishing review gates, delivery through consumer verification, specialist reviews, and optional fleet coordination.",
   "author": {
     "name": "Claire Novotny LLC",

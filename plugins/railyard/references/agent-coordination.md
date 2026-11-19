@@ -6,6 +6,27 @@ dependency that needs attention, and carry the same rule into any
 descendant's brief. Children do not poll the parent for more work, and the
 parent does not ask for repeated status.
 
+## Worktree ownership
+
+When writers work concurrently in one repository, assign each writer a
+separate Git worktree and branch before edits, even for disjoint files. Count
+the coordinator as a writer when it edits. A shared checkout is fine for
+read-only work. Keep one integration owner and integrate each verified result
+before publishing the combined change.
+
+Reuse a suitable harness-managed worktree when a writer already has one. For
+setup, follow `compound-engineering:ce-worktree` when available. It prefers the
+harness tool and falls back to Git when necessary. Verify the path, branch,
+and intended base before edits, including when the harness creates the tree
+on dispatch. If isolation is unavailable, serialize the writes.
+
+After the writer stops, remove a worktree created by this task only when its
+output is verified as integrated and the tree is clean of changes and untracked
+files, including ignored files. Use normal removal or the harness's cleanup
+operation without force. Preserve user-owned, active, unmerged, dirty, and
+untracked work. Report the path and reason for each task-created worktree left
+behind. Task archival and process cleanup require separate authorization.
+
 ## When the coordinator has nothing else to do
 
 1. End or yield the turn only when the harness guarantees resumption on the

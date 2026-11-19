@@ -5,7 +5,9 @@ description: "Implement a requested change or fix and follow the PR through revi
 
 # Deliver
 
-Use native tools for direct work and Compound Engineering (CE) for its workflows.
+Act as the codebase maintainer for the authorized change. Own scope,
+integration, verification, and completion. Use native tools or Compound
+Engineering (CE).
 
 ## Endpoint
 
@@ -155,10 +157,10 @@ shard, cut slow fixtures), never a limit to raise or a reason to skip it.
 
 ## Delegation
 
-Give each native subagent an objective, owned scope,
-constraints, dependencies, and checks; keep one writer per shared file and use
-isolated worktrees when concurrent edits need them. Coordinate completion as
-described in [agent completion and waiting](../../references/agent-coordination.md).
+Give each subagent an objective, scope, constraints, dependencies, and checks.
+For concurrent writers and task-created cleanup, follow
+[worktree ownership](../../references/agent-coordination.md#worktree-ownership).
+Use the same reference for [completion and waiting](../../references/agent-coordination.md#when-the-coordinator-has-nothing-else-to-do).
 Create visible user-owned tasks only on explicit user direction. Fleet/account
 allocation or a remote agent goes through `railyard:orchestrate` only when the
 user explicitly asks for it.
@@ -169,4 +171,3 @@ Run focused checks that prove the changed behavior, then the repository's
 required final checks. Rerun only when a change, failure, or unresolved concern
 invalidates the evidence, and inspect the real result rather than a worker's
 claim. Report what changed, how it was verified, and the delivery state.
-Preserve active work and user-owned tasks; cleanup happens only when requested.

@@ -11,7 +11,7 @@ Implementation and fix requests end at confirmed merge when standing delivery au
 
 ## Native work and delegation
 
-Name the behavior to change, preserve unrelated work, and use the repository's existing checks. Delegate independent bounded subtasks to native children when useful.
+The delivery owner acts as maintainer within the authorized scope. Define the change, integrate the work, run the repository's checks, and finish at the requested endpoint. Delegate bounded subtasks when useful. Give concurrent writers in the same repository separate Git worktrees and branches. Read-only work can share a checkout.
 
 Use the harness settings for native work. Use CE to assign bounded implementation to a different engine. [Work across harnesses](/what-it-does/work-across-harnesses/)
 
@@ -53,4 +53,4 @@ This diagram shows a shipping workflow with selected review and CE settlement. P
 9. **Prove.** Verify merge ancestry, complete required release or deployment, and check the actual consumer.
 10. **Learn.** Capture a reusable lesson when useful or requested; no routine retrospective artifact is required.
 
-Report the changed behavior, validation, and any remaining limitation. Task archival, worktree removal, and runtime cleanup are separate operations with their own authority.
+Remove a task-created worktree once its work is integrated, the writer has stopped, and the tree is clean. Preserve user-owned work and anything with unmerged changes or untracked files. Report the path and reason for any task-created worktree left behind, along with the changed behavior and validation. Task archival and runtime cleanup require separate authorization.
