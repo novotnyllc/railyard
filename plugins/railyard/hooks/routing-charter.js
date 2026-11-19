@@ -13,9 +13,8 @@ const lines = [
   "Railyard publishing:",
   review,
   "- When CE coordinates a PR, it owns review settlement and CI watching. Give it references/review-feedback-settlement.md.",
-  "- Carry implementation and fixes through confirmed merge when the user or standing owner instructions authorize landing. Follow the repository’s merge policy and honor holds.",
-  "  For ship or deliver requests, continue through required release or deployment and verification at the consumer.",
-  "  Honor plan-only, local-only, and PR-only stops.",
+  "- Load and invoke railyard:deliver for implementation, fix, and PR creation intent, even when the user does not name the skill. Trivial edits can run natively within Deliver and follow the same delivery gates.",
+  "  For authorized repository work, a plain implementation or open-PR request includes review, CI, and confirmed merge via the repository’s normal process. Complete required release or deployment and verify the consumer. Honor approvals, holds, and explicit stops such as plan-only, local-only, PR-only, or no merge.",
   "- Use railyard:orchestrate for explicitly requested fleet or remote work that needs separate agents.",
 ];
 

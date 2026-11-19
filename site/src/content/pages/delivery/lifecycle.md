@@ -7,7 +7,7 @@ nav_order: 1
 
 # The delivery lifecycle
 
-Implementation and fix requests end at confirmed merge when standing delivery authority covers publication and merge. Required approvals and repository holds take precedence. A shipping request or repository requirement can extend delivery through release or deployment and consumer verification. Plan-only, diagnosis-only, review-only, local-only, and PR-only requests stop at the stated endpoint.
+For authorized repository work, implementation, fix, and open-PR requests run through review, CI, confirmed merge, and any required release or deployment and consumer verification. Required approvals and repository holds take precedence. Plan-only, diagnosis-only, review-only, local-only, PR-only, and no-merge requests stop at the stated endpoint.
 
 ## Native work and delegation
 

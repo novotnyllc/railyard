@@ -90,11 +90,12 @@ test("shipped instructions do not reference retired routing contracts", () => {
   assert.deepEqual(hits, []);
 });
 
-test("implementation reaches confirmed merge when authorized and shipping includes its required tail", () => {
-  assert.match(deliver, /request to implement or fix.*default endpoint is a confirmed merge when the user or standing owner instructions authorize landing/);
-  assert.match(deliver, /Installing or updating Railyard adds no publication or merge authority/);
-  assert.match(deliver, /ship or deliver.*required release or deployment.*actual consumer/);
-  for (const stop of ["plan-only", "diagnosis-only", "review-only", "local-only", "PR-only"]) {
+test("ordinary implementation and PR requests reach merge and required release unless narrowed", () => {
+  assert.match(deliver, /For authorized repository work, a plain implementation, fix, or open-PR request includes review, CI, and confirmed merge through the repository's normal process/);
+  assert.match(deliver, /without a separate merge or shipping request.*Complete required release or deployment and verify the actual consumer/);
+  assert.match(deliver, /Installing or updating Railyard grants no privileges or approval/);
+  assert.match(orchestrate, /Apply the `railyard:deliver` endpoint to each lane.*open-PR requests for authorized repository work.*confirmed merge.*required release or deployment and consumer verification/);
+  for (const stop of ["plan-only", "diagnosis-only", "review-only", "local-only", "PR-only", "no-merge"]) {
     assert.ok(deliver.includes(stop), `Deliver honors the ${stop} stop`);
   }
   assert.match(deliver, /Advice and investigation requests carry no publication authority/);
@@ -354,6 +355,8 @@ test("watch repair delegates stop locally before the reviewed publisher writes",
 
 test("push-only and PR-only publication preserve the user's merge boundary", () => {
   const handoff = flat(read("skills/deliver/references/ce-call-adapter.md"));
+  assert.match(handoff, /plain implementation, fix, or open-PR request for authorized repository work includes normal PR review, CI, and landing/);
+  assert.match(handoff, /Apply the PR-only rules for an explicit no-merge request/);
   assert.match(handoff, /Create a new auto-landing PR as a draft in the create operation/);
   assert.match(handoff, /Before pushing, verify an effective draft or repository hold and confirm that the queue cannot land the current head/);
   assert.match(handoff, /Push-only does not create a PR/);
