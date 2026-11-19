@@ -5,6 +5,11 @@ When Deliver calls a CE stage, resolve its `SKILL.md`, execute the procedure,
 and return to the requested delivery boundary. A CE stage can run in the
 current session or in a native subagent.
 
+Pass [worktree ownership](../../../references/agent-coordination.md#worktree-ownership)
+to every CE stage that can write, including LFG and its workers. Use parallel
+writes only if CE can give each concurrent writer in the same repository a
+separate worktree and branch. Serialize writes otherwise.
+
 ## Machine-local stage routing
 
 Keep the current chat coordinating. Plan in the current CE stage and let

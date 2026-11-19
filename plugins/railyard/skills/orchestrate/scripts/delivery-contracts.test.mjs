@@ -124,6 +124,20 @@ test("CE alone owns review settlement and CI, and PRs use ce-commit-push-pr", ()
   }
 });
 
+test("the maintainer owns delivery and isolates concurrent writers", () => {
+  assert.match(deliver, /codebase maintainer for the authorized change.*Own scope, integration, verification, and completion/);
+  for (const instructions of [deliver, orchestrate]) {
+    assert.match(instructions, /agent-coordination\.md#worktree-ownership/);
+  }
+  const ownership = flat(read("references/agent-coordination.md").split("## Worktree ownership")[1].split("## ")[0]);
+  assert.match(ownership, /separate Git worktree and branch before edits.*coordinator as a writer.*shared checkout is fine for read-only work/);
+  assert.match(ownership, /If isolation is unavailable, serialize the writes/);
+  assert.match(ownership, /After the writer stops.*created by this task only when its output is verified as integrated.*untracked files, including ignored files/);
+  assert.match(ownership, /without force.*Preserve user-owned, active, unmerged, dirty, and untracked work.*Report the path and reason/);
+  const adapter = flat(read("skills/deliver/references/ce-call-adapter.md"));
+  assert.match(adapter, /agent-coordination\.md#worktree-ownership.*every CE stage that can write.*separate worktree and branch.*Serialize writes otherwise/);
+});
+
 test("full review retains Thermos plus configured Codex review", () => {
   const review = flat(read("skills/deliver/SKILL.md").match(/## End-of-PR review\n([\s\S]*?)\n## /)?.[1] ?? "");
   assert.match(review, /`full`-level/);

@@ -42,9 +42,9 @@ Identify the requested result, standing authorization, and stop condition.
 Before dispatching, state the simplest path in one line; if it is a direct
 edit or propagation, do it instead of dispatching, unless the user asked for
 that carrier. Split only where scopes are independent or a dependency needs its
-own owner. Keep one writer per shared file and transfer ownership explicitly. Use
-isolated worktrees when concurrent changes need them, and preserve unrelated
-work. Start dependency-ready work in parallel, answer child questions, and
+own owner. Assign worktrees and branches before concurrent writes under
+[worktree ownership](../../references/agent-coordination.md#worktree-ownership).
+Transfer ownership explicitly. Start dependency-ready work in parallel, answer child questions, and
 redirect failed work without duplicating it. Continue authorized delivery and
 repairs until the combined result passes the user's acceptance surface or is
 concretely blocked.
@@ -121,8 +121,6 @@ or WSL pass does not prove native Windows behavior.
 
 ## Preserve resumable work
 
-A stopped or idle signal does not prove the objective is done. Preserve active
-worktrees, branches, and user-owned tasks. Archive, remove worktrees, or clean
-up processes only on explicit request, after confirming the target is inactive
-and its output is integrated or preserved; unrelated or dirty work is not
-discarded without authorization.
+A stopped or idle signal does not prove the objective is done. Apply
+[worktree ownership](../../references/agent-coordination.md#worktree-ownership) to
+task-created worktrees, and preserve user-owned work and tasks.
