@@ -1,4 +1,4 @@
 interface:
   display_name: "Deliver"
-  short_description: "Deliver changes through release and consumer verification."
-  default_prompt: "Use $deliver to complete this change through implementation, verification, commit, push, PR, CE-owned review and CI settlement, merge, required release or deployment, and consumer verification. Preserve explicit plan-only, diagnosis-only, review-only, local-only, or PR-only stops. Keep ownership across child handoffs and waits until the selected endpoint is reached or a concrete blocker requires user or external action."
+  short_description: "Implement a change and see its PR through review and merge."
+  default_prompt: "Implement the requested change and review it locally. Follow its PR through feedback, CI, and confirmed merge when landing is authorized. Respect any narrower endpoint. If shipping is requested, verify the required release or deployment at its consumer."

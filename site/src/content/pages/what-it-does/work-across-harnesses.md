@@ -7,33 +7,30 @@ nav_order: 6
 
 # Work across harnesses
 
-A delivery can start in Claude Code, hand a bounded unit of work to Codex, and bring the evidence back to the one workflow that owns it. Record the harness, model, and effort at each handoff so the request stays coherent and every handoff can be inspected.
+Describe the outcome in your Codex or Claude Code chat:
 
-## Easy path
+> Fix retries and show a useful CLI error when they run out.
 
-```text
-> Hand this bounded change to Codex and show me which model and effort you picked.
-```
+The chat can handle a small change directly or select CE Work for a clear
+implementation request. CE Work keeps scheduling, integration, and verification
+in the current chat. It defaults to the current harness and reads external
+implementer preferences from `.compound-engineering/config.local.yaml` and
+`.compound-engineering/config.yaml` when it runs. You can also name an engine for
+a particular assignment.
 
-`railyard:model-routing` helps choose the model and effort for the unit of work.
+Each run binds a single implementation engine. Give one run ownership of a
+shared file at a time. CE checks the requested engine, isolates external edits
+in a worktree, and returns evidence to the coordinating chat. Use
+`mode:return-to-caller` when the chat owns the combined review or publication.
 
-## What happens
+CE has implementation targets for Codex, Claude, Grok, Antigravity, OpenCode,
+and others. Use Groq through CE's `opencode` route. Configure Groq in OpenCode,
+connect your account with `/connect`, then pass a `groq/<model-id>` selector from
+`/models` to CE. External routes depend on local tooling, account access, and
+the requested model. Follow CE's preflight and read back which engine ran. [OpenCode providers](https://opencode.ai/docs/providers/) · [Execution engines](https://github.com/EveryInc/compound-engineering-plugin/blob/compound-engineering-v3.38.2/skills/ce-work/references/execution-engines.md) · [External execution](https://github.com/EveryInc/compound-engineering-plugin/blob/compound-engineering-v3.38.2/skills/ce-work/references/cross-model-execution.md)
 
-Native subagents in the same harness are the default. Crossing harnesses is opt-in, and the destination CLI has to be set up separately. Report an unsupported selection; don't change the model, effort, or provider without saying so.
-
-## Session model and delegated model are different
-
-Pick the interactive session for the conversation, and pick the model for each delegated unit of work. Choose an effort with the model wherever the model exposes one; Haiku 4.5 has no effort setting.
-
-- **Claude Code:** Opus 5.5 at `medium` handles substantive subagent work, Fable 5.1 is the escalation for frontier-hard or long autonomous work, Sonnet 5.5 takes well-scoped edits, bug fixes, and docs, and Haiku 4.5 takes read-only search.
-- **Codex:** GPT-6.1 Sol at `medium` is the baseline for implementation, debugging, planning, and ambiguous or multi-file work, even when small or bounded. Use Luna only for routine or repetitive work with no substantial engineering judgment and an inexpensive acceptance check, such as extraction, classification, large repetitive transforms, or narrowly specified edits. Use deterministic tools first for fully mechanical work. Demanding work can justify Sol 6.1 at `high`, `xhigh`, or `max`. Codex reviews default to Sol 6.1 at `high`. Astra is a rare, explicitly justified escalation after a concrete residual failure or quality gap on Sol 6.1.
-
-Leaving the model unset means the child inherits the parent's. In Codex, a full-history fork inherits both settings; changing either one needs a limited-history or no-history fork and a sufficient brief. Check the actual tool schema before dispatch, and keep the requested selection separate from the runtime metadata that shows what ran.
-
-## Handoffs keep one owner
-
-Claude Code reaches Codex models through a Codex CLI worker. Codex reaches Claude review through Compound Engineering's `claude -p` adapter. Either harness can get a ChatGPT Pro second opinion through [Oracle](/skills/oracle/). Create a visible provider-owned task only when the user explicitly asks for one; an unavailable transport doesn't justify creating one as a fallback.
-
-## Next
-
-[Control model cost](/what-it-does/control-model-cost/) or [read model routing](/delivery/model-routing/).
+For one coordinated PR workflow with a selected implementation engine, use
+CE's `lfg` and name the engine for implementation. For work that must run on
+a specific remote host or account, use Railyard's fleet workflow.
+[CE stage routing](https://github.com/EveryInc/compound-engineering-plugin/blob/compound-engineering-v3.38.2/skills/lfg/references/stage-routing.md) ·
+[Fleet orchestration](/skills/orchestrate/)

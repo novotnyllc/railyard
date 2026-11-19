@@ -1,7 +1,7 @@
 {
   "name": "railyard",
-  "version": "0.14.0",
-  "description": "Lean automatic workflow selection, deliberate model and reasoning effort, native delegation, selected CE delivery, and explicit fleet orchestration.",
+  "version": "0.15.0",
+  "description": "Publishing review gates, delivery through consumer verification, specialist reviews, and optional fleet coordination.",
   "author": {
     "name": "Claire Novotny LLC",
     "url": "https://github.com/novotnyllc"
@@ -13,8 +13,8 @@
   "hooks": "./codex/hooks.json",
   "interface": {
     "displayName": "Railyard",
-    "shortDescription": "Deliberate model and effort, lean delivery, and fleet orchestration",
-    "longDescription": "Railyard supplies a concise startup routing charter and deterministic dispatch checks. Routine work runs natively; selected Compound Engineering workflows own planning, debugging, publishing, and PR follow-through. Model and reasoning effort are chosen together, with GPT-6.1 Sol at medium as the default for engineering and subagents, Sol 6.1 at high for review, Luna for routine work with little engineering judgment and an inexpensive check, and Astra only for a demonstrated Sol 6.1 gap. Fleet/account placement, targeted review, Oracle, audit, and runtime cleanup remain available when explicitly needed.",
+    "shortDescription": "Delivery, publishing checks, and optional fleet coordination",
+    "longDescription": "Railyard guides local publishing review and carries authorized delivery through the repository’s merge process, required release or deployment, and consumer verification. Compound Engineering coordinates PR review and CI. Fleet coordination and specialist reviews are available on demand.",
     "developerName": "Claire Novotny LLC",
     "category": "Productivity",
     "capabilities": [
@@ -26,7 +26,7 @@
     "privacyPolicyURL": "https://github.com/novotnyllc/railyard",
     "termsOfServiceURL": "https://github.com/novotnyllc/railyard",
     "defaultPrompt": [
-      "Use Railyard to complete this change with an appropriate model, effort, and workflow.",
+      "Use Railyard to deliver this change through the required release or deployment and verify it at the consumer.",
       "Use Railyard to coordinate this explicitly requested fleet or account workflow.",
       "Run the Railyard doctor for this installation problem."
     ],

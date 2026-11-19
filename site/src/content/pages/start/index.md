@@ -13,7 +13,7 @@ If a command or gate stops, use the [troubleshooting guide](/troubleshooting/) b
 
 ## First delivery example
 
-For a request to fix an issue and get it merged, begin with native execution and select useful CE workflows. CE owns review settlement and the CI loop through the requested merge. Show the actual checks and post-merge evidence so the operator can assess the result. Add Roundhouse for explicitly requested fleet work.
+For an implementation or fix request, begin with native execution and use CE workflows where they help. CE owns review settlement and CI. Deliver follows the repository’s merge process and confirms the PR landed. Show the actual checks and post-merge evidence so the operator can assess the result. Add Roundhouse for explicitly requested fleet work.
 
 - [Install](/start/install/) — add Railyard to Claude Code, Codex, or both; Roundhouse is optional for fleet work.
 - [First delivery](/start/first-delivery/) — go from one sentence to a verified merge on one machine.
@@ -22,13 +22,13 @@ For a request to fix an issue and get it merged, begin with native execution and
 
 ## What happens around your request
 
-Routine work runs natively. Select CE workflows automatically when they help, and resolve CE only when a selected stage needs it. Startup loads routing guidance without bootstrapping workflow dependencies.
+Routine work runs natively. Invoke a focused CE workflow when it helps.
 
-Before every push, complete the [whole-candidate review gate](/delivery/gates/): both [Thermos](/skills/thermos/) lenses and `codex review` on GPT-6.1 Sol at high effort cover the complete cumulative change and affected lifecycle. Resolve findings and bind the completed evidence to the exact candidate. Use `compound-engineering:ce-commit-push-pr` to publish it; CE owns one review settlement and CI loop. Reuse valid evidence and recheck changed interactions before repair pushes. [Audits or retrospectives](/delivery/audit/) remain optional.
+Run repository checks and one independent [local review](/delivery/gates/) of the whole change before the first push. Use `compound-engineering:ce-commit-push-pr` to publish it. CE owns feedback and CI, and batches repair pushes. Review each repair and its affected behavior before publishing again.
 
 Use native child agents for useful parallel work. Create visible Codex tasks only when the user explicitly requests them. Fleet or account orchestration also requires explicit scope.
 
-Choose both model and reasoning effort deliberately. In Claude Code, Opus 5.5 at `medium` is the default for substantive subagent work; in Codex, GPT-6.1 Sol at `medium` is the baseline for implementation, debugging, planning, and ambiguous or multi-file work, even when small or bounded. Omitting the model means the child inherits. Disclose an unavailable selection instead of silently substituting one. The [model routing guide](/delivery/model-routing/) explains the choice.
+For an explicit assignment to another implementation engine, use [CE cross-engine work](/what-it-does/work-across-harnesses/).
 
 ## Choose the path
 

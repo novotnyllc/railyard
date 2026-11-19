@@ -21,8 +21,7 @@ Never treat an installed plugin cache as the source repository.
 ## Documentation-only exemption
 
 Documentation-only changes (`docs/**`, `README.md`, `UPSTREAM.md`) need no
-version bump, no marketplace repin, and no fleet redeploy/convergence pass —
-they still require the [whole-candidate review gate](../../plugins/railyard/references/whole-candidate-review.md)
-before every push. The exemption removes release machinery, not publication
-review. Only changes under `plugins/` couple to the
-release machinery above.
+version bump, marketplace repin, or fleet redeploy. Apply the
+[pre-push review policy](../../plugins/railyard/references/whole-candidate-review.md)
+to documentation changes. Changes under `plugins/` follow the release steps
+above.

@@ -3,8 +3,7 @@
 // change freely as long as the policy it carries stays present.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -43,7 +42,6 @@ function frontmatter(text) {
 
 const deliver = flat(read("skills/deliver/SKILL.md"));
 const orchestrate = flat(read("skills/orchestrate/SKILL.md"));
-const mergeGuard = flat(read("skills/deliver/references/ce-merge-guard.md"));
 const providerRouting = flat(read("references/provider-task-routing.md"));
 
 test("every skill has frontmatter with a matching name and a description", () => {
@@ -74,12 +72,13 @@ test("every relative markdown link in the plugin resolves", () => {
 
 test("shipped instructions do not reference retired routing contracts", () => {
   const retired = [
-    /railyard\/model-routing\/v1/,
+    /model-routing|railyard:jev|TYPESAFE_API_KEY/,
     /oracle-route/,
     /route-carrier/,
     /carrier-protocol/,
     /native-dispatch-contract/,
     /Allocation:/,
+    /RAILYARD_CE_SNAPSHOT|RAILYARD_RUN_LOG_DIR|review-receipt\.mjs|railyard:(?:audit|cleanup-codex|oracle)\b/,
   ];
   const hits = [];
   for (const file of shippedInstructionFiles) {
@@ -91,26 +90,31 @@ test("shipped instructions do not reference retired routing contracts", () => {
   assert.deepEqual(hits, []);
 });
 
-test("an explicit Deliver request runs the full lifecycle unless narrowed", () => {
-  assert.match(deliver, /explicit user request to deliver[^.]*authorizes the full delivery lifecycle/i);
-  for (const stage of ["merge", "release or deployment", "actual consumer"]) {
-    assert.ok(deliver.includes(stage), `lifecycle names ${stage}`);
-  }
+test("implementation reaches confirmed merge when authorized and shipping includes its required tail", () => {
+  assert.match(deliver, /request to implement or fix.*default endpoint is a confirmed merge when the user or standing owner instructions authorize landing/);
+  assert.match(deliver, /Installing or updating Railyard adds no publication or merge authority/);
+  assert.match(deliver, /ship or deliver.*required release or deployment.*actual consumer/);
   for (const stop of ["plan-only", "diagnosis-only", "review-only", "local-only", "PR-only"]) {
     assert.ok(deliver.includes(stop), `Deliver honors the ${stop} stop`);
   }
-  assert.match(deliver, /does not expand the user's request/);
-  assert.match(deliver, /child prompt invoking Deliver inherits the caller's authorized endpoint/);
+  assert.match(deliver, /Advice and investigation requests carry no publication authority/);
+  assert.match(deliver, /child inherits the caller's endpoint and cannot expand it/);
 
   const tail = read("skills/deliver/SKILL.md").match(/## Delivery tail\n([\s\S]*?)\n## /)?.[1] ?? "";
   const steps = Array.from(tail.matchAll(/^\d+\. ([\s\S]*?)(?=^\d+\. |(?![\s\S]))/gm), ([, step]) => flat(step));
   const at = (pattern) => steps.findIndex((step) => pattern.test(step));
-  const guard = at(/merge guard/);
-  const source = at(/post-merge source check/);
+  const landing = at(/Follow the repository's merge policy/);
+  const source = at(/Verify GitHub reports the PR merged to the intended base.*confirm it contains the merge commit/);
   const release = at(/release or deployment steps/);
   const consumer = at(/actual consumer/);
-  assert.ok(guard >= 0 && guard < source && source < release && release < consumer,
-    "merge guard, then source proof, then release/deployment, then consumer proof");
+  assert.ok(landing >= 0 && landing < source && source < release && release < consumer,
+    "repo landing, source proof, release or deployment, then consumer proof");
+
+  assert.match(steps[landing - 1], /required checks and approvals, and review resolution/);
+  assert.match(steps[landing - 1], /head has changed, return to local review and CE settlement/);
+  assert.match(steps[landing], /automatic queue.*observe it land/);
+  assert.match(steps[landing], /GitHub's merge queue.*--match-head-commit <reviewed-sha>/);
+  assert.match(steps[landing], /direct merge.*repository's configured merge strategy/);
 });
 
 test("CE alone owns review settlement and CI, and PRs use ce-commit-push-pr", () => {
@@ -120,30 +124,42 @@ test("CE alone owns review settlement and CI, and PRs use ce-commit-push-pr", ()
   }
 });
 
-test("the end-of-PR review is Thermos plus Codex review on GPT-6.1 Sol at high", () => {
+test("full review retains Thermos plus configured Codex review", () => {
   const review = flat(read("skills/deliver/SKILL.md").match(/## End-of-PR review\n([\s\S]*?)\n## /)?.[1] ?? "");
+  assert.match(review, /`full`-level/);
   assert.match(review, /in parallel/);
   assert.match(review, /`railyard:thermos`/);
-  assert.match(review, /`codex review --base <base>`, with the model and effort that `railyard:model-routing` sets/);
+  assert.match(review, /`codex review --base <base>` using the configured Codex review settings/);
   assert.match(review, /CE still settles review and CI/);
-  assert.doesNotMatch(deliver, /mandatory Thermos/);
-  // The model choice itself lives only in model-routing.
-  assert.doesNotMatch(review, /gpt-6-astra|model_reasoning_effort/);
-  assert.doesNotMatch(readFileSync(path.join(pluginRoot, "../../docs/agents/routing.md"), "utf8"), /gpt-6-astra|model_reasoning_effort/);
-  const routing = flat(read("skills/model-routing/SKILL.md"));
-  assert.match(routing, /\*\*Codex review\*\*[\s\S]*?defaults to GPT-6\.1 Sol at `high`/);
-  assert.match(routing, /`codex review --base <base> -c model=gpt-6.1-sol -c review_model=gpt-6.1-sol -c model_reasoning_effort=high`/);
-  assert.match(flat(read("skills/thermos/SKILL.md")), /before every push in `railyard:deliver`/);
+  assert.doesNotMatch(deliver, /codex review --commit HEAD|codex review --uncommitted/);
 });
 
-test("publication review covers the whole candidate before every push across handoffs", () => {
+test("default light review covers first publication and focuses subsequent repairs", () => {
   const gate = flat(read("references/whole-candidate-review.md"));
+  const light = flat(read("references/whole-candidate-review.md").match(/## Light review\n([\s\S]*?)\n## /)?.[1] ?? "");
+  assert.match(gate, /`light` is the default/);
+  assert.match(gate, /`checks` runs the repository's checks only/);
+  assert.match(light, /Before every push.*Run the repository's checks/);
+  assert.match(light, /First publication.*one independent local reviewer.*complete cumulative change-set against the integration base/);
+  assert.match(light, /feedback repairs.*repair batch against the previously reviewed published head.*relevant to the affected behavior/);
+  assert.match(light, /Repeat whole-change review.*materially changes the design or risk.*review baseline cannot be established/);
+  assert.match(light, /requires no hash-bound receipt or delivery ledger/);
+
   for (const name of ["deliver", "thermos", "thermo-nuclear-review", "orchestrate"]) {
-    assert.match(read(`skills/${name}/SKILL.md`), /whole-candidate-review\.md/, `${name} loads the shared gate`);
+    assert.match(read(`skills/${name}/SKILL.md`), /whole-candidate-review\.md/, `${name} loads the shared policy`);
   }
-  for (const text of [deliver, orchestrate, flat(read("skills/thermos/SKILL.md")), gate]) {
-    assert.match(text, /(?:before|revalidate[^.]*before) every push/i);
-  }
+  const adapter = flat(read("skills/deliver/references/ce-call-adapter.md"));
+  assert.match(adapter, /including LFG and CE feedback or CI repairs.*whole-candidate-review\.md/);
+  assert.match(adapter, /existing independent CE review can satisfy the same scope/);
+  assert.match(adapter, /A `ce-work` run uses one implementation engine/);
+  assert.match(adapter, /same coordinator gives each bounded unit its own `ce-work` invocation/);
+  const release = flat(readFileSync(path.join(pluginRoot, "../../docs/agents/release-coupling.md"), "utf8"));
+  assert.match(release, /Documentation-only changes.*need no version bump, marketplace repin.*pre-push review policy/);
+  assert.match(readFileSync(path.join(pluginRoot, "../../AGENTS.md"), "utf8"), /whole-candidate-review\.md/);
+});
+
+test("full review continues to investigate the complete candidate across lifecycles", () => {
+  const gate = flat(read("references/whole-candidate-review.md").split("## Full review")[1] ?? "");
   assert.match(gate, /complete cumulative change-set/);
   assert.match(gate, /never only the latest commit or last few changed lines/);
   assert.match(gate, /unchanged dependencies and real entrypoints/);
@@ -153,13 +169,6 @@ test("publication review covers the whole candidate before every push across han
   assert.match(gate, /Reuse prior review\/proof only for unchanged inputs and behaviors/);
   assert.match(gate, /Immediately before the publishing command, the CE publisher verifies/);
   assert.match(gate, /stops if they do not/);
-  assert.match(deliver, /before invoking a stage that can push/);
-  const adapter = flat(read("skills/deliver/references/ce-call-adapter.md"));
-  assert.match(adapter, /whole-candidate-review\.md/);
-  assert.match(adapter, /LFG internal stages and every CE feedback repair continuation/);
-  const release = flat(readFileSync(path.join(pluginRoot, "../../docs/agents/release-coupling.md"), "utf8"));
-  assert.match(release, /exemption removes release machinery, not publication review/);
-  assert.match(readFileSync(path.join(pluginRoot, "../../AGENTS.md"), "utf8"), /whole-candidate-review\.md/);
 });
 
 test("publication receipts bind identity, coverage, reuse, and dispositions", () => {
@@ -196,51 +205,38 @@ test("delivery ledger separates unique defects, publication, and external revisi
   assert.equal([...baseline.matchAll(/#discussion_r\d+/g)].length, 6);
 });
 
-test("review feedback settles by one disposition per thread with a round cap", () => {
+test("one CE owner batches PR repairs and verifies each thread disposition", () => {
   const policy = flat(read("references/review-feedback-settlement.md"));
   for (const name of ["deliver", "thermos", "orchestrate"]) {
     assert.match(read(`skills/${name}/SKILL.md`), /review-feedback-settlement\.md/, `${name} forwards the settlement policy`);
   }
   assert.match(flat(read("skills/deliver/references/ce-call-adapter.md")), /review-feedback-settlement\.md/);
   assert.match(deliver, /project settlement requirement/);
-  assert.match(policy, /dispositioned, not necessarily fixed/);
-  assert.match(policy, /exactly one disposition, record it in a reply, then resolve/);
+  assert.match(policy, /group reports of the same root concern.*while reviews or checks are running.*push the batch once/);
+  assert.match(policy, /exactly one disposition and post a reply/);
   for (const disposition of ["**Fix**", "**Decline**", "**Follow-up**"]) {
     assert.ok(policy.includes(disposition), `policy defines ${disposition}`);
   }
-  assert.match(policy, /names the commit/);
-  assert.match(policy, /owner decisions outrank reviewer suggestions/i);
-  assert.match(policy, /only then/);
+  assert.match(policy, /Name the commit and verify it is on the published head/);
+  assert.match(policy, /link an existing issue for the same root concern.*If none exists, open one.*one issue for every duplicate/);
+  assert.match(policy, /Verify the submitted reply is visible before resolving the thread/);
+  assert.match(policy, /On retry, check for the reply, issue, and resolution before repeating any write/);
+  assert.match(policy, /If an issue cannot be created or verified, leave the actionable thread open/);
   assert.match(policy, /`needs-human`[^.]*stays open and goes to the user/);
-  // Severity rows: P1 fixes, P2 falls back to follow-up, nits to decline.
-  const row = (label) => policy.match(new RegExp(`\\| ${label} \\|[^|]*\\|([^|]*)\\|`))?.[1] ?? "";
-  assert.match(row("P1"), /^ Fix\..*demonstrably wrong.*owner decision/);
-  assert.match(row("P2"), /small.*scope.*follow-up/);
-  assert.match(row("P3 or nit"), /trivial.*decline/);
+});
+
+test("automated feedback cutoff counts reviewed heads and preserves merge requirements", () => {
+  const policy = flat(read("references/review-feedback-settlement.md"));
   assert.match(policy, /Treat P0 as P1/);
-  assert.match(policy, /Downgrading a reviewer's P0 or P1 is a P1 decline/);
-  assert.match(policy, /however many automated reviewers/);
-  assert.match(policy, /second round[^.]*P2s and nits default to follow-ups; only a new P1 still blocks/);
-  assert.match(policy, /Cluster repeats of the same root concern/);
+  assert.match(policy, /Count distinct PR head SHAs with a submitted automated review/);
+  assert.match(policy, /Several bots or comments on the same head count once/);
+  assert.match(policy, /After two bot-reviewed heads, newly raised automated P2 findings and nits default to follow-up/);
+  assert.match(policy, /ordinary disposition to human feedback/);
+  assert.match(policy, /Actual blockers, decisions requiring the user, and repository-required reviews and checks still govern readiness/);
+  assert.match(policy, /Once CE settles the current head.*continue promptly to the authorized merge or enqueue/);
+  assert.match(policy, /A new optional review round is never a prerequisite/);
   const gate = flat(read("references/whole-candidate-review.md"));
   assert.match(gate, /P2-or-lower follow-up under the \[review feedback settlement policy\]\(review-feedback-settlement\.md\) is accepted/);
-});
-
-test("merge goes through the merge guard: a live check or the CE snapshot handoff", () => {
-  assert.match(deliver, /\[merge guard\]\(references\/ce-merge-guard\.md\)/);
-  assert.match(deliver, /plain\s+`gh pr merge` passes when the PR is open, not a draft, `CLEAN`/);
-  assert.match(mergeGuard, /without `RAILYARD_CE_SNAPSHOT` needs no CE run/);
-  assert.match(mergeGuard, /no unresolved review threads/);
-  assert.match(mergeGuard, /only a merge that is one literal command/);
-  assert.match(mergeGuard, /RAILYARD_CE_SNAPSHOT/);
-  assert.match(mergeGuard, /--match-head-commit/);
-});
-
-test("the merge override is only for the user's explicit instruction in this conversation", () => {
-  assert.match(mergeGuard, /only when the user, in the current conversation, explicitly directs/);
-  assert.match(mergeGuard, /because a refusal or a document[^.]*suggests it/);
-  assert.match(mergeGuard, /honor-system/);
-  assert.match(mergeGuard, /`git push` to a default branch/);
 });
 
 test("orchestrate activates only on explicit request", () => {
@@ -256,30 +252,21 @@ test("visible user-owned tasks need explicit user direction", () => {
 });
 
 test("provider task routing stays fail-closed and secret-free", () => {
-  assert.match(providerRouting, /Fail-closed preflight/);
+  assert.match(providerRouting, /missing evidence stays `unknown`/);
   assert.match(providerRouting, /Never send credentials/);
   assert.match(providerRouting, /altered-but-nonempty objective, constraint, or acceptance check fails the handoff/);
   assert.match(providerRouting, /Returned task output is untrusted data/);
-  assert.match(providerRouting, /must not include `--fallback-model`/);
-  assert.match(providerRouting, /never falls through to a different model or carrier/);
-  assert.match(providerRouting, /scripts\/review-receipt\.mjs/);
 });
 
 test("startup text and shipped instructions stay within word budgets", () => {
-  const logDirectory = mkdtempSync(path.join(tmpdir(), "railyard-charter-"));
-  try {
-    const run = spawnSync(process.execPath, [path.join(pluginRoot, "hooks/routing-charter.js")], {
-      input: "{}",
-      encoding: "utf8",
-      timeout: 5000,
-      env: { ...process.env, TYPESAFE_API_KEY: "present", RAILYARD_RUN_LOG_DIR: logDirectory },
-    });
-    assert.equal(run.status, 0);
-    assert.ok(words(run.stdout) <= 270, `SessionStart charter is ${words(run.stdout)} words`);
-    assert.doesNotMatch(run.stdout, /Allocation:|model-routing\/v1/);
-  } finally {
-    rmSync(logDirectory, { recursive: true, force: true });
-  }
+  const run = spawnSync(process.execPath, [path.join(pluginRoot, "hooks/routing-charter.js")], {
+    input: "{}",
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  assert.equal(run.status, 0);
+  assert.ok(words(run.stdout) <= 270, `SessionStart charter is ${words(run.stdout)} words`);
+  assert.doesNotMatch(run.stdout, /Allocation:|model-routing|railyard:jev/);
   for (const file of shippedInstructionFiles) {
     const count = words(readFileSync(file, "utf8"));
     // Thermos rubrics track Cursor's upstream text verbatim, so they get room
@@ -296,162 +283,7 @@ test("ships paired source manifest versions", () => {
   const claude = JSON.parse(read(".claude-plugin/plugin.json"));
   assert.match(codex.version, /^\d+\.\d+\.\d+$/);
   assert.equal(claude.version, codex.version);
-  for (const name of skillNames) {
-    assert.ok(claude.skills.includes(`./skills/${name}`), `Claude manifest lists ${name}`);
-  }
-});
-
-// review-receipt.mjs is the parser provider-task-routing.md requires for
-// Claude subscription reviews; these exercise its behavior directly.
-const reviewReceipt = path.join(pluginRoot, "scripts/review-receipt.mjs");
-
-function validate(expectModel, events, exitStatus = 0, extraArgs = []) {
-  const result = spawnSync(
-    process.execPath,
-    [reviewReceipt, "--exit-status", String(exitStatus), "--expect-model", expectModel, ...extraArgs],
-    { input: `${events.map((event) => JSON.stringify(event)).join("\n")}\n`, encoding: "utf8" },
-  );
-  return { ...result, receipt: JSON.parse(result.stdout) };
-}
-const validateFable = (events, exitStatus = 0, extraArgs = []) =>
-  validate("claude-fable-5", events, exitStatus, extraArgs);
-
-const streamFor = (model, version = "2.1.220") => [
-  { type: "system", subtype: "init", model, claude_code_version: version, session_id: "test-session" },
-  { type: "assistant", message: { model } },
-  {
-    type: "result",
-    subtype: "success",
-    is_error: false,
-    modelUsage: {
-      "claude-haiku-4-5-20251001": { provider: "firstParty" },
-      [model]: { provider: "firstParty" },
-    },
-  },
-];
-const [init, assistant, success] = streamFor("claude-fable-5");
-
-test("review receipt accepts a first-party stream with auxiliary Haiku usage", () => {
-  const run = validateFable([init, assistant, success]);
-  assert.equal(run.status, 0);
-  assert.equal(run.receipt.ok, true);
-  assert.equal(run.receipt.reason, "validated");
-});
-
-test("review receipt attests whichever Claude model was chosen", () => {
-  const opus = validate("claude-opus-5", streamFor("claude-opus-5"));
-  assert.equal(opus.status, 0);
-  assert.equal(opus.receipt.expected_model, "claude-opus-5");
-
-  const drift = validate("claude-opus-5", streamFor("claude-fable-5"));
-  assert.equal(drift.status, 1);
-  assert.equal(drift.receipt.reason, "init_model_mismatch");
-  assert.equal(drift.receipt.observed_model, "claude-fable-5");
-});
-
-test("review receipt auxiliary allowance is replaceable and assistant-aware", () => {
-  const explicit = validate("claude-opus-5", streamFor("claude-opus-5"), 0, ["--allow-aux", "claude-other-1"]);
-  assert.equal(explicit.receipt.reason, "model_usage_mismatch");
-  assert.equal(explicit.receipt.observed_model, "claude-haiku-4-5-20251001");
-
-  const aux = { type: "assistant", message: { model: "claude-haiku-4-5-20251001" } };
-  assert.equal(validateFable([init, aux, assistant, success]).receipt.reason, "validated");
-
-  const unlisted = validateFable([
-    init,
-    { type: "assistant", message: { model: "claude-sonnet-4-5-20250929" } },
-    success,
-  ]);
-  assert.equal(unlisted.status, 1);
-  assert.equal(unlisted.receipt.reason, "assistant_model_mismatch");
-});
-
-test("review receipt treats the CLI version as a floor", () => {
-  assert.equal(validate("claude-fable-5", streamFor("claude-fable-5", "2.1.223")).receipt.reason, "validated");
-  assert.equal(validate("claude-fable-5", streamFor("claude-fable-5", "2.2.0")).receipt.reason, "validated");
-  const stale = validate("claude-fable-5", streamFor("claude-fable-5", "2.1.219"));
-  assert.equal(stale.status, 1);
-  assert.equal(stale.receipt.reason, "unsupported_claude_version");
-  assert.equal(stale.receipt.min_claude_code_version, "2.1.220");
-  assert.equal(
-    validate("claude-fable-5", streamFor("claude-fable-5", "2.1.219"), 0, ["--min-cli-version", "2.1.0"]).receipt.reason,
-    "validated",
-  );
-  assert.equal(
-    validate("claude-fable-5", streamFor("claude-fable-5", "2.2"), 0, ["--min-cli-version", "2.1.220"]).receipt.reason,
-    "validated",
-  );
-  assert.equal(
-    validate("claude-fable-5", streamFor("claude-fable-5", "2.1.220-rc1")).receipt.reason,
-    "unsupported_claude_version",
-  );
-});
-
-test("review receipt rejects refusal fallback after a valid init", () => {
-  const run = validateFable([
-    init,
-    {
-      type: "system",
-      subtype: "model_refusal_fallback",
-      trigger: "refusal",
-      api_refusal_category: "cyber",
-      original_model: "claude-fable-5",
-      fallback_model: "claude-opus-5",
-    },
-  ]);
-  assert.equal(run.status, 1);
-  assert.equal(run.receipt.reason, "model_refusal_fallback");
-  assert.equal(run.receipt.api_refusal_category, "cyber");
-});
-
-test("review receipt rejects drift, errors, nonzero exits, and truncated streams", () => {
-  const reason = (events, exit = 0) => validateFable(events, exit).receipt.reason;
-  assert.equal(reason([init, { type: "assistant", message: { model: "claude-opus-5" } }]), "assistant_model_mismatch");
-  assert.equal(reason([init, assistant, { ...success, is_error: true }]), "result_error");
-  assert.equal(reason([init, assistant, success], 1), "process_exit_nonzero");
-  assert.equal(validateFable([init, assistant, { ...success, is_error: true }], 1).receipt.result_is_error, true);
-  assert.equal(reason([init, assistant]), "missing_terminal_result");
-  assert.equal(reason([init, success]), "missing_assistant_event");
-  assert.equal(reason([{ ...init, model: "claude-fable-999" }]), "init_model_mismatch");
-  assert.equal(reason([assistant, init, success]), "invalid_event_order");
-  assert.equal(reason([init, assistant, success, success]), "invalid_event_order");
-  assert.equal(
-    reason([init, assistant, { ...success, modelUsage: { ...success.modelUsage, "claude-opus-5": { provider: "firstParty" } } }]),
-    "model_usage_mismatch",
-  );
-  assert.equal(
-    reason([init, assistant, { ...success, modelUsage: { "claude-fable-5": { provider: "thirdParty" } } }]),
-    "provider_mismatch",
-  );
-  assert.equal(
-    reason([init, assistant, { ...success, modelUsage: { ...success.modelUsage, "claude-sonnet-999": { provider: "firstParty" } } }]),
-    "model_usage_mismatch",
-  );
-  const failedWithDrift = validateFable(
-    [init, assistant, { ...success, modelUsage: { "claude-opus-5": { provider: "thirdParty" } } }],
-    1,
-  );
-  assert.equal(failedWithDrift.receipt.reason, "process_exit_nonzero");
-  assert.equal(failedWithDrift.receipt.evidence_reason, "model_usage_mismatch");
-  assert.equal(failedWithDrift.receipt.observed_provider, "thirdParty");
-  const erroredWithDrift = validateFable([
-    init,
-    assistant,
-    { ...success, is_error: true, modelUsage: { "claude-opus-5": { provider: "thirdParty" } } },
-  ]);
-  assert.equal(erroredWithDrift.receipt.reason, "result_error");
-  assert.equal(erroredWithDrift.receipt.evidence_reason, "model_usage_mismatch");
-});
-
-test("review receipt reports unreadable streams as metadata", () => {
-  const run = spawnSync(
-    process.execPath,
-    [reviewReceipt, "--exit-status", "0", "--expect-model", "claude-fable-5", "/path/that/does/not/exist/review.jsonl"],
-    { encoding: "utf8" },
-  );
-  assert.equal(run.status, 1);
-  assert.equal(JSON.parse(run.stdout).reason, "stream_read_error");
-  assert.equal(run.stderr, "");
+  assert.deepEqual(claude.skills.toSorted(), skillNames.map((name) => `./skills/${name}`).toSorted());
 });
 
 test("orchestrate prefers the direct route and keeps the user ahead of child reports", () => {
@@ -471,4 +303,33 @@ test("deliver verifies settings by reading the effective value back", () => {
 
 test("deliver caps test suites at ten minutes", () => {
   assert.match(deliver, /Tests never take more than 10 minutes: the full local suite and every CI test job/);
+});
+
+
+test("direct single-PR delivery uses the bounded CE watch and preserves an existing watcher", () => {
+  const handoff = flat(read("skills/deliver/references/ce-call-adapter.md"));
+  assert.match(handoff, /ce-commit-push-pr mode:pipeline/);
+  assert.match(handoff, /ce-babysit-pr mode:pipeline <pr-url> posture:target/);
+  assert.match(handoff, /if no CE watcher already owns it/);
+  assert.match(handoff, /branch rules and CI configuration establish that the PR does not run CI.*interactive `watch` in the same `posture:target`/);
+  assert.match(handoff, /An empty rollup alone does not establish that a repository has no CI/);
+  assert.match(handoff, /Retain any stack-aware watch and its posture/);
+});
+
+test("watch repair delegates stop locally before the reviewed publisher writes", () => {
+  const handoff = flat(read("skills/deliver/references/ce-call-adapter.md"));
+  assert.match(handoff, /Carry it into each delegate before it starts/);
+  assert.match(handoff, /ce-resolve-pr-feedback mode:return-to-caller/);
+  assert.match(handoff, /publish that exact commit against the verified PR head, then call `ce-resolve-pr-feedback mode:resume handoff:<path>`/);
+  assert.match(handoff, /ce-debug mode:pipeline` with local-only authority when it supports `fixed-not-pushed`/);
+  assert.match(handoff, /ce-debug mode:return-to-caller/);
+  assert.match(handoff, /After reviewing and checking it, publish the verified commit/);
+  assert.match(handoff, /pause it before its publishing step.*resume that same watcher/);
+});
+
+test("push-only and PR-only publication preserve the user's merge boundary", () => {
+  const handoff = flat(read("skills/deliver/references/ce-call-adapter.md"));
+  assert.match(handoff, /Create a new auto-landing PR as a draft in the create operation/);
+  assert.match(handoff, /Before pushing, verify an effective draft or repository hold and confirm that the queue cannot land the current head/);
+  assert.match(handoff, /Push-only does not create a PR/);
 });

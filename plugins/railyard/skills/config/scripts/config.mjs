@@ -3,8 +3,6 @@
 //   config.mjs [show]                       print the effective settings
 //   config.mjs off | on                     stand Railyard down here (and in every worktree) or back up
 //   config.mjs review full|light|checks     pre-push review level
-//   config.mjs ce on|off                    steer toward Compound Engineering stages or not
-//   config.mjs merge-gate on|off            check PR merges here or not
 // Run it from inside the repository, or pass --repo <dir>.
 import { execFileSync } from "node:child_process";
 import { rmSync } from "node:fs";
@@ -35,13 +33,7 @@ else if (action === "on") {
 else if (action === "review") {
   if (!REVIEW_LEVELS.includes(value)) fail(`review must be one of: ${REVIEW_LEVELS.join(", ")}`);
   git("config", "railyard.review", value);
-} else if (action === "ce") {
-  if (value !== "on" && value !== "off") fail("ce must be on or off");
-  git("config", "railyard.ce", value);
-} else if (action === "merge-gate") {
-  if (value !== "on" && value !== "off") fail("merge-gate must be on or off");
-  git("config", "railyard.mergeGate", value);
-} else if (action !== "show") fail("usage: config.mjs [show | off | on | review full|light|checks | ce on|off | merge-gate on|off] [--repo <dir>]");
+} else if (action !== "show") fail("usage: config.mjs [show | off | on | review full|light|checks] [--repo <dir>]");
 
-const { off, review, ce, mergeGate } = repoConfig(cwd);
-console.log(`railyard: ${off ? "off" : "on"}  review: ${review}  ce: ${ce ? "on" : "off"}  merge-gate: ${mergeGate ? "on" : "off"}`);
+const { off, review } = repoConfig(cwd);
+console.log(`railyard: ${off ? "off" : "on"}  review: ${review}`);

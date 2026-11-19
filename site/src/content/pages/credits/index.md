@@ -10,16 +10,17 @@ Build on visible lineage and give upstream work its due. Clear attribution makes
 
 ## Shipped and adapted
 
-- **Oracle** — the [Oracle skill](/skills/oracle/) adapts the lifecycle pattern from [Peter Steinberger's oracle](https://github.com/steipete/oracle), MIT.
 - **Thermos review family** — [Thermos](/skills/thermos/) supplies the review lenses tracked from [Cursor plugins](https://github.com/cursor/plugins), MIT.
 
 ## Workflow and harness tools
 
-- [Compound Engineering (3.20.0+)](https://github.com/EveryInc/compound-engineering-plugin) supplies selected delivery workflow stages and owns review settlement and CI. Resolve it when a selected stage needs it.
+- [Compound Engineering (3.38.2+)](https://github.com/EveryInc/compound-engineering-plugin) supplies selected delivery workflow stages and owns review settlement and CI. Resolve it when a selected stage needs it.
 - [Claude Code](https://code.claude.com) and [Codex](https://openai.com/codex) supply the harness and plugin surfaces.
 - [gh-stack](https://github.com/github/gh-stack) supports dependent-PR delivery.
 
 ## Other attribution
+
+- Railyard previously shipped Oracle. [Agent Utilities](https://github.com/novotnyllc/agent-utilities) now maintains the skill adapted from [Peter Steinberger's oracle](https://github.com/steipete/oracle), MIT.
 
 - [Ponytail](https://github.com/DietrichGebert/ponytail) is credited for efficiency guidance; it is not a Railyard prerequisite.
 

@@ -1,6 +1,6 @@
 ---
 name: doctor
-description: "Diagnose and repair the Railyard delivery setup: plugin and skill versions across harnesses and fleet hosts, marketplace freshness, hook trust, fleet config, host reachability and enrollment, desired-state sync, and leftover test processes. Use when the user asks for doctor, a Railyard health check, or whether plugins, skills, or hosts are in sync. Not for bugs in the user's own code."
+description: "Diagnose and repair the Railyard delivery setup: plugin and skill versions across harnesses and fleet hosts, marketplace freshness, hook trust, fleet config, host reachability and enrollment, and desired-state sync. Use when the user asks for doctor, a Railyard health check, or whether plugins, skills, or hosts are in sync. Not for bugs in the user's own code."
 ---
 
 # Railyard Doctor
@@ -62,11 +62,8 @@ config through the specific keys named here, never by printing whole files:
     upgrades are not faults.
 - Compound Engineering: the selected skills are exposed, including
   `ce-babysit-pr` when watching a PR.
-- Codex hook trust: current hashes for intentionally enabled hooks. Disabled
-  optional hooks are healthy; never approve every hook as a generic repair.
-  Before activating a selected merge guard, test the installed
-  startup/dispatch path, the live no-snapshot merge check, and the CE snapshot
-  handoff.
+- Codex hook trust: verify the current hash of Railyard’s startup hook when
+  enabled and check that it supplies the expected delivery guidance.
 
 **Fleet parity** (only when requested)
 
@@ -74,17 +71,6 @@ Delegate the cross-host comparison to `roundhouse:fleet-agents` (inventory
 mode) and fold in its drift report rather than repeating it. If
 `roundhouse --help` lists a plugin probe (such as `probe --plugins`), use that
 as the fleet-wide form of the version check instead.
-
-**Process leftovers**
-
-- cleanup-codex canary listeners, left behind by an interrupted canary test:
-  `pgrep -fl '[c]leanup-codex-canary\.' </dev/null`. Skip the row while a
-  canary test is running (`pgrep -f '[c]anary\.test\.mjs'`), and count a
-  listener as leaked only when it is older than 10 minutes
-  (`ps -o etime= -p <pid>`, which prints `[[dd-]hh:]mm:ss` on macOS and
-  Linux; older when it has an hours or days field or 10 or more minutes). Exit 1 passes, leaked listeners warn, and any
-  other exit is unknown. Fix by stopping each leaked PID and removing its
-  `cleanup-codex-canary.*` temporary directory.
 
 **Configuration and state**
 
@@ -141,7 +127,6 @@ non-pass row the minimal fix and its owner:
 - a declared marketplace missing from its harness → `railyard:setup`;
 - plugin/skill drift or a stale catalog → `roundhouse:fleet-agents` refresh
   (locally, the marketplace and plugin commands above);
-- leaked canary listeners → `railyard:cleanup-codex`;
 - sshd faults → `roundhouse:ssh-doctor`;
 - enrollment or host prerequisites → `roundhouse:fleet-hosts`;
 - package baseline (tmux/jq) → `roundhouse:fleet-update`;

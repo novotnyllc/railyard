@@ -20,10 +20,6 @@ result. Hand breakage, as opposed to absence, to `railyard:doctor`.
   resolved path throughout.
 - Tooling: `gh` auth, `gh-stack` and its agent skills, `tmux`, `jq`, `node`;
   optionally `chezmoi` and `op`.
-- Oracle: `"${ORACLE_BIN:-oracle}" --version` (0.20.3 or newer) and whether
-  config exists at `ORACLE_CONFIG_PATH`, else `~/.oracle/config.json`. The
-  oracle skill's `ensure-oracle.sh` can install or upgrade, so it runs only in
-  the install stage.
 - Credentials installed plugins need, by presence only (`gh auth status`,
   `op` sign-in, keys named in installed skills' docs), with where to set a
   missing one (dotfiles environment or 1Password). Never read or print a
@@ -38,7 +34,8 @@ current help, preserve disabled plugins and hooks, leave cache files
 unmodified, and verify installed-and-enabled state rather than cache
 presence.
 
-- **Compound Engineering:** confirm the selected skills are exposed
+- **Compound Engineering:** check that selected delivery workflows use
+  version 3.38.2 or newer, then confirm the selected skills are exposed
   (`compound-engineering:ce-commit-push-pr`; `ce-babysit-pr` as review and CI
   owner) and report any missing one with its fix.
 - **Roundhouse and craft skills:** only for explicit fleet/account work or
@@ -50,11 +47,9 @@ The setup request authorizes only the work it names; installing Railyard is
 not consent to install anything else. With the concrete operation prepared,
 ask only for missing scope or new authority.
 
-After a Codex update, verify the installed version, source bytes, and hook
-commands and hashes. Trust only the validated SessionStart routing charter and
-native dispatch gate, plus the CE merge guard when PR delivery is selected and
-its [snapshot handoff](../deliver/references/ce-merge-guard.md) validates.
-Keep disabled hooks disabled unless the user authorized activation.
+After a Codex update, verify the installed version and startup hook command and
+hash. Verify that the hook supplies the publishing guidance. Keep the hook
+disabled if the user has not authorized enabling it.
 
 ## 3. Configuration interview (defaults in brackets)
 
@@ -66,9 +61,7 @@ requested setup needs; local-only setup skips fleet questions.
   `wsl_interop_via`.
 - **Paths**: development root [`~/dev`]; cross-host handoff repo [none];
   Codex remote-control host, only for a native-Windows Codex Desktop
-  destination [none]. Model choice needs no configuration.
-- **Oracle** [skip]: with ChatGPT Pro and interest, record availability per
-  the oracle skill.
+  destination [none].
 - **Fleet sync** [skip]: only when requested (declining disables nothing
   else); see §3a.
 - **Update schedule** [none]: only when requested, via §3a or

@@ -1,18 +1,18 @@
 ---
 name: thermos
-description: "Run paired whole-candidate correctness/security and maintainability reviews before publication, alongside Codex review. Also use for standalone reviews. Supplies findings to the existing owner."
+description: "Run paired whole-candidate correctness/security and maintainability reviews for full publication review, alongside Codex review. Also use for standalone reviews. Supplies findings to the existing owner."
 ---
 
 # Thermos
 
 Run the two thermo review passes as concurrent subagents, collect both results directly, then synthesize them.
 
-Use it before every push in `railyard:deliver`, where it runs beside
+Use it before every push in `railyard:deliver` when the selected review level is
+`full`. In that mode it runs beside
 `codex review` and its findings go to the CE owner; also use it when the user
 asks for it or when a change's risk needs both correctness/security and
 maintainability depth. For a single concern, use the relevant sibling skill
-directly. Choose each reviewer's model and reasoning effort with
-`railyard:model-routing`. Thermos itself launches no other provider's review;
+directly. Thermos itself launches no other provider's review;
 the Codex review beside it is the caller's to run.
 
 ## Workflow

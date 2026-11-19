@@ -1,13 +1,7 @@
 # Model cost weighting
 
-This page gives relative cost weights for models within one billing
-relationship, and shows how they were derived so anyone can recheck them.
-They are a rough input to allocation. What matters is the cost of the
-accepted result, including retries, repairs, and child agents, not the price
-per token. Model and effort guidance lives in
-[`railyard:model-routing`](../plugins/railyard/skills/model-routing/SKILL.md).
-List prices and controls are in the
-[native invocation reference](../plugins/railyard/references/harness-model-invocation.md).
+This historical estimate records the rate assumptions used in September 2026.
+It preserves the arithmetic behind the model cost comparisons from that period.
 
 ## Method
 
@@ -41,7 +35,7 @@ List prices and controls are in the
 5. **Measured outcomes win.** Once cost per accepted task has been measured
    for a model and effort, use that number instead of this arithmetic.
 
-## Current table (Claude checked 2026-09-28; OpenAI checked 2026-09-29)
+## September 2026 table (Claude checked 2026-09-28; OpenAI checked 2026-09-29)
 
 ### Claude (reference: Fable 5.1 = 100)
 
@@ -58,8 +52,7 @@ Source for cache-read rates: the
 [Sonnet 5.5 overview](https://platform.claude.com/docs/en/models/sonnet-5-5/overview).
 
 Anthropic reports that Opus 5.5 at `medium` matches or exceeds Opus 5 at
-`high`. At a lower price, that makes Opus 5.5 the better default of the two
-for most work. Measured outcomes still decide it.
+`high`. At a lower list price, this supported the earlier choice of Opus 5.5 as the default.
 
 Sonnet 5.5 costs the same as Sonnet 5. Anthropic reports that on several
 benchmarks Sonnet 5.5 at `low` or `medium` beats Sonnet 5's best score at
@@ -73,7 +66,7 @@ as Opus 5.5.
 | --- | --- | --- | --- | --- | --- |
 | GPT-5.6 Sol (reference only) | 4.00 | 0.40 | 20.00 | 27.60 | 100 |
 | GPT-6 Astra | 10.00 | 1.00 | 50.00 | 69.00 | **250** |
-| GPT-6.1 Sol (default) | 2.00 | 0.10 | 10.00 | 12.90 | **47** |
+| GPT-6.1 Sol (then default) | 2.00 | 0.10 | 10.00 | 12.90 | **47** |
 | GPT-6 Luna | 0.10 | 0.01 | 0.50 | 0.69 | **3** |
 
 These are standard short-context rates. Above 272K input tokens, the full
@@ -86,7 +79,7 @@ above excludes cache writes and assumes the listed cache-hit rate.
 Sol 6.1's standard input/output prices are one-fifth of Astra's; cached input
 is one-tenth. Its 12.90 work unit is `10 × (0.9 × 0.10 + 0.1 × 2) + 10`.
 Near-Astra performance is OpenAI's evaluation claim, not a local benchmark.
-Legacy GPT-6 Sol is no longer an allocation candidate; Sol 6.1 replaces it.
+Sol 6.1 was the allocation default at the time.
 
 Sources: [OpenAI API pricing](https://developers.openai.com/api/docs/pricing)
 (checked 2026-09-29),
@@ -95,12 +88,4 @@ and [Introducing GPT-6.1 Sol](https://openai.com/index/introducing-gpt-6-1-sol/)
 
 Daybreak (`gpt-daybreak-blue-latest`) is not
 separately priced, and because its alias can be repointed, don't derive a
-Daybreak rate from Sol or Luna. Choosing Daybreak for security work needs an
-access rationale, not a borrowed price.
-
-## Updating
-
-Recheck published prices when a model launches or a promotion ends. Recompute
-the work unit with the assumptions above, and note any assumption you change.
-Update this table and the price column in the native invocation reference
-together.
+Daybreak rate from Sol or Luna.

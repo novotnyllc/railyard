@@ -1,18 +1,20 @@
 # AGENTS.md
 
-Railyard is the delivery system for agent work: model routing, delivery,
-orchestration, cross-machine placement, review gates, and Oracle. Plugin
+Railyard is the delivery system for agent work: delivery,
+orchestration, cross-machine placement, and review. Plugin
 source lives under `plugins/railyard/`; everything else is documentation.
 
 ## Always
 
-- Before every push, satisfy the [whole-candidate review gate](plugins/railyard/references/whole-candidate-review.md), including repair and release pushes. This is a project publishing requirement for CE; a delta review or test pass alone does not satisfy it.
+- Pass the [pre-push review policy](plugins/railyard/references/whole-candidate-review.md)
+  to CE. The default requires repository checks and one independent review of
+  the whole change before the first push. Review later repairs and their
+  affected behavior, or review the whole change again when its design or
+  risk changes materially or prior coverage is uncertain.
 
-- Choose model and reasoning effort deliberately for each assignment;
-  use `railyard:model-routing` when resolving or changing an allocation.
-  Routine work runs natively; select CE workflows when they help, and use
-  explicit fleet/account orchestration only when requested —
-  [delivery routing](docs/agents/routing.md).
+- Use the current chat as coordinator. CE Work handles implementer selection
+  and execution across supported harnesses. Use Railyard orchestration for
+  explicit fleet or account placement. See [delivery routing](docs/agents/routing.md).
 - Any change under `plugins/` bumps both plugin manifests and repins the
   marketplace; docs-only changes do neither —
   [release coupling](docs/agents/release-coupling.md).
@@ -26,20 +28,9 @@ Node 24, no package manager and no install step:
 
 ```sh
 node --test \
-  plugins/railyard/skills/jev/scripts/jev-adviser.test.mjs \
   plugins/railyard/skills/orchestrate/scripts/delivery-contracts.test.mjs \
-  plugins/railyard/skills/oracle/scripts/ensure-oracle.test.mjs \
-  plugins/railyard/skills/cleanup-codex/scripts/inventory.test.mjs \
-  plugins/railyard/skills/cleanup-codex/scripts/snapshot-reap.test.mjs \
-  plugins/railyard/skills/cleanup-codex/scripts/recycle.test.mjs \
-  plugins/railyard/skills/cleanup-codex/scripts/desktop.test.mjs \
-  plugins/railyard/skills/cleanup-codex/scripts/hook.test.mjs \
-  plugins/railyard/skills/cleanup-codex/scripts/canary.test.mjs \
-  plugins/railyard/skills/cleanup-codex/scripts/transaction.test.mjs \
   plugins/railyard/hooks/lean-hooks.test.mjs \
-  plugins/railyard/hooks/dispatch-gate.test.mjs \
-  plugins/railyard/hooks/routing-charter.test.mjs \
-  plugins/railyard/hooks/merge-settlement-gate.test.mjs
+  plugins/railyard/hooks/routing-charter.test.mjs
 ```
 
 These are exactly the suites `.github/workflows/validate.yml` runs on Linux

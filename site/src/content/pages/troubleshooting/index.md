@@ -6,7 +6,7 @@ nav_order: 4
 
 # Troubleshooting
 
-Recover from the first broken proof, not the loudest symptom. Keep the receipt, run log, and exact failing command; identify the owner of that boundary; restore its prerequisite or evidence; then rerun only the check the fix invalidated.
+Start with the failing command and its output. Identify which tool owns the failure, restore its prerequisite, and rerun the affected check.
 
 The practice is a short loop: observe the held or failed receipt, trace it to install, delivery, transport, trust, or fleet ownership, repair that boundary, and require a fresh receipt. The mechanisms below are evidence for that loop.
 
@@ -33,4 +33,4 @@ The practice is a short loop: observe the held or failed receipt, trace it to in
 
 ## Where to look
 
-The run log records the route, dispatches, checks, review rounds, retries, and terminal result. The delivery receipt identifies the merge and post-merge proof. For diagnosis, start with [Doctor](/skills/doctor/) and [SSH Doctor](/skills/ssh-doctor/); for a fleet-wide readiness question, use [Fleet readiness](/skills/fleet-readiness/).
+Use native task history to inspect dispatches, checks, review rounds, retries, and outcomes. The delivery handoff identifies the merge and post-merge proof. For diagnosis, start with [Doctor](/skills/doctor/) and [SSH Doctor](/skills/ssh-doctor/); for a fleet-wide readiness question, use [Fleet readiness](/skills/fleet-readiness/).

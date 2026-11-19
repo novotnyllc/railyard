@@ -1,11 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import runLog from "./run-log.js";
 
 const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "routing-charter.js");
 
@@ -23,8 +22,6 @@ function environment(home, overrides = {}) {
     CODEX_HOME: path.join(home, ".codex"),
     CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
     CLAUDE_PLUGIN_ROOT: "",
-    RAILYARD_RUN_LOG_DIR: path.join(home, "run-log"),
-    TYPESAFE_API_KEY: "",
     ...overrides,
   };
 }
@@ -34,42 +31,13 @@ function run(home, overrides = {}, input) {
     encoding: "utf8",
     timeout: 5000,
     input: typeof input === "string" ? input : input === undefined ? undefined : JSON.stringify(input),
-    // Never inspect the real user's relocated roots or write their run log.
+    // Never inspect the real user's relocated roots.
     env: environment(home, overrides),
   });
   assert.ifError(r.error);
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stderr, "");
-  return { out: r.stdout, logDir: path.join(home, "run-log") };
-}
-
-function entries(home) {
-  const directory = path.join(home, "run-log");
-  return readdirSync(directory).sort().flatMap((file) =>
-    readFileSync(path.join(directory, file), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)));
-}
-
-async function runOpenInput(home, send) {
-  const child = spawn(process.execPath, [script], { env: environment(home), stdio: ["pipe", "pipe", "pipe"] });
-  let out = "";
-  let err = "";
-  child.stdout.on("data", (chunk) => { out += chunk; });
-  child.stderr.on("data", (chunk) => { err += chunk; });
-  child.stdin.on("error", () => {}); // The bounded reader may close before late data.
-  const completed = new Promise((resolve, reject) => {
-    child.once("error", reject);
-    child.once("close", (code) => resolve(code));
-  });
-  const deadline = setTimeout(() => child.kill(), 2000);
-  try {
-    await send(child);
-    assert.equal(await completed, 0, err);
-    assert.equal(err, "");
-    assert.match(out, /Railyard routing:/);
-  } finally {
-    clearTimeout(deadline);
-    child.stdin.destroy();
-  }
+  return { out: r.stdout };
 }
 
 const words = (text) => text.split(/\s+/).filter(Boolean).length;
@@ -77,72 +45,30 @@ const flat = (text) => text.replace(/\s+/g, " ");
 
 test("startup guide stays short and plain", (t) => {
   const { out } = run(fixture(t));
-  assert.match(out, /^Railyard routing:/);
+  assert.match(out, /^Railyard publishing:/);
   assert.ok(words(out) <= 250, `SessionStart guide is ${words(out)} words`);
   assert.doesNotMatch(out, /\b[A-Z]{4,}\b/, "no all-caps emphasis");
   assert.doesNotMatch(out, /do not claim|Allocation:/i);
 });
 
-test("startup names the default models for both harnesses", (t) => {
-  const out = flat(run(fixture(t)).out);
-  assert.match(out, /Opus 5\.5/);
-  assert.match(out, /`opus`/);
-  assert.match(out, /Fable 5\.1/);
-  assert.match(out, /Sol 6\.1 medium \(review high\)/);
-  assert.doesNotMatch(out, /GPT-6 Sol/);
-  assert.match(out, /Luna/);
-  assert.match(out, /Astra only for a proven gap/);
-});
-
 test("startup keeps CE ownership, the deliver endpoint, and explicit-only orchestration", (t) => {
   const out = flat(run(fixture(t)).out);
-  assert.match(out, /native tools and subagents/);
-  assert.match(out, /CE owns review settlement and CI watching/);
-  assert.match(out, /CE owns review settlement and CI watching; give it references\/review-feedback-settlement\.md/);
-  assert.match(out, /compound-engineering:ce-commit-push-pr/);
-  assert.match(out, /through merge, required release or deployment, and consumer verification unless narrowed/);
+  assert.match(out, /When CE coordinates a PR, it owns review settlement and CI watching/);
+  assert.match(out, /Give it references\/review-feedback-settlement\.md/);
+  assert.match(out, /Carry implementation and fixes through confirmed merge when the user or standing owner instructions authorize landing/);
+  assert.match(out, /Follow the repository’s merge policy and honor holds/);
+  assert.match(out, /For ship or deliver requests, continue through required release or deployment and verification at the consumer/);
   assert.match(out, /plan-only, local-only, and PR-only stops/);
-  assert.match(out, /CE snapshot handoff/);
-  assert.match(out, /railyard:orchestrate only for requested fleet or remote work that needs separate agents/);
-  assert.match(out, /propagating config across hosts is direct work/);
-  assert.match(out, /user-owned tasks only when asked/);
-  assert.match(out, /completion events rather than polling/);
-});
-
-test("startup steers toward the fastest route and a time check", (t) => {
-  const out = flat(run(fixture(t)).out);
-  assert.match(out, /Take the fastest route to the result: reuse existing tools/);
-  assert.match(out, /propagate settings that already exist instead of rebuilding them/);
-  assert.match(out, /verify settings by reading them back/);
-  assert.match(out, /Dispatch a subagent only when it reads far more than it returns, gives independent judgment, runs a substantial parallel unit without shared files or state, or needs another model \(full rule: railyard:model-routing\)/);
-  assert.match(out, /State the simplest path and a rough time estimate first/);
-  assert.match(out, /at about twice it, or when the user presses on time, find a faster route to the same result/);
-  assert.match(out, /Gates and the endpoint still apply/);
+  assert.match(out, /railyard:orchestrate for explicitly requested fleet or remote work that needs separate agents/);
+  assert.doesNotMatch(out, /Opus|Fable|Sol|Luna|Astra|ce-plan|ce-debug|Pick Compound Engineering stages/);
 });
 
 test("startup supplies the shared publication gate to direct CE and LFG callers", (t) => {
   const out = flat(run(fixture(t)).out);
-  assert.match(out, /Before every push, load Railyard's references\/whole-candidate-review\.md gate/);
-  assert.match(out, /including direct CE\/LFG publishing calls/);
+  assert.match(out, /Before every push, including direct CE\/LFG publishing calls, apply the light policy in references\/whole-candidate-review\.md/);
+  assert.match(out, /review the whole change independently before first publication/);
+  assert.match(out, /review affected behavior for routine repair pushes/);
   assert.ok(readFileSync(path.join(path.dirname(script), "../references/whole-candidate-review.md"), "utf8").includes("complete cumulative change-set"));
-});
-
-test("configured Jev adds one line without exposing credentials or startup content", (t) => {
-  const home = fixture(t);
-  const base = run(home).out;
-  const input = { hook_event_name: "SessionStart", prompt: "private-task-canary" };
-  const { out } = run(home, { TYPESAFE_API_KEY: "test-only-secret-canary" }, input);
-  assert.equal(out.split("\n").length, base.split("\n").length + 1);
-  assert.match(out, /railyard:jev/);
-  assert.ok(words(out) <= 270);
-  const recorded = JSON.stringify(entries(home));
-  for (const secret of ["test-only-secret-canary", "private-task-canary"]) {
-    assert.ok(!out.includes(secret));
-    assert.ok(!recorded.includes(secret));
-  }
-  for (const key of ["", "   "]) {
-    assert.doesNotMatch(run(home, { TYPESAFE_API_KEY: key }).out, /railyard:jev/);
-  }
 });
 
 test("missing plugins in both empty harness roots do not bootstrap dependencies", (t) => {
@@ -178,141 +104,17 @@ test("installed and relocated plugin caches cannot alter startup routing", (t) =
   }
 });
 
-test("startup anchors the run log with one session line", (t) => {
-  const { logDir } = run(fixture(t));
-  const files = readdirSync(logDir);
-  assert.equal(files.length, 1);
-  const lines = readFileSync(path.join(logDir, files[0]), "utf8").split("\n").filter(Boolean);
-  assert.equal(lines.length, 1);
-  assert.equal(JSON.parse(lines[0]).event, "session");
-  assert.equal(JSON.parse(lines[0]).session_id, undefined);
-  assert.equal(JSON.parse(lines[0]).cwd, undefined);
-});
-
-test("native and Claude SessionStart payloads supply identity and cwd without extra content", (t) => {
-  for (const harness of ["codex", "claude-code"]) {
-    const home = fixture(t);
-    const sid = `${harness}-current-task`;
-    const cwd = path.join(home, "actual-task-workdir");
-    run(home, {
-      CODEX_THREAD_ID: "ancestor-codex",
-      CLAUDE_CODE_SESSION_ID: "ancestor-claude",
-      CLAUDE_PLUGIN_ROOT: path.join(home, harness === "codex" ? ".codex" : ".claude", "plugins", "railyard"),
-    }, {
-      hook_event_name: "SessionStart", session_id: sid, cwd,
-      transcript_path: "/private/transcript.jsonl", source: "startup",
-      model: "fixture-model", permission_mode: "default",
-      prompt: "never record this body", session_title: "never record this title",
-    });
-    const [anchor] = entries(home);
-    assert.equal(anchor.session_id, sid);
-    assert.equal(anchor.cwd, cwd);
-    assert.equal(anchor.harness, harness);
-    assert.deepEqual(Object.keys(anchor).sort(), ["cwd", "event", "harness", "session_id", "ts"]);
-  }
-});
-
-test("missing or malformed startup input never borrows an ancestor's identity or cwd", (t) => {
-  for (const input of [undefined, "{", "not JSON", null, [], {},
-    { hook_event_name: "PostToolUse", session_id: "wrong-event", cwd: "/wrong" },
-    { hook_event_name: "SessionStart", session_id: {}, cwd: [] },
-    { hook_event_name: "SessionStart", session_id: "s".repeat(121), cwd: "x".repeat(4097) },
-  ]) {
-    const home = fixture(t);
-    run(home, { CODEX_THREAD_ID: "ancestor", CLAUDE_CODE_SESSION_ID: "other-ancestor" }, input);
-    const [anchor] = entries(home);
-    assert.equal(anchor.session_id, undefined);
-    assert.equal(anchor.cwd, undefined);
-    assert.equal(entries(home).length, 1);
-  }
-});
-
-test("partial startup metadata preserves known fields without inventing the missing ones", (t) => {
+test("startup accepts the native payload without creating session logs", (t) => {
   const home = fixture(t);
-  run(home, {}, { hook_event_name: "SessionStart", session_id: "known-task" });
-  run(home, {}, { hook_event_name: "SessionStart", cwd: "/known/workdir" });
-  const [identified, unidentified] = entries(home);
-  assert.equal(identified.session_id, "known-task");
-  assert.equal(identified.cwd, undefined);
-  assert.equal(unidentified.session_id, undefined);
-  assert.equal(unidentified.cwd, "/known/workdir");
-});
-
-test("oversized startup input preserves the route guide with an unidentified anchor", (t) => {
-  const home = fixture(t);
-  run(home, {}, { hook_event_name: "SessionStart", session_id: "oversized-task", cwd: "/work",
-    unused: "x".repeat(128 * 1024) });
-  assert.deepEqual(Object.keys(entries(home)[0]).sort(), ["event", "ts"]);
-});
-
-test("a complete native payload finishes while its stdin pipe remains open", async (t) => {
-  const home = fixture(t);
-  await runOpenInput(home, (child) => {
-    child.stdin.write(JSON.stringify({ hook_event_name: "SessionStart", session_id: "open-pipe-task", cwd: "/native/work" }));
+  const logDir = path.join(home, "run-log");
+  const { out } = run(home, { RAILYARD_RUN_LOG_DIR: logDir }, {
+    hook_event_name: "SessionStart",
+    session_id: "native-session",
+    cwd: home,
   });
-  assert.equal(entries(home)[0].session_id, "open-pipe-task");
+  assert.match(out, /^Railyard publishing:/);
+  assert.deepEqual(readdirSync(home), []);
 });
-
-test("an empty or incomplete open pipe cannot hold startup beyond its input budget", async (t) => {
-  for (const input of ["", '{"hook_event_name":"SessionStart",']) {
-    const home = fixture(t);
-    const started = Date.now();
-    await runOpenInput(home, (child) => { if (input) child.stdin.write(input); });
-    assert.ok(Date.now() - started < 1500);
-    assert.equal(entries(home)[0].session_id, undefined);
-  }
-});
-
-test("startup prints before input and accepts a fragmented payload within its budget", async (t) => {
-  const home = fixture(t);
-  await runOpenInput(home, async (child) => {
-    await new Promise((resolve) => child.stdout.once("data", resolve));
-    const payload = JSON.stringify({ hook_event_name: "SessionStart", session_id: "fragmented-task", cwd: "/work" });
-    child.stdin.write(payload.slice(0, 20));
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    child.stdin.write(payload.slice(20));
-  });
-  assert.equal(entries(home)[0].session_id, "fragmented-task");
-});
-
-test("audit selection keeps interleaved sessions and their outcomes separate", (t) => {
-  const home = fixture(t);
-  const cwd = "/shared/worktree";
-  run(home, {}, { hook_event_name: "SessionStart", session_id: "task-a", cwd });
-  run(home, {}, { hook_event_name: "SessionStart", session_id: "task-b", cwd });
-  const file = path.join(home, "run-log", readdirSync(path.join(home, "run-log"))[0]);
-  const append = (values) => writeFileSync(file, values.map((value) => JSON.stringify(value)).join("\n") + "\n", { flag: "a" });
-  append([
-    { event: "dispatch", phase: "pre_tool_use", session_id: "task-a", label: "worker" },
-    { event: "outcome", session_id: "task-b", what: "worker", result: "complete" },
-    { event: "dispatch", cwd, label: "unidentified" },
-  ]);
-  run(home, {}, { hook_event_name: "SessionStart", source: "resume", session_id: "task-a", cwd });
-  append([{ event: "dispatch", session_id: "task-b", label: "next worker" }]);
-  const all = entries(home);
-  assert.deepEqual(runLog.entriesForSession(all, "task-a").map((entry) => entry.event), ["session", "dispatch", "session"]);
-  assert.deepEqual(runLog.entriesForSession(all, "task-b").map((entry) => entry.event), ["session", "outcome", "dispatch"]);
-  assert.equal(runLog.entriesForSession(all, "task-a").some((entry) => entry.event === "outcome"), false,
-    "another task's completion must not fill this task's missing completion evidence");
-  assert.deepEqual(runLog.entriesForSession(all, undefined), []);
-  assert.deepEqual(runLog.entriesForSession(all, "task"), []);
-  assert.deepEqual(runLog.entriesForSession([null, [], "malformed", ...all], "task-a"), runLog.entriesForSession(all, "task-a"));
-});
-
-test("identified dispatches remain usable when their startup anchor is missing", () => {
-  const dispatch = { event: "dispatch", session_id: "partial-run" };
-  assert.deepEqual(runLog.entriesForSession([dispatch, { event: "session" }], "partial-run"), [dispatch]);
-});
-
-test("an unavailable run-log destination does not block startup", (t) => {
-  const home = fixture(t);
-  const blocker = path.join(home, "not-a-directory");
-  writeFileSync(blocker, "untouched");
-  const { out } = run(home, { RAILYARD_RUN_LOG_DIR: path.join(blocker, "run-log") });
-  assert.match(out, /Railyard routing:/);
-  assert.equal(readFileSync(blocker, "utf8"), "untouched");
-});
-
 
 test("startup, setup, and doctor do not restore removed behavior-plugin dependencies", () => {
   const pluginRoot = path.resolve(path.dirname(script), "..");

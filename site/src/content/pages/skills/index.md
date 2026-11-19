@@ -13,17 +13,12 @@ Select a skill when its expertise helps the requested work. This reference group
 
 - [Deliver](/skills/deliver/) — `railyard`
 - [Orchestrate](/skills/orchestrate/) — `railyard`
-- [Model routing](/skills/model-routing/) — `railyard`
-- [Jev advice](/skills/jev/) — `railyard`
 - [Thermos](/skills/thermos/) — `railyard`
-- [Oracle](/skills/oracle/) — `railyard`
-- [Audit](/skills/audit/) — `railyard`
 
 ## Set up and diagnose
 
 - [Setup](/skills/setup/) — `railyard`
 - [Doctor](/skills/doctor/) — `railyard`
-- [Cleanup Codex](/skills/cleanup-codex/) — `railyard`
 - [SSH Doctor](/skills/ssh-doctor/) — `roundhouse`
 - [Fleet readiness](/skills/fleet-readiness/) — `roundhouse`
 
@@ -42,6 +37,11 @@ Select a skill when its expertise helps the requested work. This reference group
 ## Reach a machine
 
 - [Remote Mac](/skills/remote-mac/) — `roundhouse`
+
+## Consult or recover
+
+- [Oracle](https://github.com/novotnyllc/agent-utilities/tree/main/plugins/agent-utilities/skills/oracle) — `agent-utilities`
+- [Cleanup Codex](https://github.com/novotnyllc/agent-utilities/tree/main/plugins/agent-utilities/skills/cleanup-codex) — `agent-utilities`
 
 ## Connect integrations
 

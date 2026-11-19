@@ -1,35 +1,30 @@
 ---
 name: deliver
-description: "Deliver an implementation or fix through review, merge, required release or deployment, and consumer verification unless the user sets a narrower endpoint. Use when the user explicitly asks to deliver or ship a change, or names this skill."
+description: "Implement a requested change or fix and follow the PR through review, CI, and confirmed merge when authorized. Use for implementation requests with standing delivery authority and explicit shipping requests. Honor narrower endpoints. When shipping requires a release, deployment, or consumer verification, complete that tail."
 ---
 
 # Deliver
 
-Complete the requested change with the smallest workflow that proves its
-result. Native tools and native subagents can implement directly; select a
-Compound Engineering (CE) stage when the task benefits from one.
+Use native tools for direct work and Compound Engineering (CE) for its workflows.
 
 ## Endpoint
 
-An explicit user request to deliver an implementation or fix, including
-invoking this skill for one, authorizes the full delivery lifecycle by default:
-implementation, verification, commit, push, PR, CE review/CI settlement, merge,
-required release or deployment, and verification at the actual consumer. A
-local patch, passing tests, an open PR, or a merged source change is not the
-endpoint while release, marketplace publication, installation, or deployment
-remains.
+For a request to implement or fix something, the default endpoint is a
+confirmed merge when the user or standing owner instructions authorize
+landing. Installing or updating Railyard adds no publication or merge
+authority. Keep the current chat responsible through the authorized endpoint
+and use the repository's normal merge process when landing is in scope.
+An explicit request to ship or deliver also includes any required release or
+deployment and verification at the actual consumer. Apply a repository's
+release contract when it governs the change.
 
-Explicit plan-only, diagnosis-only, review-only, local-only, and PR-only
-requests override that default and stop at their result. Read the endpoint
-from the current instruction and still-applicable prior authorization: a later
-local-only stop halts shipping; a later ship or merge instruction extends an
-earlier local stop. Continue authorized work without asking again.
-
-Selecting this skill internally does not expand the user's request. Outside an
-explicit delivery request, a plan, review, diagnosis, or local edit does not by
-itself authorize publication or merge. A child prompt invoking Deliver inherits
-the caller's authorized endpoint and cannot create new publication or
-deployment authority.
+Honor explicit plan-only, diagnosis-only, review-only, local-only, push-only,
+and PR-only requests. For a push-only or PR-only endpoint, apply the
+[publication hold rules](references/ce-call-adapter.md#merge-authorization-at-publication)
+before a new head can trigger automatic landing. Advice and investigation
+requests carry no publication authority. A child inherits the caller's
+endpoint and cannot expand it.
+Respect draft status, holds, branch rules and required human approvals.
 
 ## Stages
 
@@ -62,28 +57,37 @@ only within existing authorization.
 
 ## Before every push
 
-Complete the [whole-candidate review gate](../../references/whole-candidate-review.md)
-before every push, including the first publication, focused feedback fixes,
-release/version changes, and pushes inside LFG or CE continuations. Pass this
-requirement and its exact-candidate receipt to the CE publishing owner as a
-project publishing requirement before invoking a stage that can push. Keep
-ownership of the gate across handoffs; CE remains the only settlement owner.
-Revalidate the complete cumulative candidate each time, reusing prior proof
-only for unchanged inputs and behaviors. Do not substitute the last few
-changed lines. Keep the gate's delivery ledger through settlement.
+Pass the [local review policy](../../references/whole-candidate-review.md) to
+every publisher, including CE feedback and CI repair stages. The default
+`light` level requires repository checks and one independent local review of
+the complete change before the first push. A completed CE review of the same
+candidate can fulfill it. Fix actionable findings before publication.
+
+For a repair batch, review the changes since the last reviewed head and the
+behavior they affect, then run the required checks and push once. Repeat the
+whole-change review when the design or risk materially changes or prior review
+coverage cannot be established. Keep receipts, the delivery ledger, and the
+paired specialist passes for explicitly selected `full` review. Honor an
+explicit `checks` selection.
 
 ## One review and CI owner
 
-CE alone owns review settlement and CI/PR monitoring. When LFG already runs
+CE alone owns review settlement and CI/PR monitoring. Use the
+[CE pipeline handoff](references/ce-call-adapter.md) when delivering a single
+PR directly. Include its [local repair handoff](references/ce-call-adapter.md#repairs-during-the-ce-watch)
+when starting the watcher. When LFG already runs
 `ce-babysit-pr`, consume its result and continuations; for an existing PR
 outside LFG, `ce-babysit-pr` owns that loop; Railyard adds no watcher. Feed
 every reviewer's findings to that owner with the
 [review feedback settlement policy](../../references/review-feedback-settlement.md)
 as a project settlement requirement.
 
-A CE checkpoint that still needs a watch continuation is not completion.
-Continue that owner until review and CI settle or a concrete blocker requires
-user action.
+Keep that owner watching until the requested endpoint. Batch available review
+fixes into one verified repair push. Act on CI failures for the current head;
+refresh the checks when a repair or another contributor changes it. For each comment,
+fix a blocker, explain a decline, or link an issue for work the PR can safely
+ship without. Honor the policy's two-reviewed-head cutoff for automated
+feedback and hand a ready PR to the repository's merge process promptly.
 
 ## End-of-PR review
 
@@ -93,8 +97,7 @@ pushing and before settlement. Reuse a pre-push review at settlement only
 when its complete candidate and relevant inputs still match:
 
 - `railyard:thermos`
-- `codex review --base <base>`, with the model and effort that
-  `railyard:model-routing` sets for Codex review
+- `codex review --base <base>` using the configured Codex review settings
 
 These reviews produce findings only; CE still settles review and CI.
 
@@ -103,16 +106,21 @@ These reviews produce findings only; CE still settles review and CI.
 After CE's settled result, complete the remaining work only through the user's
 selected authorized endpoint:
 
-1. Confirm the merge is still authorized and no user or repository hold
-   remains. CE supplies the review and CI disposition; this checks the
-   delivery boundary only.
-2. Merge the exact reviewed head (`--match-head-commit`) with the configured
-   strategy through the [merge guard](references/ce-merge-guard.md): a plain
-   `gh pr merge` passes when the PR is open, not a draft, `CLEAN`, with no
-   unresolved review threads; else hand off CE's snapshot. For a stack,
-   follow `gh-stack` in dependency order.
-3. Observe the merge commit, fetch the base, and verify that the merge is on
-   the intended base. Run the smallest applicable post-merge source check.
+1. Refresh the PR before landing. Confirm its repository, base, and reviewed
+   head, plus authorization, draft and hold status, required checks and
+   approvals, and review resolution. If the head has changed, return to local
+   review and CE settlement for that head. Resolve unknown readiness before
+   landing.
+2. Follow the repository's merge policy. With an automatic queue such as
+   Mergify, satisfy the queue's rules and observe it land. With GitHub's
+   merge queue, enqueue the ready PR with `gh pr merge <number> --repo
+   <owner/repo> --match-head-commit <reviewed-sha>`. For a direct merge, use
+   the same command with the repository's configured merge strategy. Follow
+   `gh-stack` in dependency order for managed stacks. A race or refusal
+   calls for a fresh PR read and resolution through the configured path.
+3. Verify GitHub reports the PR merged to the intended base. Fetch the base
+   and confirm it contains the merge commit. Run the smallest applicable
+   post-merge source check.
 4. Complete the release or deployment steps required by the selected endpoint
    within the assigned target. For plugins, publish required marketplace pins
    and update the intended installation through its supported manager. Do not
@@ -128,40 +136,26 @@ selected authorized endpoint:
 6. Report the result, PR/merge and release links, relevant checks, and any
    remaining concrete blocker.
 
-A local test pass, pushed branch, open PR, green CI, merge, and deployed result
-prove different things; verify at the requested acceptance surface.
-Intermediate handoffs and bounded waits do not end the overall delivery. Keep
-ownership through the endpoint, continue independent work around a blocker,
-and stop only when completion or a concrete unmet prerequisite requires user
-or external action.
+Verify at the requested acceptance surface. Keep ownership through handoffs
+and waits. Continue independent work around a blocker and stop when the
+endpoint is reached or a prerequisite requires user or external action.
 
 ## Shape and pace
 
-Long write-then-review cycles are the main delivery cost; shape work so
-review confirms rather than discovers:
+Keep each PR focused on one concern, aiming for roughly 500 changed lines or
+fewer when practical. When review finds work the change can
+safely ship without, use a linked follow-up. A worker verifies its own edits;
+the delivery owner uses the selected local review level at publication. Reuse
+applicable review findings and checks across handoffs. Confirm the reviewed
+head and target before landing.
 
-- One concern per PR, roughly 500 changed lines or fewer; features, fixes,
-  and unrelated hardening ship separately. A requested behavior-preserving
-  refactor may move to an immediate follow-up only as a gate-recorded
-  accepted finding.
-- Review while building: after each commit or fix batch the implementer runs
-  `codex review --commit HEAD` or `--uncommitted`, routed by
-  `railyard:model-routing`, and fixes what it finds.
-- The implementer owns its fix, test, and delta-review loop and reports a
-  review-clean candidate; the delivery owner handles judgment calls and the
-  publication decision, not each round.
-- Later gate rounds revalidate the whole candidate, reusing proof for
-  unchanged inputs so fresh review effort goes to what changed.
-- Land promptly in dependency order; merge the moving base once, before the
-  final gate review, not after it.
-- Tests never take more than 10 minutes: the full local suite and every CI
-  test job. Shorter is better. A slower suite is a defect to fix (parallelize,
-  shard, cut slow fixtures), never a limit to raise or a reason to skip it.
+Tests never take more than 10 minutes: the full local suite and every CI
+test job. Shorter is better. A slower suite is a defect to fix (parallelize,
+shard, cut slow fixtures), never a limit to raise or a reason to skip it.
 
 ## Delegation
 
-Choose model and reasoning effort for each assignment with
-`railyard:model-routing`. Give each native subagent an objective, owned scope,
+Give each native subagent an objective, owned scope,
 constraints, dependencies, and checks; keep one writer per shared file and use
 isolated worktrees when concurrent edits need them. Coordinate completion as
 described in [agent completion and waiting](../../references/agent-coordination.md).

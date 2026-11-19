@@ -7,28 +7,26 @@ nav_order: 1
 
 # Deliver
 
-An explicit Deliver request for an implementation or fix runs through commit, push, PR, review and CI settlement, merge, required release or deployment, and consumer verification. Explicit plan-only, diagnosis-only, review-only, local-only, or PR-only requests retain their narrower endpoints. Routine edits and verification run natively; internal skill selection does not expand user authorization. For configuration and settings, consumer verification means reading the value back where it is consumed, such as the config file, a CLI readback, or a model list; live-process adoption, restarts, and inference canaries are out of scope unless requested.
+An implementation or fix request runs through confirmed merge when the user or repository owner has authorized automatic delivery. Required approvals and repository holds take precedence. Shipping requests and repository requirements can extend delivery through release or deployment and consumer verification. Plan-only, diagnosis-only, review-only, local-only, or PR-only requests stop at their stated endpoint. Routine edits and verification run natively. For configuration and settings, consumer verification means reading the value back where it is consumed, such as the config file, a CLI readback, or a model list; live-process adoption, restarts, and inference canaries are out of scope unless requested.
 
 ## What it adds
 
-Deliver coordinates useful Compound Engineering (CE) stages and the requested endpoint. Automatically select a CE stage when it helps, resolving the dependency when that stage is needed. CE owns review settlement and CI/PR monitoring; Deliver continues its settled result to the authorized terminal boundary.
+Deliver owns the requested endpoint and uses Compound Engineering (CE) stages when they help. CE owns review settlement and CI/PR monitoring; Deliver continues its settled result to the authorized terminal boundary.
 
 ## How it works
 
-Choose the stages that fit the work: planning, diagnosis, structured implementation, review, or shipping. Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR. Before every push, review the exact candidate’s complete cumulative change-set and affected lifecycle through the whole-candidate gate. Existing Thermos correctness/security and maintainability passes alongside Codex review fulfill this coverage; their completed findings feed the same CE review owner. Standalone Thermos review remains optional when publication is outside the requested scope. Reuse unchanged proof and keep a compact receipt binding candidate identity, coverage, and findings dispositions. Required pre-push evidence blocks publication; publication-dependent release, install, and consumer checks remain pending with a named delivery-tail owner.
+Choose the stages that fit the work. Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR.
 
-When `TYPESAFE_API_KEY` is present, [Jev](/skills/jev/) is the default for model
-and effort selection, workflow choice, evidence selection, work priority, and
-review triage throughout delivery. Explicit choices and privacy restrictions
-take precedence; uncertainty or service failure falls back to ordinary judgment.
+The default `light` review runs repository checks and one independent local review of the complete change before the first push. Review later repairs and their affected behavior, repeating broad review when design or risk changes materially or prior coverage is uncertain. Full review with Thermos and a formal receipt is opt-in. [Local review policy](/delivery/gates/)
 
-For delegation, choose model and reasoning effort together: Opus 5.5 at `medium` in Claude Code, GPT-6.1 Sol at `medium` in Codex. Sol owns implementation, debugging, planning, and ambiguous or multi-file work even when small or bounded. Use Fable 5.1 for harder Claude Code work. Raise Sol 6.1 to `high`, `xhigh`, or `max` for justified demanding Codex work; reserve Astra for a rare, explicitly justified escalation after a concrete residual failure or quality gap on Sol 6.1. Omitting the model means the child inherits. Native children handle ordinary subtasks, and visible tasks require an explicit user request.
+Let CE batch feedback and own the watch loop. Fix blockers, explain declines, and link issues for actionable work that can ship separately. Once automated reviewers have reviewed two distinct heads, newly raised minor findings default to follow-up. Use the configured queue where applicable and verify the PR has merged.
+
+Use native children for ordinary subtasks and CE for explicit cross-engine implementation. Create a visible task when the user explicitly requests one.
 
 Illustrative delivery outline:
 
 ```text
 > Use Deliver to fix the retry path in the webhook worker through consumer verification.
-model=gpt-6.1-sol  effort=medium
 scope=bounded-change  review_and_ci=CE
 tail=CE-disposition -> merge -> required-release/deployment -> consumer-check
 stop=report observed delivery state and verification
@@ -36,7 +34,7 @@ stop=report observed delivery state and verification
 
 ## Scope
 
-One software change or PR belongs here. Routine parallel work uses native children; explicitly requested fleet/account allocation or a delegated remote agent belongs to [Orchestrate](/skills/orchestrate/). Contracts, retrospectives, and cleanup are available on demand.
+One software change or PR belongs here. Routine parallel work uses native children; explicitly requested fleet/account allocation or a delegated remote agent belongs to [Orchestrate](/skills/orchestrate/).
 
 ## Source
 
@@ -44,4 +42,4 @@ Ships in the `railyard` plugin.
 
 ## Proof point
 
-Record the observed PR and merge commit, verify reachability from the intended base, and complete required release or deployment steps. For a plugin, that includes required marketplace pins, a supported manager update, and installed-runtime verification. A local pass, open PR, merge, and deployed result prove different boundaries; an intermediate result does not finish an explicit Deliver request.
+Record the observed PR and merge commit, verify reachability from the intended base, and complete required release or deployment steps. For a plugin, that includes required marketplace pins, a supported manager update, and installed-runtime verification. Report the checks and evidence at the requested endpoint.

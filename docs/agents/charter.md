@@ -7,21 +7,14 @@ becomes a verified, delivered result, on any machine in the fleet.
 
 Deciding and driving work —
 
-- *Routing* — which model and reasoning effort carry a unit of work
-  (`model-routing`), and transport-safe provider handoffs.
 - *Delivery* — driving one software change through the right workflow to
   merge and post-merge proof (`deliver`).
 - *Orchestration and placement* — decomposing objectives across tasks,
   projects, hosts, and dependencies, and choosing where each child runs
   (`orchestrate`, including the Codex saved-project and Claude SSH
   worker lanes).
-- *Targeted reviews and second opinions* — optional pre-commit deep reviews
-  (`thermos` and the two thermo-nuclear reviewers) and the Oracle one-shot
-  advisor.
-- *Runtime hygiene* — diagnosing and cleaning up observed residue on request
-  (`cleanup-codex`), with automatic cleanup off by default.
-- *Audit and retrospective* — reconstructing how a run went from the
-  mechanical run log (`audit`).
+- *Targeted reviews* — optional deep reviews (`thermos` and the two
+  thermo-nuclear reviewers).
 
 ## Belongs elsewhere
 
@@ -32,15 +25,18 @@ the [public fleet docs](https://novotnyllc.github.io/railyard/fleet/); the orche
 consults `roundhouse:fleet-readiness` before dispatch and never administers
 hosts itself.
 
+Oracle consultations and macOS Codex process recovery live in
+[Agent Utilities](https://github.com/novotnyllc/agent-utilities).
+
 ## External dependencies
 
 Compound Engineering
 ([EveryInc/compound-engineering-plugin](https://github.com/EveryInc/compound-engineering-plugin))
-provides selected planning, debugging, publishing, and review workflows.
-Railyard selects the appropriate stage automatically and leaves review
-settlement and CI monitoring with CE. Native routine work needs no workflow
-plugin bootstrap. Installing Railyard does not authorize installing unrelated
-plugins or enabling every available hook.
+provides planning, debugging, external implementation, publishing, and review
+workflows. CE owns implementation engine selection, review settlement, and CI
+monitoring. Routine work uses the harness's native tools. Installing Railyard
+does not authorize installing unrelated plugins or enabling every available
+hook.
 
 Roundhouse is needed for explicitly selected fleet/account work; craft skills
 and stacked-PR tooling are loaded only when relevant. Setup uses each host's

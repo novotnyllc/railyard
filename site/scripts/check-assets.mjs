@@ -4,7 +4,7 @@ import { join } from 'node:path';
 const root = new URL('../dist/', import.meta.url).pathname;
 const diagrams = ['m1-convergence', 'm2-delivery-lifecycle', 'm3-trust-ratchet', 'm4-trust-boundaries', 'm6-review-gates', 'm7-skill-sync', 'm8-canary-evidence', 'm9-enrollment', 'm10-anti-rollback'];
 const required = ['favicon.svg', 'favicon-16.png', 'favicon-32.png', 'apple-touch-icon.png', 'assets/railyard-icon.png', 'og/railyard-og.svg', 'og/railyard-og.png', 'assets/hero-rail.svg', ...diagrams.map((name) => `diagrams/${name}.svg`)];
-const icons = ['ship', 'review', 'fleet', 'skill', 'state', 'harness', 'build', 'machine', 'remote', 'cost'];
+const icons = ['ship', 'review', 'fleet', 'skill', 'state', 'harness', 'build', 'machine', 'remote'];
 const failures = [];
 for (const file of [...required, ...icons.map((icon) => `assets/scenarios/${icon}.svg`)]) if (!existsSync(join(root, file))) failures.push(`missing ${file}`);
 for (const file of ['favicon.svg', 'assets/hero-rail.svg', 'og/railyard-og.svg', ...diagrams.map((name) => `diagrams/${name}.svg`), ...icons.map((icon) => `assets/scenarios/${icon}.svg`)]) {

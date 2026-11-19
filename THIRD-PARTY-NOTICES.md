@@ -13,22 +13,6 @@ carry no license obligation here and are credited on the credits page instead.
 Every incorporation below is MIT-licensed. Their copyright notices are
 preserved in [`LICENSE`](LICENSE) alongside our own.
 
-## Oracle
-
-- **What:** `plugins/railyard/skills/oracle/SKILL.md`, adapted.
-- **From:** https://github.com/steipete/oracle, path `skills/oracle`,
-  commit `0f0bdb6a752efb2c736ec4dcaa6d3cc29743d851`.
-- **Copyright:** Copyright (c) 2026 Peter Steinberger.
-- **License:** MIT — text in [`LICENSE`](LICENSE).
-- **Modifications:** configuration knobs replacing fixed package/repo/account
-  examples, and a portable skill-local lifecycle bootstrap. See
-  [`UPSTREAM.md`](UPSTREAM.md).
-
-Surrounding scripting in `plugins/railyard/skills/oracle/scripts/` is our own
-work, reviewed against https://github.com/steipete/agent-scripts at commit
-`c46ea65b6323e8a2b6f441f8b6449ae731bc8f81` (MIT, Copyright (c) 2026 Peter
-Steinberger).
-
 ## Thermos review family
 
 - **What:** `plugins/railyard/skills/thermos/SKILL.md`,
@@ -42,8 +26,11 @@ Steinberger).
   [`LICENSE`](LICENSE).
 - **Modifications:** upstream's `disable-model-invocation: true` frontmatter
   is handled by our wrappers rather than copied; `thermos/SKILL.md` is
-  substantially rewritten for two-harness packaging and model-routing-safe
+  substantially rewritten for two-harness packaging and native subagent
   dispatch. See [`UPSTREAM.md`](UPSTREAM.md).
+
+Oracle previously shipped here and now lives in
+[Agent Utilities](https://github.com/novotnyllc/agent-utilities), where its upstream attribution is maintained.
 
 Corrections welcome — an incomplete or wrong notice here is a bug.
 [File it](https://github.com/novotnyllc/railyard/issues).
