@@ -33,8 +33,9 @@ accepting the result. CE can fall back to the current host even in
 `require` mode. See the
 [CE implementation routing guide](https://everyinc.github.io/compound-engineering-plugin/guides/configuration/#implementation-routing).
 
-Use Railyard orchestration when the assignment needs a specific remote
-machine or account. Roundhouse supplies the host readiness checks.
+Deliver can invoke Orchestrate when a stage benefits from authorized fleet
+placement. Roundhouse verifies the candidate's readiness. Routine work and
+explicit local-only requests stay local.
 
 ```sh
 claude plugin marketplace add novotnyllc/marketplace
@@ -54,7 +55,7 @@ can do, how it works, and what a delivery actually looks like.
 | --- | --- |
 | Setup & health | `setup` — inspect and configure relevant prerequisites; `doctor` — diagnose and fix drift; `config` — per-repository settings |
 | Delivery | `deliver` — select native execution or one useful CE workflow and complete the authorized scope |
-| Orchestration & placement | `orchestrate` — explicit fleet/account work, cross-project coordination, and supported remote placement |
+| Orchestration & placement | `orchestrate` — authorized fleet placement, bounded remote commands, and delegated remote workers |
 | Specialist review | `thermos`, `thermo-nuclear-review`, `thermo-nuclear-code-quality-review` — when their perspective is useful |
 
 ## Selected Compound Engineering workflows

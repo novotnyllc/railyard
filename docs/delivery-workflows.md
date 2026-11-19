@@ -2,7 +2,7 @@
 
 Routine work uses the harness's native tools and bounded subagents. Compound
 Engineering (CE) provides focused workflows and external implementation
-engines. Use Railyard for the delivery endpoint or explicit fleet coordination.
+engines. Use Railyard for the delivery endpoint and authorized fleet placement.
 
 ## Choose the smallest useful path
 
@@ -14,7 +14,7 @@ engines. Use Railyard for the delivery endpoint or explicit fleet coordination.
 | Create a PR or push user-requested commits to an existing PR | `compound-engineering:ce-commit-push-pr` | Deliver continues to the authorized endpoint |
 | Address PR feedback or watch CI | Applicable CE feedback or babysitting workflow | One owner for review settlement, CI, and the watch loop |
 | Implementation or fix | Native or selected CE implementation, local review, and CE settlement | Confirmed merge, with further release and consumer verification when required |
-| Explicit fleet/account allocation, remote work, or coordination that needs `orchestrate` | `railyard:orchestrate` | Combined acceptance evidence from the selected lanes |
+| Authorized fleet placement that could help a stage | Deliver invokes `railyard:orchestrate` | Acceptance evidence from the selected host and carrier |
 | Fleet setup or reconciliation | `roundhouse:fleet-readiness` | Required host, project, tool, and authentication readiness |
 
 Load `deliver` for implementation, fixes, and open-PR intent. Deliver may
@@ -30,7 +30,7 @@ that the PR landed.
 
 ```mermaid
 flowchart TD
-    request["Requested outcome"] --> placement{"Explicit fleet/account or remote work?"}
+    request["Requested outcome"] --> placement{"Would authorized fleet placement help?"}
     placement -- No --> local["Native execution and bounded subagents"]
     placement -- Yes --> orchestration["Orchestrate: allocate, monitor, combine evidence"]
     orchestration --> readiness["Verify required host and project readiness"]
@@ -101,13 +101,13 @@ for cleanup. Task archival and process cleanup require separate authorization.
 For macOS Codex recovery, use
 [Agent Utilities](https://github.com/novotnyllc/agent-utilities/tree/main/plugins/agent-utilities/skills/cleanup-codex).
 
-## Explicit fleet and account work
+## Fleet and account work
 
-`orchestrate` owns allocation, placement, monitoring, dependencies, and combined
-acceptance evidence when that coordination is needed. It uses Roundhouse to
-verify the required project, saved-project capability, harness, plugins, and
-authentication before remote dispatch. A checkout on disk alone does not prove
-the destination can accept the task.
+Deliver invokes `orchestrate` when a stage could benefit from authorized fleet
+placement. It uses Roundhouse for candidate readiness and checks current load
+when spare capacity matters. The coordinator runs bounded remote commands over
+approved SSH. A separate worker can provide independent reasoning or a needed
+account. Routine and local-only work use local tools.
 
 Roundhouse owns fleet inventory and reconciliation. Missing required readiness
 becomes a prerequisite; it does not authorize silent installation or unrelated

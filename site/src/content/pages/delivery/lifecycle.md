@@ -43,7 +43,7 @@ This diagram shows a shipping workflow with selected review and CE settlement. P
 ### Sequence
 
 1. **Ask.** Establish the requested result and whether publishing and merging are authorized.
-2. **Route.** Choose native execution, a focused workflow, or explicit fleet placement.
+2. **Route.** Choose native execution, a focused workflow, or authorized fleet placement for a stage it could help.
 3. **Build.** Execute natively or use a useful selected CE workflow.
 4. **Review.** Complete one independent local review of the whole change before the first push. Review later repair batches and their affected behavior. Repeat broad review when design or risk changes materially or prior coverage is uncertain.
 5. **Quality.** Run required repository checks and focused checks for the changed surface.

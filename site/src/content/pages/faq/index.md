@@ -34,7 +34,7 @@ Railyard uses [Compound Engineering (EveryInc)](https://github.com/EveryInc/comp
 
 ## Does every request need a delivery workflow?
 
-Routine work runs natively, and you can invoke CE workflows when useful. Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or pushing user-requested commits to an existing PR. CE owns one review settlement and CI loop. Fleet or account orchestration requires explicit scope; native child agents are the default for parallel work, and visible Codex tasks require an explicit user request.
+Routine work runs natively, and you can invoke CE workflows when useful. Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or pushing user-requested commits to an existing PR. CE owns one review settlement and CI loop. Deliver can use authorized fleet placement when it helps a stage. Native child agents are the default for local parallel work, and visible Codex tasks require an explicit user request.
 
 ## What are the formal review receipt and Thermos?
 

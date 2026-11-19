@@ -34,7 +34,7 @@ stop=report observed delivery state and verification
 
 ## Scope
 
-One software change or PR belongs here. Routine parallel work uses native children; explicitly requested fleet/account allocation or a delegated remote agent belongs to [Orchestrate](/skills/orchestrate/).
+One software change or PR belongs here. Routine and local-only work stay local. Deliver invokes [Orchestrate](/skills/orchestrate/) when authorized fleet placement could help a stage.
 
 ## Source
 

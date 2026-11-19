@@ -7,7 +7,7 @@ nav_order: 2
 
 # First delivery
 
-Prerequisite: [install Railyard first →](/start/install/). Add Roundhouse when you explicitly request fleet placement.
+Prerequisite: [install Railyard first →](/start/install/). Roundhouse provides readiness for authorized fleet placement.
 
 For authorized repository work, plain implementation, fix, and open-PR requests run through confirmed merge and any required release or deployment and verification of the actual consumer. Required approvals and repository holds take precedence. Say “PR only” or “no merge” to stop at publication. If access blocks a step, Deliver reports the blocker and continues authorized work that can proceed independently.
 
@@ -47,7 +47,7 @@ The [delivery lifecycle](/delivery/lifecycle/) requires merge ancestry and a rea
 
 ## Scope
 
-The first delivery is a complete one-machine path. Request fleet placement explicitly when another host is needed through [run work on another machine](/what-it-does/run-work-on-another-machine/).
+The first delivery is a complete one-machine path. Deliver can use [authorized fleet placement](/what-it-does/run-work-on-another-machine/) when another host helps a stage.
 
 ## Troubleshooting
 

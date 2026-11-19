@@ -265,10 +265,24 @@ test("automated feedback budget spans providers and preserves merge requirements
   assert.match(gate, /P2-or-lower follow-up under the \[review feedback settlement policy\]\(review-feedback-settlement\.md\) is accepted/);
 });
 
-test("orchestrate activates only on explicit request", () => {
+test("Deliver selects useful authorized placement without scanning routine work", () => {
   const { description } = frontmatter(read("skills/orchestrate/SKILL.md"));
-  assert.match(description, /explicitly requested/);
-  assert.match(orchestrate, /activates only for explicitly requested/);
+  assert.match(description, /authorized fleet.*including calls from Deliver/);
+  assert.match(deliver, /Invoke `railyard:orchestrate` when authorized fleet placement could help.*explicit local-only work local/);
+  assert.match(orchestrate, /Deliver identifies an authorized stage that could benefit.*Keep routine and explicit local-only work local/);
+  assert.match(orchestrate, /only for plausible hosts/);
+  assert.match(orchestrate, /coordinator-owned SSH command.*separate remote worker for independent reasoning or a needed account/);
+});
+
+test("remote placement verifies each stage and can reconnect without duplicating work", () => {
+  const remote = flat(read("skills/orchestrate/references/remote-execution.md"));
+  assert.match(remote, /only plausible hosts with `roundhouse:fleet-readiness`, passing their names explicitly.*Verify the target identity, exact repository baseline/);
+  assert.match(remote, /Native Apple build, signing, or simulator work needs a suitable Mac.*platform-neutral lint, compile, or test stage can run on eligible Linux, Windows, or macOS/);
+  assert.match(remote, /fresh, time-bounded read-only check.*one physical host as shared machine capacity/);
+  assert.match(remote, /Keep optional work local without a clear gain.*required stage has no verified compatible host/);
+  assert.match(remote, /Before launch, record verified host\/user identity.*job or session ID.*remote log and status locations/);
+  assert.match(remote, /actual final exit status.*independently of the SSH or logging pipeline.*same job to inspect liveness, logs, and status before retrying/);
+  assert.match(remote, /Remove only task-created temporary resources after the matching job is terminal.*Preserve active, ambiguous, and user-owned resources/);
 });
 
 test("visible user-owned tasks need explicit user direction", () => {

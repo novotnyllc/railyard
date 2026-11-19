@@ -13,8 +13,8 @@ source lives under `plugins/railyard/`; everything else is documentation.
   risk changes materially or prior coverage is uncertain.
 
 - Use the current chat as coordinator. CE Work handles implementer selection
-  and execution across supported harnesses. Use Railyard orchestration for
-  explicit fleet or account placement. See [delivery routing](docs/agents/routing.md).
+  and execution across supported harnesses. Use Railyard orchestration when
+  authorized fleet placement could help. See [delivery routing](docs/agents/routing.md).
 - Any change under `plugins/` bumps both plugin manifests and repins the
   marketplace; docs-only changes do neither —
   [release coupling](docs/agents/release-coupling.md).

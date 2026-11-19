@@ -11,7 +11,7 @@ Use native tools for routine work and focused Compound Engineering workflows for
 
 For authorized repository work, plain implementation, fix, and open-PR requests continue through confirmed merge and any required release or deployment and consumer verification. Required approvals, repository holds, and explicit narrower requests take precedence. CE owns PR feedback and CI.
 
-Native subagents handle bounded parallel work. Fleet/account orchestration is explicit, and visible tasks are created only when the user asks for them. Select LFG or paired review when the change calls for it.
+Native subagents handle bounded local work. Deliver invokes Orchestrate when authorized fleet placement could help a stage. Visible tasks are created only when the user asks for them. Select LFG or paired review when the change calls for it.
 
 - [Lifecycle](/delivery/lifecycle/) — native work and the selected shipping path.
 - [Work across harnesses](/what-it-does/work-across-harnesses/) — coordinate different implementation engines from one chat.

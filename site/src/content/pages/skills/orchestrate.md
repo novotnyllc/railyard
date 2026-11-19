@@ -7,7 +7,7 @@ nav_order: 2
 
 # Orchestrate
 
-Use Orchestrate for explicitly requested fleet/account allocation or delegated remote-agent work. It coordinates bounded lanes under one acceptance contract when the work needs those placement and transport controls.
+Deliver invokes Orchestrate when authorized fleet placement could help a stage. It coordinates bounded lanes under one acceptance contract. Routine and local-only work stay local.
 
 ## What it adds
 
@@ -29,7 +29,7 @@ fanout=2  canonical_writer=integration
 
 ## Scope
 
-Orchestrate owns requested fleet placement, coordination, and synthesis. Use native children for local parallel units and [CE for code implementation across engines](/what-it-does/work-across-harnesses/). Use the named CLI or Roundhouse for mechanical host changes. Create a visible user-owned task only when the user explicitly requests one. CE owns review settlement and CI for each applicable software lane.
+Orchestrate owns authorized fleet placement, coordination, and synthesis. Use an approved SSH command for bounded remote execution. Use a separate worker for independent reasoning or an authorized account. Use native children for local parallel units and [CE for code implementation across engines](/what-it-does/work-across-harnesses/). Create a visible user-owned task only when the user explicitly requests one. CE owns review settlement and CI for each applicable software lane.
 
 ## Source
 

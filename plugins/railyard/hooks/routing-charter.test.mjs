@@ -51,7 +51,7 @@ test("startup guide stays short and plain", (t) => {
   assert.doesNotMatch(out, /do not claim|Allocation:/i);
 });
 
-test("startup keeps CE ownership, the deliver endpoint, and explicit-only orchestration", (t) => {
+test("startup keeps CE ownership and routes useful authorized placement through Deliver", (t) => {
   const out = flat(run(fixture(t)).out);
   assert.match(out, /When CE coordinates a PR, it owns review settlement and CI watching/);
   assert.match(out, /Give it references\/review-feedback-settlement\.md/);
@@ -60,7 +60,7 @@ test("startup keeps CE ownership, the deliver endpoint, and explicit-only orches
   assert.match(out, /For authorized repository work, a plain implementation or open-PR request includes review, CI, and confirmed merge via the repository’s normal process/);
   assert.match(out, /Complete required release or deployment and verify the consumer/);
   assert.match(out, /Honor approvals, holds, and explicit stops such as plan-only, local-only, PR-only, or no merge/);
-  assert.match(out, /railyard:orchestrate for explicitly requested fleet or remote work that needs separate agents/);
+  assert.match(out, /Within Deliver, invoke railyard:orchestrate when authorized fleet placement could help.*routine or local-only work local.*Visible tasks require an explicit request/);
   assert.doesNotMatch(out, /Opus|Fable|Sol|Luna|Astra|ce-plan|ce-debug|Pick Compound Engineering stages/);
 });
 
