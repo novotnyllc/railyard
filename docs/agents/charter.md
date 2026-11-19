@@ -13,13 +13,8 @@ Deciding and driving work —
   projects, hosts, and dependencies, and choosing where each child runs
   (`orchestrate`, including the Codex saved-project and Claude SSH
   worker lanes).
-- *Targeted reviews and second opinions* — optional pre-commit deep reviews
-  (`thermos` and the two thermo-nuclear reviewers) and the Oracle one-shot
-  advisor.
-- *Runtime hygiene* — diagnosing and cleaning up observed residue on request
-  (`cleanup-codex`), with automatic cleanup off by default.
-- *Audit and retrospective* — reconstructing how a run went from the
-  mechanical run log (`audit`).
+- *Targeted reviews* — optional deep reviews (`thermos` and the two
+  thermo-nuclear reviewers).
 
 ## Belongs elsewhere
 
@@ -29,6 +24,9 @@ installs, network gear — lives in
 the [public fleet docs](https://novotnyllc.github.io/railyard/fleet/); the orchestrator
 consults `roundhouse:fleet-readiness` before dispatch and never administers
 hosts itself.
+
+Oracle consultations and macOS Codex process recovery live in
+[Agent Utilities](https://github.com/novotnyllc/agent-utilities).
 
 ## External dependencies
 

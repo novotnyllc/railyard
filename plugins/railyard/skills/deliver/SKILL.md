@@ -5,9 +5,7 @@ description: "Implement a requested change or fix and follow the PR through revi
 
 # Deliver
 
-Complete the requested change with the smallest workflow that proves its
-result. Use native tools for direct work and Compound Engineering (CE) to
-coordinate work that uses its workflows.
+Use native tools for direct work and Compound Engineering (CE) for its workflows.
 
 ## Endpoint
 
@@ -108,18 +106,21 @@ These reviews produce findings only; CE still settles review and CI.
 After CE's settled result, complete the remaining work only through the user's
 selected authorized endpoint:
 
-1. Confirm the merge is still authorized and no user or repository hold
-   remains. CE supplies the review and CI disposition; this checks the
-   delivery boundary only.
-2. Follow repository policy for the exact reviewed head. For Mergify, satisfy
-   the queue rules and observe the queue merge. For a GitHub merge queue, use
-   the supported enqueue operation pinned to the reviewed head. Where direct
-   merge is permitted, use the configured strategy and `--match-head-commit`
-   with the [merge guard](references/ce-merge-guard.md). For a stack, follow
-   `gh-stack` in dependency order. If the PR head changes, return to local
-   review and CE settlement as applicable.
-3. Observe the merge commit, fetch the base, and verify that the merge is on
-   the intended base. Run the smallest applicable post-merge source check.
+1. Refresh the PR before landing. Confirm its repository, base, and reviewed
+   head, plus authorization, draft and hold status, required checks and
+   approvals, and review resolution. If the head has changed, return to local
+   review and CE settlement for that head. Resolve unknown readiness before
+   landing.
+2. Follow the repository's merge policy. With an automatic queue such as
+   Mergify, satisfy the queue's rules and observe it land. With GitHub's
+   merge queue, enqueue the ready PR with `gh pr merge <number> --repo
+   <owner/repo> --match-head-commit <reviewed-sha>`. For a direct merge, use
+   the same command with the repository's configured merge strategy. Follow
+   `gh-stack` in dependency order for managed stacks. A race or refusal
+   calls for a fresh PR read and resolution through the configured path.
+3. Verify GitHub reports the PR merged to the intended base. Fetch the base
+   and confirm it contains the merge commit. Run the smallest applicable
+   post-merge source check.
 4. Complete the release or deployment steps required by the selected endpoint
    within the assigned target. For plugins, publish required marketplace pins
    and update the intended installation through its supported manager. Do not
@@ -135,12 +136,9 @@ selected authorized endpoint:
 6. Report the result, PR/merge and release links, relevant checks, and any
    remaining concrete blocker.
 
-A local test pass, pushed branch, open PR, green CI, merge, and deployed result
-prove different things; verify at the requested acceptance surface.
-Intermediate handoffs and bounded waits do not end the overall delivery. Keep
-ownership through the endpoint, continue independent work around a blocker,
-and stop only when completion or a concrete unmet prerequisite requires user
-or external action.
+Verify at the requested acceptance surface. Keep ownership through handoffs
+and waits. Continue independent work around a blocker and stop when the
+endpoint is reached or a prerequisite requires user or external action.
 
 ## Shape and pace
 

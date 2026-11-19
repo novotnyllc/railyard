@@ -38,8 +38,7 @@ requests.
 - `railyard:orchestrate` is only for explicitly requested fleet/account
   allocation or delegated remote-agent work. A bounded one-host admin
   operation uses its named CLI or `roundhouse:remote-mac` over SSH directly.
-- Keep startup small and free of dependency installation. Audits,
-  retrospectives, and process cleanup run on request.
+- Keep startup focused on delivery and review guidance.
 
 Repository and user title instructions take precedence over the default
 [task-title guidance](../../plugins/railyard/references/task-titles.md).

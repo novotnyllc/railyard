@@ -1,6 +1,6 @@
 ---
 name: config
-description: "Show or change a repository's Railyard settings: turn Railyard off or on for a repository and its worktrees, set the pre-push review level (full, light, checks), or turn the merge gate off. Use when the user asks to disable, quiet, lighten, or configure Railyard for a repository; not for installation (use setup)."
+description: "Show or change a repository's Railyard settings: turn Railyard off or on for a repository and its worktrees, set the pre-push review level (full, light, checks). Use when the user asks to disable, quiet, lighten, or configure Railyard for a repository; not for installation (use setup)."
 ---
 
 # Railyard Config
@@ -16,12 +16,10 @@ after every change. Resolve `SKILL_DIR` to the directory containing this file.
 | Turn Railyard off here | `node "$SKILL_DIR/scripts/config.mjs" off` |
 | Turn it back on | `node "$SKILL_DIR/scripts/config.mjs" on` |
 | Pre-push review level | `node "$SKILL_DIR/scripts/config.mjs" review full\|light\|checks` |
-| Stop checking PR merges | `node "$SKILL_DIR/scripts/config.mjs" merge-gate off` (`merge-gate on` restores) |
 
-- **off**: the startup guide becomes a one-line notice and every hook stands
-  down, including the opt-in default-branch push guard. It covers the
-  repository and all its worktrees. A copy or move of the repository comes back
-  on; submodules are configured separately.
+- **off**. A one-line notice replaces the publishing guide for this
+  repository and its worktrees. Copies, moves, and submodules use their own
+  settings.
 - **review**. `light` is the default. Run repository checks before each push.
   Use one independent whole-change review for initial publication, and focus
   routine feedback repairs on the changes and affected behavior. Repeat the
@@ -29,11 +27,6 @@ after every change. Resolve `SKILL_DIR` to the directory containing this file.
   local review baseline is uncertain. `full` adds Thermos, Codex review, and
   evidence accounting for each candidate. `checks` runs repository checks only.
   See the [review policy](../../references/whole-candidate-review.md).
-- **merge-gate off**: the merge gate stops checking PR merges in this
-  repository, for repositories whose host already enforces merge readiness
-  (a merge queue or branch protection). The opt-in push guard is unaffected.
 
-New sessions pick up a change at startup; tell the user to start a new session
-for it to apply to the guide. `review` and `merge-gate` can also be set
-as personal defaults with `git config --global` (keys `railyard.review` and
-`railyard.mergeGate`); a repository's own value wins.
+New sessions pick up these settings. Set a personal default with
+`git config --global railyard.review <level>`. A repository value wins.

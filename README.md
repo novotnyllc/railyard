@@ -55,9 +55,7 @@ can do, how it works, and what a delivery actually looks like.
 | Setup & health | `setup` — inspect and configure relevant prerequisites; `doctor` — diagnose and fix drift; `config` — per-repository settings |
 | Delivery | `deliver` — select native execution or one useful CE workflow and complete the authorized scope |
 | Orchestration & placement | `orchestrate` — explicit fleet/account work, cross-project coordination, and supported remote placement |
-| Specialist review | `thermos`, `thermo-nuclear-review`, `thermo-nuclear-code-quality-review` — when their perspective is useful; `oracle` — a manual GPT-6 Pro second opinion through the ChatGPT browser |
-| Optional audit | `audit` — explain a run's decisions, outcomes, and resource use when requested or useful |
-| Runtime repair | `cleanup-codex` — inspect or repair a concrete process problem |
+| Specialist review | `thermos`, `thermo-nuclear-review`, `thermo-nuclear-code-quality-review` — when their perspective is useful |
 
 ## Selected Compound Engineering workflows
 
@@ -66,7 +64,9 @@ Railyard uses the external
 plugin (3.38.2 or newer) for selected `ce-*` workflows. Use `ce-commit-push-pr` when creating a
 PR or pushing user-requested commits to an existing PR. The selected CE
 workflow owns PR feedback resolution, CI, and the watch loop. Use the
-repository's merge process and confirm the PR landed.
+repository's merge process and confirm the PR landed. Railyard's startup hook
+loads delivery and review guidance. Configure required merge checks and
+default-branch push restrictions in the repository host.
 
 Railyard defaults to one independent review of the cumulative change before
 the first push, then focused review of subsequent repairs and their affected
@@ -90,22 +90,24 @@ every worktree, are never committed, and don't follow a clone. Ask an agent
 ```sh
 git config railyard.off "$(git rev-parse --path-format=absolute --git-common-dir)"   # off; --unset railyard.off for on
 git config railyard.review light     # full | light | checks
-git config railyard.mergeGate off    # on | off
 ```
 
 | Setting | Effect |
 | --- | --- |
-| `off` | The startup guide becomes a one-line notice and every hook stands down, including the opt-in default-branch push guard, in the repository and all its worktrees. A copy or move comes back on; submodules are configured separately. |
+| `off` | The startup guide stands down for the repository and all its worktrees. A copy or move comes back on; submodules are configured separately. |
 | `review` | `light` (default) runs repository checks, one independent whole-change review before the first push, and focused review of later repairs. `full` uses Thermos and Codex review and records formal evidence on every push. `checks` runs repository checks only where project policy allows. |
-| `merge-gate off` | Stops checking PR merges, for repositories whose host already enforces readiness (a merge queue or branch protection). The opt-in push guard is unaffected. |
 
-`review` and `merge-gate` also work as personal defaults through `git config --global`;
-a repository's own value wins.
+Set a personal review default with `git config --global railyard.review light`.
+A repository's own value wins.
 
-Railyard 0.15 removes the old `railyard.ce` startup nudge setting. Use
-`railyard:config off` to opt a repository and its worktrees out of Railyard.
-Keep any narrower publication or merge approval rules in the repository's
-instructions.
+Railyard 0.15 retires the startup nudge (`railyard.ce`), shell merge guard
+(`railyard.mergeGate`, `railyard.guardDefaultBranchPush`), and run log. Use
+`railyard:config off` to opt a repository and its worktrees out of startup
+guidance. Keep narrower publication or merge approval rules in the
+repository's instructions.
+
+Oracle and macOS Codex recovery moved to [Agent Utilities](https://github.com/novotnyllc/agent-utilities).
+Use `agent-utilities:oracle` and `agent-utilities:cleanup-codex`.
 
 Ponytail and Superpowers are not Railyard prerequisites. Native subagents are
 the default for bounded parallel work; user-visible tasks are created only
@@ -123,7 +125,6 @@ story, scenarios, and guides live at
 
 MIT — see [LICENSE](LICENSE).
 
-Portions are adapted from `steipete/oracle` and `cursor/plugins` (both MIT),
-with `steipete/agent-scripts` (MIT) reviewed alongside. Their copyright
-notices are preserved in [LICENSE](LICENSE) and the incorporations are
+The Thermos review skills adapt material from `cursor/plugins` (MIT).
+Copyright notices are preserved in [LICENSE](LICENSE) and the incorporations are
 itemized in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

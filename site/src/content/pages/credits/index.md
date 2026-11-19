@@ -10,7 +10,6 @@ Build on visible lineage and give upstream work its due. Clear attribution makes
 
 ## Shipped and adapted
 
-- **Oracle** — the [Oracle skill](/skills/oracle/) adapts the lifecycle pattern from [Peter Steinberger's oracle](https://github.com/steipete/oracle), MIT.
 - **Thermos review family** — [Thermos](/skills/thermos/) supplies the review lenses tracked from [Cursor plugins](https://github.com/cursor/plugins), MIT.
 
 ## Workflow and harness tools
@@ -20,6 +19,8 @@ Build on visible lineage and give upstream work its due. Clear attribution makes
 - [gh-stack](https://github.com/github/gh-stack) supports dependent-PR delivery.
 
 ## Other attribution
+
+- Railyard previously shipped Oracle. [Agent Utilities](https://github.com/novotnyllc/agent-utilities) now maintains the skill adapted from [Peter Steinberger's oracle](https://github.com/steipete/oracle), MIT.
 
 - [Ponytail](https://github.com/DietrichGebert/ponytail) is credited for efficiency guidance; it is not a Railyard prerequisite.
 

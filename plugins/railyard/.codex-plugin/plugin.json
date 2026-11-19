@@ -14,7 +14,7 @@
   "interface": {
     "displayName": "Railyard",
     "shortDescription": "Delivery, publishing checks, and optional fleet coordination",
-    "longDescription": "Railyard defines the publishing review and merge checks and can carry an explicitly requested delivery through release or deployment and consumer verification. Compound Engineering coordinates PR review and CI. Fleet coordination, specialist reviews, Oracle, audit, and runtime cleanup are available on demand.",
+    "longDescription": "Railyard guides local publishing review and carries authorized delivery through the repository’s merge process, required release or deployment, and consumer verification. Compound Engineering coordinates PR review and CI. Fleet coordination and specialist reviews are available on demand.",
     "developerName": "Claire Novotny LLC",
     "category": "Productivity",
     "capabilities": [

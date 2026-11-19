@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Railyard is the delivery system for agent work: delivery,
-orchestration, cross-machine placement, review gates, and Oracle. Plugin
+orchestration, cross-machine placement, and review. Plugin
 source lives under `plugins/railyard/`; everything else is documentation.
 
 ## Always
@@ -29,17 +29,8 @@ Node 24, no package manager and no install step:
 ```sh
 node --test \
   plugins/railyard/skills/orchestrate/scripts/delivery-contracts.test.mjs \
-  plugins/railyard/skills/oracle/scripts/ensure-oracle.test.mjs \
-  plugins/railyard/skills/cleanup-codex/scripts/inventory.test.mjs \
-  plugins/railyard/skills/cleanup-codex/scripts/snapshot-reap.test.mjs \
-  plugins/railyard/skills/cleanup-codex/scripts/recycle.test.mjs \
-  plugins/railyard/skills/cleanup-codex/scripts/desktop.test.mjs \
-  plugins/railyard/skills/cleanup-codex/scripts/hook.test.mjs \
-  plugins/railyard/skills/cleanup-codex/scripts/canary.test.mjs \
-  plugins/railyard/skills/cleanup-codex/scripts/transaction.test.mjs \
   plugins/railyard/hooks/lean-hooks.test.mjs \
-  plugins/railyard/hooks/routing-charter.test.mjs \
-  plugins/railyard/hooks/merge-settlement-gate.test.mjs
+  plugins/railyard/hooks/routing-charter.test.mjs
 ```
 
 These are exactly the suites `.github/workflows/validate.yml` runs on Linux

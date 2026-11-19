@@ -15,17 +15,13 @@
     "orchestration",
     "delivery",
     "review",
-    "oracle",
     "skills"
   ],
   "skills": [
     "./skills/setup",
     "./skills/config",
     "./skills/doctor",
-    "./skills/audit",
-    "./skills/cleanup-codex",
     "./skills/deliver",
-    "./skills/oracle",
     "./skills/orchestrate",
     "./skills/thermo-nuclear-code-quality-review",
     "./skills/thermo-nuclear-review",

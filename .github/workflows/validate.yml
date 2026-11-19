@@ -33,14 +33,5 @@ jobs:
         run: |
           node --test --test-timeout=60000 --test-force-exit \
             plugins/railyard/skills/orchestrate/scripts/delivery-contracts.test.mjs \
-            plugins/railyard/skills/oracle/scripts/ensure-oracle.test.mjs \
-            plugins/railyard/skills/cleanup-codex/scripts/inventory.test.mjs \
-            plugins/railyard/skills/cleanup-codex/scripts/snapshot-reap.test.mjs \
-            plugins/railyard/skills/cleanup-codex/scripts/recycle.test.mjs \
-            plugins/railyard/skills/cleanup-codex/scripts/desktop.test.mjs \
-            plugins/railyard/skills/cleanup-codex/scripts/hook.test.mjs \
-            plugins/railyard/skills/cleanup-codex/scripts/canary.test.mjs \
-            plugins/railyard/skills/cleanup-codex/scripts/transaction.test.mjs \
             plugins/railyard/hooks/lean-hooks.test.mjs \
-            plugins/railyard/hooks/routing-charter.test.mjs \
-            plugins/railyard/hooks/merge-settlement-gate.test.mjs
+            plugins/railyard/hooks/routing-charter.test.mjs

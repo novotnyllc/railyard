@@ -32,7 +32,7 @@ Thermos runs two lenses against that same complete candidate:
 - `thermo-nuclear-review`: correctness, security, breakage, developer experience, and feature-leak risk.
 - `thermo-nuclear-code-quality-review`: structure, duplication, maintainability, and complexity.
 
-At the `full` level, run both lenses alongside `codex review` using its configured settings before publication. Reuse their completed evidence at settlement only while candidate identity, inputs and coverage still match. Standalone reviews can use a narrower pair or single lens, but they do not satisfy the publication gate. Findings return to the implementation owner and existing CE loop; [Oracle](/skills/oracle/) remains an optional advisor. The whole-candidate gate governs pushing, not every local commit; CE separately owns merge settlement.
+At the `full` level, run both lenses alongside `codex review` using its configured settings before publication. Reuse their completed evidence at settlement only while candidate identity, inputs and coverage still match. Standalone reviews can use a narrower pair or single lens, but they do not satisfy the publication gate. Findings return to the implementation owner and existing CE loop. When full review is selected, apply the whole-candidate gate before each push. CE owns review and CI settlement.
 
 This sequence shows the optional `full` level. CE uses the completed whole-candidate receipt before each push and checks current evidence before merging.
 
@@ -55,11 +55,18 @@ Use the project's existing browser and accessibility checks for the changed surf
 
 <span id="merge-settlement"></span>
 
-## Merge guard
+## Merge after review and CI
 
-Before a recognized `gh` merge, the merge guard checks one of two things. Without a CE snapshot, it requires the merge to be one literal command, reads the PR once from GitHub, and allows the merge when it is open, not a draft, `mergeStateStatus` `CLEAN`, and has no unresolved review threads; otherwise it refuses with the reason. On a base branch that requires a merge queue, either path allows the same ready PR to be enqueued with one literal `gh pr merge` pinned by `--match-head-commit`, because the queue re-runs the required checks against the latest base before it merges. There, `--admin`, REST merges and unpinned enqueues refuse. `--auto` and raw GraphQL merge, enqueue or auto-merge mutations refuse on every base. With a snapshot, it consumes the completed CE owner's final snapshot, checks that it matches CE's latest state, and verifies the current PR head and base. Only one hook process runs for each shell call, so the check stays cheap. Stale evidence or an unreadable GitHub answer refuses the merge with a recovery message. CE remains the sole review and CI owner; the guard has no reviewer wait timers or separate watcher.
+Once CE settles the current PR, check the repository's merge requirements
+and confirm the head still matches the reviewed commit. Follow the configured
+queue where present. For a direct GitHub merge, use the repository's merge
+strategy and pin the reviewed SHA with the GitHub CLI's
+`--match-head-commit` option. Verify that the PR merged. For a PR-only
+endpoint, preserve its draft status or effective merge hold.
 
-Deliver's [merge guard reference](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/skills/deliver/references/ce-merge-guard.md) documents both paths; the snapshot path requires recent evidence and an explicit head match. The guard covers the documented shell route rather than arbitrary API clients. The [implementation](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.js) and [tests](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/hooks/merge-settlement-gate.test.mjs) define its checks. Broad prompt nudges and automatic retrospective hooks are retired; cleanup remains manual.
+Configure requirements such as approvals, status checks, review-thread
+resolution, and default-branch push restrictions in the repository host.
+Railyard's startup hook provides delivery guidance.
 
 ## Post-merge proof
 

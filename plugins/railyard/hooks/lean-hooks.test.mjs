@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -9,93 +9,17 @@ import { fileURLToPath } from "node:url";
 const hookDirectory = path.dirname(fileURLToPath(import.meta.url));
 const pluginDirectory = path.resolve(hookDirectory, "..");
 const repositoryDirectory = path.resolve(pluginDirectory, "../..");
-const retiredHooks = ["routing-nudge", "railyard-retro", "route-state", "route-lifecycle", "dispatch-gate"];
-
-test("retired automation hook scripts are not shipped", () => {
-  for (const name of retiredHooks) {
-    for (const extension of [".js", ".test.mjs"]) {
-      const relative = `hooks/${name}${extension}`;
-      assert.equal(existsSync(path.join(pluginDirectory, relative)), false, relative);
-    }
-  }
-});
-
 for (const relative of ["hooks/claude-hooks.json", "codex/hooks.json"]) {
-  test(`${relative} registers only startup and the shell merge guard`, () => {
+  test(`${relative} registers only the startup guide`, () => {
     const { hooks } = JSON.parse(readFileSync(path.join(pluginDirectory, relative), "utf8"));
-    for (const event of ["UserPromptSubmit", "Stop", "SessionEnd"]) {
-      assert.equal(Object.hasOwn(hooks, event), false, `${relative}: ${event}`);
-    }
+    assert.deepEqual(Object.keys(hooks), ["SessionStart"]);
     assert.equal(hooks.SessionStart.length, 1);
-    assert.equal(hooks.PreToolUse.length, 1);
-    const commands = Object.values(hooks).flatMap(entries =>
-      entries.flatMap(entry => entry.hooks.flatMap(hook =>
-        [hook.command, hook.commandWindows].filter(value => typeof value === "string"))));
-    for (const command of commands) {
-      for (const name of retiredHooks) {
-        assert.ok(!command.includes(name), `${relative} still invokes ${name}`);
-      }
-    }
+    const entries = hooks.SessionStart[0].hooks;
+    assert.equal(entries.length, 1);
+    assert.match(entries[0].command, /routing-charter\.js/);
+    assert.match(entries[0].commandWindows, /routing-charter\.js/);
   });
 }
-
-test("manual audit, retrospective notes, and cleanup remain available", () => {
-  for (const relative of [
-    "skills/audit/SKILL.md",
-    "references/run-audit.md",
-    "hooks/run-log.js",
-    "skills/cleanup-codex/SKILL.md",
-    "skills/cleanup-codex/scripts/cleanup-codex.mjs",
-  ]) {
-    assert.ok(existsSync(path.join(pluginDirectory, relative)), relative);
-  }
-  const claude = JSON.parse(readFileSync(path.join(pluginDirectory, ".claude-plugin/plugin.json"), "utf8"));
-  const codex = JSON.parse(readFileSync(path.join(pluginDirectory, ".codex-plugin/plugin.json"), "utf8"));
-  for (const name of ["audit", "cleanup-codex"]) {
-    assert.ok(claude.skills.includes(`./skills/${name}`), `Claude skill ${name}`);
-    const discoverable = typeof codex.skills === "string"
-      ? existsSync(path.join(pluginDirectory, codex.skills, name, "SKILL.md"))
-      : codex.skills.includes(`./skills/${name}`);
-    assert.ok(discoverable, `Codex skill ${name}`);
-  }
-});
-
-test("manual audit notes retain session binding without a retrospective hook", (t) => {
-  const cases = [
-    { codex: "codex-child", claude: "claude-parent", expected: "codex-child" },
-    { codex: "", claude: "claude-session", expected: "claude-session" },
-    { codex: "", claude: `  ${"s".repeat(200)}  `, expected: "s".repeat(120) },
-    { codex: "", claude: "", expected: undefined },
-  ];
-  for (const { codex, claude, expected } of cases) {
-    const logDirectory = mkdtempSync(path.join(tmpdir(), "lean-hook-audit-"));
-    t.after(() => rmSync(logDirectory, { recursive: true, force: true }));
-    const result = spawnSync(process.execPath, [
-      path.join(hookDirectory, "run-log.js"),
-      "note",
-      JSON.stringify({ event: "retrospective", what: "requested audit" }),
-    ], {
-      encoding: "utf8",
-      timeout: 5000,
-      env: {
-        ...process.env,
-        RAILYARD_RUN_LOG_DIR: logDirectory,
-        CODEX_THREAD_ID: codex,
-        CLAUDE_CODE_SESSION_ID: claude,
-        CLAUDE_PLUGIN_ROOT: "",
-      },
-    });
-    assert.ifError(result.error);
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, "");
-    assert.equal(result.stderr, "");
-    const entries = readdirSync(logDirectory).flatMap(name =>
-      readFileSync(path.join(logDirectory, name), "utf8").trim().split("\n").map(line => JSON.parse(line)));
-    assert.equal(entries.length, 1);
-    assert.equal(entries[0].event, "retrospective");
-    assert.equal(entries[0].session_id, expected);
-  }
-});
 
 test("local and CI required suites agree and cover hook retirement", () => {
   const files = ["AGENTS.md", ".github/workflows/validate.yml"];
@@ -134,22 +58,20 @@ function realRepo(t) {
 
 const isolatedEnv = (home) => ({
   ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), GIT_CONFIG_NOSYSTEM: "1",
-  RAILYARD_RUN_LOG_DIR: path.join(home, "run-log"),
 });
-
-function runHook(name, cwd, home, input) {
-  return spawnSync(process.execPath, [path.join(hookDirectory, name)], {
-    cwd, encoding: "utf8", timeout: 5000, env: isolatedEnv(home),
-    input: input === undefined ? "" : JSON.stringify(input),
-  });
-}
 
 const configure = (cwd, home, ...args) =>
   spawnSync(process.execPath, [configScript, ...args], { cwd, encoding: "utf8", env: isolatedEnv(home) });
-const charter = (cwd, home) => runHook("routing-charter.js", cwd, home).stdout;
-const mergeCommand = ["gh", "pr", "merge", "1", "--squash"].join(" ");
+const charter = (cwd, home) => {
+  const result = spawnSync(process.execPath, [path.join(hookDirectory, "routing-charter.js")], {
+    cwd, encoding: "utf8", timeout: 5000, env: isolatedEnv(home),
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout;
+};
 
-test("railyard.off stands every hook down in the repository and its worktrees only", (t) => {
+test("railyard.off disables startup guidance in the repository and its worktrees only", (t) => {
   const { root, main, home } = realRepo(t);
   assert.match(configure(main, home, "off").stdout, /railyard: off/);
   git(main, "worktree", "add", "-q", path.join(root, "feature"), "-b", "feature");
@@ -158,10 +80,6 @@ test("railyard.off stands every hook down in the repository and its worktrees on
 
   for (const dir of [main, path.join(main, "src"), path.join(root, "feature")]) {
     assert.match(charter(dir, home), /^Railyard is off in this repository/, dir);
-    const merge = runHook("merge-settlement-gate.js", dir, home, {
-      hook_event_name: "PreToolUse", cwd: dir, tool_name: "Bash", tool_input: { command: mergeCommand },
-    });
-    assert.equal(merge.status, 0, merge.stderr);
   }
   for (const dir of [path.join(root, "cloned"), path.join(root, "copied")]) {
     assert.match(charter(dir, home), /^Railyard publishing:/, dir);
@@ -169,15 +87,6 @@ test("railyard.off stands every hook down in the repository and its worktrees on
 
   assert.match(configure(main, home, "on").stdout, /railyard: on/);
   assert.match(charter(main, home), /^Railyard publishing:/);
-});
-
-test("tool hooks follow the session folder in the payload, not the process folder", (t) => {
-  const { root, main, home } = realRepo(t);
-  configure(main, home, "off");
-  const merge = runHook("merge-settlement-gate.js", root, home, {
-    hook_event_name: "PreToolUse", cwd: main, tool_name: "Bash", tool_input: { command: `${mergeCommand} --admin` },
-  });
-  assert.equal(merge.status, 0, merge.stderr);
 });
 
 test("review level changes the publishing requirement", (t) => {
@@ -207,21 +116,6 @@ test("the config script rejects unknown values and non-repositories", (t) => {
   assert.match(configure(root, home, "--repo", main).stdout, /railyard: on/);
 });
 
-test("merge-gate off stops merge checks in that repository only", (t) => {
-  const { root, main, home } = realRepo(t);
-  const merge = (dir) => runHook("merge-settlement-gate.js", dir, home, {
-    hook_event_name: "PreToolUse", cwd: dir, tool_name: "Bash", tool_input: { command: `${mergeCommand} --admin` },
-  });
-  assert.equal(merge(main).status, 2);
-  assert.match(configure(main, home, "merge-gate", "off").stdout, /merge-gate: off/);
-  assert.equal(merge(main).status, 0);
-  git(root, "clone", "-q", "main", "cloned");
-  assert.equal(merge(path.join(root, "cloned")).status, 2);
-  assert.match(configure(main, home, "merge-gate", "on").stdout, /merge-gate: on/);
-  assert.equal(merge(main).status, 2);
-  assert.equal(configure(main, home, "merge-gate", "maybe").status, 2);
-});
-
 test("explicit repository values beat personal global defaults", (t) => {
   const { main, home } = realRepo(t);
   mkdirSync(path.join(home, ".config", "git"), { recursive: true });
@@ -239,34 +133,6 @@ test("personal global defaults apply outside a repository", (t) => {
   assert.match(charter(outside, home), /run the repository's checks/);
 });
 
-test("merge settings follow the repository a merge runs in", (t) => {
-  const { root, main, home } = realRepo(t);
-  git(root, "init", "-q", "other");
-  const run = (cwd, command) => runHook("merge-settlement-gate.js", cwd, home, {
-    hook_event_name: "PreToolUse", cwd, tool_name: "Bash", tool_input: { command },
-  });
-  configure(main, home, "merge-gate", "off");
-  assert.equal(run(main, `${mergeCommand} --admin`).status, 0);
-  assert.equal(run(main, `cd ${path.join(root, "other")} && ${mergeCommand} --admin`).status, 2);
-  configure(main, home, "merge-gate", "on");
-  configure(path.join(root, "other"), home, "merge-gate", "off");
-  assert.equal(run(main, `cd ${path.join(root, "other")} && ${mergeCommand} --admin`).status, 0);
-});
-
-test("a refusal in another repository survives the session repository's settings", (t) => {
-  const { root, main, home } = realRepo(t);
-  git(root, "init", "-q", "other");
-  const run = (command) => runHook("merge-settlement-gate.js", main, home, {
-    hook_event_name: "PreToolUse", cwd: main, tool_name: "Bash", tool_input: { command },
-  });
-  configure(main, home, "merge-gate", "off");
-  assert.equal(run(`cd ${path.join(root, "other")} && sh -c '${mergeCommand} --admin'`).status, 2);
-  assert.equal(run(`env --chdir=${path.join(root, "other")} sh -c '${mergeCommand} --admin'`).status, 2);
-  configure(main, home, "merge-gate", "on");
-  configure(main, home, "off");
-  assert.equal(run(`cd ${path.join(root, "other")} && ${mergeCommand} --admin`).status, 2);
-});
-
 test("a repository switched off with the 0.13 marker file stays off until switched on", (t) => {
   const { main, home } = realRepo(t);
   const common = git(main, "rev-parse", "--path-format=absolute", "--git-common-dir");
@@ -274,38 +140,4 @@ test("a repository switched off with the 0.13 marker file stays off until switch
   assert.match(charter(main, home), /^Railyard is off in this repository/);
   assert.match(configure(main, home, "on").stdout, /railyard: on/);
   assert.match(charter(main, home), /^Railyard publishing:/);
-});
-
-test("unplaced merges keep the gate whatever the session repository says", (t) => {
-  const { main, home } = realRepo(t);
-  const run = (command) => runHook("merge-settlement-gate.js", main, home, {
-    hook_event_name: "PreToolUse", cwd: main, tool_name: "Bash", tool_input: { command },
-  });
-  configure(main, home, "merge-gate", "off");
-  assert.equal(run(`sh -c '${mergeCommand} --admin'`).status, 2);
-  assert.equal(run(`${mergeCommand} --admin`).status, 0);
-});
-
-test("a push that names another repository keeps that repository's guard", (t) => {
-  const { root, main, home } = realRepo(t);
-  git(root, "clone", "-q", "main", "guarded");
-  const guarded = path.join(root, "guarded");
-  git(guarded, "config", "railyard.guardDefaultBranchPush", "true");
-  configure(main, home, "off");
-  const branch = git(main, "rev-parse", "--abbrev-ref", "HEAD");
-  const push = `git --git-dir=${path.join(guarded, ".git")} --work-tree=${guarded} push origin HEAD:${branch}`;
-  const r = runHook("merge-settlement-gate.js", main, home, {
-    hook_event_name: "PreToolUse", cwd: main, tool_name: "Bash", tool_input: { command: push },
-  });
-  assert.equal(r.status, 2, r.stderr);
-});
-
-test("a merge that names its repository keeps the gate", (t) => {
-  const { main, home } = realRepo(t);
-  configure(main, home, "merge-gate", "off");
-  const run = (command) => runHook("merge-settlement-gate.js", main, home, {
-    hook_event_name: "PreToolUse", cwd: main, tool_name: "Bash", tool_input: { command },
-  });
-  assert.equal(run(`${mergeCommand} --repo owner/other --admin`).status, 2);
-  assert.equal(run(`GH_REPO=owner/other ${mergeCommand} --admin`).status, 2);
 });

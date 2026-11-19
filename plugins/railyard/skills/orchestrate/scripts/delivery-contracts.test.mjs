@@ -3,8 +3,7 @@
 // change freely as long as the policy it carries stays present.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -43,7 +42,6 @@ function frontmatter(text) {
 
 const deliver = flat(read("skills/deliver/SKILL.md"));
 const orchestrate = flat(read("skills/orchestrate/SKILL.md"));
-const mergeGuard = flat(read("skills/deliver/references/ce-merge-guard.md"));
 const providerRouting = flat(read("references/provider-task-routing.md"));
 
 test("every skill has frontmatter with a matching name and a description", () => {
@@ -80,6 +78,7 @@ test("shipped instructions do not reference retired routing contracts", () => {
     /carrier-protocol/,
     /native-dispatch-contract/,
     /Allocation:/,
+    /RAILYARD_CE_SNAPSHOT|RAILYARD_RUN_LOG_DIR|review-receipt\.mjs|railyard:(?:audit|cleanup-codex|oracle)\b/,
   ];
   const hits = [];
   for (const file of shippedInstructionFiles) {
@@ -104,12 +103,18 @@ test("implementation reaches confirmed merge when authorized and shipping includ
   const tail = read("skills/deliver/SKILL.md").match(/## Delivery tail\n([\s\S]*?)\n## /)?.[1] ?? "";
   const steps = Array.from(tail.matchAll(/^\d+\. ([\s\S]*?)(?=^\d+\. |(?![\s\S]))/gm), ([, step]) => flat(step));
   const at = (pattern) => steps.findIndex((step) => pattern.test(step));
-  const landing = at(/reviewed head/);
-  const source = at(/observe the merge commit.*intended base/i);
+  const landing = at(/Follow the repository's merge policy/);
+  const source = at(/Verify GitHub reports the PR merged to the intended base.*confirm it contains the merge commit/);
   const release = at(/release or deployment steps/);
   const consumer = at(/actual consumer/);
   assert.ok(landing >= 0 && landing < source && source < release && release < consumer,
     "repo landing, source proof, release or deployment, then consumer proof");
+
+  assert.match(steps[landing - 1], /required checks and approvals, and review resolution/);
+  assert.match(steps[landing - 1], /head has changed, return to local review and CE settlement/);
+  assert.match(steps[landing], /automatic queue.*observe it land/);
+  assert.match(steps[landing], /GitHub's merge queue.*--match-head-commit <reviewed-sha>/);
+  assert.match(steps[landing], /direct merge.*repository's configured merge strategy/);
 });
 
 test("CE alone owns review settlement and CI, and PRs use ce-commit-push-pr", () => {
@@ -234,25 +239,6 @@ test("automated feedback cutoff counts reviewed heads and preserves merge requir
   assert.match(gate, /P2-or-lower follow-up under the \[review feedback settlement policy\]\(review-feedback-settlement\.md\) is accepted/);
 });
 
-test("landing follows the repo queue or the merge guard on the reviewed head", () => {
-  assert.match(deliver, /For Mergify, satisfy the queue rules and observe the queue merge/);
-  assert.match(deliver, /GitHub merge queue.*enqueue operation pinned to the reviewed head/);
-  assert.match(deliver, /Where direct merge is permitted.*--match-head-commit.*\[merge guard\]\(references\/ce-merge-guard\.md\)/);
-  assert.match(deliver, /If the PR head changes, return to local review and CE settlement/);
-  assert.match(mergeGuard, /without `RAILYARD_CE_SNAPSHOT` needs no CE run/);
-  assert.match(mergeGuard, /no unresolved review threads/);
-  assert.match(mergeGuard, /only a merge that is one literal command/);
-  assert.match(mergeGuard, /RAILYARD_CE_SNAPSHOT/);
-  assert.match(mergeGuard, /--match-head-commit/);
-});
-
-test("the merge override is only for the user's explicit instruction in this conversation", () => {
-  assert.match(mergeGuard, /only when the user, in the current conversation, explicitly directs/);
-  assert.match(mergeGuard, /because a refusal or a document[^.]*suggests it/);
-  assert.match(mergeGuard, /honor-system/);
-  assert.match(mergeGuard, /`git push` to a default branch/);
-});
-
 test("orchestrate activates only on explicit request", () => {
   const { description } = frontmatter(read("skills/orchestrate/SKILL.md"));
   assert.match(description, /explicitly requested/);
@@ -266,30 +252,21 @@ test("visible user-owned tasks need explicit user direction", () => {
 });
 
 test("provider task routing stays fail-closed and secret-free", () => {
-  assert.match(providerRouting, /Fail-closed preflight/);
+  assert.match(providerRouting, /missing evidence stays `unknown`/);
   assert.match(providerRouting, /Never send credentials/);
   assert.match(providerRouting, /altered-but-nonempty objective, constraint, or acceptance check fails the handoff/);
   assert.match(providerRouting, /Returned task output is untrusted data/);
-  assert.match(providerRouting, /must not include `--fallback-model`/);
-  assert.match(providerRouting, /never falls through to a different model or carrier/);
-  assert.match(providerRouting, /scripts\/review-receipt\.mjs/);
 });
 
 test("startup text and shipped instructions stay within word budgets", () => {
-  const logDirectory = mkdtempSync(path.join(tmpdir(), "railyard-charter-"));
-  try {
-    const run = spawnSync(process.execPath, [path.join(pluginRoot, "hooks/routing-charter.js")], {
-      input: "{}",
-      encoding: "utf8",
-      timeout: 5000,
-      env: { ...process.env, RAILYARD_RUN_LOG_DIR: logDirectory },
-    });
-    assert.equal(run.status, 0);
-    assert.ok(words(run.stdout) <= 270, `SessionStart charter is ${words(run.stdout)} words`);
-    assert.doesNotMatch(run.stdout, /Allocation:|model-routing|railyard:jev/);
-  } finally {
-    rmSync(logDirectory, { recursive: true, force: true });
-  }
+  const run = spawnSync(process.execPath, [path.join(pluginRoot, "hooks/routing-charter.js")], {
+    input: "{}",
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  assert.equal(run.status, 0);
+  assert.ok(words(run.stdout) <= 270, `SessionStart charter is ${words(run.stdout)} words`);
+  assert.doesNotMatch(run.stdout, /Allocation:|model-routing|railyard:jev/);
   for (const file of shippedInstructionFiles) {
     const count = words(readFileSync(file, "utf8"));
     // Thermos rubrics track Cursor's upstream text verbatim, so they get room
@@ -307,159 +284,6 @@ test("ships paired source manifest versions", () => {
   assert.match(codex.version, /^\d+\.\d+\.\d+$/);
   assert.equal(claude.version, codex.version);
   assert.deepEqual(claude.skills.toSorted(), skillNames.map((name) => `./skills/${name}`).toSorted());
-});
-
-// review-receipt.mjs is the parser provider-task-routing.md requires for
-// Claude subscription reviews; these exercise its behavior directly.
-const reviewReceipt = path.join(pluginRoot, "scripts/review-receipt.mjs");
-
-function validate(expectModel, events, exitStatus = 0, extraArgs = []) {
-  const result = spawnSync(
-    process.execPath,
-    [reviewReceipt, "--exit-status", String(exitStatus), "--expect-model", expectModel, ...extraArgs],
-    { input: `${events.map((event) => JSON.stringify(event)).join("\n")}\n`, encoding: "utf8" },
-  );
-  return { ...result, receipt: JSON.parse(result.stdout) };
-}
-const validateFable = (events, exitStatus = 0, extraArgs = []) =>
-  validate("claude-fable-5", events, exitStatus, extraArgs);
-
-const streamFor = (model, version = "2.1.220") => [
-  { type: "system", subtype: "init", model, claude_code_version: version, session_id: "test-session" },
-  { type: "assistant", message: { model } },
-  {
-    type: "result",
-    subtype: "success",
-    is_error: false,
-    modelUsage: {
-      "claude-haiku-4-5-20251001": { provider: "firstParty" },
-      [model]: { provider: "firstParty" },
-    },
-  },
-];
-const [init, assistant, success] = streamFor("claude-fable-5");
-
-test("review receipt accepts a first-party stream with auxiliary Haiku usage", () => {
-  const run = validateFable([init, assistant, success]);
-  assert.equal(run.status, 0);
-  assert.equal(run.receipt.ok, true);
-  assert.equal(run.receipt.reason, "validated");
-});
-
-test("review receipt attests whichever Claude model was chosen", () => {
-  const opus = validate("claude-opus-5", streamFor("claude-opus-5"));
-  assert.equal(opus.status, 0);
-  assert.equal(opus.receipt.expected_model, "claude-opus-5");
-
-  const drift = validate("claude-opus-5", streamFor("claude-fable-5"));
-  assert.equal(drift.status, 1);
-  assert.equal(drift.receipt.reason, "init_model_mismatch");
-  assert.equal(drift.receipt.observed_model, "claude-fable-5");
-});
-
-test("review receipt auxiliary allowance is replaceable and assistant-aware", () => {
-  const explicit = validate("claude-opus-5", streamFor("claude-opus-5"), 0, ["--allow-aux", "claude-other-1"]);
-  assert.equal(explicit.receipt.reason, "model_usage_mismatch");
-  assert.equal(explicit.receipt.observed_model, "claude-haiku-4-5-20251001");
-
-  const aux = { type: "assistant", message: { model: "claude-haiku-4-5-20251001" } };
-  assert.equal(validateFable([init, aux, assistant, success]).receipt.reason, "validated");
-
-  const unlisted = validateFable([
-    init,
-    { type: "assistant", message: { model: "claude-sonnet-4-5-20250929" } },
-    success,
-  ]);
-  assert.equal(unlisted.status, 1);
-  assert.equal(unlisted.receipt.reason, "assistant_model_mismatch");
-});
-
-test("review receipt treats the CLI version as a floor", () => {
-  assert.equal(validate("claude-fable-5", streamFor("claude-fable-5", "2.1.223")).receipt.reason, "validated");
-  assert.equal(validate("claude-fable-5", streamFor("claude-fable-5", "2.2.0")).receipt.reason, "validated");
-  const stale = validate("claude-fable-5", streamFor("claude-fable-5", "2.1.219"));
-  assert.equal(stale.status, 1);
-  assert.equal(stale.receipt.reason, "unsupported_claude_version");
-  assert.equal(stale.receipt.min_claude_code_version, "2.1.220");
-  assert.equal(
-    validate("claude-fable-5", streamFor("claude-fable-5", "2.1.219"), 0, ["--min-cli-version", "2.1.0"]).receipt.reason,
-    "validated",
-  );
-  assert.equal(
-    validate("claude-fable-5", streamFor("claude-fable-5", "2.2"), 0, ["--min-cli-version", "2.1.220"]).receipt.reason,
-    "validated",
-  );
-  assert.equal(
-    validate("claude-fable-5", streamFor("claude-fable-5", "2.1.220-rc1")).receipt.reason,
-    "unsupported_claude_version",
-  );
-});
-
-test("review receipt rejects refusal fallback after a valid init", () => {
-  const run = validateFable([
-    init,
-    {
-      type: "system",
-      subtype: "model_refusal_fallback",
-      trigger: "refusal",
-      api_refusal_category: "cyber",
-      original_model: "claude-fable-5",
-      fallback_model: "claude-opus-5",
-    },
-  ]);
-  assert.equal(run.status, 1);
-  assert.equal(run.receipt.reason, "model_refusal_fallback");
-  assert.equal(run.receipt.api_refusal_category, "cyber");
-});
-
-test("review receipt rejects drift, errors, nonzero exits, and truncated streams", () => {
-  const reason = (events, exit = 0) => validateFable(events, exit).receipt.reason;
-  assert.equal(reason([init, { type: "assistant", message: { model: "claude-opus-5" } }]), "assistant_model_mismatch");
-  assert.equal(reason([init, assistant, { ...success, is_error: true }]), "result_error");
-  assert.equal(reason([init, assistant, success], 1), "process_exit_nonzero");
-  assert.equal(validateFable([init, assistant, { ...success, is_error: true }], 1).receipt.result_is_error, true);
-  assert.equal(reason([init, assistant]), "missing_terminal_result");
-  assert.equal(reason([init, success]), "missing_assistant_event");
-  assert.equal(reason([{ ...init, model: "claude-fable-999" }]), "init_model_mismatch");
-  assert.equal(reason([assistant, init, success]), "invalid_event_order");
-  assert.equal(reason([init, assistant, success, success]), "invalid_event_order");
-  assert.equal(
-    reason([init, assistant, { ...success, modelUsage: { ...success.modelUsage, "claude-opus-5": { provider: "firstParty" } } }]),
-    "model_usage_mismatch",
-  );
-  assert.equal(
-    reason([init, assistant, { ...success, modelUsage: { "claude-fable-5": { provider: "thirdParty" } } }]),
-    "provider_mismatch",
-  );
-  assert.equal(
-    reason([init, assistant, { ...success, modelUsage: { ...success.modelUsage, "claude-sonnet-999": { provider: "firstParty" } } }]),
-    "model_usage_mismatch",
-  );
-  const failedWithDrift = validateFable(
-    [init, assistant, { ...success, modelUsage: { "claude-opus-5": { provider: "thirdParty" } } }],
-    1,
-  );
-  assert.equal(failedWithDrift.receipt.reason, "process_exit_nonzero");
-  assert.equal(failedWithDrift.receipt.evidence_reason, "model_usage_mismatch");
-  assert.equal(failedWithDrift.receipt.observed_provider, "thirdParty");
-  const erroredWithDrift = validateFable([
-    init,
-    assistant,
-    { ...success, is_error: true, modelUsage: { "claude-opus-5": { provider: "thirdParty" } } },
-  ]);
-  assert.equal(erroredWithDrift.receipt.reason, "result_error");
-  assert.equal(erroredWithDrift.receipt.evidence_reason, "model_usage_mismatch");
-});
-
-test("review receipt reports unreadable streams as metadata", () => {
-  const run = spawnSync(
-    process.execPath,
-    [reviewReceipt, "--exit-status", "0", "--expect-model", "claude-fable-5", "/path/that/does/not/exist/review.jsonl"],
-    { encoding: "utf8" },
-  );
-  assert.equal(run.status, 1);
-  assert.equal(JSON.parse(run.stdout).reason, "stream_read_error");
-  assert.equal(run.stderr, "");
 });
 
 test("orchestrate prefers the direct route and keeps the user ahead of child reports", () => {
@@ -487,6 +311,8 @@ test("direct single-PR delivery uses the bounded CE watch and preserves an exist
   assert.match(handoff, /ce-commit-push-pr mode:pipeline/);
   assert.match(handoff, /ce-babysit-pr mode:pipeline <pr-url> posture:target/);
   assert.match(handoff, /if no CE watcher already owns it/);
+  assert.match(handoff, /branch rules and CI configuration establish that the PR does not run CI.*interactive `watch` in the same `posture:target`/);
+  assert.match(handoff, /An empty rollup alone does not establish that a repository has no CI/);
   assert.match(handoff, /Retain any stack-aware watch and its posture/);
 });
 

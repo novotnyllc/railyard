@@ -1,19 +1,6 @@
 {
-  "description": "Startup publishing guide and a merge guard consuming the completed Compound Engineering result. CE alone owns review and CI settlement.",
+  "description": "Startup publishing guide. Compound Engineering owns PR review and CI settlement.",
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/merge-settlement-gate.js\"",
-            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\hooks\\merge-settlement-gate.js\" }",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
     "SessionStart": [
       {
         "hooks": [

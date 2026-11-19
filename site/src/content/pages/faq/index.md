@@ -36,8 +36,7 @@ Railyard uses [Compound Engineering (EveryInc)](https://github.com/EveryInc/comp
 
 Routine work runs natively, and you can invoke CE workflows when useful. Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or pushing user-requested commits to an existing PR. CE owns one review settlement and CI loop. Fleet or account orchestration requires explicit scope; native child agents are the default for parallel work, and visible Codex tasks require an explicit user request.
 
-## What is a receipt, a run log, or Thermos?
+## What are the formal review receipt and Thermos?
 
 - The [formal review receipt](/delivery/gates/) records candidate identity, coverage, checks, and findings when full review is selected.
-- A [run log](/delivery/audit/) records decisions when an audit is useful; audit and retrospective are optional.
 - [Thermos](/skills/thermos/) supplies both lenses for the [optional full review](/delivery/gates/) alongside `codex review` using its configured settings. Its findings feed the existing CE owner.

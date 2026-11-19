@@ -40,7 +40,7 @@ For an orchestrated delivery, the useful evidence can follow this sequence:
 requested outcome → useful CE workflow → CE review settlement and CI → result evidence
 ```
 
-Routine work runs natively. Selected CE workflows own one review settlement and CI loop, and the result includes the evidence needed to assess what completed. [Audit and retrospective](/delivery/audit/) are optional when reconstructing decisions would help. [Delivery lifecycle](/delivery/lifecycle/) explains delivery evidence; [Sync](/sync/) and [Roundhouse](/roundhouse/) cover explicitly requested fleet work.
+Routine work runs natively. Selected CE workflows own one review settlement and CI loop, and the result includes the evidence needed to assess what completed. [Delivery lifecycle](/delivery/lifecycle/) explains delivery evidence; [Sync](/sync/) and [Roundhouse](/roundhouse/) cover explicitly requested fleet work.
 
 ## Start with a real change
 

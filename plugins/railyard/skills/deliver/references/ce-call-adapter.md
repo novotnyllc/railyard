@@ -84,6 +84,11 @@ an interactive quiet period after readiness. Inspect the returned disposition.
 Continue the same watch when work remains pending. Required checks, approvals,
 and unresolved blockers still govern landing. Respect a narrower PR-only stop.
 
+For a repository whose branch rules and CI configuration establish that the
+PR does not run CI, use CE's interactive `watch` in the same `posture:target`.
+The pipeline treats an empty check rollup as pending. An empty rollup alone
+does not establish that a repository has no CI.
+
 LFG owns its internal stages, including its CE review and babysitting loop;
 do not duplicate them around it. Deliver consumes its result and continues the
 authorized merge, release/deployment, and consumer-verification tail.

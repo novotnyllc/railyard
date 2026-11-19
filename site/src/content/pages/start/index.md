@@ -24,7 +24,7 @@ For an implementation or fix request, begin with native execution and use CE wor
 
 Routine work runs natively. Invoke a focused CE workflow when it helps.
 
-Run repository checks and one independent [local review](/delivery/gates/) of the whole change before the first push. Use `compound-engineering:ce-commit-push-pr` to publish it. CE owns feedback and CI, and batches repair pushes. Review each repair and its affected behavior before publishing again. [Audits and retrospectives](/delivery/audit/) remain optional.
+Run repository checks and one independent [local review](/delivery/gates/) of the whole change before the first push. Use `compound-engineering:ce-commit-push-pr` to publish it. CE owns feedback and CI, and batches repair pushes. Review each repair and its affected behavior before publishing again.
 
 Use native child agents for useful parallel work. Create visible Codex tasks only when the user explicitly requests them. Fleet or account orchestration also requires explicit scope.
 

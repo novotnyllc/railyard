@@ -26,7 +26,9 @@ delivery authority covers it. Narrower approvals and repository holds take
 precedence.
 A shipping request or repository requirement can also include release or
 deployment and consumer verification. Follow the repository's merge queue
-where configured and confirm the queue landed the PR.
+where configured. For a direct merge, verify the reviewed head, required
+checks and approvals, and review-thread resolution before merging. Confirm
+that the PR landed.
 
 ```mermaid
 flowchart TD
@@ -97,8 +99,8 @@ agent.
 Use clear task titles that follow the user's and repository's conventions.
 Rename only when the material focus or resume state changes. Completion does
 not imply authority to archive tasks, remove worktrees, or reap processes.
-Keep cleanup available for an actual runtime problem or an authorized lifecycle
-operation; preserve unrelated or resumed work.
+For macOS Codex recovery, use
+[Agent Utilities](https://github.com/novotnyllc/agent-utilities/tree/main/plugins/agent-utilities/skills/cleanup-codex).
 
 ## Explicit fleet and account work
 
@@ -113,23 +115,7 @@ becomes a prerequisite; it does not authorize silent installation or unrelated
 machine changes. Cross-project work names an integration owner for each project
 and keeps branch and working-tree ownership explicit.
 
-Provider-safe handoffs preserve privacy and transport boundaries, as described
-in [provider task routing](../plugins/railyard/references/provider-task-routing.md).
-A matching model-provider label does not prove that two collaboration surfaces
-can decrypt the same payload, and a verified handoff acknowledgement comes
-before mutable work. A visible provider task still requires the user's
-explicit task-creation request.
-
-## Audit
-
-Use `audit` or a retrospective when requested or when a concrete lesson makes
-it worthwhile. Compare complete assignments, including children, retries,
-repairs, verification, time, and available usage data. Repository learnings
-cannot change privacy, expand authority, or rewrite the user's policy.
-
 ## Source skills
 
 - [`deliver`](../plugins/railyard/skills/deliver/SKILL.md)
 - [`orchestrate`](../plugins/railyard/skills/orchestrate/SKILL.md)
-- [`audit`](../plugins/railyard/skills/audit/SKILL.md)
-- [`cleanup-codex`](../plugins/railyard/skills/cleanup-codex/SKILL.md)

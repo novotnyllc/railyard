@@ -20,10 +20,6 @@ result. Hand breakage, as opposed to absence, to `railyard:doctor`.
   resolved path throughout.
 - Tooling: `gh` auth, `gh-stack` and its agent skills, `tmux`, `jq`, `node`;
   optionally `chezmoi` and `op`.
-- Oracle: `"${ORACLE_BIN:-oracle}" --version` (0.20.3 or newer) and whether
-  config exists at `ORACLE_CONFIG_PATH`, else `~/.oracle/config.json`. The
-  oracle skill's `ensure-oracle.sh` can install or upgrade, so it runs only in
-  the install stage.
 - Credentials installed plugins need, by presence only (`gh auth status`,
   `op` sign-in, keys named in installed skills' docs), with where to set a
   missing one (dotfiles environment or 1Password). Never read or print a
@@ -51,10 +47,9 @@ The setup request authorizes only the work it names; installing Railyard is
 not consent to install anything else. With the concrete operation prepared,
 ask only for missing scope or new authority.
 
-After a Codex update, verify the installed version, source bytes, and hook
-commands and hashes. Validate the SessionStart publishing guide. If PR delivery
-is selected, also validate the shell merge guard and its [snapshot handoff](../deliver/references/ce-merge-guard.md).
-Keep disabled hooks disabled unless the user authorized activation.
+After a Codex update, verify the installed version and startup hook command and
+hash. Verify that the hook supplies the publishing guidance. Keep the hook
+disabled if the user has not authorized enabling it.
 
 ## 3. Configuration interview (defaults in brackets)
 
@@ -67,8 +62,6 @@ requested setup needs; local-only setup skips fleet questions.
 - **Paths**: development root [`~/dev`]; cross-host handoff repo [none];
   Codex remote-control host, only for a native-Windows Codex Desktop
   destination [none].
-- **Oracle** [skip]: with ChatGPT Pro and interest, record availability per
-  the oracle skill.
 - **Fleet sync** [skip]: only when requested (declining disables nothing
   else); see §3a.
 - **Update schedule** [none]: only when requested, via §3a or

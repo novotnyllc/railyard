@@ -5,12 +5,10 @@
 //                    Railyard stands down there and in every worktree. A clone,
 //                    copy or move no longer matches the path, so it comes back on.
 //   railyard.review  full | light | checks: the pre-push review level (default light).
-//   railyard.mergeGate on | off: whether the merge gate checks PR merges here
-//                    (default on). The opt-in push guard is separate.
 //
 // Repository git config lives in the shared git directory, so worktrees share
-// it and it is never committed. review and mergeGate may also be set
-// globally as personal defaults; a repository's own value wins.
+// it and it is never committed. A repository review setting overrides the
+// personal default in global git config.
 const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -57,7 +55,9 @@ function repoConfig(start) {
   const values = {};
   for (const line of raw.split("\n")) {
     const space = line.indexOf(" ");
-    if (space > 0) values[line.slice(0, space)] = line.slice(space + 1).trim();
+    if (space <= 0) continue;
+    const key = line.slice(0, space);
+    if (key === "railyard.off" || key === "railyard.review") values[key] = line.slice(space + 1).trim();
   }
   let off = markerOff(cwd);
   if (!off && values["railyard.off"]) {
@@ -66,7 +66,6 @@ function repoConfig(start) {
   return {
     off,
     review: REVIEW_LEVELS.includes(values["railyard.review"]) ? values["railyard.review"] : DEFAULTS.review,
-    mergeGate: values["railyard.mergegate"] !== "off",
   };
 }
 
