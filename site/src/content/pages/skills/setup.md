@@ -15,7 +15,7 @@ Setup inspects installed plugins, marketplaces, relevant tools, and user configu
 
 ## How it works
 
-Setup keeps local installation, optional fleet enrollment, model policy, auth artifact custody, and privileged lanes distinct. A repeat run reads the current state and proposes only the delta.
+Setup keeps local installation, optional fleet enrollment, auth artifact custody, and privileged lanes distinct. A repeat run reads the current state and proposes only the delta.
 
 ```text
 > Inspect this machine, install the delivery surface, and show the proposed delta before any optional enrollment.

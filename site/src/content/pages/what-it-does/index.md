@@ -18,7 +18,6 @@ Start with the delivery outcome that carries real stakes: merge a change, harden
 7. [Build iOS and Mac apps](/what-it-does/ios-and-mac-apps/)
 8. [Run work on another machine](/what-it-does/run-work-on-another-machine/)
 9. [Administer remotely](/what-it-does/administer-remotely/)
-10. [Control model cost](/what-it-does/control-model-cost/)
 
 ## Pick a first outcome
 

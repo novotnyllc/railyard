@@ -32,7 +32,6 @@ jobs:
       - name: JS contract suites
         run: |
           node --test --test-timeout=60000 --test-force-exit \
-            plugins/railyard/skills/jev/scripts/jev-adviser.test.mjs \
             plugins/railyard/skills/orchestrate/scripts/delivery-contracts.test.mjs \
             plugins/railyard/skills/oracle/scripts/ensure-oracle.test.mjs \
             plugins/railyard/skills/cleanup-codex/scripts/inventory.test.mjs \
@@ -43,6 +42,5 @@ jobs:
             plugins/railyard/skills/cleanup-codex/scripts/canary.test.mjs \
             plugins/railyard/skills/cleanup-codex/scripts/transaction.test.mjs \
             plugins/railyard/hooks/lean-hooks.test.mjs \
-            plugins/railyard/hooks/dispatch-gate.test.mjs \
             plugins/railyard/hooks/routing-charter.test.mjs \
             plugins/railyard/hooks/merge-settlement-gate.test.mjs

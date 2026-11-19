@@ -24,7 +24,6 @@ function environment(home, overrides = {}) {
     CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
     CLAUDE_PLUGIN_ROOT: "",
     RAILYARD_RUN_LOG_DIR: path.join(home, "run-log"),
-    TYPESAFE_API_KEY: "",
     ...overrides,
   };
 }
@@ -65,7 +64,7 @@ async function runOpenInput(home, send) {
     await send(child);
     assert.equal(await completed, 0, err);
     assert.equal(err, "");
-    assert.match(out, /Railyard routing:/);
+    assert.match(out, /Railyard publishing:/);
   } finally {
     clearTimeout(deadline);
     child.stdin.destroy();
@@ -77,72 +76,31 @@ const flat = (text) => text.replace(/\s+/g, " ");
 
 test("startup guide stays short and plain", (t) => {
   const { out } = run(fixture(t));
-  assert.match(out, /^Railyard routing:/);
+  assert.match(out, /^Railyard publishing:/);
   assert.ok(words(out) <= 250, `SessionStart guide is ${words(out)} words`);
   assert.doesNotMatch(out, /\b[A-Z]{4,}\b/, "no all-caps emphasis");
   assert.doesNotMatch(out, /do not claim|Allocation:/i);
 });
 
-test("startup names the default models for both harnesses", (t) => {
-  const out = flat(run(fixture(t)).out);
-  assert.match(out, /Opus 5\.5/);
-  assert.match(out, /`opus`/);
-  assert.match(out, /Fable 5\.1/);
-  assert.match(out, /Sol 6\.1 medium \(review high\)/);
-  assert.doesNotMatch(out, /GPT-6 Sol/);
-  assert.match(out, /Luna/);
-  assert.match(out, /Astra only for a proven gap/);
-});
-
 test("startup keeps CE ownership, the deliver endpoint, and explicit-only orchestration", (t) => {
   const out = flat(run(fixture(t)).out);
-  assert.match(out, /native tools and subagents/);
-  assert.match(out, /CE owns review settlement and CI watching/);
-  assert.match(out, /CE owns review settlement and CI watching; give it references\/review-feedback-settlement\.md/);
-  assert.match(out, /compound-engineering:ce-commit-push-pr/);
-  assert.match(out, /through merge, required release or deployment, and consumer verification unless narrowed/);
+  assert.match(out, /When CE coordinates a PR, it owns review settlement and CI watching/);
+  assert.match(out, /Give it references\/review-feedback-settlement\.md/);
+  assert.match(out, /Carry implementation and fixes through confirmed merge when the user or standing owner instructions authorize landing/);
+  assert.match(out, /Use the repository’s merge queue and honor holds/);
+  assert.match(out, /For ship or deliver requests, continue through required release or deployment and verification at the consumer/);
   assert.match(out, /plan-only, local-only, and PR-only stops/);
   assert.match(out, /CE snapshot handoff/);
-  assert.match(out, /railyard:orchestrate only for requested fleet or remote work that needs separate agents/);
-  assert.match(out, /propagating config across hosts is direct work/);
-  assert.match(out, /user-owned tasks only when asked/);
-  assert.match(out, /completion events rather than polling/);
-});
-
-test("startup steers toward the fastest route and a time check", (t) => {
-  const out = flat(run(fixture(t)).out);
-  assert.match(out, /Take the fastest route to the result: reuse existing tools/);
-  assert.match(out, /propagate settings that already exist instead of rebuilding them/);
-  assert.match(out, /verify settings by reading them back/);
-  assert.match(out, /Dispatch a subagent only when it reads far more than it returns, gives independent judgment, runs a substantial parallel unit without shared files or state, or needs another model \(full rule: railyard:model-routing\)/);
-  assert.match(out, /State the simplest path and a rough time estimate first/);
-  assert.match(out, /at about twice it, or when the user presses on time, find a faster route to the same result/);
-  assert.match(out, /Gates and the endpoint still apply/);
+  assert.match(out, /railyard:orchestrate for explicitly requested fleet or remote work that needs separate agents/);
+  assert.doesNotMatch(out, /Opus|Fable|Sol|Luna|Astra|ce-plan|ce-debug|Pick Compound Engineering stages/);
 });
 
 test("startup supplies the shared publication gate to direct CE and LFG callers", (t) => {
   const out = flat(run(fixture(t)).out);
-  assert.match(out, /Before every push, load Railyard's references\/whole-candidate-review\.md gate/);
-  assert.match(out, /including direct CE\/LFG publishing calls/);
+  assert.match(out, /Before every push, including direct CE\/LFG publishing calls, apply the light policy in references\/whole-candidate-review\.md/);
+  assert.match(out, /review the whole change independently before first publication/);
+  assert.match(out, /review affected behavior for routine repair pushes/);
   assert.ok(readFileSync(path.join(path.dirname(script), "../references/whole-candidate-review.md"), "utf8").includes("complete cumulative change-set"));
-});
-
-test("configured Jev adds one line without exposing credentials or startup content", (t) => {
-  const home = fixture(t);
-  const base = run(home).out;
-  const input = { hook_event_name: "SessionStart", prompt: "private-task-canary" };
-  const { out } = run(home, { TYPESAFE_API_KEY: "test-only-secret-canary" }, input);
-  assert.equal(out.split("\n").length, base.split("\n").length + 1);
-  assert.match(out, /railyard:jev/);
-  assert.ok(words(out) <= 270);
-  const recorded = JSON.stringify(entries(home));
-  for (const secret of ["test-only-secret-canary", "private-task-canary"]) {
-    assert.ok(!out.includes(secret));
-    assert.ok(!recorded.includes(secret));
-  }
-  for (const key of ["", "   "]) {
-    assert.doesNotMatch(run(home, { TYPESAFE_API_KEY: key }).out, /railyard:jev/);
-  }
 });
 
 test("missing plugins in both empty harness roots do not bootstrap dependencies", (t) => {
@@ -309,7 +267,7 @@ test("an unavailable run-log destination does not block startup", (t) => {
   const blocker = path.join(home, "not-a-directory");
   writeFileSync(blocker, "untouched");
   const { out } = run(home, { RAILYARD_RUN_LOG_DIR: path.join(blocker, "run-log") });
-  assert.match(out, /Railyard routing:/);
+  assert.match(out, /Railyard publishing:/);
   assert.equal(readFileSync(blocker, "utf8"), "untouched");
 });
 

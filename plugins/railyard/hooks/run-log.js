@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-// Append-only run log: the mechanical half of the how-it-ran audit. Hooks
-// record what they can see (a dispatch attempt was allowed, its requested
-// model and effort, a session started); the owning session records what only
-// it knows (decisions, outcomes, deviations) through `note`.
+// Append-only run log: the mechanical half of the how-it-ran audit. SessionStart records
+// session anchors. The owner records decisions, outcomes, and deviations
+// through `note`.
 //
 // Metadata only — never prompts, handoff bodies, or provider output.
 //
@@ -95,7 +94,7 @@ function record(entry) {
   try {
     append(entry);
   } catch {
-    // Never surface: an unwritable log is not a reason to fail a dispatch.
+    // An unwritable audit log should leave session startup and notes usable.
   }
 }
 

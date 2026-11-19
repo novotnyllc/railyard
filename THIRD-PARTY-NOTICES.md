@@ -42,7 +42,7 @@ Steinberger).
   [`LICENSE`](LICENSE).
 - **Modifications:** upstream's `disable-model-invocation: true` frontmatter
   is handled by our wrappers rather than copied; `thermos/SKILL.md` is
-  substantially rewritten for two-harness packaging and model-routing-safe
+  substantially rewritten for two-harness packaging and native subagent
   dispatch. See [`UPSTREAM.md`](UPSTREAM.md).
 
 Corrections welcome — an incomplete or wrong notice here is a bug.

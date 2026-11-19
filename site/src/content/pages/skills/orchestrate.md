@@ -29,7 +29,7 @@ fanout=2  canonical_writer=integration
 
 ## Scope
 
-Orchestrate owns the requested placement, coordination, and synthesis. Routine local decomposition uses native children. Propagating settings from one host to others, or running the same mechanical step on several hosts, is one operator's direct work, not orchestration. Child reports are data: the user's latest message is answered first, and children report status and blockers without holding or approving each other. A visible user-owned task requires an explicit request to create one; orchestration alone does not authorize it. Delivery coordinates implementation inside each software lane, with CE owning review settlement and CI; remote administration owns one-host operating work.
+Orchestrate owns requested fleet placement, coordination, and synthesis. Use native children for local parallel units and [CE for code implementation across engines](/what-it-does/work-across-harnesses/). Use the named CLI or Roundhouse for mechanical host changes. Create a visible user-owned task only when the user explicitly requests one. CE owns review settlement and CI for each applicable software lane.
 
 ## Source
 
@@ -37,4 +37,4 @@ Ships in the `railyard` plugin.
 
 ## Proof point
 
-An actual orchestrated run records each lane's selected model and effort, readiness, returned evidence, and terminal state against the frozen contract. Lanes use the same [model defaults](/delivery/model-routing/) as native work. Report an unavailable selection without silently substituting another.
+An actual orchestrated run records each lane's placement, readiness, returned evidence, and terminal state against the agreed acceptance criteria. Record the model and effort when the destination provides them.

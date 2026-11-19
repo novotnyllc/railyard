@@ -7,7 +7,7 @@ nav_order: 4
 
 # Thermos
 
-Thermos supplies the paired correctness/security and maintainability review for Railyard's [whole-candidate gate](/delivery/gates/) before every push, alongside `codex review` on GPT-6.1 Sol at high effort. It gathers the complete cumulative change and lifecycle context, runs both reviewers, and synthesizes one actionable findings packet for the existing owner.
+Thermos supplies the paired correctness/security and maintainability review for Railyard's [optional full review](/delivery/gates/) alongside `codex review` using its configured settings. It gathers the complete cumulative change and lifecycle context, runs both reviewers, and synthesizes one actionable findings packet for the existing owner.
 
 ## What it adds
 
@@ -15,7 +15,7 @@ Thermos runs a paired review, each rubric carried over from upstream verbatim: a
 
 ## How it works
 
-Thermos gathers the diff and any needed context itself rather than asking a reviewer to guess it, and passes each reviewer the identical scoped diff in a self-contained brief — a fresh reviewer has none of the calling conversation's history. The two reviewers launch together and run concurrently, and Thermos collects their results directly (foreground calls in Claude Code, spawn then wait in Codex), each with a model and reasoning effort chosen through `railyard:model-routing`. When a change ships a runtime artifact, reviewers validate the actual delivery/packaging path rather than accepting a formal receipt at face value. An opt-in frozen review packet (deterministic diff/file digests plus reusable validation results) is available when the caller asks for one. Synthesis deduplicates findings across reviewers and weights overlapping findings more heavily. When used in Compound Engineering (CE) delivery, the implementation lane fixes accepted findings through its existing review loop.
+Thermos gathers the diff and any needed context itself rather than asking a reviewer to guess it, and passes each reviewer the identical scoped diff in a self-contained brief — a fresh reviewer has none of the calling conversation's history. The two reviewers launch together and run concurrently, and Thermos collects their results directly (foreground calls in Claude Code, spawn then wait in Codex). When a change ships a runtime artifact, reviewers validate the actual delivery/packaging path rather than accepting a formal receipt at face value. An opt-in frozen review packet (deterministic diff/file digests plus reusable validation results) is available when the caller asks for one. Synthesis deduplicates findings across reviewers and weights overlapping findings more heavily. When used in Compound Engineering (CE) delivery, the implementation lane fixes accepted findings through its existing review loop.
 
 Illustrative review outline:
 
@@ -23,7 +23,6 @@ Illustrative review outline:
 > Run the two Thermos lenses on this diff and return one deduplicated findings packet.
 packet=<diff and source context, gathered not guessed>
 lenses=correctness+failure-memory,maintainability
-model=<chosen via model-routing per reviewer>
 output=deduplicated, weighted findings with evidence
 owner=existing-workflow
 ```
@@ -32,7 +31,7 @@ The [review bakeoff](/delivery/review-bakeoff/) explains the choice to pair Ther
 
 ## Scope
 
-Thermos reviews and synthesizes. CE retains review settlement and CI/PR monitoring, and the delivery owner continues to the authorized endpoint. Publication requires completed whole-candidate evidence before every push; it does not add a second watcher or require a review for every local commit. Standalone reviews honor an explicitly narrower scope and cannot satisfy the publication gate.
+Thermos reviews and synthesizes. CE retains review settlement and CI/PR monitoring, and the delivery owner continues to the authorized endpoint. At the full level, publication requires completed whole-candidate evidence before every push. Standalone reviews honor the requested scope.
 
 ## Use one lens deliberately
 

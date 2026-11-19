@@ -20,7 +20,8 @@ and SSH.
 
 - **Ordinary delegated work:** native subagents (Codex `spawn_agent` with
   `send_message` or `followup_task`; Claude Code `Agent`). The coordinator may
-  do unassigned local work meanwhile.
+  do unassigned local work meanwhile. Use CE for coordination within a selected
+  CE workflow.
 - **Visible user-owned tasks** (Codex `create_thread` or `fork_thread`, or an
   exposed Claude Code session/task capability) are created only on explicit
   user direction. A request for subagents, a fleet catalog, or an
@@ -34,7 +35,6 @@ Search the deferred tool catalog and use the actual schema before declaring a
 capability unavailable; report a missing carrier with any supported
 alternative. Coordinate completion per
 [agent completion and waiting](../../references/agent-coordination.md).
-Choose each assignment's model and effort with `railyard:model-routing`.
 
 ## Ownership and briefs
 
@@ -104,10 +104,11 @@ bounded handoff does not complete the caller's delivery. Use `compound-engineeri
 to create a PR or push user-requested commits to one, and `gh-stack` for
 dependent PRs. Name an owner for integration and for each affected repository,
 and publish only within the requested boundary. Every publishing lane inherits
-the [whole-candidate review gate](../../references/whole-candidate-review.md)
-before every push, including CE/LFG repair continuations. The integration owner
-checks the cumulative candidate receipt and maintains the delivery ledger;
-a child's bounded review does not establish integration coverage.
+the [local review policy](../../references/whole-candidate-review.md)
+before every push, including CE/LFG repair continuations. Under default
+`light` review, one independent reviewer covers the integrated change before
+its first push. For routine repairs, cover the batch and its affected behavior.
+Only `full` review requires a candidate receipt and delivery ledger.
 
 CE alone owns review settlement and CI/PR monitoring. Reuse the lane's CE
 watcher, including LFG's, and route reviewer findings to it with the

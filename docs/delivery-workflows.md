@@ -1,19 +1,19 @@
 # Native work, selected workflows, and fleet orchestration
 
-Routine work uses the harness's native tools and bounded subagents. Railyard
-adds deliberate model and reasoning-effort choice and selects a useful
-Compound Engineering workflow when the request benefits from one. A configured
-fleet catalog does not turn an ordinary local edit into fleet work.
+Routine work uses the harness's native tools and bounded subagents. Compound
+Engineering (CE) provides focused workflows and external implementation
+engines. Use Railyard for the delivery endpoint or explicit fleet coordination.
 
 ## Choose the smallest useful path
 
 | Situation | Path | Completion boundary |
 | --- | --- | --- |
 | Known edit, bounded implementation, or routine investigation | Native tools; delegate independent subtasks when useful | The requested result and proportional checks |
-| Planning, debugging, review, or UI work that benefits from a focused workflow | Select the matching CE or specialist skill automatically | The requested artifact or verified behavior |
+| Planning, debugging, review, or UI work that benefits from a focused workflow | Invoke the matching CE or specialist skill | The requested artifact or verified behavior |
+| One chat coordinating code changes across different engines | Separate `ce-work` runs with a named engine and bounded scope for each | The owning chat integrates and verifies the combined result |
 | Create a PR or push user-requested commits to an existing PR | `compound-engineering:ce-commit-push-pr` | The requested PR state, with the selected CE workflow owning follow-through |
 | Address PR feedback or watch CI | Applicable CE feedback or babysitting workflow | One owner for review settlement, CI, and the watch loop |
-| Explicit Deliver implementation/fix request | Native or selected CE implementation, then CE settlement | Merge, required release or deployment, and consumer verification |
+| Implementation or fix | Native or selected CE implementation, local review, and CE settlement | Confirmed merge, with further release and consumer verification when required |
 | Explicit fleet/account allocation, remote work, or coordination that needs `orchestrate` | `railyard:orchestrate` | Combined acceptance evidence from the selected lanes |
 | Fleet setup or reconciliation | `roundhouse:fleet-readiness` | Required host, project, tool, and authentication readiness |
 
@@ -21,10 +21,12 @@ fleet catalog does not turn an ordinary local edit into fleet work.
 a focused CE workflow; it does not send generic implementation through LFG by
 default. LFG remains available when explicitly chosen. Plan-only, diagnosis-only,
 review-only, local-only, and PR-only requests retain their stated endpoints.
-An explicit Deliver implementation/fix request authorizes the full lifecycle,
-including commit, push, PR, merge, required release or deployment, and consumer
-verification. Internal skill selection does not expand a narrower user request.
-Existing authorization carries through child handoffs and waits to completion.
+An implementation or fix request runs through confirmed merge when standing
+delivery authority covers it. Narrower approvals and repository holds take
+precedence.
+A shipping request or repository requirement can also include release or
+deployment and consumer verification. Follow the repository's merge queue
+where configured and confirm the queue landed the PR.
 
 ```mermaid
 flowchart TD
@@ -37,40 +39,41 @@ flowchart TD
     workflow -- Yes --> ce["One CE or specialist workflow"]
     workflow -- No --> check["Proportional verification"]
     ce --> check
-    check --> publish{"PR creation or requested PR push?"}
-    publish -- Yes --> pr["CE commit/push/PR workflow"]
+    check --> publish{"PR publication in scope?"}
+    publish -- Yes --> review["Independent local review before publication"]
+    review --> pr["CE commit/push/PR workflow"]
     publish -- No --> result["Requested artifact and evidence"]
     pr --> settlement["CE owns review settlement and CI"]
-    settlement --> terminal{"Merge authorized?"}
+    settlement --> terminal{"Merge in scope?"}
     terminal -- No --> result
-    terminal -- Yes --> merged["Merge and source proof"]
+    terminal -- Yes --> merged["Repository merge process and confirmation"]
     merged --> tail{"Further delivery required by selected endpoint?"}
     tail -- No --> result
     tail -- Yes --> proof["Release/deployment, then consumer proof, as required by endpoint"]
     proof --> result
 ```
 
-## Choose model and effort together
+## Coordinate external implementation
 
-Choose model and reasoning effort deliberately for each assignment, as
-described in [`model-routing`](../plugins/railyard/skills/model-routing/SKILL.md).
-In Claude Code, Opus 5.5 is the default for substantive subagents and Fable
-5.1 the escalation. Deterministic tools handle mechanical operations directly.
-Dispatch prompts need no allocation marker; an omitted model inherits the
-parent's. Requested and observed model, effort, and transport are separate
-facts; unknown observations stay unknown.
+For a bounded code change, assign the implementation engine to `ce-work`.
+Each run binds one engine. A coordinating chat can assign disjoint changes to
+different engines using separate runs and keep the combined review and
+publication with `mode:return-to-caller`. Check prerequisites and report the
+actual route. [Work across harnesses](../site/src/content/pages/what-it-does/work-across-harnesses.md)
 
 ## Keep one workflow owner
 
 When CE is selected, it owns its planning or implementation workflow and its
 review, feedback-resolution, CI, and watch loop. Railyard carries the user's
-requested endpoint and verifies the returned evidence. It adds no second
-watcher or review gate.
+requested endpoint and verifies the returned evidence. CE remains the sole watcher.
 
-Thermos, Oracle, deeper review, browser checks, and debugging skills remain
-available when their perspective is useful. Required repository checks stay
-authoritative. Run focused checks for the changed behavior and repeat them
-when a relevant change, failure, or unresolved concern justifies it.
+Before first publication, run repository checks and one independent local
+review of the cumulative change. When feedback requires a repair push, review
+the repair and its affected behavior. Repeat the broad review when the design
+or risk changes materially or the original coverage is uncertain. Batch fixes
+and push once per batch. After two distinct heads receive automated review,
+newly raised minor findings default to follow-up issues. Resolve real blockers
+in the PR. Thermos and deeper review remain available for higher-risk work.
 
 Use `gh-stack` for related dependent PRs when useful; keep independent PRs
 independent. Resolve missing tooling at the stage that needs it through its
@@ -127,7 +130,6 @@ cannot change privacy, expand authority, or rewrite the user's policy.
 ## Source skills
 
 - [`deliver`](../plugins/railyard/skills/deliver/SKILL.md)
-- [`model-routing`](../plugins/railyard/skills/model-routing/SKILL.md)
 - [`orchestrate`](../plugins/railyard/skills/orchestrate/SKILL.md)
 - [`audit`](../plugins/railyard/skills/audit/SKILL.md)
 - [`cleanup-codex`](../plugins/railyard/skills/cleanup-codex/SKILL.md)

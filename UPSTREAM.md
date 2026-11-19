@@ -52,8 +52,7 @@ adaptations blindly.
   weight overlapping findings more heavily) but replaces Cursor's registered
   `thermo-nuclear-*-subagent` types with native Claude Code `Agent` or Codex
   `explorer` subagents that each receive the sibling rubric in a
-  self-contained brief. It also chooses reviewer model and effort through
-  `railyard:model-routing`, reuses a completed review covering the same
+  self-contained brief. It also reuses a completed review covering the same
   inputs and concern, asks reviewers to validate an actual delivery/packaging
   risk, supports an opt-in frozen review packet, and leaves review settlement
   and CI to CE. All three package for both harnesses. Cursor's

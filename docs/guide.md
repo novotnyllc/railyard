@@ -2,7 +2,7 @@
 
 Railyard turns "go do X" into a verified, delivered result. The public
 documentation is canonical for installation, scenarios, delivery lifecycle,
-model routing, quality gates, integrations, and credits:
+cross-engine implementation, quality gates, integrations, and credits:
 
 [novotnyllc.github.io/railyard](https://novotnyllc.github.io/railyard/)
 

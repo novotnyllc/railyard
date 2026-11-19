@@ -2,32 +2,39 @@
 
 # Railyard
 
-**Say what you want done. Get a verified result at the boundary you requested.**
+When the user or repository owner has authorized automatic delivery,
+implementation requests run through confirmed merge. Narrower requests,
+approval requirements, and repository holds take precedence. Shipping requests
+and repository requirements can
+also carry the change through release or deployment and verification at the
+consumer. Compound Engineering (CE) coordinates implementation, PR feedback,
+and CI. Railyard also provides specialist review and remote fleet placement.
 
-Railyard helps Codex and Claude Code choose suitable models, reasoning effort,
-and workflows without turning every edit into a delivery ceremony. Routine
-work uses native tools and bounded subagents. A useful Compound Engineering
-skill activates when the work calls for it; fleet and account orchestration
-remain explicit choices.
+## One coordinator, different implementers
 
-- 🚦 **Plain-language work.** Native execution for routine changes, selected
-  CE workflows for planning, debugging, review, and PR delivery when useful.
-- 🧠 **Deliberate allocation.** Choose model and reasoning effort together.
-  In Claude Code, Opus 5.5 at medium effort handles substantive subagent work,
-  with Fable 5.1 for frontier-hard or long autonomous work, Sonnet 5.5 for
-  well-scoped edits, bug fixes, and docs, and Haiku 4.5 for read-only search.
-  In Codex, GPT-6.1 Sol at medium is the baseline, with Sol 6.1 at high
-  for review, Luna for routine checked work, and Astra only for a demonstrated gap.
-  An omitted model inherits the parent's, and unsupported selections are
-  disclosed.
-- 🔍 **One completion owner.** CE owns review settlement and CI watching for
-  a selected PR workflow. An explicit Deliver implementation/fix request runs
-  through merge, required release or deployment, and consumer verification;
-  explicit narrower requests keep their stated endpoint.
-- 🖥️ **Explicit fleet work.** Orchestrates across machines when requested,
-  and only dispatches to
-  hosts its sibling [roundhouse](https://github.com/novotnyllc/roundhouse)
-  has verified are ready.
+Describe the outcome in your Codex or Claude Code chat. For example, “Fix
+retries and show a useful CLI error when they run out.” The chat can handle a
+small fix directly or select CE Work for a larger implementation. When CE Work
+runs, the chat coordinates independent work, integrates changes, and runs the
+checks. CE Work defaults to the current harness.
+
+CE Work uses one external engine per run. The coordinator can give separate
+assignments to different engines and isolate concurrent writers. For Groq-hosted
+models, use the OpenCode route with a configured `groq/<model-id>`.
+[Groq's OpenCode guide](https://console.groq.com/docs/coding-with-groq/opencode)
+
+Set standing implementer preferences in the repository’s
+`.compound-engineering/config.yaml` or override them for your checkout in
+`.compound-engineering/config.local.yaml`. You can also name an implementer in
+the chat. Use an installed, authenticated
+engine. If authorship is a requirement, have the coordinator preflight the
+engine before starting and verify the actual author in CE’s run record before
+accepting the result. CE can fall back to the current host even in
+`require` mode. See the
+[CE implementation routing guide](https://everyinc.github.io/compound-engineering-plugin/guides/configuration/#implementation-routing).
+
+Use Railyard orchestration when the assignment needs a specific remote
+machine or account. Roundhouse supplies the host readiness checks.
 
 ```sh
 claude plugin marketplace add novotnyllc/marketplace
@@ -43,14 +50,9 @@ can do, how it works, and what a delivery actually looks like.
 
 ## What's inside
 
-Freight doesn't move itself — the yard receives it, sorts it, assembles the
-train, clears the departure, and confirms arrival:
-
 | Track | Skills |
 | --- | --- |
 | Setup & health | `setup` — inspect and configure relevant prerequisites; `doctor` — diagnose and fix drift; `config` — per-repository settings |
-| Allocation | `model-routing` — native model and reasoning-effort guidance for Claude Code and Codex |
-| Semantic decisions | `jev` — model/effort selection, workflow choice, evidence selection, work priority, and review triage, consulted only when a choice is genuinely open and matters; requires `TYPESAFE_API_KEY` |
 | Delivery | `deliver` — select native execution or one useful CE workflow and complete the authorized scope |
 | Orchestration & placement | `orchestrate` — explicit fleet/account work, cross-project coordination, and supported remote placement |
 | Specialist review | `thermos`, `thermo-nuclear-review`, `thermo-nuclear-code-quality-review` — when their perspective is useful; `oracle` — a manual GPT-6 Pro second opinion through the ChatGPT browser |
@@ -61,13 +63,15 @@ train, clears the departure, and confirms arrival:
 
 Railyard uses the external
 [Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin)
-plugin for selected `ce-*` workflows. Use `ce-commit-push-pr` when creating a
+plugin (3.38.2 or newer) for selected `ce-*` workflows. Use `ce-commit-push-pr` when creating a
 PR or pushing user-requested commits to an existing PR. The selected CE
-workflow owns review, feedback resolution, CI, and its watch loop; Railyard
-does not add a second watcher or mandatory reviewer.
+workflow owns PR feedback resolution, CI, and the watch loop. Use the
+repository's merge process and confirm the PR landed.
 
-LFG remains available for an explicitly selected full workflow. Routine work
-does not require it, a delivery contract, a retrospective, or process cleanup.
+Railyard defaults to one independent review of the cumulative change before
+the first push, then focused review of subsequent repairs and their affected
+behavior. Repeat broad review when design or risk changes materially or prior
+coverage is uncertain. Choose LFG for work that benefits from a full workflow.
 Startup performs no dependency bootstrap. Install CE through the plugin manager
 when needed:
 
@@ -86,41 +90,26 @@ every worktree, are never committed, and don't follow a clone. Ask an agent
 ```sh
 git config railyard.off "$(git rev-parse --path-format=absolute --git-common-dir)"   # off; --unset railyard.off for on
 git config railyard.review light     # full | light | checks
-git config railyard.ce off           # on | off
 git config railyard.mergeGate off    # on | off
 ```
 
 | Setting | Effect |
 | --- | --- |
 | `off` | The startup guide becomes a one-line notice and every hook stands down, including the opt-in default-branch push guard, in the repository and all its worktrees. A copy or move comes back on; submodules are configured separately. |
-| `review` | Pre-push review: `full` (default) is the whole-candidate gate with Thermos and Codex review; `light` is the repository's checks plus one combined review; `checks` is the repository's checks only. |
-| `ce off` | Keeps Railyard's gates and routing but stops suggesting Compound Engineering stages. |
+| `review` | `light` (default) runs repository checks, one independent whole-change review before the first push, and focused review of later repairs. `full` uses Thermos and Codex review and records formal evidence on every push. `checks` runs repository checks only where project policy allows. |
 | `merge-gate off` | Stops checking PR merges, for repositories whose host already enforces readiness (a merge queue or branch protection). The opt-in push guard is unaffected. |
 
-`review`, `ce` and `merge-gate` also work as personal defaults through `git config --global`;
+`review` and `merge-gate` also work as personal defaults through `git config --global`;
 a repository's own value wins.
+
+Railyard 0.15 removes the old `railyard.ce` startup nudge setting. Use
+`railyard:config off` to opt a repository and its worktrees out of Railyard.
+Keep any narrower publication or merge approval rules in the repository's
+instructions.
 
 Ponytail and Superpowers are not Railyard prerequisites. Native subagents are
 the default for bounded parallel work; user-visible tasks are created only
 when the user explicitly asks for them.
-
-## Jev advice
-
-[TypeSafe Jev](https://docs.typesafe.ai/) selects among eligible model/effort
-pairs, available workflows, relevant evidence, ready work, and next review
-investigations. Railyard consults it only when such a choice is genuinely open
-between eligible options and matters for cost or outcome, skipping explicit
-choices, clear defaults, single options, and small dispatches, and reuses an
-answer already reached in the session. An auth or rate-limit failure stops
-further consultation for the rest of the session. `TYPESAFE_API_KEY` must be
-present, or Jev is inactive; no extra installation is needed. Use `--offline`
-to disable the helper; missing credentials, service errors, and uncertain
-judgments fall back to ordinary Railyard reasoning.
-
-Jev receives only the context and candidates explicitly supplied to its helper.
-It leaves permissions, model choice, execution, and CE review settlement with
-their existing owners. See the [Jev skill](plugins/railyard/skills/jev/SKILL.md)
-for examples and the request contract.
 
 ## The family
 

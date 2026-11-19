@@ -17,20 +17,24 @@ Unresolved feedback and stale checks must be handled before an authorized merge.
 
 ### Settling review feedback
 
-Deliver passes CE the [review feedback settlement policy](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/references/review-feedback-settlement.md) as a project settlement requirement. Each review thread gets one recorded fix, decline or follow-up issue and is then resolved; resolved means dispositioned, not necessarily fixed. Severity defaults and a cap on automated review rounds keep fix pushes from cycling indefinitely. A finding that needs a decision beyond the agent's authority stays open until the user answers.
+Deliver passes CE the [review feedback settlement policy](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/references/review-feedback-settlement.md) as a project settlement requirement. Batch comments into one repair push when practical. Reply to each thread with the fix, a brief reason to decline, or a link to an issue for actionable work that can ship separately, then resolve it. After automated review has covered two distinct PR heads, newly raised minor findings default to follow-up issues. A real blocker still needs resolution. A finding that needs a decision beyond the agent’s authority stays open until the user answers.
+
+## Local review before publication
+
+The default `light` level runs repository checks and one independent review of the complete cumulative change before the first push. Check correctness, regressions, and maintainability. For later repair pushes, review the repair and its affected behavior. Repeat broad review when design or risk changes materially or the original coverage is uncertain. Routine review needs neither a formal receipt nor a ledger. [Pre-push review policy](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/references/whole-candidate-review.md)
 
 ## Specialist review
 
-Before every push, satisfy the [whole-candidate review gate](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/references/whole-candidate-review.md). Cover the exact candidate's complete cumulative change and affected lifecycle, including repair and release pushes. Collect completed reports, resolve actionable findings, and bind the reviews, checks, coverage and dispositions in a compact receipt before CE publishes.
+Select `railyard:config review full` for whole-candidate review and a formal receipt on every push. Use `railyard:config review checks` for repository checks alone where project policy allows.
 
 Thermos runs two lenses against that same complete candidate:
 
 - `thermo-nuclear-review`: correctness, security, breakage, developer experience, and feature-leak risk.
 - `thermo-nuclear-code-quality-review`: structure, duplication, maintainability, and complexity.
 
-Run both lenses alongside `codex review` on GPT-6.1 Sol at `high` effort before publication. Reuse their completed evidence at settlement only while candidate identity, inputs and coverage still match. Standalone reviews can use a narrower pair or single lens, but they do not satisfy the publication gate. Findings return to the implementation owner and existing CE loop; [Oracle](/skills/oracle/) remains an optional advisor. The whole-candidate gate governs pushing, not every local commit; CE separately owns merge settlement.
+At the `full` level, run both lenses alongside `codex review` using its configured settings before publication. Reuse their completed evidence at settlement only while candidate identity, inputs and coverage still match. Standalone reviews can use a narrower pair or single lens, but they do not satisfy the publication gate. Findings return to the implementation owner and existing CE loop; [Oracle](/skills/oracle/) remains an optional advisor. The whole-candidate gate governs pushing, not every local commit; CE separately owns merge settlement.
 
-The following review sequence supplies findings to the existing CE owner. Publication requires the completed whole-candidate receipt before any push. Its final review step checks existing evidence; it does not automatically dispatch another reviewer.
+This sequence shows the optional `full` level. CE uses the completed whole-candidate receipt before each push and checks current evidence before merging.
 
 ![A selected Thermos review feeds findings into one CE settlement loop before an authorized merge and post-merge proof.](/diagrams/m6-review-gates.svg)
 
@@ -42,16 +46,12 @@ The following review sequence supplies findings to the existing CE owner. Public
 4. **Return.** Synthesize actionable findings and send fixes to the implementation owner.
 5. **Settle.** Bind the review receipt before CE publishes; let CE own feedback resolution, review settlement and CI. Revalidate the complete candidate before each repair push.
 6. **Review.** Confirm the current evidence satisfies the repository's requirements.
-7. **Merge.** Merge only within the user's authorized scope.
+7. **Merge.** Follow the repository's merge process and confirm the PR lands when merge is in scope.
 8. **Prove.** Verify the merged state and the applicable post-merge result.
 
 ## UI checks
 
 Use the project's existing browser and accessibility checks for the changed surface. React Doctor remains available when its analysis is useful for React work. Resolve its current invocation when selecting it; installing or running an additional scanner is not a universal docs, backend, or UI prerequisite.
-
-## Dispatch check
-
-A narrow dispatch hook checks native subagent model and effort arguments against the controls the harness supports. Omitting the model means the child inherits. A full-history Codex fork cannot carry model or effort overrides; use a limited-history or no-history fork to change either. Unsupported selections are disclosed; a passing hook test doesn't show that the live harness ran the selection.
 
 <span id="merge-settlement"></span>
 

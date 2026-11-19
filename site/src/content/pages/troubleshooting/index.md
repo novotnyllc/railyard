@@ -33,4 +33,4 @@ The practice is a short loop: observe the held or failed receipt, trace it to in
 
 ## Where to look
 
-The run log records the route, dispatches, checks, review rounds, retries, and terminal result. The delivery receipt identifies the merge and post-merge proof. For diagnosis, start with [Doctor](/skills/doctor/) and [SSH Doctor](/skills/ssh-doctor/); for a fleet-wide readiness question, use [Fleet readiness](/skills/fleet-readiness/).
+Use native task history to inspect dispatches, checks, review rounds, retries, and outcomes. The run log supplies session anchors and any decision notes the owner recorded. The delivery handoff identifies the merge and post-merge proof. For diagnosis, start with [Doctor](/skills/doctor/) and [SSH Doctor](/skills/ssh-doctor/); for a fleet-wide readiness question, use [Fleet readiness](/skills/fleet-readiness/).

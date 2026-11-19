@@ -1,7 +1,7 @@
 {
   "name": "railyard",
-  "version": "0.14.0",
-  "description": "Lean automatic workflow selection, deliberate model and reasoning effort, native delegation, selected CE delivery, and explicit fleet orchestration.",
+  "version": "0.15.0",
+  "description": "Publishing review gates, delivery through consumer verification, specialist reviews, and optional fleet coordination.",
   "author": {
     "name": "Claire Novotny LLC",
     "url": "https://github.com/novotnyllc"
@@ -12,7 +12,6 @@
   "keywords": [
     "codex",
     "claude-code",
-    "model-routing",
     "orchestration",
     "delivery",
     "review",
@@ -26,8 +25,6 @@
     "./skills/audit",
     "./skills/cleanup-codex",
     "./skills/deliver",
-    "./skills/jev",
-    "./skills/model-routing",
     "./skills/oracle",
     "./skills/orchestrate",
     "./skills/thermo-nuclear-code-quality-review",

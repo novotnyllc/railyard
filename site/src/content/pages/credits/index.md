@@ -15,7 +15,7 @@ Build on visible lineage and give upstream work its due. Clear attribution makes
 
 ## Workflow and harness tools
 
-- [Compound Engineering (3.20.0+)](https://github.com/EveryInc/compound-engineering-plugin) supplies selected delivery workflow stages and owns review settlement and CI. Resolve it when a selected stage needs it.
+- [Compound Engineering (3.38.2+)](https://github.com/EveryInc/compound-engineering-plugin) supplies selected delivery workflow stages and owns review settlement and CI. Resolve it when a selected stage needs it.
 - [Claude Code](https://code.claude.com) and [Codex](https://openai.com/codex) supply the harness and plugin surfaces.
 - [gh-stack](https://github.com/github/gh-stack) supports dependent-PR delivery.
 

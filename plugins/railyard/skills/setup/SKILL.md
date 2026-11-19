@@ -38,7 +38,8 @@ current help, preserve disabled plugins and hooks, leave cache files
 unmodified, and verify installed-and-enabled state rather than cache
 presence.
 
-- **Compound Engineering:** confirm the selected skills are exposed
+- **Compound Engineering:** check that selected delivery workflows use
+  version 3.38.2 or newer, then confirm the selected skills are exposed
   (`compound-engineering:ce-commit-push-pr`; `ce-babysit-pr` as review and CI
   owner) and report any missing one with its fix.
 - **Roundhouse and craft skills:** only for explicit fleet/account work or
@@ -51,9 +52,8 @@ not consent to install anything else. With the concrete operation prepared,
 ask only for missing scope or new authority.
 
 After a Codex update, verify the installed version, source bytes, and hook
-commands and hashes. Trust only the validated SessionStart routing charter and
-native dispatch gate, plus the CE merge guard when PR delivery is selected and
-its [snapshot handoff](../deliver/references/ce-merge-guard.md) validates.
+commands and hashes. Validate the SessionStart publishing guide. If PR delivery
+is selected, also validate the shell merge guard and its [snapshot handoff](../deliver/references/ce-merge-guard.md).
 Keep disabled hooks disabled unless the user authorized activation.
 
 ## 3. Configuration interview (defaults in brackets)
@@ -66,7 +66,7 @@ requested setup needs; local-only setup skips fleet questions.
   `wsl_interop_via`.
 - **Paths**: development root [`~/dev`]; cross-host handoff repo [none];
   Codex remote-control host, only for a native-Windows Codex Desktop
-  destination [none]. Model choice needs no configuration.
+  destination [none].
 - **Oracle** [skip]: with ChatGPT Pro and interest, record availability per
   the oracle skill.
 - **Fleet sync** [skip]: only when requested (declining disables nothing

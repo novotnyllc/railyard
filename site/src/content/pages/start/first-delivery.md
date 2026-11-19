@@ -9,28 +9,28 @@ nav_order: 2
 
 Prerequisite: [install Railyard first →](/start/install/). Add Roundhouse when you explicitly request fleet placement.
 
-Start with a real change and carry it to observable proof. When required access is available, an explicit Deliver request works through review, merge, required release or deployment, and verification of the actual consumer on the intended machine. If access blocks a step, Deliver reports the blocker and continues authorized work that can proceed independently.
+When standing delivery authority covers publication and merge, an implementation or fix request runs through confirmed merge. Required approvals and repository holds take precedence. A shipping request or repository requirement can extend delivery through release or deployment and verification of the actual consumer. If access blocks a step, Deliver reports the blocker and continues authorized work that can proceed independently.
 
 ## Easy path
 
 ```text
-> Use Deliver to fix the retry path in the webhook worker.
+> Fix the retry path in the webhook worker.
 ```
 
 This request names the outcome. Routine implementation runs natively; `railyard:deliver` can coordinate the useful Compound Engineering (CE) stages and the requested delivery boundary.
 
 ## What happens
 
-1. Use native tools for routine work and automatically select CE stages when they help. Resolve CE only when a selected stage needs it.
-2. For delegated work, choose model and reasoning effort together: Opus 5.5 at `medium` in Claude Code, GPT-6.1 Sol at `medium` in Codex. Sol owns implementation, debugging, planning, and ambiguous or multi-file work even when small or bounded. Escalate to Fable 5.1 for harder Claude Code work. Demanding Codex work can justify Sol 6.1 at `high`, `xhigh`, or `max`; Astra requires an explicit justification after a concrete residual failure or quality gap on Sol 6.1. Omitting the model means the child inherits. Use native children unless the user explicitly requests a visible task.
-3. Before every push, complete the [whole-candidate review gate](https://github.com/novotnyllc/railyard/blob/main/plugins/railyard/references/whole-candidate-review.md). Review the complete cumulative change and affected lifecycle with both [Thermos](/skills/thermos/) lenses and `codex review` on GPT-6.1 Sol at `high`. Resolve findings and bind the completed reviews and checks to the exact candidate.
-4. Use `compound-engineering:ce-commit-push-pr` to publish that reviewed candidate. CE owns review settlement and CI; reuse valid pre-push evidence and recheck changed interactions when feedback requires a repair push.
-5. Check the merged commit for reachability from the base branch, complete required release or deployment steps, and verify the actual consumer. For plugins, this includes required marketplace publication, a supported manager update, and installed-runtime verification.
+1. Use native tools for routine work and select CE stages when they help. Resolve CE only when a selected stage needs it.
+2. Use native children for independent work. Use [CE cross-engine work](/what-it-does/work-across-harnesses/) for a requested external implementer. Create a visible task when the user explicitly requests one.
+3. Run repository checks and one independent [local review](/delivery/gates/) of the complete cumulative change before the first push. Fix actionable findings before publishing.
+4. Use `compound-engineering:ce-commit-push-pr` to publish. CE owns feedback and CI. Batch repairs and review each batch and its affected behavior before pushing again. Repeat broad review when design or risk changes materially or prior coverage is uncertain.
+5. Follow the configured merge queue, if any, and verify the PR landed. Complete applicable release or deployment steps and verify the actual consumer. For plugins, this includes required marketplace publication, a supported manager update, and installed-runtime verification.
 
 Illustrative evidence fields for a native Codex run; fill them from actual observations:
 
 ```text
-model=gpt-6.1-sol effort=medium
+implementation=<observed engine>
 observed_allocation=<runtime evidence or unverified>
 review_and_ci=<CE disposition>
 merge=<observed merge commit> ancestry=<check result>
@@ -38,8 +38,6 @@ post_merge_check=<focused command and result>
 release_or_deployment=<observed result when required>
 consumer_check=<installed or deployed behavior>
 ```
-
-Same-harness execution is the default. Crossing from another harness to Codex is opt-in and requires a separately configured Codex CLI.
 
 The post-merge check is stack-specific and comes from the repository's existing tooling, such as `node --test test/retry.test.mjs` or `pytest -q`.
 
@@ -60,6 +58,5 @@ The first delivery is a complete one-machine path. Request fleet placement expli
 
 ## Terms used here
 
-- [Model routing](/delivery/model-routing/) — choosing the model and reasoning effort for delegated work.
-- [Thermos](/skills/thermos/) — the paired whole-candidate review that contributes findings to the CE owner before publication.
+- [Thermos](/skills/thermos/) — the optional paired review that contributes findings to the CE owner before publication.
 - [React Doctor](/delivery/gates/) — the project-appropriate browser-visible quality check for React surfaces.

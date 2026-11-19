@@ -8,9 +8,8 @@
   description should not trigger on unrelated requests.
 - Write for current models: a clear goal and constraints, each rule stated
   once, no ALL-CAPS or "never/always" pileups, no motivational or threatening
-  framing, and no rules against rituals the model would not invent. State
-  model/effort guidance only in `skills/model-routing/SKILL.md` and
-  `references/harness-model-invocation.md`; other files point there.
+  framing, and no rules against rituals the model would not invent. Read model
+  and effort selectors from the active harness or CE execution engine.
 - Shipped skills and references carry runtime instructions only. Maintainer
   notes, provenance, and dated verification snapshots live under `docs/`.
 - Preserve upstream attribution when copying or refreshing skills; the

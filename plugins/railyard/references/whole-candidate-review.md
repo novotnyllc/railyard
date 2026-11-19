@@ -10,13 +10,38 @@ child handoff does not narrow the integration owner's review scope.
 ## Review level
 
 The repository's `railyard.review` setting (`railyard:config`) sets how much of
-this gate applies. `full`, the default, is everything below. `light` is the
-repository's checks plus one combined correctness and maintainability review of
-the complete cumulative change, with no receipt or ledger. `checks` is the
-repository's checks only. An explicit user request overrides the setting for
-that push.
+this gate applies. An explicit user request overrides the setting for that
+push. `checks` runs the repository's checks only. `light` is the default.
+`full` uses the Full review policy below.
 
-## Candidate and investigation
+## Light review
+
+Before every push, identify the target repository, branch, integration base,
+and intended candidate. Run the repository's checks on that candidate.
+
+- **First publication.** Ask one independent local reviewer to inspect the
+  complete cumulative change-set against the integration base for
+  correctness, regressions, and maintainability. Review every intended change.
+  Address actionable findings before publishing. Review and check any
+  subsequent edits that affect the final candidate.
+- **Routine feedback repairs.** Review the repair batch against the previously
+  reviewed published head. Include changed interactions, failure paths, and
+  tests relevant to the affected behavior. Group actionable feedback into a
+  batch and push the verified batch once, under
+  [the settlement policy](review-feedback-settlement.md).
+- **Repeat whole-change review** when the repair materially changes the
+  design or risk, new feature work expands the reviewed scope, or the
+  previous local review baseline cannot be established.
+  After a rebase, check whether the new base changes the interactions or
+  assumptions covered by that review.
+
+Keep the reviewed head and check results in the ordinary delivery handoff as
+needed for a subsequent repair. Light review requires no hash-bound receipt or
+delivery ledger.
+
+## Full review
+
+### Candidate and investigation
 
 Resolve the intended target repository, branch, base commit, and exact candidate
 commit/tree. Review the complete cumulative change-set against the integration
@@ -31,7 +56,7 @@ bound in the receipt. Changed commit metadata requires renewed identity checks;
 changed tree, base, requirements, or dependencies requires renewed review.
 
 Use the existing Thermos correctness/security and maintainability passes alongside
-Codex review, using the allocation selected by model-routing. Their completed
+Codex review using its configured settings. Their completed
 reports can fulfill this gate; do not add a third review tree or watcher. Supply both reviewers
 with the complete candidate, user requirements, and affected lifecycle. Trace
 unchanged dependencies and real entrypoints through producer, packaging,
@@ -52,7 +77,7 @@ must explain reused evidence. A previous clean verdict is not transferable to
 new code merely because the newest patch is small. Collect every required
 reviewer's completed report; progress or spawn acknowledgements are insufficient.
 
-## Hash-bound receipt and publication decision
+### Hash-bound receipt and publication decision
 
 Keep a compact receipt in a user-owned local evidence location outside the
 candidate payload to avoid self-referential hashes. Bind the base SHA, exact
@@ -93,7 +118,7 @@ must be read back before retrying and are not counted as successful publication.
 Keep receipt references in the delivery handoff. This is an instruction gate;
 Git itself does not enforce it automatically.
 
-## Compact delivery ledger
+### Compact delivery ledger
 
 The delivery owner starts one ledger per PR/change and updates it after each
 review, push, external feedback batch, and settlement. Link receipts and source

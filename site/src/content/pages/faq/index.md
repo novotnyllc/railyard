@@ -10,11 +10,11 @@ Choose the smallest operating boundary that can produce a real receipt, then add
 
 ## Railyard vs Roundhouse: do I need both?
 
-Start with the outcome you need to prove. Railyard carries routing, review, merge, and post-merge proof; Roundhouse adds inventory, readiness, convergence, and remote administration when machines become part of that outcome. See the [Start decision matrix](/start/).
+Railyard carries a change through review, merge, and post-merge proof. Roundhouse adds inventory, readiness, convergence, and remote administration when machines become part of that outcome. [Start decision matrix](/start/)
 
 ## Claude Code vs Codex: which harnesses are supported?
 
-Keep one owning delivery even when execution surfaces change. Claude Code and Codex are both supported; same-harness execution is the default. Cross-harness dispatch is opt-in, requires the destination Codex CLI to be set up separately, and records the harness, model, and effort. The [cross-harness practice](/what-it-does/work-across-harnesses/) shows that receipt.
+Railyard runs in Claude Code and Codex. Use CE to select an external implementation engine from the owning chat, with the destination CLI and account already configured. [Work across harnesses](/what-it-does/work-across-harnesses/)
 
 ## Does this work on Windows and WSL?
 
@@ -26,7 +26,7 @@ Match the receipt to the available delivery surface. A GitHub remote enables a p
 
 ## What does it cost?
 
-Railyard itself is free and open source (MIT); you pay only your own Claude/Codex usage, billed exactly as any other session in that harness. The [control model cost guide](/what-it-does/control-model-cost/) explains how to choose models and efforts with cost in mind.
+Railyard is free and open source (MIT). Usage bills through the harness and model provider configured for the run.
 
 ## What else gets installed?
 
@@ -34,10 +34,10 @@ Railyard uses [Compound Engineering (EveryInc)](https://github.com/EveryInc/comp
 
 ## Does every request need a delivery workflow?
 
-Routine work runs natively, and useful CE workflows are selected automatically. Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or pushing user-requested commits to an existing PR. CE owns one review settlement and CI loop. Fleet or account orchestration requires explicit scope; native child agents are the default for parallel work, and visible Codex tasks require an explicit user request.
+Routine work runs natively, and you can invoke CE workflows when useful. Use `compound-engineering:ce-commit-push-pr` whenever creating a PR or pushing user-requested commits to an existing PR. CE owns one review settlement and CI loop. Fleet or account orchestration requires explicit scope; native child agents are the default for parallel work, and visible Codex tasks require an explicit user request.
 
 ## What is a receipt, a run log, or Thermos?
 
-- A [receipt](/delivery/lifecycle/) is the evidence chain from intent through merge and post-merge proof.
+- The [formal review receipt](/delivery/gates/) records candidate identity, coverage, checks, and findings when full review is selected.
 - A [run log](/delivery/audit/) records decisions when an audit is useful; audit and retrospective are optional.
-- [Thermos](/skills/thermos/) supplies both review lenses for the [whole-candidate gate](/delivery/gates/) before every push, alongside `codex review` on GPT-6.1 Sol at `high` effort. Its findings feed the existing CE owner.
+- [Thermos](/skills/thermos/) supplies both lenses for the [optional full review](/delivery/gates/) alongside `codex review` using its configured settings. Its findings feed the existing CE owner.

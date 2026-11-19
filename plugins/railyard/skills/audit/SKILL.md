@@ -33,11 +33,11 @@ to name, not to fill in.
 
 ## Sources
 
-1. **Run log**: mechanical `session`/`dispatch`/`subagent_stop` lines plus the
-   session's own `decision`/`outcome`/`deviation` notes.
-2. **Native runtime results and task history**: observed child starts,
-   resolved model/effort, and outcomes. A PreToolUse `dispatch` entry shows the
-   gate allowed an attempt, not that the child ran with those settings.
+1. **Run log**. Session anchors, the owner's `decision`/`outcome`/`deviation`
+   notes, and any older `dispatch` or `subagent_stop` entries.
+2. **Native runtime results and task history**. Current dispatches, observed
+   child starts, resolved model and effort, and outcomes. Confirm the child's
+   actual settings and result from runtime evidence.
 
 ## Report
 
@@ -48,7 +48,7 @@ In this order:
    pieces → piece 2's review found a shared-writer conflict → a fix batch →
    a second review round on pieces 1 and 2." Follow `fed_by`/`led_to`; where
    they are missing, say the link is inferred from ordering.
-2. **Shape.** One line: allowed dispatch attempts by requested model/effort,
+2. **Shape.** Summarize dispatch attempts by requested model and effort,
    observed fan-out, rounds, retries, and timing. Unobserved values are
    unknown; the default log does not record child concurrency or completion.
 3. **Did it work as expected.** Compare the decision sequence with the planned

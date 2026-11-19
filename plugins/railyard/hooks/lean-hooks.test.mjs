@@ -9,9 +9,9 @@ import { fileURLToPath } from "node:url";
 const hookDirectory = path.dirname(fileURLToPath(import.meta.url));
 const pluginDirectory = path.resolve(hookDirectory, "..");
 const repositoryDirectory = path.resolve(pluginDirectory, "../..");
-const retiredHooks = ["routing-nudge", "railyard-retro", "route-state", "route-lifecycle"];
+const retiredHooks = ["routing-nudge", "railyard-retro", "route-state", "route-lifecycle", "dispatch-gate"];
 
-test("retired prompt and retrospective hook scripts are not shipped", () => {
+test("retired automation hook scripts are not shipped", () => {
   for (const name of retiredHooks) {
     for (const extension of [".js", ".test.mjs"]) {
       const relative = `hooks/${name}${extension}`;
@@ -21,13 +21,13 @@ test("retired prompt and retrospective hook scripts are not shipped", () => {
 });
 
 for (const relative of ["hooks/claude-hooks.json", "codex/hooks.json"]) {
-  test(`${relative} has no prompt, stop, or session-end automation`, () => {
+  test(`${relative} registers only startup and the shell merge guard`, () => {
     const { hooks } = JSON.parse(readFileSync(path.join(pluginDirectory, relative), "utf8"));
     for (const event of ["UserPromptSubmit", "Stop", "SessionEnd"]) {
       assert.equal(Object.hasOwn(hooks, event), false, `${relative}: ${event}`);
     }
-    // Do not pin the number of startup/PreToolUse hooks: a targeted merge
-    // guard may be added without restoring the retired ambient behavior.
+    assert.equal(hooks.SessionStart.length, 1);
+    assert.equal(hooks.PreToolUse.length, 1);
     const commands = Object.values(hooks).flatMap(entries =>
       entries.flatMap(entry => entry.hooks.flatMap(hook =>
         [hook.command, hook.commandWindows].filter(value => typeof value === "string"))));
@@ -134,7 +134,7 @@ function realRepo(t) {
 
 const isolatedEnv = (home) => ({
   ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), GIT_CONFIG_NOSYSTEM: "1",
-  RAILYARD_RUN_LOG_DIR: path.join(home, "run-log"), TYPESAFE_API_KEY: "",
+  RAILYARD_RUN_LOG_DIR: path.join(home, "run-log"),
 });
 
 function runHook(name, cwd, home, input) {
@@ -147,10 +147,6 @@ function runHook(name, cwd, home, input) {
 const configure = (cwd, home, ...args) =>
   spawnSync(process.execPath, [configScript, ...args], { cwd, encoding: "utf8", env: isolatedEnv(home) });
 const charter = (cwd, home) => runHook("routing-charter.js", cwd, home).stdout;
-const forkPayload = (cwd) => ({
-  hook_event_name: "PreToolUse", cwd, tool_name: "spawn_agent",
-  tool_input: { task_name: "x", fork_turns: "all", model: "m" },
-});
 const mergeCommand = ["gh", "pr", "merge", "1", "--squash"].join(" ");
 
 test("railyard.off stands every hook down in the repository and its worktrees only", (t) => {
@@ -162,53 +158,49 @@ test("railyard.off stands every hook down in the repository and its worktrees on
 
   for (const dir of [main, path.join(main, "src"), path.join(root, "feature")]) {
     assert.match(charter(dir, home), /^Railyard is off in this repository/, dir);
-    assert.equal(runHook("dispatch-gate.js", dir, home, forkPayload(dir)).status, 0, dir);
     const merge = runHook("merge-settlement-gate.js", dir, home, {
       hook_event_name: "PreToolUse", cwd: dir, tool_name: "Bash", tool_input: { command: mergeCommand },
     });
     assert.equal(merge.status, 0, merge.stderr);
   }
   for (const dir of [path.join(root, "cloned"), path.join(root, "copied")]) {
-    assert.match(charter(dir, home), /^Railyard routing:/, dir);
-    assert.equal(runHook("dispatch-gate.js", dir, home, forkPayload(dir)).status, 2, dir);
+    assert.match(charter(dir, home), /^Railyard publishing:/, dir);
   }
 
   assert.match(configure(main, home, "on").stdout, /railyard: on/);
-  assert.match(charter(main, home), /^Railyard routing:/);
+  assert.match(charter(main, home), /^Railyard publishing:/);
 });
 
 test("tool hooks follow the session folder in the payload, not the process folder", (t) => {
   const { root, main, home } = realRepo(t);
   configure(main, home, "off");
-  assert.equal(runHook("dispatch-gate.js", root, home, forkPayload(main)).status, 0);
+  const merge = runHook("merge-settlement-gate.js", root, home, {
+    hook_event_name: "PreToolUse", cwd: main, tool_name: "Bash", tool_input: { command: `${mergeCommand} --admin` },
+  });
+  assert.equal(merge.status, 0, merge.stderr);
 });
 
-test("review level and CE nudges change only their startup lines", (t) => {
+test("review level changes the publishing requirement", (t) => {
   const { main, home } = realRepo(t);
-  const full = charter(main, home);
-  assert.match(full, /whole-candidate-review\.md gate/);
-  assert.match(full, /Pick Compound Engineering stages/);
+  assert.match(configure(main, home).stdout, /review: light/);
+  const light = charter(main, home);
+  assert.match(light, /apply the light policy in references\/whole-candidate-review\.md/);
+  assert.match(light, /review the whole change independently before first publication/);
+  assert.match(light, /review affected behavior for routine repair pushes/);
 
-  configure(main, home, "review", "light");
-  assert.match(charter(main, home), /checks and one combined correctness and maintainability review .*railyard\.review light/);
   configure(main, home, "review", "checks");
   assert.match(charter(main, home), /run the repository's checks; no review passes/);
 
-  configure(main, home, "ce", "off");
-  const quiet = charter(main, home);
-  assert.match(quiet, /Don't pick Compound Engineering stages unless the user asks/);
-  assert.doesNotMatch(quiet, /ce-commit-push-pr|CE owns|CE snapshot/);
-  assert.match(quiet, /railyard:deliver request runs through merge/);
-
-  assert.match(configure(main, home, "review", "full").stdout, /review: full {2}ce: off/);
-  assert.match(configure(main, home, "ce", "on").stdout, /review: full {2}ce: on/);
-  assert.equal(charter(main, home), full);
+  assert.match(configure(main, home, "review", "full").stdout, /review: full/);
+  assert.match(charter(main, home), /whole-candidate-review\.md gate/);
+  assert.match(configure(main, home, "review", "light").stdout, /review: light/);
+  assert.equal(charter(main, home), light);
 });
 
 test("the config script rejects unknown values and non-repositories", (t) => {
   const { root, main, home } = realRepo(t);
   assert.equal(configure(main, home, "review", "fast").status, 2);
-  assert.equal(configure(main, home, "ce", "maybe").status, 2);
+  assert.equal(configure(main, home, "unknown").status, 2);
   const outside = mkdtempSync(path.join(tmpdir(), "railyard-outside-"));
   t.after(() => rmSync(outside, { recursive: true, force: true }));
   assert.equal(configure(outside, home, "off").status, 2);
@@ -233,19 +225,18 @@ test("merge-gate off stops merge checks in that repository only", (t) => {
 test("explicit repository values beat personal global defaults", (t) => {
   const { main, home } = realRepo(t);
   mkdirSync(path.join(home, ".config", "git"), { recursive: true });
-  writeFileSync(path.join(home, ".config", "git", "config"), "[railyard]\n\treview = checks\n\tce = off\n");
-  assert.match(configure(main, home).stdout, /review: checks {2}ce: off/);
+  writeFileSync(path.join(home, ".config", "git", "config"), "[railyard]\n\treview = checks\n");
+  assert.match(configure(main, home).stdout, /review: checks/);
   assert.match(configure(main, home, "review", "full").stdout, /review: full/);
-  assert.match(configure(main, home, "ce", "on").stdout, /ce: on/);
 });
 
 test("personal global defaults apply outside a repository", (t) => {
   const { home } = realRepo(t);
   mkdirSync(path.join(home, ".config", "git"), { recursive: true });
-  writeFileSync(path.join(home, ".config", "git", "config"), "[railyard]\n\tce = off\n");
+  writeFileSync(path.join(home, ".config", "git", "config"), "[railyard]\n\treview = checks\n");
   const outside = mkdtempSync(path.join(tmpdir(), "railyard-outside-"));
   t.after(() => rmSync(outside, { recursive: true, force: true }));
-  assert.match(charter(outside, home), /Don't pick Compound Engineering stages/);
+  assert.match(charter(outside, home), /run the repository's checks/);
 });
 
 test("merge settings follow the repository a merge runs in", (t) => {
@@ -282,7 +273,7 @@ test("a repository switched off with the 0.13 marker file stays off until switch
   writeFileSync(path.join(common, "railyard-off"), common + "\n");
   assert.match(charter(main, home), /^Railyard is off in this repository/);
   assert.match(configure(main, home, "on").stdout, /railyard: on/);
-  assert.match(charter(main, home), /^Railyard routing:/);
+  assert.match(charter(main, home), /^Railyard publishing:/);
 });
 
 test("unplaced merges keep the gate whatever the session repository says", (t) => {

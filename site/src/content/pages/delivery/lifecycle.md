@@ -7,19 +7,19 @@ nav_order: 1
 
 # The delivery lifecycle
 
-The requested finish line determines the workflow. An explicit Deliver implementation/fix request authorizes the shipping path through required release or deployment and consumer verification. Explicit plan-only, diagnosis-only, review-only, local-only, and PR-only requests keep their stated endpoints. Routine work runs natively, with a focused skill selected automatically when it helps; internal skill selection does not expand authorization.
+Implementation and fix requests end at confirmed merge when standing delivery authority covers publication and merge. Required approvals and repository holds take precedence. A shipping request or repository requirement can extend delivery through release or deployment and consumer verification. Plan-only, diagnosis-only, review-only, local-only, and PR-only requests stop at the stated endpoint.
 
-## Native work and allocation
+## Native work and delegation
 
 Name the behavior to change, preserve unrelated work, and use the repository's existing checks. Delegate independent bounded subtasks to native children when useful.
 
-Choose model and reasoning effort together. In Claude Code, Opus 5.5 at `medium` is the default for substantive subagent work, with Fable 5.1 for frontier-hard or long autonomous work. In Codex, GPT-6.1 Sol at `medium` is the baseline for implementation, debugging, planning, and ambiguous or multi-file work, even when small or bounded. Raise Sol 6.1 to `high`, `xhigh`, or `max` for justified demanding work. Astra is a rare, explicitly justified escalation after a concrete residual failure or quality gap on Sol 6.1. Omitting the model means the child inherits. See [model routing](/delivery/model-routing/).
+Use the harness settings for native work. Use CE to assign bounded implementation to a different engine. [Work across harnesses](/what-it-does/work-across-harnesses/)
 
-If the current host can't run a selection, report it; don't fall back to another model, effort, provider, or host without saying so.
+Report the engine that ran and any unavailable requested route.
 
 ## Select a workflow where it helps
 
-CE planning, debugging, code review, feedback resolution, and UI skills are selected for relevant work. LFG remains available when explicitly chosen. Standalone Thermos review and Oracle consultation can supply additional perspectives when useful. Before every push, the whole-candidate gate requires broad review of the exact candidate’s complete cumulative change-set and affected lifecycle. Existing Thermos correctness/security and maintainability passes alongside Codex review can fulfill it; no third reviewer or watcher is required.
+Use CE planning, debugging, and code review for work that benefits from them. Choose LFG for a full workflow when the change warrants it. The default light review covers the complete cumulative change independently before the first push. Focus later reviews on repairs and affected behavior. Repeat broad review when design or risk changes materially or prior coverage is uncertain. Choose Thermos and full review for higher-risk changes.
 
 Use `compound-engineering:ce-commit-push-pr` when creating a PR or pushing user-requested commits to an existing PR. CE owns the selected review-settlement and CI watch loop. Railyard does not run a second watcher or require another reviewer after CE has completed that work.
 
@@ -43,13 +43,13 @@ This diagram shows a shipping workflow with selected review and CE settlement. P
 ### Sequence
 
 1. **Ask.** Establish the requested result and whether publishing and merging are authorized.
-2. **Route.** Choose model and reasoning effort deliberately, or let the child inherit.
+2. **Route.** Choose native execution, a focused workflow, or explicit fleet placement.
 3. **Build.** Execute natively or use a useful selected CE workflow.
-4. **Review.** Before every push, complete whole-candidate review and bind identity, coverage, tests, and findings dispositions in a compact receipt. Reuse unchanged proof. Required pre-push evidence blocks publication; future release, install, and consumer verification remains pending with a named delivery-tail owner.
+4. **Review.** Complete one independent local review of the whole change before the first push. Review later repair batches and their affected behavior. Repeat broad review when design or risk changes materially or prior coverage is uncertain.
 5. **Quality.** Run required repository checks and focused checks for the changed surface.
 6. **Publish.** Use CE commit/push/PR for PR creation and user-requested PR pushes.
-7. **Settle.** Let the selected CE workflow own review settlement, feedback, and CI.
-8. **Merge.** Merge the authorized change once the current repository requirements are satisfied.
+7. **Settle.** Let CE own feedback and CI. Batch repairs, resolve each thread, and link follow-up issues for separable work. After two distinct heads receive automated review, newly raised minor findings default to follow-up.
+8. **Merge.** Follow the repository's merge process and wait for the queue to land the PR where configured.
 9. **Prove.** Verify merge ancestry, complete required release or deployment, and check the actual consumer.
 10. **Learn.** Capture a reusable lesson when useful or requested; no routine retrospective artifact is required.
 

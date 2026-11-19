@@ -7,8 +7,6 @@ becomes a verified, delivered result, on any machine in the fleet.
 
 Deciding and driving work —
 
-- *Routing* — which model and reasoning effort carry a unit of work
-  (`model-routing`), and transport-safe provider handoffs.
 - *Delivery* — driving one software change through the right workflow to
   merge and post-merge proof (`deliver`).
 - *Orchestration and placement* — decomposing objectives across tasks,
@@ -36,11 +34,11 @@ hosts itself.
 
 Compound Engineering
 ([EveryInc/compound-engineering-plugin](https://github.com/EveryInc/compound-engineering-plugin))
-provides selected planning, debugging, publishing, and review workflows.
-Railyard selects the appropriate stage automatically and leaves review
-settlement and CI monitoring with CE. Native routine work needs no workflow
-plugin bootstrap. Installing Railyard does not authorize installing unrelated
-plugins or enabling every available hook.
+provides planning, debugging, external implementation, publishing, and review
+workflows. CE owns implementation engine selection, review settlement, and CI
+monitoring. Routine work uses the harness's native tools. Installing Railyard
+does not authorize installing unrelated plugins or enabling every available
+hook.
 
 Roundhouse is needed for explicitly selected fleet/account work; craft skills
 and stacked-PR tooling are loaded only when relevant. Setup uses each host's

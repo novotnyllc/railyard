@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// SessionStart: print a short route guide, then record a session anchor in
+// SessionStart: print a short publishing guide, then record a session anchor in
 // the run log from the bounded hook payload.
 const { readHookInput } = require("./hook-input.js");
 const { repoConfig } = require("./repo-config.js");
@@ -8,52 +8,24 @@ const { repoConfig } = require("./repo-config.js");
 // folder: both harnesses start this hook in the session folder.
 const config = repoConfig();
 
-const routing = config.ce
-  ? [
-    "- Ordinary work uses native tools and subagents. Pick Compound Engineering stages that help:",
-    "  ce-debug, ce-plan, ce-code-review, or lfg. Open PRs with compound-engineering:ce-commit-push-pr.",
-  ]
-  : ["- Ordinary work uses native tools and subagents. Don't pick Compound Engineering stages unless the user asks (railyard.ce off)."];
 const review = {
   full: "- Before every push, load Railyard's references/whole-candidate-review.md gate, including direct CE/LFG publishing calls.",
-  light: "- Before every push, run the repository's checks and one combined correctness and maintainability review of the whole change (railyard.review light).",
+  light: "- Before every push, including direct CE/LFG publishing calls, apply the light policy in references/whole-candidate-review.md. Run repository checks, review the whole change independently before first publication, and review affected behavior for routine repair pushes.",
   checks: "- Before every push, run the repository's checks; no review passes (railyard.review checks).",
 }[config.review];
-const settlement = config.ce
-  ? [
-    "- CE owns review settlement and CI watching; give it references/review-feedback-settlement.md. An explicit",
-    "  railyard:deliver request runs through merge, required release or deployment, and consumer verification",
-    "  unless narrowed; honor plan-only, local-only, and PR-only stops. Clean, thread-free PRs merge plainly; else CE snapshot handoff.",
-  ]
-  : [
-    "- An explicit railyard:deliver request runs through merge, required release or deployment, and consumer verification",
-    "  unless narrowed; honor plan-only, local-only, and PR-only stops.",
-  ];
-
 const lines = [
-  "Railyard routing:",
-  ...routing,
+  "Railyard publishing:",
   review,
-  ...settlement,
-  "- Choose model and effort per subagent. Claude Code: Opus 5.5 (`opus`, 2.1.280+) by default, Fable 5.1 for",
-  "  frontier-hard work. Codex: Sol 6.1 medium (review high), Luna for routine checked work, Astra only for a proven gap.",
-  "- Take the fastest route to the result: reuse existing tools, propagate settings that already exist instead",
-  "  of rebuilding them, do small work directly, and verify settings by reading them back. Dispatch a subagent",
-  "  only when it reads far more than it returns, gives independent judgment, runs a substantial parallel unit",
-  "  without shared files or state, or needs another model (full rule: railyard:model-routing). State the",
-  "  simplest path and a rough time estimate first; at about twice it, or when the user presses on time, find",
-  "  a faster route to the same result. Gates and the endpoint still apply.",
-  "- Create visible user-owned tasks only when asked. Use railyard:orchestrate only for requested fleet or",
-  "  remote work that needs separate agents; propagating config across hosts is direct work. Wait on",
-  "  completion events rather than polling.",
+  "- When CE coordinates a PR, it owns review settlement and CI watching. Give it references/review-feedback-settlement.md.",
+  "- Carry implementation and fixes through confirmed merge when the user or standing owner instructions authorize landing. Use the repository’s merge queue and honor holds.",
+  "  For ship or deliver requests, continue through required release or deployment and verification at the consumer.",
+  "  Honor plan-only, local-only, and PR-only stops.",
+  "- The merge guard accepts a live check for clean PRs with no unresolved threads, or the CE snapshot handoff.",
+  "- Use railyard:orchestrate for explicitly requested fleet or remote work that needs separate agents.",
 ];
-// Presence enables advice, not an inference call or a credential disclosure.
-if (process.env.TYPESAFE_API_KEY?.trim()) {
-  lines.push("- Jev configured: consult railyard:jev for open model, effort, or workflow choices; skip explicit choices, clear defaults, and small dispatches.");
-}
 
 process.stdout.write(config.off
-  ? "Railyard is off in this repository (railyard.off): skip its routing and gates, and don't pick Compound Engineering stages unless the user asks.\n"
+  ? "Railyard is off in this repository (railyard.off): its hooks stand down here.\n"
   : lines.join("\n") + "\n");
 if (config.off) process.exit(0);
 

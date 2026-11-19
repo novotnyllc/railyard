@@ -43,19 +43,18 @@ ID; name the extra ID and the evidence. Shared labels or adjacent timestamps
 do not join two tasks. Missing anchors do not erase identified dispatches, but
 the start of the run is then unknown.
 
-### Mechanical lines (written by hooks)
+### Session anchors and older hook evidence
 
 | Event | Written by | Fields |
 | --- | --- | --- |
 | `session` | SessionStart charter (both harnesses) | `ts`, `harness` when known, payload `session_id` and `cwd` when available |
-| `dispatch` | PreToolUse dispatch gate, on every **allowed** dispatch | `ts`, `harness`, `tool`, `model`, `effort` (Codex), `role`, `label`, `session_id` |
-| `subagent_stop` | Optional lifecycle hook (off by default) | `ts`, `harness`, `session_id` |
+| `dispatch` | Retired PreToolUse dispatch gate | `ts`, `harness`, `tool`, `model`, `effort` (Codex), `role`, `label`, `session_id` |
+| `subagent_stop` | Older optional lifecycle hook | `ts`, `harness`, `session_id` |
 
-A refused dispatch is not recorded. A `dispatch` line records permission for
-an attempt, not that the runtime accepted, started, or completed it;
-corroborate actual model/effort and completion from native runtime evidence.
-Because it is written at PreToolUse, it still appears when the child crashes
-or is abandoned.
+Use native runtime records and task history for current dispatches, model and
+effort, and completion. Older `dispatch` lines record that the former gate
+allowed an attempt. Use runtime evidence to confirm that the child started
+and ran with the requested settings.
 
 Startup reads identity and working directory from the SessionStart JSON and
 never fills them from an ancestor's environment or the hook's own cwd.
@@ -94,8 +93,7 @@ review", "intake"); the chain is meant to be read, not joined by a query.
 
 ### Cross-session messages
 
-A message to another session is not a dispatch, and the gate never logs it.
-Record one only when it changed the run, as a `decision` or `outcome` naming
+For a message that changed the run, record a `decision` or `outcome` naming
 the peer by its session name as the native agent list shows it. The parent's
 `session_id` on a dispatch attempt is not the child's runtime identity.
 

@@ -2,9 +2,8 @@
 
 Use this reference when delegated work must cross a provider or transport
 boundary, or when a workflow selects a read-only Claude subscription review.
-It chooses a transport-safe path without changing the chosen model, effort,
-privacy constraints, or budget. Model and effort selection lives in
-`railyard:model-routing`.
+Choose a compatible transport for the already-selected model and effort.
+Preserve the privacy constraints and budget.
 
 ## Classify before dispatch
 
