@@ -14,16 +14,30 @@ this gate applies. An explicit user request overrides the setting for that
 push. `checks` runs the repository's checks only. `light` is the default.
 `full` uses the Full review policy below.
 
+When choosing who runs the independent CE review, prefer Codex Astra through
+native delegation or the machine’s Codex CLI when project settings permit it.
+Apply CE’s provider disclosure before sending code to an external reviewer.
+Use another available independent reviewer promptly when that preference
+cannot be met. Follow the [machine routing rules](../skills/deliver/references/ce-call-adapter.md#machine-local-stage-routing).
+
 ## Light review
 
 Before every push, identify the target repository, branch, integration base,
 and intended candidate. Run the repository's checks on that candidate.
 
-- **First publication.** Ask one independent local reviewer to inspect the
-  complete cumulative change-set against the integration base for
-  correctness, regressions, and maintainability. Review every intended change.
-  Address actionable findings before publishing. Review and check any
-  subsequent edits that affect the final candidate.
+- **First publication.** Run one coordinated local review round of the
+  complete cumulative change-set against the integration base. Reuse a completed
+  independent CE review covering that candidate and scope. Otherwise run
+  CE’s code review with an independent reviewer. CE selects depth and specialists for the diff.
+  When Ponytail Review is available, include its questions about load,
+  test coverage, and unnecessary complexity in the same review brief.
+  Reserve the paired Thermos passes for requested specialist or full review.
+- **Before the first push.** Consolidate duplicate findings, fix serious and
+  medium defects, and verify the fixes and affected behavior in one focused
+  pass. Record remaining safe, separable work in the PR. Resolve ship blockers,
+  including security and data-loss defects, before publication. If verification fails, re-fix and check that item when it
+  blocks shipping. Record safe residuals in the PR. Routine fixes do not start
+  a third broad pass.
 - **Routine feedback repairs.** Review the repair batch against the previously
   reviewed published head. Include changed interactions, failure paths, and
   tests relevant to the affected behavior. Group actionable feedback into a

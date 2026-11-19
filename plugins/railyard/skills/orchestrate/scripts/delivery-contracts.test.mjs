@@ -140,7 +140,12 @@ test("default light review covers first publication and focuses subsequent repai
   assert.match(gate, /`light` is the default/);
   assert.match(gate, /`checks` runs the repository's checks only/);
   assert.match(light, /Before every push.*Run the repository's checks/);
-  assert.match(light, /First publication.*one independent local reviewer.*complete cumulative change-set against the integration base/);
+  assert.match(light, /First publication.*one coordinated local review round.*complete cumulative change-set against the integration base/);
+  assert.match(light, /Reuse a completed independent CE review covering that candidate and scope/);
+  const routing = flat(read("skills/deliver/references/ce-call-adapter.md"));
+  assert.match(routing, /native delegation or a supported CLI or ACP runtime on the machine/);
+  assert.match(light, /Ponytail Review.*same review brief.*Thermos passes for requested specialist or full review/);
+  assert.match(light, /fix serious and medium defects.*one focused pass/);
   assert.match(light, /feedback repairs.*repair batch against the previously reviewed published head.*relevant to the affected behavior/);
   assert.match(light, /Repeat whole-change review.*materially changes the design or risk.*review baseline cannot be established/);
   assert.match(light, /requires no hash-bound receipt or delivery ledger/);
@@ -225,12 +230,18 @@ test("one CE owner batches PR repairs and verifies each thread disposition", () 
   assert.match(policy, /`needs-human`[^.]*stays open and goes to the user/);
 });
 
-test("automated feedback cutoff counts reviewed heads and preserves merge requirements", () => {
+test("automated feedback budget spans providers and preserves merge requirements", () => {
   const policy = flat(read("references/review-feedback-settlement.md"));
   assert.match(policy, /Treat P0 as P1/);
-  assert.match(policy, /Count distinct PR head SHAs with a submitted automated review/);
-  assert.match(policy, /Several bots or comments on the same head count once/);
-  assert.match(policy, /After two bot-reviewed heads, newly raised automated P2 findings and nits default to follow-up/);
+  assert.match(policy, /one routine automated repair batch per PR, shared across all reviewers/);
+  assert.match(policy, /out of quota requires no wait or retry.*substantive findings/);
+  assert.match(policy, /queued or running review, allow CE’s existing bounded wait once/);
+  assert.match(policy, /required check or approval still blocks when unavailable/i);
+  assert.match(policy, /requiredness is unclear, report readiness as unknown/);
+  const adapter = flat(read("skills/deliver/references/ce-call-adapter.md"));
+  assert.match(adapter, /At each returned disposition.*optional-review rule/);
+  assert.match(adapter, /PR-description refresh.*stop its repair delegates and wake source before enqueueing/);
+  assert.match(flat(read("skills/deliver/SKILL.md")), /adapter verifies that only an optional reviewer remains/);
   assert.match(policy, /ordinary disposition to human feedback/);
   assert.match(policy, /Actual blockers, decisions requiring the user, and repository-required reviews and checks still govern readiness/);
   assert.match(policy, /Once CE settles the current head.*continue promptly to the authorized merge or enqueue/);

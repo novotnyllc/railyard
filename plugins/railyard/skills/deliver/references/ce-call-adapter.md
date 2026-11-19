@@ -5,6 +5,22 @@ When Deliver calls a CE stage, resolve its `SKILL.md`, execute the procedure,
 and return to the requested delivery boundary. A CE stage can run in the
 current session or in a native subagent.
 
+## Machine-local stage routing
+
+Keep the current chat coordinating. Plan in the current CE stage and let
+CE select the implementation engine. Delegate when the user asks, when an
+independent perspective would resolve a consequential decision, or when a
+worker has a capability the task needs.
+
+For a delegated stage, use native delegation or a supported CLI or ACP runtime
+on the machine, regardless of which harness started the chat. Check only the
+route needed for this assignment. Honor checkout restrictions, CE’s disclosure
+rules, and the stage’s scope. Planning and review delegates work read-only.
+If a preferred route is unavailable, continue with CE’s available route for
+that stage. If the user required a specific model, surface the blocker.
+
+## Implementation engine
+
 CE coordinates implementation and selects the engine through `ce-work`'s
 `references/execution-engines.md`. A `ce-work` run uses one implementation
 engine. If the user requests different engines for independent units, the
@@ -81,7 +97,13 @@ For a single PR delivered directly through CE, use
 run `ce-babysit-pr mode:pipeline <pr-url> posture:target` if no CE watcher
 already owns it. This uses CE’s bounded feedback and CI loop without adding
 an interactive quiet period after readiness. Inspect the returned disposition.
-Continue the same watch when work remains pending. Required checks, approvals,
+At each returned disposition, including a timeout or failed check, apply the
+settlement policy's optional-review rule before continuing the watch. If only
+an optional reviewer remains and fresh GitHub evidence confirms eligibility
+on the current head, finish the watcher’s pending PR-description refresh
+and stop its repair delegates and wake source before enqueueing. Recheck
+the head after that handoff. Continue the
+same watch for other pending work. Required checks, approvals,
 and unresolved blockers still govern landing. Respect a narrower PR-only stop.
 
 For a repository whose branch rules and CI configuration establish that the

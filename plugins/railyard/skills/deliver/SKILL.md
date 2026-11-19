@@ -61,7 +61,7 @@ Pass the [local review policy](../../references/whole-candidate-review.md) to
 every publisher, including CE feedback and CI repair stages. The default
 `light` level requires repository checks and one independent local review of
 the complete change before the first push. A completed CE review of the same
-candidate can fulfill it. Fix actionable findings before publication.
+candidate can fulfill it. Apply the shared policy’s severity and focused verification rules.
 
 For a repair batch, review the changes since the last reviewed head and the
 behavior they affect, then run the required checks and push once. Repeat the
@@ -86,8 +86,8 @@ Keep that owner watching until the requested endpoint. Batch available review
 fixes into one verified repair push. Act on CI failures for the current head;
 refresh the checks when a repair or another contributor changes it. For each comment,
 fix a blocker, explain a decline, or link an issue for work the PR can safely
-ship without. Honor the policy's two-reviewed-head cutoff for automated
-feedback and hand a ready PR to the repository's merge process promptly.
+ship without. Honor the policy's single routine repair batch across automated
+reviewers and hand a ready PR to the repository's merge process promptly.
 
 ## End-of-PR review
 
@@ -103,7 +103,7 @@ These reviews produce findings only; CE still settles review and CI.
 
 ## Delivery tail
 
-After CE's settled result, complete the remaining work only through the user's
+After CE settles or the adapter verifies that only an optional reviewer remains, complete the remaining work only through the user's
 selected authorized endpoint:
 
 1. Refresh the PR before landing. Confirm its repository, base, and reviewed
