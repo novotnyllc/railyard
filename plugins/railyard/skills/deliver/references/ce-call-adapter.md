@@ -82,11 +82,14 @@ handoff, review, or safe publication cannot complete.
 
 ## Merge authorization at publication
 
-Resolve landing authority from the user's request or standing owner
-instructions for the project. A plugin update grants no additional authority.
+Carry Deliver's endpoint into CE. A plain implementation, fix, or open-PR
+request for authorized repository work includes normal PR review, CI, and
+landing. Use the actual repository privileges and merge rules. Honor required
+approvals, holds, and any explicit narrower endpoint.
 
 For a push-only or PR-only endpoint, inspect the repository's automatic
-landing rules before every publish. Create a new auto-landing PR as a draft
+landing rules before every publish. Apply the PR-only rules for an explicit
+no-merge request. Create a new auto-landing PR as a draft
 in the create operation. If the user requests a ready PR, apply and verify
 the repository hold while it is still a draft before marking it ready. For
 an existing auto-landing PR, apply a repository hold if needed. Before

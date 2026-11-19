@@ -11,21 +11,19 @@ engines. Use Railyard for the delivery endpoint or explicit fleet coordination.
 | Known edit, bounded implementation, or routine investigation | Native tools; delegate independent subtasks when useful | The requested result and proportional checks |
 | Planning, debugging, review, or UI work that benefits from a focused workflow | Invoke the matching CE or specialist skill | The requested artifact or verified behavior |
 | One chat coordinating code changes across different engines | Separate `ce-work` runs with a named engine and bounded scope for each | The owning chat integrates and verifies the combined result |
-| Create a PR or push user-requested commits to an existing PR | `compound-engineering:ce-commit-push-pr` | The requested PR state, with the selected CE workflow owning follow-through |
+| Create a PR or push user-requested commits to an existing PR | `compound-engineering:ce-commit-push-pr` | Deliver continues to the authorized endpoint |
 | Address PR feedback or watch CI | Applicable CE feedback or babysitting workflow | One owner for review settlement, CI, and the watch loop |
 | Implementation or fix | Native or selected CE implementation, local review, and CE settlement | Confirmed merge, with further release and consumer verification when required |
 | Explicit fleet/account allocation, remote work, or coordination that needs `orchestrate` | `railyard:orchestrate` | Combined acceptance evidence from the selected lanes |
 | Fleet setup or reconciliation | `roundhouse:fleet-readiness` | Required host, project, tool, and authentication readiness |
 
-`deliver` coordinates one requested outcome. It may execute directly or select
-a focused CE workflow; it does not send generic implementation through LFG by
-default. LFG remains available when explicitly chosen. Plan-only, diagnosis-only,
-review-only, local-only, and PR-only requests retain their stated endpoints.
-An implementation or fix request runs through confirmed merge when standing
-delivery authority covers it. Narrower approvals and repository holds take
-precedence.
-A shipping request or repository requirement can also include release or
-deployment and consumer verification. Follow the repository's merge queue
+Load `deliver` for implementation, fixes, and open-PR intent. Deliver may
+execute directly or select a focused CE workflow. For authorized repository
+work, ordinary requests run through confirmed merge and any required release
+or deployment and consumer verification. Plan-only, diagnosis-only,
+review-only, local-only, PR-only, and no-merge requests stop at their stated
+endpoint. Required approvals and repository holds take precedence.
+Follow the repository's merge queue
 where configured. For a direct merge, verify the reviewed head, required
 checks and approvals, and review-thread resolution before merging. Confirm
 that the PR landed.
@@ -97,8 +95,9 @@ provider, model, account, or host. SSH command execution alone is not a remote
 agent.
 
 Use clear task titles that follow the user's and repository's conventions.
-Rename only when the material focus or resume state changes. Completion does
-not imply authority to archive tasks, remove worktrees, or reap processes.
+Rename only when the material focus or resume state changes. Follow the
+[worktree ownership policy](../plugins/railyard/references/agent-coordination.md#worktree-ownership)
+for cleanup. Task archival and process cleanup require separate authorization.
 For macOS Codex recovery, use
 [Agent Utilities](https://github.com/novotnyllc/agent-utilities/tree/main/plugins/agent-utilities/skills/cleanup-codex).
 

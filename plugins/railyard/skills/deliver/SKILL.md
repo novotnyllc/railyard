@@ -1,6 +1,6 @@
 ---
 name: deliver
-description: "Implement a requested change or fix and follow the PR through review, CI, and confirmed merge when authorized. Use for implementation requests with standing delivery authority and explicit shipping requests. Honor narrower endpoints. When shipping requires a release, deployment, or consumer verification, complete that tail."
+description: "Handle implementation, fix, and pull request creation requests, including plain-language requests. For authorized repository work, follow the PR through review, CI, confirmed merge, and any required release, deployment, and consumer verification. Honor explicit narrower endpoints and repository protections."
 ---
 
 # Deliver
@@ -11,17 +11,14 @@ Engineering (CE).
 
 ## Endpoint
 
-For a request to implement or fix something, the default endpoint is a
-confirmed merge when the user or standing owner instructions authorize
-landing. Installing or updating Railyard adds no publication or merge
-authority. Keep the current chat responsible through the authorized endpoint
-and use the repository's normal merge process when landing is in scope.
-An explicit request to ship or deliver also includes any required release or
-deployment and verification at the actual consumer. Apply a repository's
-release contract when it governs the change.
+For authorized repository work, a plain implementation, fix, or open-PR
+request includes review, CI, and confirmed merge through the repository's
+normal process. Use this intent without a separate merge or shipping request.
+Complete required release or deployment and verify the actual consumer.
+Installing or updating Railyard grants no privileges or approval.
 
 Honor explicit plan-only, diagnosis-only, review-only, local-only, push-only,
-and PR-only requests. For a push-only or PR-only endpoint, apply the
+PR-only, and no-merge requests. For a push-only or PR-only endpoint, apply the
 [publication hold rules](references/ce-call-adapter.md#merge-authorization-at-publication)
 before a new head can trigger automatic landing. Advice and investigation
 requests carry no publication authority. A child inherits the caller's
@@ -32,7 +29,7 @@ Respect draft status, holds, branch rules and required human approvals.
 
 | Work | Execution |
 | --- | --- |
-| Bounded, understood fix or mechanical edit | Native edit and focused verification |
+| Bounded, understood fix or mechanical edit | Native edit and focused verification within Deliver |
 | Consequential design choice | `compound-engineering:ce-brainstorm` |
 | Substantial planning with dependencies or unclear implementation | `compound-engineering:ce-plan` |
 | Difficult diagnosis | `compound-engineering:ce-debug` |
@@ -52,10 +49,9 @@ the user asks for it; do not wrap an active LFG run in another plan/work
 sequence. Running a CE stage means reading and executing its `SKILL.md`; see
 [CE call semantics](references/ce-call-adapter.md).
 
-CE is an external dependency. Discover the installed skill before using it and
-never patch its source or plugin cache. If a selected stage is missing, report
-it, complete independent work, and install it through the supported manager
-only within existing authorization.
+Discover each installed CE skill before use. If a stage is missing, report it,
+continue independent work, and use the supported manager within existing
+authorization. Keep installed skill sources and caches untouched.
 
 ## Before every push
 

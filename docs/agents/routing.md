@@ -21,12 +21,10 @@ requests.
   by the [review feedback settlement policy](../../plugins/railyard/references/review-feedback-settlement.md).
   Batch feedback and keep the active CE watcher. After one shared automated repair batch, newly raised minor findings default to follow-up
   issues. Real blockers still need resolution.
-- With standing delivery authority, plain implementation and fix requests run
-  through confirmed merge via the
-  repository's merge process. Shipping requests or repository requirements add
-  any required release or deployment and consumer verification. Plan-only,
-  diagnosis-only, review-only, PR-only, and local-only requests stop at their
-  stated endpoint.
+- Load Deliver for implementation, fixes, and open-PR intent. For authorized
+  repository work, follow the normal PR process through confirmed merge and
+  any required release or deployment and consumer verification. Honor explicit
+  narrower requests, including PR-only or no merge, and repository protections.
 - Native work uses the harness defaults and any explicit user settings. For
   external implementation, let CE resolve the engine and model. The owning
   chat can run separate `ce-work` invocations for distinct scopes and engines.

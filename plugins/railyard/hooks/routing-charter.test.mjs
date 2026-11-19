@@ -55,10 +55,11 @@ test("startup keeps CE ownership, the deliver endpoint, and explicit-only orches
   const out = flat(run(fixture(t)).out);
   assert.match(out, /When CE coordinates a PR, it owns review settlement and CI watching/);
   assert.match(out, /Give it references\/review-feedback-settlement\.md/);
-  assert.match(out, /Carry implementation and fixes through confirmed merge when the user or standing owner instructions authorize landing/);
-  assert.match(out, /Follow the repository’s merge policy and honor holds/);
-  assert.match(out, /For ship or deliver requests, continue through required release or deployment and verification at the consumer/);
-  assert.match(out, /plan-only, local-only, and PR-only stops/);
+  assert.match(out, /Load and invoke railyard:deliver for implementation, fix, and PR creation intent, even when the user does not name the skill/);
+  assert.match(out, /Trivial edits can run natively within Deliver and follow the same delivery gates/);
+  assert.match(out, /For authorized repository work, a plain implementation or open-PR request includes review, CI, and confirmed merge via the repository’s normal process/);
+  assert.match(out, /Complete required release or deployment and verify the consumer/);
+  assert.match(out, /Honor approvals, holds, and explicit stops such as plan-only, local-only, PR-only, or no merge/);
   assert.match(out, /railyard:orchestrate for explicitly requested fleet or remote work that needs separate agents/);
   assert.doesNotMatch(out, /Opus|Fable|Sol|Luna|Astra|ce-plan|ce-debug|Pick Compound Engineering stages/);
 });

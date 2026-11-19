@@ -7,7 +7,7 @@ nav_order: 1
 
 # Deliver
 
-An implementation or fix request runs through confirmed merge when the user or repository owner has authorized automatic delivery. Required approvals and repository holds take precedence. Shipping requests and repository requirements can extend delivery through release or deployment and consumer verification. Plan-only, diagnosis-only, review-only, local-only, or PR-only requests stop at their stated endpoint. Routine edits and verification run natively. For configuration and settings, consumer verification means reading the value back where it is consumed, such as the config file, a CLI readback, or a model list; live-process adoption, restarts, and inference canaries are out of scope unless requested.
+For authorized repository work, plain implementation, fix, and open-PR requests run through review, CI, confirmed merge, and any required release or deployment and consumer verification. Required approvals and repository holds take precedence. Plan-only, diagnosis-only, review-only, local-only, PR-only, and no-merge requests stop at their stated endpoint. Routine edits and verification run natively. For configuration and settings, verify the value where it is consumed, such as the config file, a CLI readback, or a model list.
 
 ## What it adds
 

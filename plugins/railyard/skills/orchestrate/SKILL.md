@@ -99,8 +99,11 @@ orchestration work and reclassifies the operation.
 
 ## Delivery and verification
 
-`railyard:deliver` defines the delivery lifecycle and endpoint; a child's
-bounded handoff does not complete the caller's delivery. Use `compound-engineering:ce-commit-push-pr`
+Apply the `railyard:deliver` endpoint to each lane. Plain implementation, fix,
+and open-PR requests for authorized repository work include normal review,
+CI, confirmed merge, and any required release or deployment and consumer
+verification. Preserve explicit stops and repository protections. A child's
+bounded handoff returns to the delivery owner. Use `compound-engineering:ce-commit-push-pr`
 to create a PR or push user-requested commits to one, and `gh-stack` for
 dependent PRs. Name an owner for integration and for each affected repository,
 and publish only within the requested boundary. Every publishing lane inherits

@@ -9,7 +9,7 @@ has_children: true
 
 Use native tools for routine work and focused Compound Engineering workflows for planning, debugging, review, or PR delivery.
 
-When the user or repository owner has authorized automatic delivery, implementation and fix requests continue through confirmed merge. Narrower approval requirements and repository holds take precedence. Shipping requests and repository requirements can extend delivery through release or deployment and consumer verification. Local-only and plan-only requests stop at their stated endpoint. CE owns PR feedback and CI.
+For authorized repository work, plain implementation, fix, and open-PR requests continue through confirmed merge and any required release or deployment and consumer verification. Required approvals, repository holds, and explicit narrower requests take precedence. CE owns PR feedback and CI.
 
 Native subagents handle bounded parallel work. Fleet/account orchestration is explicit, and visible tasks are created only when the user asks for them. Select LFG or paired review when the change calls for it.
 

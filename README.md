@@ -2,21 +2,21 @@
 
 # Railyard
 
-When the user or repository owner has authorized automatic delivery,
-implementation requests run through confirmed merge. Narrower requests,
-approval requirements, and repository holds take precedence. Shipping requests
-and repository requirements can
-also carry the change through release or deployment and verification at the
-consumer. Compound Engineering (CE) coordinates implementation, PR feedback,
-and CI. Railyard also provides specialist review and remote fleet placement.
+For authorized repository work, a plain implementation, fix, or open-PR
+request runs through review, CI, confirmed merge, and any required release or
+deployment and consumer verification. Say “PR only” or “no merge” to stop at
+publication. Required approvals and repository holds take precedence.
+Compound Engineering (CE) coordinates implementation, PR feedback, and CI.
+Railyard also provides specialist review and remote fleet placement.
 
 ## One coordinator, different implementers
 
 Describe the outcome in your Codex or Claude Code chat. For example, “Fix
-retries and show a useful CLI error when they run out.” The chat can handle a
-small fix directly or select CE Work for a larger implementation. When CE Work
-runs, the chat coordinates independent work, integrates changes, and runs the
-checks. CE Work defaults to the current harness.
+retries and show a useful CLI error when they run out.” Within Deliver,
+the chat can handle a small fix directly or select CE Work for a larger
+implementation. When CE Work runs, the chat coordinates independent work,
+integrates changes, and runs the checks. CE Work defaults to the current
+harness.
 
 CE Work uses one external engine per run. The coordinator can give separate
 assignments to different engines and isolate concurrent writers. For Groq-hosted

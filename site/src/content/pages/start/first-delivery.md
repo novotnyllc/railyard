@@ -9,7 +9,7 @@ nav_order: 2
 
 Prerequisite: [install Railyard first →](/start/install/). Add Roundhouse when you explicitly request fleet placement.
 
-When standing delivery authority covers publication and merge, an implementation or fix request runs through confirmed merge. Required approvals and repository holds take precedence. A shipping request or repository requirement can extend delivery through release or deployment and verification of the actual consumer. If access blocks a step, Deliver reports the blocker and continues authorized work that can proceed independently.
+For authorized repository work, plain implementation, fix, and open-PR requests run through confirmed merge and any required release or deployment and verification of the actual consumer. Required approvals and repository holds take precedence. Say “PR only” or “no merge” to stop at publication. If access blocks a step, Deliver reports the blocker and continues authorized work that can proceed independently.
 
 ## Easy path
 
@@ -17,7 +17,7 @@ When standing delivery authority covers publication and merge, an implementation
 > Fix the retry path in the webhook worker.
 ```
 
-This request names the outcome. Routine implementation runs natively; `railyard:deliver` can coordinate the useful Compound Engineering (CE) stages and the requested delivery boundary.
+This request names the outcome. Railyard loads Deliver from the implementation intent. Routine work can run natively within Deliver, which coordinates the useful Compound Engineering (CE) stages and owns the delivery boundary.
 
 ## What happens
 
