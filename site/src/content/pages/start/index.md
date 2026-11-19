@@ -13,7 +13,7 @@ If a command or gate stops, use the [troubleshooting guide](/troubleshooting/) b
 
 ## First delivery example
 
-For an implementation or fix request, begin with native execution and use CE workflows where they help. CE owns review settlement and CI. Deliver follows the repository’s merge process and confirms the PR landed. Show the actual checks and post-merge evidence so the operator can assess the result. Add Roundhouse for explicitly requested fleet work.
+For an implementation or fix request, begin with native execution and use CE workflows where they help. CE owns review settlement and CI. Deliver follows the repository’s merge process and confirms the PR landed. Show the actual checks and post-merge evidence. Roundhouse supplies readiness when authorized fleet placement helps a stage.
 
 - [Install](/start/install/) — add Railyard to Claude Code, Codex, or both; Roundhouse is optional for fleet work.
 - [First delivery](/start/first-delivery/) — go from one sentence to a verified merge on one machine.
@@ -26,7 +26,7 @@ Routine work runs natively. Invoke a focused CE workflow when it helps.
 
 Run repository checks and one independent [local review](/delivery/gates/) of the whole change before the first push. Use `compound-engineering:ce-commit-push-pr` to publish it. CE owns feedback and CI, and batches repair pushes. Review each repair and its affected behavior before publishing again.
 
-Use native child agents for useful parallel work. Create visible Codex tasks only when the user explicitly requests them. Fleet or account orchestration also requires explicit scope.
+Use native child agents for useful local parallel work. Deliver may use existing fleet permissions when another host helps. Create visible Codex tasks only when the user explicitly requests them.
 
 For an explicit assignment to another implementation engine, use [CE cross-engine work](/what-it-does/work-across-harnesses/).
 

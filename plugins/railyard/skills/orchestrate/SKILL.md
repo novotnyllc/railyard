@@ -1,17 +1,16 @@
 ---
 name: orchestrate
-description: "Coordinate explicitly requested fleet/account allocation or delegated remote-agent work across projects, hosts, and dependencies. Use when the user requests those capabilities or names this skill. Ordinary local implementation and parallel work use native tools and subagents without this skill. A bounded one-host admin operation uses its named CLI or roundhouse:remote-mac over SSH directly."
+description: "Coordinate authorized fleet and account placement for work that benefits from another host, including calls from Deliver. Match each stage to a configured, ready host and use the simplest carrier. Keep routine and local-only work local."
 ---
 
 # Orchestrate
 
-Split the requested objective across owners, track dependencies, and verify
-the combined result. This workflow activates only for explicitly requested
-fleet/account allocation or delegated remote-agent work. A configured fleet
-catalog, many files, or useful local parallelism does not activate it; if the
-user names this skill for local work, use ordinary native execution and
-delegation. Propagating settings or configuration from one host to others, or
-running the same mechanical step on several hosts, is not orchestration either;
+Use this workflow when requested or when Deliver identifies an authorized
+stage that could benefit from fleet placement. Select a route and verify the
+result. Keep routine and explicit local-only work local. A fleet listing
+identifies candidates. Use existing placement permissions for the job,
+host, account, and data. Propagating settings or configuration from one host to
+others, or running the same mechanical step on several hosts, is not orchestration;
 one operator does it directly, with the fleet's config sync (for example
 `agent-utilities:fleet-chezmoi` where installed) or `roundhouse:remote-mac`
 and SSH.
@@ -74,27 +73,22 @@ follow user and repository conventions, defaulting to
 
 ## Fleet/account and remote work
 
-- **Delegated remote agent:** a destination-native carrier per
-  [remote execution](references/remote-execution.md), after verifying the
-  host's readiness through Roundhouse.
-- **Fleet/account allocation:** place work from the user-owned fleet
-  configuration and Roundhouse readiness evidence.
-- **Explicitly selected provider bridge:** read
-  [provider task routing](../../references/provider-task-routing.md); it does
-  not authorize a visible task.
+Use [remote execution](references/remote-execution.md) to match each stage to
+an authorized, ready, available host. Prefer a coordinator-owned SSH command
+for a bounded build, check, or run. Use a separate remote worker for independent
+reasoning or a needed account. For an explicitly selected provider bridge,
+read [provider task routing](../../references/provider-task-routing.md).
 
 Send work to another machine only when that pays for the setup and
-coordination it costs: a platform or hardware the controller and CI can't
-provide, a checkout or data that exists only on that host, well over about 15
-minutes of machine work per unit on an idle, faster host, or a separate
-account's model capacity. Otherwise run it locally with native subagents.
+coordination it costs, such as a required platform, hardware, checkout or data,
+or enough available capacity to save time. If placement is optional and no
+candidate has a clear benefit, continue locally. Surface an unknown or unmet
+required platform as a blocker for that stage.
 Config, settings, and plugin propagation is never per-host agent work; one
 operator runs it through Roundhouse's sealed plans or the fleet's config sync.
 
-Check prerequisites only for the assigned scope; only fleet-wide parity needs
-every node. Repair missing readiness within existing authorization, without
-touching unrelated hosts. When the user names a CLI, inspect it first. A
-correction such as "just SSH" or "use the CLI" cancels unconsumed
+Check prerequisites only for plausible hosts. When the user names a CLI,
+inspect it first. A correction such as "just SSH" or "use the CLI" cancels unconsumed
 orchestration work and reclassifies the operation.
 
 ## Delivery and verification

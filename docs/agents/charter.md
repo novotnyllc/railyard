@@ -38,6 +38,6 @@ monitoring. Routine work uses the harness's native tools. Installing Railyard
 does not authorize installing unrelated plugins or enabling every available
 hook.
 
-Roundhouse is needed for explicitly selected fleet/account work; craft skills
+Roundhouse verifies authorized fleet placement. Craft skills
 and stacked-PR tooling are loaded only when relevant. Setup uses each host's
 plugin manager and preserves explicit disabled states.

@@ -38,7 +38,7 @@ presence.
   version 3.38.2 or newer, then confirm the selected skills are exposed
   (`compound-engineering:ce-commit-push-pr`; `ce-babysit-pr` as review and CI
   owner) and report any missing one with its fix.
-- **Roundhouse and craft skills:** only for explicit fleet/account work or
+- **Roundhouse and craft skills:** only for authorized fleet/account work or
   their domain; presence alone enrolls, syncs, or routes nothing.
 - **Other tools** (`gh-stack`, Xcode/Tart, 1Password, tmux, fleet YAML
   tooling): only for the selected operation.
@@ -106,4 +106,4 @@ config item, its state (installed / enrolled / configured / skipped by choice
 / missing), and the exact next command for anything deferred. When all
 required items are green, report the host delivery-ready and name the entry
 points: native routine work, `railyard:deliver`, `railyard:orchestrate` for
-explicit fleet/account work, and `roundhouse:fleet-hosts`.
+authorized fleet/account work, and `roundhouse:fleet-hosts`.

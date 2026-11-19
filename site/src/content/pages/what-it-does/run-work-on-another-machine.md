@@ -7,27 +7,27 @@ nav_order: 8
 
 # Run work on another machine
 
-A delivery needs Linux tooling while the current workstation is a Mac. Explicitly select remote placement, verify the required project, agent, and transport readiness, and preserve the requested acceptance boundary on that host. A local request stays local even when a fleet catalog exists.
+A delivery needs a native Apple build, while some lint and tests are portable. Deliver can place only the Apple stage on an authorized Mac with the required Xcode and SDK. Other stages can run on any eligible platform with the right toolchain and access. Explicit local-only requests stay local.
 
 ## Easy path
 
 ```text
-> Create a new task for this delivery on the Linux machine, and get the change merged there.
+> Build and test this change, including the iOS simulator check.
 ```
 
-`railyard:orchestrate` uses `roundhouse:fleet-readiness` before placement. This example explicitly authorizes a new visible task. Native subagents remain the default for bounded work inside an existing task; remote placement does not independently authorize visible-task creation.
+Deliver uses `railyard:orchestrate` and `roundhouse:fleet-readiness` when its configured placement permissions cover the stage. It checks the eligible Mac before launch. A bounded build or test can run over approved SSH under the delivery owner's control.
 
 ## The run
 
-The operator asks for a Linux-bound delivery. Roundhouse verifies that the chosen host can receive it, and Railyard carries the objective, constraints, and acceptance checks into the supported destination surface. The selected CE workflow owns PR review settlement and CI there. Because this example authorizes merge, completion includes merge confirmation and post-merge proof.
+Roundhouse verifies relevant readiness. Railyard checks current load when capacity matters. Eligible environments on the same physical host share capacity. CE owns PR review and CI while the delivery owner integrates results and verifies the authorized endpoint.
 
 ## What happens
 
-The destination must expose the required task or worker capability; a checkout on disk or a working SSH command alone does not establish a remote agent. If the required placement surface is unavailable, report the limitation without silently changing host, account, provider, or model.
+Pick a separate worker for independent reasoning or a needed account. A new visible user-owned task requires an explicit request. Keep optional work local when there is no gain. Surface a required stage without a verified compatible host.
 
 ## Proof point
 
-The [fleet-readiness reference](/skills/fleet-readiness/) defines a placement table, and [Orchestrate](/skills/orchestrate/) consults readiness before creating a remote work task.
+For a long job, record the host, checkout, job ID, reconnect command, and remote log and exit-status locations before launch. Reconnect to the same job before retrying and collect its final status and artifacts. The [fleet-readiness reference](/skills/fleet-readiness/) describes host eligibility.
 
 ## Next
 

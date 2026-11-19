@@ -32,9 +32,10 @@ requests.
 - Native subagents are the default for delegation. Visible user-owned tasks
   require explicit user direction; fleet inventory or account configuration is
   not that direction.
-- `railyard:orchestrate` is only for explicitly requested fleet/account
-  allocation or delegated remote-agent work. A bounded one-host admin
-  operation uses its named CLI or `roundhouse:remote-mac` over SSH directly.
+- Deliver invokes `railyard:orchestrate` when a stage could benefit from
+  authorized fleet placement. Routine and local-only work stay local. A
+  bounded one-host admin operation uses its named CLI or
+  `roundhouse:remote-mac` over SSH directly.
 - Keep startup focused on delivery and review guidance.
 
 Repository and user title instructions take precedence over the default

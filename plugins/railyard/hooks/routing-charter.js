@@ -15,7 +15,7 @@ const lines = [
   "- When CE coordinates a PR, it owns review settlement and CI watching. Give it references/review-feedback-settlement.md.",
   "- Load and invoke railyard:deliver for implementation, fix, and PR creation intent, even when the user does not name the skill. Trivial edits can run natively within Deliver and follow the same delivery gates.",
   "  For authorized repository work, a plain implementation or open-PR request includes review, CI, and confirmed merge via the repository’s normal process. Complete required release or deployment and verify the consumer. Honor approvals, holds, and explicit stops such as plan-only, local-only, PR-only, or no merge.",
-  "- Use railyard:orchestrate for explicitly requested fleet or remote work that needs separate agents.",
+  "- Within Deliver, invoke railyard:orchestrate when authorized fleet placement could help. Keep routine or local-only work local. Visible tasks require an explicit request.",
 ];
 
 process.stdout.write(config.off

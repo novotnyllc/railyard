@@ -1,4 +1,4 @@
 interface:
   display_name: "Task Orchestrator"
-  short_description: "Coordinate requested fleet/account or remote-agent work."
-  default_prompt: "Use $orchestrate for this explicitly requested allocation or remote-agent objective. Keep ordinary local work on native tools and subagents, give each scope one owner, and verify the requested result. Create visible user-owned tasks only on explicit user direction; CE owns any review settlement and CI monitoring."
+  short_description: "Place authorized work across ready fleet hosts."
+  default_prompt: "Use $orchestrate to place a stage when authorized fleet capacity or platform access helps. Keep routine and local-only work local. Prefer a coordinator-owned SSH command for bounded execution. Give each scope one owner and verify the result. Create visible tasks only on explicit user direction. CE owns PR review and CI."

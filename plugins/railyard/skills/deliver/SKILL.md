@@ -157,9 +157,9 @@ Give each subagent an objective, scope, constraints, dependencies, and checks.
 For concurrent writers and task-created cleanup, follow
 [worktree ownership](../../references/agent-coordination.md#worktree-ownership).
 Use the same reference for [completion and waiting](../../references/agent-coordination.md#when-the-coordinator-has-nothing-else-to-do).
-Create visible user-owned tasks only on explicit user direction. Fleet/account
-allocation or a remote agent goes through `railyard:orchestrate` only when the
-user explicitly asks for it.
+Invoke `railyard:orchestrate` when authorized fleet placement could help a
+stage. Keep routine and explicit local-only work local. Create visible
+user-owned tasks only on explicit user direction.
 
 ## Verification and reporting
 
